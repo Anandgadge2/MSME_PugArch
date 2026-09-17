@@ -313,10 +313,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     rawOwnResp ??
     (ownParticipation ? {
       id: ownParticipation.id,
-      status: ownParticipation.status ?? ownParticipation.submissionStatus ?? 'SUBMITTED',
-      submissionStatus: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'SUBMITTED',
-      createdAt: ownParticipation.submittedAt ?? ownParticipation.createdAt,
-      submittedAt: ownParticipation.submittedAt ?? ownParticipation.createdAt,
+      status: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
+      submissionStatus: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
+      createdAt: ownParticipation.createdAt,
+      submittedAt: ownParticipation.submittedAt ?? null,
       offeredPrice: ownParticipation.offeredPrice ?? ownParticipation.quotedAmount ?? ownParticipation.totalAmount,
       offeredQuantity: ownParticipation.offeredQuantity,
       deliveryTimeline: ownParticipation.deliveryTimeline,
@@ -675,8 +675,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   }
   const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
   const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
-  const timer      = calcTimeLeft(deadline);
-  const submitted  = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
+  const submitted  = Boolean(
+    (ownResponse && String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase() === 'SUBMITTED') ||
+    rawBid?.hasSubmittedProposal
+  );
   const statusUpper = String(status || 'OPEN').toUpperCase();
   const canCancel  = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 

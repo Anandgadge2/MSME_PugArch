@@ -3848,7 +3848,7 @@ router.post('/marketplace/requirements/:id/clarifications/:clarId/reply', authen
     }
 });
 
-router.get('/marketplace/requirements/:id/clarifications', authenticate, async (req: AuthRequest, res: Response) => {
+router.get('/marketplace/requirements/:id/clarifications', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
     try {
         const requirement = await findRequirementRecord(req.params.id);
         if (!requirement) return apiResponse.error(res, 404, 'RFQ not found', 'REQUIREMENT_NOT_FOUND');
@@ -3859,11 +3859,25 @@ router.get('/marketplace/requirements/:id/clarifications', authenticate, async (
             orderBy: { askedAt: 'asc' }
         });
 
-        // Buyers/admins see everything; sellers see PUBLIC threads + their own PRIVATE ones.
-        const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'master_admin' || isRequirementOwner(req, requirement);
+        const currentUserId = req.user?.id ? Number(req.user.id) : null;
+        const isPrivileged = Boolean(
+            req.user && (
+                req.user.role === 'admin' ||
+                req.user.role === 'master_admin' ||
+                isRequirementOwner(req, requirement)
+            )
+        );
+
+        // Private clarifications must NOT be shown to the public or other sellers/bidders.
+        // They must be visible to the asking seller and the buyer only.
         const filtered = isPrivileged
             ? clarifications
-            : clarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === Number(req.user?.id));
+            : clarifications.filter((c: any) => {
+                const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+                if (vis === 'PUBLIC') return true;
+                if (!currentUserId) return false;
+                return Number(c.askedById) === currentUserId;
+            });
 
         return ok(res, filtered);
     } catch (error) {

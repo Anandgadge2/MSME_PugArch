@@ -175,11 +175,15 @@ const dedupeDocuments = (documents: any[]) => {
 };
 
 const submittedStatus = (response: any) =>
-  String(response?.status || response?.submissionStatus || response?.responseStatus || '').trim().toUpperCase();
+  String(response?.submissionStatus || response?.status || response?.responseStatus || '').trim().toUpperCase();
 
 const isFinalSubmittedResponse = (response: any) => {
+  if (!response) return false;
   const status = submittedStatus(response);
-  return Boolean(response) && status !== '' && status !== 'DRAFT';
+  if (!status || ['DRAFT', 'PENDING', 'LOCKED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED'].includes(status)) {
+    return false;
+  }
+  return status === 'SUBMITTED' || status === 'ACCEPTED' || status === 'AWARDED';
 };
 
 const fileNameFromUrl = (url?: string) => {
@@ -226,13 +230,13 @@ const normalizeOwnResponse = (raw: any) => {
     : toArray(raw.lineItems).length
     ? toArray(raw.lineItems)
     : toArray(raw.lineQuotes);
-  const status = raw.status || raw.submissionStatus || responseData.status || 'SUBMITTED';
+  const status = raw.submissionStatus || raw.status || responseData.status || 'DRAFT';
   const supportingAttachment = findSupportingAttachment({ ...raw, responseData }, documents);
 
   return {
     ...raw,
     status,
-    submissionStatus: raw.submissionStatus || status,
+    submissionStatus: raw.submissionStatus || status || 'DRAFT',
     responseData: {
       ...responseData,
       documents,
@@ -255,7 +259,6 @@ const normalizeOwnResponse = (raw: any) => {
 const findSellerParticipation = (bidData: any, user: any) => {
   const participations = [
     ...toArray(bidData?.participations),
-    ...toArray(bidData?.results),
     ...toArray(bidData?.quoteResponses)
   ];
   const found = participations.find((p: any) => {
@@ -302,17 +305,17 @@ const participationToOwnResponse = (participation: any) => {
     sellerOrganizationId: orgId,
     seller: participation.seller,
     _isFromUserParticipation: true,
-    status: participation.status || participation.submissionStatus || 'SUBMITTED',
-    submissionStatus: participation.submissionStatus || participation.status || 'SUBMITTED',
+    status: participation.submissionStatus || participation.status || 'DRAFT',
+    submissionStatus: participation.submissionStatus || participation.status || 'DRAFT',
     offeredPrice: firstPresent(participation.offeredPrice, participation.quotedAmount, participation.totalAmount, responseData.offeredPrice),
     offeredQuantity: firstPresent(participation.offeredQuantity, responseData.offeredQuantity),
     deliveryTimeline: firstPresent(participation.deliveryTimeline, responseData.deliveryTimeline),
     terms: firstPresent(participation.terms, responseData.terms),
     message: firstPresent(participation.message, responseData.message, participation.coverNote, responseData.coverNote, participation.offeredItemDescription),
     attachmentUrl: firstPresent(participation.attachmentUrl, responseData.attachmentUrl, supportingAttachment?.fileUrl, supportingAttachment?.url),
-    createdAt: participation.submittedAt || participation.createdAt,
-    updatedAt: participation.updatedAt || participation.submittedAt || participation.createdAt,
-    submittedAt: participation.submittedAt || participation.createdAt,
+    createdAt: participation.createdAt,
+    updatedAt: participation.updatedAt || participation.createdAt,
+    submittedAt: participation.submittedAt || null,
     responseData: {
       ...responseData,
       documents,

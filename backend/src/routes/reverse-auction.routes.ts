@@ -393,10 +393,13 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     let auction = await db.auction.findFirst({
       where: {
         OR: [
+          ...(Number.isFinite(numId) && numId > 0 ? [{ id: numId }] : []),
           { referenceNo: rawId },
           { referenceNo: `RFQ-${rawId}` },
           { referenceNo: `REQ-${rawId}` },
+          { referenceNo: `RA-${rawId}` },
           { auctionCode: rawId },
+          { auctionCode: `RA-${rawId}` },
         ]
       },
       include: {
@@ -1253,7 +1256,7 @@ router.post('/reverse-auctions/:id/clarifications/:clarId/reply', requirePermiss
   }
 });
 
-router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/clarifications', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const id = await resolveAuctionId(Number(req.params.id));
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1265,10 +1268,19 @@ router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_au
       orderBy: { askedAt: 'asc' }
     });
 
-    // Buyer/manager sees all; sellers see PUBLIC threads + their own PRIVATE ones.
-    const filtered = isAuctionManagerUser(req, auction)
+    const currentUserId = req.user?.id ? Number(req.user.id) : null;
+    const isManager = Boolean(req.user && isAuctionManagerUser(req, auction));
+
+    // Private clarifications must NOT be shown to the public or other sellers/bidders.
+    // They must be visible to the asking seller and the buyer/manager only.
+    const filtered = isManager
       ? clarifications
-      : clarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === req.user?.id);
+      : clarifications.filter((c: any) => {
+          const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+          if (vis === 'PUBLIC') return true;
+          if (!currentUserId) return false;
+          return Number(c.askedById) === currentUserId;
+        });
 
     return apiResponse.success(res, maskSensitive(filtered));
   } catch (error: any) {

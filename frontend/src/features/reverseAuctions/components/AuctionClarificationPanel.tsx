@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { reverseAuctionApi } from '../api';
+import { useAuth } from '../../../hooks/useAuth';
 
 const formatWhen = (value?: string | null) => {
   if (!value) return '';
@@ -24,6 +25,7 @@ interface AuctionClarificationPanelProps {
 }
 
 export default function AuctionClarificationPanel({ auctionId, role, closed }: AuctionClarificationPanelProps) {
+  const { user } = useAuth();
   const qc = useQueryClient();
   const queryKey = ['reverse-auction-clarifications', auctionId] as const;
 
@@ -50,6 +52,26 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
   const [question, setQuestion] = useState('');
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
+
+  // Filter clarifications: Private messages must NOT be shown to the public or other sellers.
+  // They must be visible to the asking seller and the buyer/admin only.
+  const visibleClarifications = React.useMemo(() => {
+    return (clarifications || []).filter(c => {
+      const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+      if (vis === 'PUBLIC') return true;
+      // If PRIVATE:
+      // 1. Buyer/manager or Admin can view
+      if (role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin') {
+        return true;
+      }
+      // 2. Only the specific seller who asked the question can view
+      if (user?.id && Number(user.id) === Number(c.askedById)) {
+        return true;
+      }
+      // Public or any other bidder/seller cannot view
+      return false;
+    });
+  }, [clarifications, role, user]);
 
   const submitQuestion = () => {
     const text = question.trim();
@@ -88,7 +110,7 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
           Clarifications &amp; Queries
         </h2>
         <span className="ml-auto text-[10px] font-black uppercase bg-[#12335f]/5 text-[#12335f] px-2.5 py-1 rounded-full border border-[#12335f]/10">
-          {clarifications.length} {clarifications.length === 1 ? 'Thread' : 'Threads'}
+          {visibleClarifications.length} {visibleClarifications.length === 1 ? 'Thread' : 'Threads'}
         </span>
       </div>
 
@@ -135,7 +157,7 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
                     <Lock className="h-3 w-3" /> Private
                   </button>
                   <span className="text-[10px] font-semibold text-slate-400">
-                    {visibility === 'PUBLIC' ? 'Answer visible to all participants' : 'Answer visible only to you'}
+                    {visibility === 'PUBLIC' ? 'Answer visible to all participants & public' : 'Answer visible only to you and buyer'}
                   </span>
                 </div>
                 <Button
@@ -158,7 +180,7 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
         <div className="flex items-center justify-center py-8 text-slate-400">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
-      ) : clarifications.length === 0 ? (
+      ) : visibleClarifications.length === 0 ? (
         <div className="flex flex-col items-center gap-2 py-8 text-center">
           <HelpCircle className="h-8 w-8 text-slate-300" />
           <p className="text-xs font-bold text-slate-500">No clarifications yet.</p>
@@ -168,7 +190,7 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
         </div>
       ) : (
         <div className="space-y-3">
-          {clarifications.map((c, idx) => (
+          {visibleClarifications.map((c, idx) => (
             <div key={c.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-xs">
               {/* Question */}
               <div className="flex items-start gap-2.5">
@@ -181,7 +203,7 @@ export default function AuctionClarificationPanel({ auctionId, role, closed }: A
                       c.visibility === 'PUBLIC' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-indigo-200 bg-indigo-50 text-indigo-700'
                     )}>
                       {c.visibility === 'PUBLIC' ? <Globe className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
-                      {c.visibility}
+                      {c.visibility === 'PUBLIC' ? 'Public' : (role === 'buyer' ? 'Private (Buyer & Seller)' : 'Private (You & Buyer)')}
                     </span>
                   </div>
                   {c.askedAt && <p className="mt-0.5 text-[10px] font-semibold text-slate-400">Asked {formatWhen(c.askedAt)}</p>}

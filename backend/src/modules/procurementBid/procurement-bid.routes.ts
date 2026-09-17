@@ -155,6 +155,13 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
     const currentOrgId = actor.organizationId ? Number(actor.organizationId) : null;
     for (const item of data.items) {
       if (Array.isArray(item.participations)) {
+        const hasSubmitted = item.participations.some((p: any) => {
+          const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+          const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+          const matchesUser = (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+          const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+          return matchesUser && subStatus === 'SUBMITTED';
+        });
         const hasPart = item.participations.some((p: any) => {
           const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
           const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
@@ -164,6 +171,7 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
           item.participated = true;
           item.hasParticipated = true;
         }
+        item.hasSubmittedProposal = hasSubmitted;
       }
     }
   }

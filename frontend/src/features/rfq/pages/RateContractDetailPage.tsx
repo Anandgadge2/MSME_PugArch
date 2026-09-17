@@ -187,9 +187,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     : null;
 
   const ownResponse = reqData?.ownResponse || bidReqData?.ownResponse || (ownParticipation ? {
-    status: ownParticipation.status || 'SUBMITTED',
+    status: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
+    submissionStatus: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
     createdAt: ownParticipation.createdAt,
     updatedAt: ownParticipation.updatedAt || ownParticipation.createdAt,
+    submittedAt: ownParticipation.submittedAt || null,
     offeredPrice: ownParticipation.offeredPrice || ownParticipation.responseData?.offeredPrice,
     offeredQuantity: ownParticipation.offeredQuantity || ownParticipation.responseData?.offeredQuantity,
     deliveryTimeline: ownParticipation.deliveryTimeline || ownParticipation.responseData?.deliveryTimeline,
@@ -303,8 +305,10 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rcData?.status);
   const isDeadlinePassedStatus = !!rcData?.deadlineDate && new Date(rcData.deadlineDate).getTime() < Date.now();
-  const canEditRateQuotation = !isClosedStatus && !isDeadlinePassedStatus && ['PUBLISHED', 'OPEN', 'AMENDED', 'REVISION_REQUESTED', 'PENDING'].includes(rcData?.status || 'PUBLISHED');
-  const isRateQuotationSubmitted = Boolean(ownResponse && ownResponse.status !== 'DRAFT');
+  const isRateQuotationSubmitted = Boolean(
+    ownResponse &&
+    String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase() === 'SUBMITTED'
+  );
 
   if (isLoading) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Rate Contract" />;

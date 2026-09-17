@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -31,8 +31,9 @@ import {
   Users,
   PhoneCall,
   Mail,
-  CheckCircle2,
   CheckCircle,
+  CheckCircle2,
+  XCircle,
   Scale,
   Sparkles,
   X,
@@ -47,12 +48,14 @@ import {
   Lock,
   Truck,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { DataTable, ColumnDef } from "../../../components/ui/data-table";
 import { useAuth } from "../../../hooks/useAuth";
-import { openFileAsset } from "../../../lib/files";
+import { openFileAsset, getFileAssetPreview, type DocumentPreview } from "../../../lib/files";
+import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
+import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -3505,6 +3508,13 @@ export interface ProcurementDetailUnifiedViewProps {
   approvalAuthority?: string;
   justification?: string;
   internalDetails?: Record<string, any>;
+
+  // Reverse Auction extensions
+  linkedAuction?: any;
+  onAuctionBidSubmitted?: () => void;
+  customClarificationPanel?: React.ReactNode;
+  sellerAuctionActions?: React.ReactNode;
+  buyerAuctionActions?: React.ReactNode;
 }
 
 export function ProcurementDetailUnifiedView(
@@ -3525,6 +3535,11 @@ export function ProcurementDetailUnifiedView(
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<
     any | null
   >(null);
+  const [selectedForTechnicalEval, setSelectedForTechnicalEval] = useState<
+    any | null
+  >(null);
+  const [isCompletingTechEval, setIsCompletingTechEval] = useState(false);
+  const queryClient = useQueryClient();
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
@@ -3650,15 +3665,50 @@ export function ProcurementDetailUnifiedView(
         },
       },
       {
+        key: "technicalStatus",
+        header: "Technical Evaluation",
+        cell: (participation) => {
+          const ts = String(participation.technicalStatus || "").toUpperCase();
+          const isQual = ts === "QUALIFIED";
+          const isDisq = ts === "DISQUALIFIED" || participation.isDisqualified;
+          return (
+            <div>
+              {isQual ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-800">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  Qualified
+                </span>
+              ) : isDisq ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[9.5px] font-extrabold text-rose-800">
+                  <XCircle className="h-3 w-3 text-rose-600" />
+                  Disqualified
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9.5px] font-extrabold text-amber-800">
+                  <Clock className="h-3 w-3 text-amber-600" />
+                  Pending Review
+                </span>
+              )}
+              {participation.score !== undefined &&
+                participation.score !== null && (
+                  <span className="text-[10px] font-bold text-slate-500 block mt-0.5">
+                    Score: {participation.score}/100
+                  </span>
+                )}
+            </div>
+          );
+        },
+      },
+      {
         key: "status",
-        header: "Status",
+        header: "Submission",
         cell: (participation) => {
           const statusLabel =
             participation.submissionStatus ||
             participation.status ||
             "Submitted";
           return (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-bold uppercase text-emerald-800">
+            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold uppercase text-slate-700">
               {statusLabel}
             </span>
           );
@@ -3669,15 +3719,29 @@ export function ProcurementDetailUnifiedView(
         header: "Action",
         align: "right",
         cell: (participation) => (
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setSelectedQuotationForReview(participation)}
-            className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs cursor-pointer"
-          >
-            <Eye className="h-3 w-3" />
-            Review Quotation
-          </Button>
+          <div className="flex items-center justify-end gap-1.5">
+            {isBuyerOrAdmin && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setSelectedForTechnicalEval(participation)}
+                className="h-7.5 px-2.5 gap-1 text-[11px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-2xs cursor-pointer"
+                title="Evaluate technical proposal, compliance and eligibility"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                Evaluate Bid
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setSelectedQuotationForReview(participation)}
+              className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs cursor-pointer"
+            >
+              <Eye className="h-3 w-3" />
+              Review Quotation
+            </Button>
+          </div>
         ),
       },
     ],
@@ -3696,9 +3760,9 @@ export function ProcurementDetailUnifiedView(
       ).toUpperCase();
       return status === "LIVE" ? 3000 : false;
     },
-    enabled: Boolean(targetId),
+    enabled: Boolean(targetId) && !props.linkedAuction,
   });
-  const linkedAuction = linkedAuctionQuery.data;
+  const linkedAuction = props.linkedAuction ?? linkedAuctionQuery.data;
 
   const { data: fetchedParticipants } = useQuery({
     queryKey: ["buyer-unified-participations", props.procurementType, targetId],
@@ -3823,6 +3887,24 @@ export function ProcurementDetailUnifiedView(
           sellerUser: r.sellerUser || r.seller || { name: contactPerson },
           sellerOrganization: r.sellerOrganization ||
             r.seller?.organization || { organizationName: sellerOrgName },
+          technicalStatus:
+            r.technicalStatus ||
+            respData.technicalStatus ||
+            (r.status === "SHORTLISTED" || r.status === "ACCEPTED"
+              ? "QUALIFIED"
+              : r.status === "REJECTED"
+                ? "DISQUALIFIED"
+                : "PENDING"),
+          technicalRemarks:
+            r.technicalRemarks ||
+            r.rejectionReason ||
+            respData.technicalRemarks ||
+            "",
+          score: r.score ?? respData.score ?? null,
+          isDisqualified:
+            r.technicalStatus === "DISQUALIFIED" ||
+            r.status === "REJECTED" ||
+            Boolean(r.isDisqualified),
         };
       };
 
@@ -4047,17 +4129,32 @@ export function ProcurementDetailUnifiedView(
     isPostBiddingStage,
   );
 
+  const isReverseAuctionType =
+    props.procurementType === "REVERSE_AUCTION" ||
+    props.procurementType === "reverse-auction" ||
+    String(props.procurementType || "")
+      .toUpperCase()
+      .includes("REVERSE_AUCTION") ||
+    String(props.procurementLabel || "")
+      .toUpperCase()
+      .includes("REVERSE AUCTION") ||
+    String(props.procurementMethod || "")
+      .toUpperCase()
+      .includes("REVERSE AUCTION") ||
+    pathname.includes("/reverse-auction");
+
   const allowsReverseAuction = Boolean(
-    (props as any)?.allowReverseAuction ??
-    payload?.allowReverseAuction ??
-    rules?.allowReverseAuction ??
-    basics?.isReverseAuctionNeeded ??
-    payload?.basics?.isReverseAuctionNeeded ??
-    ["REVERSE_AUCTION", "BID_WITH_REVERSE_AUCTION"].includes(
-      String(
-        props.procurementMethod || props.procurementType || "",
-      ).toUpperCase(),
-    ),
+    isReverseAuctionType ||
+      Boolean((props as any)?.allowReverseAuction) ||
+      Boolean(payload?.allowReverseAuction) ||
+      Boolean(rules?.allowReverseAuction) ||
+      Boolean(basics?.isReverseAuctionNeeded) ||
+      Boolean(payload?.basics?.isReverseAuctionNeeded) ||
+      ["REVERSE_AUCTION", "BID_WITH_REVERSE_AUCTION"].includes(
+        String(
+          props.procurementMethod || props.procurementType || "",
+        ).toUpperCase(),
+      ),
   );
 
   const documents = props.documents || [];
@@ -5255,7 +5352,40 @@ export function ProcurementDetailUnifiedView(
       );
       if (!seen.has(key)) {
         seen.add(key);
-        result.push(p);
+        const respData =
+          typeof p.responseData === "string"
+            ? (() => {
+                try {
+                  return JSON.parse(p.responseData);
+                } catch {
+                  return {};
+                }
+              })()
+            : p.responseData || {};
+        const s = String(p.status || p.submissionStatus || "").toUpperCase();
+        const ts = String(
+          p.technicalStatus ||
+            respData.technicalStatus ||
+            (s === "SHORTLISTED" || s === "ACCEPTED"
+              ? "QUALIFIED"
+              : s === "REJECTED"
+                ? "DISQUALIFIED"
+                : "PENDING"),
+        ).toUpperCase();
+        result.push({
+          ...p,
+          technicalStatus: ts,
+          technicalRemarks:
+            p.technicalRemarks ||
+            p.rejectionReason ||
+            respData.technicalRemarks ||
+            "",
+          score: p.score ?? respData.score ?? null,
+          isDisqualified:
+            ts === "DISQUALIFIED" ||
+            s === "REJECTED" ||
+            Boolean(p.isDisqualified),
+        });
       }
     }
     return result;
@@ -5269,6 +5399,74 @@ export function ProcurementDetailUnifiedView(
       return statusStr !== "DRAFT" && statusStr !== "CANCELLED";
     });
   }, [allParticipationsList]);
+
+  const isTwoPacketMode = useMemo(() => {
+    const rawPacket = String(
+      props.packetType ||
+        payload.packetType ||
+        (props as any).technicalPacket?.packetType ||
+        "",
+    ).toUpperCase();
+    const rawMethod = String(
+      props.procurementMethod || props.procurementType || "",
+    ).toUpperCase();
+    const methodSlug = String(props.procurementLabel || "").toLowerCase();
+    return (
+      rawPacket === "TWO_PACKET" ||
+      rawPacket.includes("TWO") ||
+      rawMethod.includes("TWO_PACKET") ||
+      methodSlug.includes("two") ||
+      props.procurementType === "OPEN_TENDER" ||
+      props.procurementType === "LIMITED_TENDER" ||
+      props.procurementType === "RFP" ||
+      isRfqType
+    );
+  }, [props, payload, isRfqType]);
+
+  const techEvaluationStats = useMemo(() => {
+    let qualified = 0;
+    let disqualified = 0;
+    let pending = 0;
+
+    for (const p of submittedParticipations) {
+      const ts = String(p.technicalStatus || "").toUpperCase();
+      if (ts === "QUALIFIED") {
+        qualified++;
+      } else if (ts === "DISQUALIFIED" || p.isDisqualified) {
+        disqualified++;
+      } else {
+        pending++;
+      }
+    }
+
+    return {
+      total: submittedParticipations.length,
+      qualified,
+      disqualified,
+      pending,
+    };
+  }, [submittedParticipations]);
+
+  const handleCompleteTechnicalEvaluation = async () => {
+    try {
+      setIsCompletingTechEval(true);
+      await procurementBidApi.completeTechnicalEvaluation(targetId);
+      toast.success(
+        "Stage 1 Technical Evaluation completed successfully! You can now open financial bids or launch Stage 2 Reverse Auction.",
+      );
+      queryClient.invalidateQueries({
+        queryKey: ["buyer-unified-participations"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["rfq-buyer-responses-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
+      queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2"] });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to complete technical evaluation.");
+    } finally {
+      setIsCompletingTechEval(false);
+    }
+  };
 
   const effectiveDeadlineTarget = closingDateValue || props.deadlineDate;
   const isDeadlinePassed = Boolean(
@@ -5868,9 +6066,15 @@ export function ProcurementDetailUnifiedView(
                 auctionId={linkedAuction.id}
                 procurementTitle={resolvedSubject}
                 procurementReference={displayIdStr}
-                onBidSubmitted={() => linkedAuctionQuery.refetch()}
+                onBidSubmitted={() => {
+                  linkedAuctionQuery.refetch();
+                  if (props.onAuctionBidSubmitted) props.onAuctionBidSubmitted();
+                }}
               />
             )}
+
+          {/* Seller Auction Actions / Status Notices */}
+          {!isBuyerSide && props.sellerAuctionActions}
 
           {/* Planned (Not Yet Created) Reverse Auction Info Banner for Sellers */}
           {!isBuyerSide &&
@@ -6016,6 +6220,7 @@ export function ProcurementDetailUnifiedView(
                     Discard Draft
                   </Button>
                 )}
+                {isBuyerOrAdmin && props.buyerAuctionActions}
                 {props.onCancelClick && (
                   <Button
                     type="button"
@@ -6634,6 +6839,56 @@ export function ProcurementDetailUnifiedView(
           {/* Tab 4: Evaluation & Controls */}
           {activeTab === "evaluation" && (
             <div className="space-y-5">
+              {(isReverseAuctionType || linkedAuction) && (
+                <DataCard
+                  title="Reverse Auction Sourcing Rules"
+                  icon={Gavel}
+                >
+                  <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150 space-y-4">
+                    <PropertyGrid columns={3}>
+                      <PropertyItem
+                        label="Opening / Start Price"
+                        value={formatCurrency(linkedAuction?.startPrice ?? props.estimatedValue)}
+                        highlight
+                      />
+                      <PropertyItem
+                        label="Minimum Decrement"
+                        value={
+                          linkedAuction?.minDecrementAmount != null
+                            ? formatCurrency(linkedAuction.minDecrementAmount)
+                            : linkedAuction?.minDecrementPercent
+                            ? `${linkedAuction.minDecrementPercent}%`
+                            : "Standard Decrement"
+                        }
+                      />
+                      <PropertyItem
+                        label="Rank Visibility Mode"
+                        value={formatPrimitiveValue(
+                          linkedAuction?.rankVisibility || "SHOW_RANK_ONLY",
+                          "rankVisibility",
+                        )}
+                      />
+                      <PropertyItem
+                        label="Min Qualified Bidders"
+                        value={String(linkedAuction?.minimumQualifiedBidders ?? 2)}
+                      />
+                      <PropertyItem
+                        label="Auto-Extension"
+                        value={
+                          linkedAuction?.autoExtensionEnabled !== false
+                            ? `Enabled (${linkedAuction?.autoExtensionWindowMinutes || 5}m trigger / ${linkedAuction?.autoExtensionByMinutes || 5}m extension)`
+                            : "Disabled"
+                        }
+                      />
+                      <PropertyItem
+                        label="Auction Format"
+                        value={`${formatPrimitiveValue(linkedAuction?.auctionType || "ENGLISH_REVERSE", "auctionType")} (${formatPrimitiveValue(linkedAuction?.auctionMode || "ONLINE", "auctionMode")})`}
+                      />
+                    </PropertyGrid>
+                  </div>
+                </DataCard>
+              )}
+
               <DataCard
                 title="Evaluation Overview & Method"
                 icon={ClipboardCheck}
@@ -6864,14 +7119,15 @@ export function ProcurementDetailUnifiedView(
                           size="sm"
                           variant="outline"
                           onClick={() => {
+                            const allIds = submittedParticipations.map(
+                              (p: any) =>
+                                String(p.id || p.sellerId || p.sellerUserId),
+                            );
                             if (submittedParticipations.length === 2) {
-                              setSelectedCompareIds(
-                                submittedParticipations.map((p: any) =>
-                                  String(p.sellerId || p.sellerUserId || p.id),
-                                ),
-                              );
+                              setSelectedCompareIds(allIds);
                               setIsComparisonModalOpen(true);
                             } else {
+                              setSelectedCompareIds(allIds);
                               setIsCompareChooserOpen(true);
                             }
                           }}
@@ -6898,7 +7154,19 @@ export function ProcurementDetailUnifiedView(
                           <Button
                             type="button"
                             size="sm"
-                            onClick={() => setIsStartAuctionModalOpen(true)}
+                            onClick={() => {
+                              const qualifiedSellers = submittedParticipations.filter(
+                                (p: any) =>
+                                  String(p.technicalStatus || "").toUpperCase() === "QUALIFIED",
+                              );
+                              if (submittedParticipations.length > 0 && qualifiedSellers.length === 0) {
+                                toast.error(
+                                  "No sellers are technically qualified yet. Please evaluate and qualify at least one seller before launching Stage 2 Reverse Auction.",
+                                );
+                                return;
+                              }
+                              setIsStartAuctionModalOpen(true);
+                            }}
                             className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3 cursor-pointer"
                           >
                             <Gavel className="h-3 w-3" />
@@ -6907,6 +7175,89 @@ export function ProcurementDetailUnifiedView(
                         )}
                     </div>
                   </div>
+
+                  {/* Two-Packet Stage 1 Technical Evaluation Progress Banner */}
+                  {isTwoPacketMode && submittedParticipations.length > 0 && (
+                    <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                            <ShieldCheck className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
+                                Two-Packet Procurement • Stage 1
+                              </span>
+                              {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                                  Technical Evaluation Complete
+                                </span>
+                              )}
+                            </div>
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
+                              Technical Packet Opening &amp; Seller Qualification
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Progress Stats Pills */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                            {techEvaluationStats.qualified} Qualified
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-bold text-rose-800 shadow-2xs">
+                            <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                            {techEvaluationStats.disqualified} Disqualified
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 shadow-2xs">
+                            <Clock className="h-3.5 w-3.5 text-amber-600" />
+                            {techEvaluationStats.pending} Pending Review
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action Bar for Completing Tech Eval & Opening Financial Bids */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-indigo-100/70">
+                        <span className="text-[11px] font-semibold text-slate-600">
+                          {techEvaluationStats.pending > 0
+                            ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
+                            : techEvaluationStats.qualified > 0
+                              ? `✅ All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
+                              : `⚠️ At least one seller must be technically qualified to proceed.`}
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={isCompletingTechEval}
+                              onClick={handleCompleteTechnicalEvaluation}
+                              className="h-7.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>{isCompletingTechEval ? "Finalizing..." : "Complete Technical Evaluation"}</span>
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/bids/${targetId}/results`)}
+                            className="h-7.5 gap-1.5 text-xs font-bold text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 shadow-2xs cursor-pointer"
+                          >
+                            <span>View Stage 2 Financial Opening &amp; Results</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {submittedParticipations.length === 0 ? (
                     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-7 px-4 text-center">
@@ -6959,6 +7310,37 @@ export function ProcurementDetailUnifiedView(
                   procurementTitle={props.subject || props.procurementLabel}
                   targetId={targetId}
                   router={router}
+                  onOpenCompare={() => {
+                    setSelectedQuotationForReview(null);
+                    setSelectedCompareIds(
+                      submittedParticipations.map((p: any) =>
+                        String(p.id || p.sellerId || p.sellerUserId),
+                      ),
+                    );
+                    setIsComparisonModalOpen(true);
+                  }}
+                  onOpenTechnicalEvaluation={(p) => {
+                    setSelectedForTechnicalEval(p);
+                  }}
+                />
+              )}
+
+              {/* Technical Packet Evaluation Modal Renderer */}
+              {selectedForTechnicalEval && (
+                <TechnicalEvaluationModal
+                  isOpen={Boolean(selectedForTechnicalEval)}
+                  onClose={() => setSelectedForTechnicalEval(null)}
+                  participation={selectedForTechnicalEval}
+                  bidId={targetId}
+                  procurementTitle={props.subject || props.procurementLabel}
+                  onEvaluationSuccess={() => {
+                    queryClient.invalidateQueries({
+                      queryKey: ["buyer-unified-participations"],
+                    });
+                    queryClient.invalidateQueries({
+                      queryKey: ["rfq-buyer-responses-v2"],
+                    });
+                  }}
                 />
               )}
 
@@ -7067,7 +7449,10 @@ export function ProcurementDetailUnifiedView(
                 />
               )}
 
-              {isClarificationAllowed &&
+              {props.customClarificationPanel ? (
+                props.customClarificationPanel
+              ) : (
+                isClarificationAllowed &&
                 (() => {
                   const clarKind =
                     props.clarificationKind ??
@@ -7097,7 +7482,8 @@ export function ProcurementDetailUnifiedView(
                       }
                     />
                   );
-                })()}
+                })()
+              )}
             </div>
           )}
 
@@ -7115,6 +7501,8 @@ interface SellerQuotationReviewModalProps {
   procurementTitle?: string;
   targetId: string;
   router: any;
+  onOpenCompare?: () => void;
+  onOpenTechnicalEvaluation?: (participation: any) => void;
 }
 
 const reviewLineItemsColumns: ColumnDef<any>[] = [
@@ -7228,8 +7616,71 @@ export function SellerQuotationReviewModal({
   procurementTitle,
   targetId,
   router,
+  onOpenCompare,
+  onOpenTechnicalEvaluation,
 }: SellerQuotationReviewModalProps) {
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | number | null>(null);
+
   if (!isOpen || !participation) return null;
+
+  const handleViewAttachment = async (doc: any, docName: string) => {
+    const fileId =
+      doc.fileAssetId ||
+      doc.fileId ||
+      (typeof doc.id === "number" || /^\d+$/.test(String(doc.id || ""))
+        ? doc.id
+        : undefined);
+    const rawUrl =
+      doc.url ||
+      doc.fileUrl ||
+      doc.signedUrl ||
+      doc.documentUrl ||
+      (fileId ? `/api/files/${fileId}/view` : "");
+
+    setPreviewLoadingId(doc.id || docName);
+    try {
+      if (fileId || rawUrl) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: fileId,
+              fileAssetId: fileId,
+              url: rawUrl,
+              fileName: doc.fileName || docName,
+            },
+            docName,
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch (e) {
+          console.warn("getFileAssetPreview fallback to openFileAsset:", e);
+        }
+
+        await openFileAsset(
+          {
+            id: fileId,
+            fileAssetId: fileId,
+            originalName: doc.fileName || docName,
+            url: rawUrl,
+          },
+          docName,
+        );
+        return;
+      }
+
+      toast.error("Document file is not available for preview.");
+    } catch (err: any) {
+      console.error("Failed to view attachment:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Unable to open document file.",
+      );
+    } finally {
+      setPreviewLoadingId(null);
+    }
+  };
 
   const sellerOrg =
     participation.sellerOrgName ||
@@ -7696,7 +8147,9 @@ export function SellerQuotationReviewModal({
                     doc.name ||
                     doc.fileName ||
                     `Attachment #${idx + 1}`;
-                  const fileId = doc.fileAssetId || doc.id;
+                  const isCurrentlyLoading =
+                    previewLoadingId === (doc.id || docName);
+
                   return (
                     <div
                       key={idx}
@@ -7718,25 +8171,22 @@ export function SellerQuotationReviewModal({
                           </p>
                         </div>
                       </div>
-                      {fileId ? (
-                        <a
-                          href={`/api/files/${fileId}/view`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition-all shrink-0"
-                        >
-                          <Download className="h-3 w-3" /> View
-                        </a>
-                      ) : doc.url ? (
-                        <a
-                          href={doc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition-all shrink-0"
-                        >
-                          <ExternalLink className="h-3 w-3" /> View
-                        </a>
-                      ) : null}
+                      <button
+                        type="button"
+                        disabled={isCurrentlyLoading}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewAttachment(doc, docName);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
+                      >
+                        {isCurrentlyLoading ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                        ) : (
+                          <Eye className="h-3 w-3 text-blue-600" />
+                        )}
+                        View
+                      </button>
                     </div>
                   );
                 };
@@ -7819,7 +8269,11 @@ export function SellerQuotationReviewModal({
               variant="outline"
               onClick={() => {
                 onClose();
-                router.push(`/bids/${targetId}/compare`);
+                if (onOpenCompare) {
+                  onOpenCompare();
+                } else {
+                  router.push(`/bids/${targetId}/compare`);
+                }
               }}
               className="font-bold text-slate-700"
             >
@@ -7838,6 +8292,14 @@ export function SellerQuotationReviewModal({
             </Button>
           </div>
         </div>
+
+        {/* Document Preview Modal */}
+        {previewDocument && (
+          <DocumentPreviewModal
+            previewDocument={previewDocument}
+            onClose={() => setPreviewDocument(null)}
+          />
+        )}
       </div>
     </div>
   );
@@ -7871,11 +8333,30 @@ export function QuotationComparisonModal({
     return list.map((p) => String(p.id || p.sellerId || p.sellerUserId));
   });
 
+  useEffect(() => {
+    if (initialSelectedSellerIds && initialSelectedSellerIds.length > 0) {
+      setActiveSelectedIds(initialSelectedSellerIds);
+    } else if (list.length > 0) {
+      setActiveSelectedIds(
+        list.map((p) => String(p.id || p.sellerId || p.sellerUserId)),
+      );
+    }
+  }, [initialSelectedSellerIds, participations, isOpen]);
+
   const displayParticipations = useMemo(() => {
-    if (activeSelectedIds.length === 0) return list;
-    return list.filter((p) =>
-      activeSelectedIds.includes(String(p.id || p.sellerId || p.sellerUserId)),
-    );
+    if (!activeSelectedIds || activeSelectedIds.length === 0) return list;
+    const filtered = list.filter((p) => {
+      const pId = p.id != null ? String(p.id) : "";
+      const pSellerId = p.sellerId != null ? String(p.sellerId) : "";
+      const pSellerUserId =
+        p.sellerUserId != null ? String(p.sellerUserId) : "";
+      return (
+        (pId && activeSelectedIds.includes(pId)) ||
+        (pSellerId && activeSelectedIds.includes(pSellerId)) ||
+        (pSellerUserId && activeSelectedIds.includes(pSellerUserId))
+      );
+    });
+    return filtered.length > 0 ? filtered : list;
   }, [list, activeSelectedIds]);
 
   // Sort participations by quoted total price ascending (L1, L2, L3...)
@@ -8210,6 +8691,14 @@ export function SelectQuotationsToCompareModal({
   const [selectedIds, setSelectedIds] = useState<string[]>(() =>
     list.map((p) => String(p.id || p.sellerId || p.sellerUserId)),
   );
+
+  useEffect(() => {
+    if (list.length > 0) {
+      setSelectedIds(
+        list.map((p) => String(p.id || p.sellerId || p.sellerUserId)),
+      );
+    }
+  }, [participations, isOpen]);
 
   if (!isOpen || !participations || participations.length === 0) return null;
 

@@ -171,12 +171,14 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     )
   );
 
+  const isOwnSubmitted = Boolean(
+    ownParticipation &&
+    String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
+  );
+
   const hasSubmittedProposal = Boolean(
-    bid.hasParticipated ||
     bid.hasSubmittedProposal ||
-    reqObj.hasParticipated ||
-    reqObj.myParticipation ||
-    ownParticipation
+    isOwnSubmitted
   );
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';

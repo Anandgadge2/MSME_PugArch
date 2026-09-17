@@ -6681,6 +6681,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: req.title,
         requirementNumber: `REQ-${req.id}`,
         buyerId: req.createdById,
+        buyerOrganizationId: (req as any).buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: req.lastDate,
         clarificationDeadline: null
@@ -6694,6 +6695,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: bid.title,
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
+        buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
@@ -6708,6 +6710,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: legacyReq.title,
         requirementNumber: legacyReq.requirementNumber,
         buyerId: legacyReq.createdById,
+        buyerOrganizationId: null,
         sellerId: null,
         deadlineDate: null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
@@ -6729,6 +6732,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: bid.title,
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
+        buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
@@ -6758,6 +6762,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       subject: bidMatch.title,
       requirementNumber: bidMatch.bidNumber,
       buyerId: bidMatch.buyerId,
+      buyerOrganizationId: bidMatch.buyerOrganizationId || null,
       sellerId: null,
       deadlineDate: bidMatch.endDate,
       clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
@@ -6917,7 +6922,7 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
   ok(res, updated);
 }));
 
-router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async (req, res) => {
+router.get('/quote-requests/:id/clarifications', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const quote = await findQuoteRequestRecord(req.params.id);
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
@@ -6937,9 +6942,28 @@ router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async 
     new Date(a.askedAt || a.createdAt).getTime() - new Date(b.askedAt || b.createdAt).getTime()
   );
 
-  const filtered = userId(req) === quote.buyerId
+  const currentUserId = req.user?.id ? Number(req.user.id) : null;
+  const isPrivilegedBuyerOrAdmin = Boolean(
+    req.user && (
+      req.user.role === 'admin' ||
+      req.user.role === 'master_admin' ||
+      (currentUserId && quote.buyerId && currentUserId === Number(quote.buyerId)) ||
+      (req.user.organizationId && (quote as any).buyerOrganizationId && req.user.organizationId === (quote as any).buyerOrganizationId)
+    )
+  );
+
+  // Private clarifications must NOT be shown to the public or other sellers/bidders.
+  // They must be visible to the asking seller and the buyer only.
+  const filtered = isPrivilegedBuyerOrAdmin
     ? allClarifications
-    : allClarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === userId(req) || c.answeredById === userId(req));
+    : allClarifications.filter((c: any) => {
+        const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+        if (vis === 'PUBLIC') return true;
+        // If PRIVATE:
+        // Must be authenticated and must be the specific seller who asked it
+        if (!currentUserId) return false;
+        return Number(c.askedById) === currentUserId;
+      });
 
   ok(res, filtered);
 }));

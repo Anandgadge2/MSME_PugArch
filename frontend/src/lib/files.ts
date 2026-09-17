@@ -186,13 +186,19 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       fileId = Number(fileAsset.fileId);
     } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
+    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+      fileId = Number(fileAsset.id);
     }
   }
 
   const fallbackUrl = typeof fileAsset === 'object'
     ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
     : null;
-  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+  const rawAbsoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const absoluteFallbackUrl = (token && rawAbsoluteFallbackUrl && (rawAbsoluteFallbackUrl.includes('/api/files/') || rawAbsoluteFallbackUrl.includes('/api/public/files/')) && !rawAbsoluteFallbackUrl.includes('token='))
+    ? `${rawAbsoluteFallbackUrl}${rawAbsoluteFallbackUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+    : rawAbsoluteFallbackUrl;
 
   if (!fileId && fallbackUrl) {
     const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);

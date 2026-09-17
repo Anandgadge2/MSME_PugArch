@@ -219,7 +219,11 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       p?.organizationId === currentUser?.organizationId
   );
   const ownResponse = ownParticipation?.response || ownParticipation?.quotation || ownParticipation?.proposal;
-  const hasSubmittedProposal = Boolean(ownParticipation || ownResponse);
+  const isOwnSubmitted = Boolean(
+    (ownParticipation && String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED') ||
+    (ownResponse && String(ownResponse.submissionStatus || ownResponse.status || '').toUpperCase() === 'SUBMITTED')
+  );
+  const hasSubmittedProposal = Boolean(bid.hasSubmittedProposal || isOwnSubmitted);
 
   const handleSubmitProposal = () => {
     if (!currentUser) {

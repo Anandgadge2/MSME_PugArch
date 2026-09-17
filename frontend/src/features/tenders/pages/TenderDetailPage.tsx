@@ -376,10 +376,13 @@ export default function TenderDetailPage() {
       (user.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(user.organizationId))
     )
   );
+  const isOwnSubmitted = Boolean(
+    ownParticipation &&
+    String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
+  );
   const hasSubmittedProposal = Boolean(
-    (tender as any).hasParticipated ||
     (tender as any).hasSubmittedProposal ||
-    ownParticipation
+    isOwnSubmitted
   );
 
   return (

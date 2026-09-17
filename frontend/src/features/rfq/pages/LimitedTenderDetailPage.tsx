@@ -153,12 +153,14 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     )
   );
 
+  const isOwnSubmitted = Boolean(
+    ownParticipation &&
+    String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
+  );
+
   const hasSubmittedProposal = Boolean(
-    bid.hasParticipated ||
     bid.hasSubmittedProposal ||
-    reqObj.hasParticipated ||
-    reqObj.myParticipation ||
-    ownParticipation
+    isOwnSubmitted
   );
 
   const invitedSellersList =

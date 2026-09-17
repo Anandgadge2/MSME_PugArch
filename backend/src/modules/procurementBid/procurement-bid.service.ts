@@ -965,6 +965,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     }) : undefined,
     results: canSeeParticipants ? (bid.participations || [])
       .filter((p: any) => {
+        const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+        if (subStatus === 'DRAFT' || p.isWithdrawn) return false;
         if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
         if (actorRole === 'seller') {
           const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
@@ -1151,7 +1153,8 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     lineItems: (options.ownView || canSeeFin) ? lineItemsArr : [],
     terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
     offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
-    submissionStatus: p.submissionStatus,
+    status: p.submissionStatus || 'DRAFT',
+    submissionStatus: p.submissionStatus || 'DRAFT',
     submittedAt: p.submittedAt,
     technicalSubmittedAt: p.technicalSubmittedAt,
     financialSubmittedAt: p.financialSubmittedAt,
@@ -2364,7 +2367,87 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
     await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
     const rows = [];
     for (const item of body.evaluations) {
-      const participation = await tx.procurementBidParticipation.findUnique({ where: { id: Number(item.participationId) } });
+      const targetIdNum = Number(item.participationId);
+      let participation = !isNaN(targetIdNum) ? await tx.procurementBidParticipation.findUnique({ where: { id: targetIdNum } }) : null;
+      if (!participation || participation.bidId !== bid.id) {
+        participation = await tx.procurementBidParticipation.findFirst({
+          where: {
+            bidId: bid.id,
+            OR: [
+              ...(!isNaN(targetIdNum) ? [{ id: targetIdNum }, { sellerId: targetIdNum }] : []),
+              { participationNumber: String(item.participationId).trim() }
+            ]
+          }
+        });
+      }
+
+      // Check linked RequirementResponse if direct participation record not found
+      if (!participation && !isNaN(targetIdNum)) {
+        const reqResp = await tx.requirementResponse.findUnique({
+          where: { id: targetIdNum }
+        });
+        if (reqResp) {
+          const uniquePartNumber = `PRT-REQ-${bid.id}-${reqResp.id}`;
+          participation = await tx.procurementBidParticipation.findFirst({
+            where: { bidId: bid.id, sellerId: reqResp.sellerUserId }
+          });
+          if (!participation) {
+            participation = await tx.procurementBidParticipation.create({
+              data: {
+                bidId: bid.id,
+                sellerId: reqResp.sellerUserId,
+                participationNumber: uniquePartNumber,
+                submissionStatus: 'SUBMITTED',
+                technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
+                financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                quotedAmount: reqResp.offeredPrice || 0,
+                totalAmount: reqResp.offeredPrice || 0,
+                submittedAt: reqResp.createdAt
+              }
+            });
+          }
+          await tx.requirementResponse.update({
+            where: { id: reqResp.id },
+            data: { status: item.status === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED' }
+          }).catch(() => {});
+        }
+      }
+
+      // Check linked QuoteResponse if still not found
+      if (!participation && !isNaN(targetIdNum)) {
+        const qResp = await tx.quoteResponse.findUnique({
+          where: { id: targetIdNum }
+        });
+        if (qResp) {
+          const uniquePartNumber = `PRT-QR-${bid.id}-${qResp.id}`;
+          participation = await tx.procurementBidParticipation.findFirst({
+            where: { bidId: bid.id, sellerId: qResp.sellerId }
+          });
+          if (!participation) {
+            participation = await tx.procurementBidParticipation.create({
+              data: {
+                bidId: bid.id,
+                sellerId: qResp.sellerId,
+                participationNumber: uniquePartNumber,
+                submissionStatus: 'SUBMITTED',
+                technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
+                financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                quotedAmount: qResp.totalAmount || 0,
+                totalAmount: qResp.totalAmount || 0,
+                submittedAt: qResp.createdAt
+              }
+            });
+          }
+          await tx.quoteResponse.update({
+            where: { id: qResp.id },
+            data: {
+              technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'NOT_QUALIFIED',
+              technicalRemarks: item.remarks || null
+            }
+          }).catch(() => {});
+        }
+      }
+
       if (!participation || participation.bidId !== bid.id) throw new ApiError(404, 'Participation not found', 'PARTICIPATION_NOT_FOUND');
       const technicalStatus = item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED';
       await tx.procurementBidParticipation.update({
@@ -2400,12 +2483,17 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
 export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: string) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
-  if (bid.status !== 'TECHNICAL_EVALUATION') throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
+  if (!['TECHNICAL_EVALUATION', 'CLOSED', 'EXPIRED'].includes(bid.status)) {
+    throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
+  }
   const qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
   if (!qualified) throw new ApiError(400, 'At least one seller must be technically qualified.', 'TECHNICAL_EVALUATION_PENDING');
   const pending = await db.procurementBidParticipation.count({ where: { bidId: bid.id, submissionStatus: 'SUBMITTED', technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] } } });
   if (pending) throw new ApiError(400, 'Every submitted participant must be technically qualified or disqualified before completion.', 'TECHNICAL_EVALUATION_PENDING');
-  assertBidTransition(bid.status, 'TECHNICAL_EVALUATION_COMPLETED');
+  if (bid.status !== 'TECHNICAL_EVALUATION') {
+    assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
+  }
+  assertBidTransition('TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED');
   const updated = await db.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION_COMPLETED', lifecycleStage: 'TECHNICAL_EVALUATION_COMPLETED' } });
   await procurementAudit(req, 'TECHNICAL_EVALUATION_COMPLETED', 'ProcurementBid', bid.id, updated);
   return updated;
