@@ -1360,18 +1360,20 @@ export default function MarketplaceProductList() {
                                                                 <div className="flex-1 inline-flex h-7 sm:h-8 items-center justify-between rounded-xl border border-[#0b2447]/30 bg-white text-[#0b2447] shadow-sm px-1">
                                                                     <button
                                                                         type="button"
+                                                                        aria-label={`Decrease quantity of ${item.name}`}
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                                                                     >
-                                                                        <Minus className="h-3 w-3" />
+                                                                        <Minus className="h-3 w-3" aria-hidden="true" />
                                                                     </button>
-                                                                    <span className="text-[10px] sm:text-xs font-black tabular-nums">{cartQuantity}</span>
+                                                                    <span className="text-[10px] sm:text-xs font-black tabular-nums" aria-live="polite" aria-atomic="true">{cartQuantity}</span>
                                                                     <button
                                                                         type="button"
+                                                                        aria-label={`Increase quantity of ${item.name}`}
                                                                         onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200"
+                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                                                                     >
-                                                                        <Plus className="h-3 w-3" />
+                                                                        <Plus className="h-3 w-3" aria-hidden="true" />
                                                                     </button>
                                                                 </div>
                                                             ) : (

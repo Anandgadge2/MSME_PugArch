@@ -361,7 +361,7 @@ export default function PurchaseOrders() {
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
 
   const handleOpenRepeatModal = (order: PurchaseOrderDto) => {
-    setRepeatingOrder(order);
+    router.push(`/buyer/repeat-orders?selectPo=${order.id}`);
   };
   const viewerScope = `${user?.role || 'guest'}-${user?.id || 'none'}`;
 
@@ -737,7 +737,7 @@ export default function PurchaseOrders() {
     const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
     const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
 
-    const buyerName =
+    const buyerOrgName =
       buyer.organization?.organizationName ||
       buyer.buyerProfile?.organizationName ||
       buyer.buyerProfile?.companyName ||
@@ -745,26 +745,79 @@ export default function PurchaseOrders() {
       buyer.name ||
       'N/A';
 
-    const sellerName =
+    const sellerOrg =
       seller.organization?.organizationName ||
+      sellerReg.tradeName ||
+      sellerReg.legalName ||
+      sellerReg.businessName ||
+      sellerReg.gstDetails?.tradeName ||
+      sellerReg.gstDetails?.legalName ||
+      sellerReg.gstDetails?.organizationName ||
       seller.sellerProfile?.businessName ||
       seller.sellerProfile?.companyName ||
       sellerReg.companyName ||
       seller.name ||
       'N/A';
 
+    const sellerOrgAddress = seller.organization?.address ||
+      [seller.organization?.addressLine1, seller.organization?.addressLine2, seller.organization?.city, seller.organization?.state, seller.organization?.pincode].filter(Boolean).join(', ');
+
+    const sellerAddress =
+      sellerOrgAddress ||
+      seller.sellerProfile?.registeredAddress ||
+      seller.sellerProfile?.address ||
+      sellerReg.businessAddress ||
+      sellerReg.registeredAddress ||
+      sellerReg.address ||
+      sellerReg.gstDetails?.businessAddress ||
+      sellerReg.gstDetails?.registeredOfficeAddress ||
+      sellerReg.gstDetails?.address ||
+      'N/A';
+
+    const sellerGstin =
+      seller.organization?.gstin ||
+      seller.sellerProfile?.gst ||
+      sellerReg.gstin ||
+      sellerReg.gstDetails?.gstin ||
+      sellerReg.gstDetails?.gstNumber ||
+      sellerReg.gstDetails?.responseGstin ||
+      'N/A';
+
+    const buyerOrgAddress = buyer.organization?.address ||
+      [buyer.organization?.addressLine1, buyer.organization?.addressLine2, buyer.organization?.city, buyer.organization?.state, buyer.organization?.pincode].filter(Boolean).join(', ');
+
+    const buyerAddress =
+      order.deliveryAddress ||
+      buyerOrgAddress ||
+      buyer.buyerProfile?.registeredAddress ||
+      buyer.buyerProfile?.address ||
+      buyerReg.registeredAddress ||
+      buyerReg.address ||
+      'N/A';
+
+    const buyerGstin =
+      buyer.organization?.gstin ||
+      buyer.buyerProfile?.gstin ||
+      buyerReg.gstin ||
+      buyerReg.gstDetails?.gstin ||
+      buyerReg.gstDetails?.gstNumber ||
+      buyerReg.gstDetails?.responseGstin ||
+      'N/A';
+
     const sellerLogo =
       seller.organization?.profile?.logoUrl ||
       sellerReg.logoUrl ||
-      seller.organization?.organizationLogoFile?.url ||
-      seller.organization?.organizationLogoFile?.fileUrl ||
+      seller.organization?.logoFile?.url ||
+      seller.organization?.logoFile?.fileUrl ||
+      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/view` : null) ||
       (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/download` : null);
 
     const buyerLogo =
       buyer.organization?.profile?.logoUrl ||
       buyerReg.logoUrl ||
-      buyer.organization?.organizationLogoFile?.url ||
-      buyer.organization?.organizationLogoFile?.fileUrl ||
+      buyer.organization?.logoFile?.url ||
+      buyer.organization?.logoFile?.fileUrl ||
+      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/view` : null) ||
       (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/download` : null);
 
     const config: DocumentConfig = {
@@ -772,29 +825,29 @@ export default function PurchaseOrders() {
       documentNumber: order.poNumber || `PO-${order.id}`,
       dateStr: formatTimestamp(new Date()),
       status: readableStatus(order.status),
-      issuerName: buyerName !== 'N/A' ? buyerName : 'Enterprise Procurement',
-      issuerSubtitle: 'Official Purchase Order Copy',
-      issuerLogo: buyerLogo || sellerLogo,
+      issuerName: sellerOrg !== 'N/A' ? sellerOrg : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Enterprise Procurement'),
+      issuerSubtitle: 'Authorized Vendor & MSME Supplier',
+      issuerLogo: sellerLogo || buyerLogo,
       sellerSignatureUrl: sellerReg.signatureUrl || null,
       sellerStampUrl: sellerReg.stampUrl || null,
       buyerSignatureUrl: buyerReg.signatureUrl || null,
       buyerStampUrl: buyerReg.stampUrl || null,
       parties: [
         {
-          title: 'Buyer / Requesting Organization',
-          name: buyerName,
+          title: 'Ship To / Buyer',
+          name: buyerOrgName,
           email: buyer.email || buyerReg.email || 'N/A',
           phone: buyer.mobile || buyerReg.mobile || 'N/A',
-          gstin: buyer.organization?.gstin || buyerReg.gstin || 'N/A',
-          address: order.deliveryAddress || buyer.organization?.address || buyerReg.address || 'N/A',
+          gstin: buyerGstin,
+          address: buyerAddress,
         },
         {
-          title: 'Seller / Supplier Organization',
-          name: sellerName,
+          title: 'Vendor / Seller',
+          name: sellerOrg,
           email: seller.email || sellerReg.email || 'N/A',
           phone: seller.mobile || sellerReg.mobile || 'N/A',
-          gstin: seller.organization?.gstin || sellerReg.gstin || 'N/A',
-          address: seller.organization?.address || sellerReg.address || 'N/A',
+          gstin: sellerGstin,
+          address: sellerAddress,
           details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
         }
       ],

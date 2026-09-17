@@ -123,22 +123,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
     allowedEvaluations: ['L1 total value']
-  },
-  {
-    id: 'REPEAT_ORDER',
-    title: 'Repeat Order',
-    subtitle: 'Duplicate a previous successful order at original contract terms',
-    icon: RotateCcw,
-    accent: 'border-lime-200 bg-lime-50 text-lime-800',
-    badge: 'Quick Reorder',
-    valueHint: 'Repeat purchase of identical item with prior seller',
-    fit: ['Identical item specifications', 'Recent previous order (e.g. < 90 days)', 'Value within reorder policy limits'],
-    gates: ['Original order ID reference', 'No price escalation proof', 'Approval for repeat order'],
-    complexity: 'Low',
-    estimatedTime: '2-4 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
-    requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
-    allowedEvaluations: ['L1 total value']
   }
 ];
 
@@ -276,7 +260,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     result.id = 'RFQ';
     result.reason = 'RFQ is recommended for low value procurement to get competitive quotes.';
     result.confidence = 'HIGH';
-    result.alternativeMethods = ['REPEAT_ORDER'];
+    result.alternativeMethods = ['LIMITED_TENDER'];
     return result;
   }
 
@@ -311,7 +295,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
   result.id = 'RFQ';
   result.reason = 'RFQ is recommended because your specifications are clear and you primarily need fast price collections from multiple suppliers.';
   result.confidence = 'HIGH';
-  result.alternativeMethods = ['REPEAT_ORDER'];
+  result.alternativeMethods = ['LIMITED_TENDER'];
 
   return result;
 };

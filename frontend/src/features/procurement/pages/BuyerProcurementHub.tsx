@@ -602,12 +602,19 @@ export default function BuyerProcurementHub() {
       cards: [
         {
           title: 'Create Procurement',
-          description: 'Unified guided flow for RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, Rate Contract, or Repeat Order.',
+          description: 'Unified guided flow for RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, or Rate Contract.',
           href: '/buyer/procurement/create',
           cta: 'Create Sourcing Event',
           icon: PlusCircle,
           badge: 'Start Here',
           badgeColor: 'bg-[#12335f] text-white',
+        },
+        {
+          title: 'Repeat Orders',
+          description: 'Quickly reorder from previous purchase orders with locked original contract terms.',
+          href: '/buyer/repeat-orders',
+          cta: 'Repeat Order',
+          icon: RefreshCw,
         },
         {
           title: 'My Procurements',
@@ -826,7 +833,6 @@ export default function BuyerProcurementHub() {
                 <option value="limited-tender">Limited Tender</option>
                 <option value="reverse-auction">Reverse Auction</option>
                 <option value="rate-contract">Rate Contract</option>
-                <option value="repeat-order">Repeat Order</option>
                 <option value="direct-purchase">Direct Purchase</option>
               </select>
             </div>

@@ -861,7 +861,7 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
   };
 };
 
-const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: string; label: string }>> = {
+const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ value: string; label: string }>>> = {
   RFQ: [
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
@@ -891,10 +891,6 @@ const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: strin
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
     { value: 'Service', label: 'Service Contract' }
-  ],
-  REPEAT_ORDER: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
   ]
 };
 
@@ -2416,7 +2412,7 @@ function SelectionsStepForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
 }) {
   const availableMethods = useMemo(() => {
-    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REPEAT_ORDER'];
+    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT'];
     return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id) && m.buyerTypes.includes(draft.basics.buyerType));
   }, [draft.basics.buyerType]);
 

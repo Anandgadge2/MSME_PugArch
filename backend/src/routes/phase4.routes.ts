@@ -53,6 +53,7 @@ import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
+import { createApprovalChain } from '../services/approval-chain.service.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -199,7 +200,6 @@ const procurementMethodDefinitions = [
   { slug: 'open-tender', code: 'OPEN_TENDER', name: 'Open Tender', route: '/buyer/procurement/create?method=OPEN_TENDER', handoffRoute: '/buyer/publish-bid?method=open-tender', badge: 'Compliance Required', valueHint: 'Formal bids and higher-value procurement' },
   { slug: 'limited-tender', code: 'LIMITED_TENDER', name: 'Limited Tender', route: '/buyer/procurement/create?method=LIMITED_TENDER', handoffRoute: '/buyer/publish-bid?method=limited-tender', badge: 'Restricted Pool', valueHint: 'Bids invited from a selected list of suppliers' },
   { slug: 'reverse-auction', code: 'REVERSE_AUCTION', name: 'Reverse Auction', route: '/buyer/procurement/create?method=REVERSE_AUCTION', handoffRoute: '/reverse-auctions/create', badge: 'Advanced', valueHint: 'Use after technical qualification' },
-  { slug: 'repeat-order', code: 'REPEAT_ORDER', name: 'Repeat Order', route: '/buyer/procurement/create?method=REPEAT_ORDER', handoffRoute: '/buyer/procurement/create?method=REPEAT_ORDER', badge: 'Quick Reorder', valueHint: 'Use with prior order reference' },
   // Legacy alias entries kept for backward compatibility with old records
   { slug: 'tender', code: 'OPEN_TENDER', name: 'Tender (Legacy)', route: '/buyer/procurement/create', handoffRoute: '/buyer/publish-bid?method=tender', badge: 'Legacy', valueHint: 'Migrated to Open Tender' },
 ];
@@ -5382,24 +5382,30 @@ router.get('/api/public/procurement-opportunities', asyncRoute(async (_req, res)
 router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const buyerUser = await db.user.findUnique({ where: { id: userId(req) }, select: { organizationId: true } });
-  if (!buyerUser?.organizationId) return ok(res, { results: [] });
+  const buyerClause = buyerUser?.organizationId
+    ? { OR: [{ buyerId: userId(req) }, { buyer: { organizationId: buyerUser.organizationId } }] }
+    : { buyerId: userId(req) };
 
   const where: any = {
-    buyer: { organizationId: buyerUser.organizationId },
+    ...buyerClause,
     status: { notIn: ['cancelled', 'rejected', 'CANCELLED', 'REJECTED'] },
   };
   if (q) {
-    where.OR = [
-      { poNumber: { contains: q, mode: 'insensitive' } },
-      { title: { contains: q, mode: 'insensitive' } },
-      { seller: { name: { contains: q, mode: 'insensitive' } } },
-      { items: { some: { itemName: { contains: q, mode: 'insensitive' } } } },
+    where.AND = [
+      {
+        OR: [
+          { poNumber: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q, mode: 'insensitive' } },
+          { seller: { name: { contains: q, mode: 'insensitive' } } },
+          { items: { some: { itemName: { contains: q, mode: 'insensitive' } } } },
+        ]
+      }
     ];
   }
 
   const pos = await db.purchaseOrder.findMany({
     where,
-    take: 20,
+    take: 100,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -5412,11 +5418,108 @@ router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('bu
       poStatus: true,
       createdAt: true,
       expectedDelivery: true,
-      buyer: { select: { id: true, name: true, organizationId: true } },
-      seller: { select: { id: true, name: true, email: true, mobile: true, accountStatus: true } },
-      items: { select: { id: true, itemName: true, description: true, quantity: true, unitOfMeasure: true, unitPrice: true, totalAmount: true } },
+      deliveryAddress: true,
+      deliveryType: true,
+      paymentTerms: true,
+      tenderId: true,
+      contractId: true,
+      metadata: true,
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+            }
+          }
+        }
+      },
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          accountStatus: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+            }
+          }
+        }
+      },
+      items: {
+        select: {
+          id: true,
+          productId: true,
+          itemName: true,
+          description: true,
+          quantity: true,
+          unitOfMeasure: true,
+          unitPrice: true,
+          taxRate: true,
+          totalAmount: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              hsnCode: true,
+              sku: true,
+              unitOfMeasure: true,
+              taxRate: true
+            }
+          }
+        }
+      },
       cracs: { select: { acceptedQuantity: true } },
-      tender: { select: { id: true, tenderId: true, requirement: { select: { id: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true } } } },
+      tender: {
+        select: {
+          id: true,
+          tenderId: true,
+          title: true,
+          category: true,
+          paymentTerms: true,
+          deliveryType: true,
+          documentUrl: true,
+          requirement: {
+            select: {
+              id: true,
+              requirementNumber: true,
+              title: true,
+              procurementMethod: true,
+              canonicalMethod: true,
+              payload: true,
+              items: {
+                select: {
+                  itemName: true,
+                  specifications: true
+                }
+              }
+            }
+          }
+        }
+      }
     }
   });
 
@@ -5424,38 +5527,104 @@ router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('bu
     const orderedQty = po.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const deliveredQty = po.cracs.reduce((sum, crac) => sum + Number(crac.acceptedQuantity || 0), 0);
     const pendingQty = Math.max(0, orderedQty - deliveredQty);
-    const originalMethod = po.tender?.requirement?.canonicalMethod || po.tender?.requirement?.procurementMethod || 'UNKNOWN';
-    const prNumber = po.tender?.requirement?.requirementNumber || null;
+    const originalMethod = po.tender?.requirement?.canonicalMethod || po.tender?.requirement?.procurementMethod || 'DIRECT_PURCHASE';
+    const prNumber = po.tender?.requirement?.requirementNumber || (po.tender?.tenderId ? `TND-${po.tender.tenderId}` : `PR-${po.id}`);
+    const reqPayload = (po.tender?.requirement?.payload as any) || {};
+
+    const buyerOrg = po.buyer?.organization;
+    const sellerOrg = po.seller?.organization;
+
+    const buyerAddress = [buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.state, buyerOrg?.pincode].filter(Boolean).join(', ') || po.deliveryAddress || 'Central Warehouse / Site Location';
+    const sellerAddress = [sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.state, sellerOrg?.pincode].filter(Boolean).join(', ') || '-';
+
+    const itemsMapped = po.items.map((item, idx) => {
+      const tenderReqItem = po.tender?.requirement?.items?.find(ri => ri.itemName?.toLowerCase() === item.itemName?.toLowerCase()) || po.tender?.requirement?.items?.[idx];
+      const specs = (tenderReqItem?.specifications as any) || (item.description ? { description: item.description } : null) || null;
+      const hsnSac = item.product?.hsnCode || (item as any).hsnCode || '8471';
+      const gstRate = Number(item.taxRate ?? item.product?.taxRate ?? 18);
+      return {
+        id: item.id,
+        productId: item.productId,
+        itemName: item.itemName,
+        description: item.description || item.itemName,
+        quantity: Number(item.quantity),
+        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        unitPrice: Number(item.unitPrice),
+        taxRate: gstRate,
+        gstRate,
+        hsnSac,
+        hsnCode: hsnSac,
+        specifications: specs,
+        totalAmount: Number(item.totalAmount),
+      };
+    });
+
+    const deliveryLocation = po.deliveryAddress || buyerAddress;
+    const paymentTerms = po.paymentTerms || po.tender?.paymentTerms || reqPayload?.paymentTerms || '100% payment within 30 days against Consignee Receipt and Acceptance Certificate (CRAC)';
+    const deliveryTerms = po.deliveryType || po.tender?.deliveryType || reqPayload?.deliveryTerms || 'Free Delivery at Site / Consignee Location (F.O.R)';
+    const commercialTerms = reqPayload?.commercialTerms || 'Original contract terms, SLA and warranty conditions shall govern this repeat order.';
+    const requiredDocs = reqPayload?.requiredDocs || reqPayload?.documents || [
+      { name: 'Tax Invoice (GST compliant)', mandatory: true },
+      { name: 'Delivery Challan / Proof of Dispatch', mandatory: true },
+      { name: 'Warranty & Guarantee Certificate', mandatory: false },
+      { name: 'Consignee Receipt Acceptance Certificate (CRAC)', mandatory: true }
+    ];
+
     return {
       id: po.id,
       poNumber: po.poNumber,
       title: po.title,
       amount: Number(po.amount),
-      totalValue: po.totalValue,
-      currency: po.currency,
+      totalValue: Number(po.totalValue || po.amount),
+      currency: po.currency || 'INR',
       status: po.status,
       poStatus: po.poStatus,
       poDate: po.createdAt,
       expectedDelivery: po.expectedDelivery,
-      sellerId: po.seller.id,
-      sellerName: po.seller.name,
-      sellerEmail: po.seller.email || '',
-      sellerMobile: po.seller.mobile || '',
-      isSupplierActive: po.seller.accountStatus === 'ACTIVE',
-      items: po.items.map(item => ({
-        id: item.id,
-        itemName: item.itemName,
-        description: item.description,
-        quantity: Number(item.quantity),
-        unitOfMeasure: item.unitOfMeasure,
-        unitPrice: Number(item.unitPrice),
-        totalAmount: Number(item.totalAmount),
-      })),
+      tenderId: po.tenderId,
+      contractId: po.contractId,
+      procurementId: prNumber,
+      procurementTitle: po.title || po.tender?.title || 'Procurement Order',
+      supplierName: sellerOrg?.organizationName || po.seller.name,
+      procurementDetails: {
+        procurementId: prNumber,
+        procurementTitle: po.title || po.tender?.title || 'Procurement Order',
+        category: po.tender?.category || 'Goods / Products',
+        procurementMethod: originalMethod,
+        tenderId: po.tender?.tenderId || null,
+      },
+      buyerDetails: {
+        id: po.buyer.id,
+        name: po.buyer.name,
+        email: po.buyer.email,
+        mobile: po.buyer.mobile,
+        organizationName: buyerOrg?.organizationName || po.buyer.name,
+        gstin: buyerOrg?.gstin || '-',
+        panNumber: buyerOrg?.panNumber || '-',
+        address: buyerAddress
+      },
+      supplierDetails: {
+        id: po.seller.id,
+        name: po.seller.name,
+        organizationName: sellerOrg?.organizationName || po.seller.name,
+        email: po.seller.email || '',
+        mobile: po.seller.mobile || '',
+        gstin: sellerOrg?.gstin || '-',
+        panNumber: sellerOrg?.panNumber || '-',
+        address: sellerAddress,
+        isSupplierActive: po.seller.accountStatus === 'ACTIVE'
+      },
+      items: itemsMapped,
       orderedQuantity: orderedQty,
       deliveredQuantity: deliveredQty,
       pendingQuantity: pendingQty,
+      deliveryLocation,
+      paymentTerms,
+      deliveryTerms,
+      commercialTerms,
+      requiredDocs,
       originalProcurementMethod: originalMethod,
-      prNumber,
+      prNumber
     };
   });
 
@@ -7454,67 +7623,164 @@ router.post('/purchase-orders/generate', authenticate, requirePermission('purcha
 router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), paymentRateLimit, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({
-    quantity: z.coerce.number().positive(),
-    deliveryAddress: z.string().trim().min(3).max(1000),
-    expectedDelivery: safeCoercedDate
+    quantity: z.coerce.number().positive().optional(),
+    deliveryAddress: z.string().trim().min(3).max(1000).optional(),
+    expectedDelivery: safeCoercedDate,
+    repeatOrderDate: safeCoercedDate.optional(),
+    requiredByDate: safeCoercedDate.optional(),
+    remarks: z.string().trim().max(1000).optional()
   }), req.body);
+
+  const buyerUser = await db.user.findUnique({
+    where: { id: userId(req) },
+    select: { organizationId: true, name: true, email: true }
+  });
 
   const existing = await db.purchaseOrder.findUnique({
     where: { id },
-    include: { items: true }
+    include: {
+      items: { include: { product: true } },
+      buyer: { include: { organization: true } },
+      seller: { include: { organization: true } },
+      tender: { include: { requirement: true } }
+    }
   });
 
   if (!existing) throw new ApiError(404, 'Purchase order not found');
 
+  const isOwner = existing.buyerId === userId(req) || (buyerUser?.organizationId && existing.buyer?.organizationId === buyerUser.organizationId);
+  if (!isOwner && !isAdmin(req)) {
+    throw new ApiError(403, 'You are not authorized to repeat this purchase order', 'FORBIDDEN');
+  }
+
+  const repeatOrderDate = body.repeatOrderDate ? new Date(body.repeatOrderDate) : new Date();
+  const newDeliveryDate = new Date(body.expectedDelivery);
+  const requiredByDate = body.requiredByDate ? new Date(body.requiredByDate) : newDeliveryDate;
+
   const poNumber = `PO-REP-${Date.now().toString().slice(-6)}`;
-  const unitPrice = existing.items[0]?.unitPrice || existing.amount;
-  const newAmount = Number(unitPrice) * body.quantity;
+  
+  let newTotalAmount = 0;
+  const itemsToCreate = existing.items.map(item => {
+    const itemQty = (body.quantity && existing.items.length === 1) ? Number(body.quantity) : Number(item.quantity);
+    const itemPrice = Number(item.unitPrice);
+    const itemTotal = itemPrice * itemQty;
+    newTotalAmount += itemTotal;
+    return {
+      productId: item.productId,
+      itemName: item.itemName,
+      description: item.description,
+      quantity: itemQty,
+      unitOfMeasure: item.unitOfMeasure,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate,
+      totalAmount: itemTotal
+    };
+  });
+
+  if (newTotalAmount <= 0) {
+    newTotalAmount = Number(existing.amount);
+  }
+
+  const buyerOrgId = buyerUser?.organizationId || existing.buyer?.organizationId;
+  const initialStatus = buyerOrgId ? 'pending_approval' : 'order_placed';
+  const initialPoStatus = buyerOrgId ? 'GENERATED' : 'ISSUED';
 
   const newPo = await db.purchaseOrder.create({
     data: {
       poNumber,
       title: `Repeat Order: ${existing.title}`,
-      status: 'order_placed',
-      amount: newAmount,
-      totalValue: newAmount,
+      status: initialStatus,
+      poStatus: initialPoStatus,
+      amount: newTotalAmount,
+      totalValue: newTotalAmount,
       buyerId: userId(req),
       sellerId: existing.sellerId,
       tenderId: existing.tenderId,
       contractId: existing.contractId,
       paymentTerms: existing.paymentTerms,
       deliveryType: existing.deliveryType,
-      deliveryAddress: body.deliveryAddress,
-      expectedDelivery: body.expectedDelivery,
+      deliveryAddress: body.deliveryAddress || existing.deliveryAddress,
+      expectedDelivery: newDeliveryDate,
+      metadata: {
+        source: 'repeat_order',
+        repeatOfPoId: existing.id,
+        repeatOfPoNumber: existing.poNumber,
+        repeatOrderDate: repeatOrderDate.toISOString(),
+        requiredByDate: requiredByDate.toISOString(),
+        newDeliveryDate: newDeliveryDate.toISOString(),
+        remarks: body.remarks || null,
+        originalOrderTitle: existing.title,
+        createdAt: new Date().toISOString()
+      },
       items: {
-        create: existing.items.map(item => ({
-          productId: item.productId,
-          itemName: item.itemName,
-          description: item.description,
-          quantity: body.quantity,
-          unitOfMeasure: item.unitOfMeasure,
-          unitPrice: item.unitPrice,
-          taxRate: item.taxRate,
-          totalAmount: Number(item.unitPrice) * body.quantity
-        }))
+        create: itemsToCreate
       }
     },
     include: {
-      buyer: { select: { id: true, name: true, email: true } },
-      seller: { select: { id: true, name: true, email: true } },
+      buyer: { select: { id: true, name: true, email: true, organization: true } },
+      seller: { select: { id: true, name: true, email: true, organization: true } },
       items: true
     }
   });
 
-  await auditWrite(req, 'purchase_order.generated', 'purchaseOrder', newPo.id);
-  notifySellerNewPurchaseOrder(newPo.id).catch(() => undefined);
-  ok(res, newPo, 201);
+  let approvalInfo = {
+    requiresApproval: false,
+    currentStage: 'READY_ISSUED',
+    message: 'Repeat purchase order created successfully.'
+  };
+
+  if (buyerOrgId) {
+    try {
+      const chain = await createApprovalChain({
+        entityType: 'purchase_order',
+        entityId: newPo.id,
+        organizationId: buyerOrgId,
+        totalValue: newTotalAmount,
+        initiatorUserId: userId(req)
+      });
+      approvalInfo = {
+        requiresApproval: true,
+        currentStage: chain[0]?.stage || 'DEPARTMENT_HEAD',
+        message: 'Repeat order submitted. Routed to Department Head for approval.'
+      };
+    } catch (err: any) {
+      logger.warn(`Failed to create approval chain for repeat PO #${newPo.id}: ${err?.message}`);
+      await db.purchaseOrder.update({
+        where: { id: newPo.id },
+        data: { status: 'order_placed', poStatus: 'ISSUED' }
+      });
+      approvalInfo = {
+        requiresApproval: false,
+        currentStage: 'ISSUED',
+        message: 'Repeat purchase order generated and placed.'
+      };
+    }
+  }
+
+  await auditWrite(req, 'purchase_order.repeat_created', 'purchaseOrder', newPo.id, {
+    originalPoId: existing.id,
+    originalPoNumber: existing.poNumber,
+    newPoNumber: newPo.poNumber,
+    totalValue: newTotalAmount
+  });
+
+  if (!approvalInfo.requiresApproval) {
+    notifySellerNewPurchaseOrder(newPo.id).catch(() => undefined);
+  }
+
+  ok(res, {
+    purchaseOrder: newPo,
+    approvalInfo,
+    message: approvalInfo.message
+  }, 201);
 }));
 
 const formatOrgWithAddress = (org: any) => {
   if (!org) return org;
   return {
     ...org,
-    address: [org.addressLine1, org.addressLine2].filter(Boolean).join(', ') || [org.city, org.state, org.pincode].filter(Boolean).join(', ') || null
+    address: [org.addressLine1, org.addressLine2].filter(Boolean).join(', ') || [org.city, org.state, org.pincode].filter(Boolean).join(', ') || null,
+    organizationLogoFile: org.logoFile || org.organizationLogoFile || null
   };
 };
 
@@ -7594,8 +7860,9 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 city: true,
                 state: true,
                 pincode: true,
+                organizationLogoFileId: true,
                 profile: { select: { logoUrl: true } },
-                organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+                logoFile: { select: { id: true, url: true, fileUrl: true } }
               }
             },
             buyerProfile: true
@@ -7621,8 +7888,9 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 city: true,
                 state: true,
                 pincode: true,
+                organizationLogoFileId: true,
                 profile: { select: { logoUrl: true } },
-                organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+                logoFile: { select: { id: true, url: true, fileUrl: true } }
               }
             },
             sellerProfile: true
@@ -7665,8 +7933,9 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               city: true,
               state: true,
               pincode: true,
+              organizationLogoFileId: true,
               profile: { select: { logoUrl: true } },
-              organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+              logoFile: { select: { id: true, url: true, fileUrl: true } }
             }
           },
           buyerProfile: true
@@ -7692,8 +7961,9 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               city: true,
               state: true,
               pincode: true,
+              organizationLogoFileId: true,
               profile: { select: { logoUrl: true } },
-              organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+              logoFile: { select: { id: true, url: true, fileUrl: true } }
             }
           },
           sellerProfile: true

@@ -3939,8 +3939,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       const buyerLogo =
         props.buyer?.organization?.profile?.logoUrl ||
         buyerReg.logoUrl ||
-        props.buyer?.organization?.organizationLogoFile?.url ||
-        props.buyer?.organization?.organizationLogoFile?.fileUrl ||
+        props.buyer?.organization?.logoFile?.url ||
+        props.buyer?.organization?.logoFile?.fileUrl ||
+        (props.buyer?.organization?.organizationLogoFileId ? `/api/files/${props.buyer.organization.organizationLogoFileId}/view` : null) ||
         (props.buyer?.organization?.organizationLogoFileId ? `/api/files/${props.buyer.organization.organizationLogoFileId}/download` : null);
 
       const engine = new PdfEngine('p');
@@ -4408,8 +4409,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
               )}
 
-              {/* BOQ Table */}
-              {hasDetailData(boqTable) && !isRfqType && !isRateContractType && (
+              {/* BOQ Table (Buyer-side only, removed from Seller View Details) */}
+              {isBuyerSide && hasDetailData(boqTable) && !isRfqType && !isRateContractType && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </DataCard>
@@ -5097,8 +5098,9 @@ export function SellerQuotationReviewModal({
       const supplierLogo =
         participation.supplier?.organization?.profile?.logoUrl ||
         supplierReg.logoUrl ||
-        participation.supplier?.organization?.organizationLogoFile?.url ||
-        participation.supplier?.organization?.organizationLogoFile?.fileUrl ||
+        participation.supplier?.organization?.logoFile?.url ||
+        participation.supplier?.organization?.logoFile?.fileUrl ||
+        (participation.supplier?.organization?.organizationLogoFileId ? `/api/files/${participation.supplier.organization.organizationLogoFileId}/view` : null) ||
         (participation.supplier?.organization?.organizationLogoFileId ? `/api/files/${participation.supplier.organization.organizationLogoFileId}/download` : null);
 
       const supplierSig = supplierReg.signatureUrl || null;

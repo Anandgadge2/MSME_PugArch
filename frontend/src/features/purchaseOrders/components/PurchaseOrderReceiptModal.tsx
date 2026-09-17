@@ -297,25 +297,38 @@ export function PurchaseOrderReceiptModal({
   const sellerReg = (order.seller?.registrationDetails as Record<string, any>) || {};
   const sellerOrg =
     order.seller?.organization?.organizationName ||
+    sellerReg.tradeName ||
+    sellerReg.legalName ||
+    sellerReg.businessName ||
+    sellerReg.gstDetails?.tradeName ||
+    sellerReg.gstDetails?.legalName ||
+    sellerReg.gstDetails?.organizationName ||
     order.seller?.sellerProfile?.businessName ||
     order.seller?.sellerProfile?.companyName ||
     sellerReg.companyName ||
-    sellerReg.businessName ||
     order.seller?.name ||
     'N/A';
 
+  const sellerOrgAddress = order.seller?.organization?.address ||
+    [order.seller?.organization?.addressLine1, order.seller?.organization?.addressLine2, order.seller?.organization?.city, order.seller?.organization?.state, order.seller?.organization?.pincode].filter(Boolean).join(', ');
+
   const sellerAddress =
-    order.seller?.organization?.address ||
+    sellerOrgAddress ||
     order.seller?.sellerProfile?.registeredAddress ||
     order.seller?.sellerProfile?.address ||
+    sellerReg.businessAddress ||
     sellerReg.registeredAddress ||
     sellerReg.address ||
+    sellerReg.gstDetails?.businessAddress ||
+    sellerReg.gstDetails?.registeredOfficeAddress ||
+    sellerReg.gstDetails?.address ||
     'N/A';
 
   const sellerPhone =
     order.seller?.mobile ||
     order.seller?.sellerProfile?.mobile ||
     sellerReg.mobile ||
+    sellerReg.phone ||
     'N/A';
 
   const sellerEmail = order.seller?.email || sellerReg.email || 'N/A';
@@ -325,12 +338,16 @@ export function PurchaseOrderReceiptModal({
     order.seller?.sellerProfile?.gst ||
     sellerReg.gstin ||
     sellerReg.gstDetails?.gstin ||
+    sellerReg.gstDetails?.gstNumber ||
+    sellerReg.gstDetails?.responseGstin ||
     'N/A';
 
   const sellerPan =
     order.seller?.organization?.panNumber ||
     order.seller?.sellerProfile?.pan ||
     sellerReg.pan ||
+    sellerReg.orgPan ||
+    sellerReg.personalPan ||
     sellerReg.gstDetails?.pan ||
     'N/A';
 
@@ -344,8 +361,11 @@ export function PurchaseOrderReceiptModal({
     order.buyer?.name ||
     'N/A';
 
+  const buyerOrgAddress = order.buyer?.organization?.address ||
+    [order.buyer?.organization?.addressLine1, order.buyer?.organization?.addressLine2, order.buyer?.organization?.city, order.buyer?.organization?.state, order.buyer?.organization?.pincode].filter(Boolean).join(', ');
+
   const buyerAddress =
-    order.buyer?.organization?.address ||
+    buyerOrgAddress ||
     order.buyer?.buyerProfile?.registeredAddress ||
     order.buyer?.buyerProfile?.address ||
     buyerReg.registeredAddress ||
@@ -354,14 +374,13 @@ export function PurchaseOrderReceiptModal({
 
   const deliveryAddress =
     order.deliveryAddress ||
-    order.buyer?.organization?.address ||
-    order.buyer?.buyerProfile?.address ||
     buyerAddress;
 
   const buyerPhone =
     order.buyer?.mobile ||
     order.buyer?.buyerProfile?.mobile ||
     buyerReg.mobile ||
+    buyerReg.phone ||
     'N/A';
 
   const buyerEmail = order.buyer?.email || buyerReg.email || 'N/A';
@@ -371,6 +390,7 @@ export function PurchaseOrderReceiptModal({
     order.buyer?.buyerProfile?.gst ||
     buyerReg.gstin ||
     buyerReg.gstDetails?.gstin ||
+    buyerReg.gstDetails?.gstNumber ||
     'N/A';
 
   const buyerPan =
@@ -384,16 +404,23 @@ export function PurchaseOrderReceiptModal({
   const sellerLogo =
     order.seller?.organization?.profile?.logoUrl ||
     sellerReg.logoUrl ||
-    order.seller?.organization?.organizationLogoFile?.url ||
-    order.seller?.organization?.organizationLogoFile?.fileUrl ||
-    (order.seller?.organization?.organizationLogoFileId ? `/api/files/${order.seller.organization.organizationLogoFileId}/download` : null);
+    order.seller?.organization?.logoFile?.url ||
+    order.seller?.organization?.logoFile?.fileUrl ||
+    (order.seller?.organization?.organizationLogoFileId ? `/api/files/${order.seller.organization.organizationLogoFileId}/view` : null) ||
+    (order.seller?.organization?.organizationLogoFileId ? `/api/files/${order.seller.organization.organizationLogoFileId}/download` : null) ||
+    null;
 
   const buyerLogo =
     order.buyer?.organization?.profile?.logoUrl ||
     buyerReg.logoUrl ||
-    order.buyer?.organization?.organizationLogoFile?.url ||
-    order.buyer?.organization?.organizationLogoFile?.fileUrl ||
-    (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/download` : null);
+    order.buyer?.organization?.logoFile?.url ||
+    order.buyer?.organization?.logoFile?.fileUrl ||
+    (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/view` : null) ||
+    (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/download` : null) ||
+    null;
+
+  const topLogo = sellerLogo || buyerLogo;
+  const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');
 
   const sellerSignature = sellerReg.signatureUrl || null;
   const sellerStamp = sellerReg.stampUrl || null;
@@ -473,9 +500,9 @@ export function PurchaseOrderReceiptModal({
         documentNumber: order.poNumber || `PO-${order.id}`,
         dateStr: poDate,
         status: readableStatus(order.status),
-        issuerName: buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement',
-        issuerSubtitle: 'Official Purchase Order',
-        issuerLogo: buyerLogo || sellerLogo,
+        issuerName: topOrgName,
+        issuerSubtitle: 'Authorized Vendor & MSME Supplier',
+        issuerLogo: topLogo,
         sellerSignatureUrl: sellerSignature,
         sellerStampUrl: sellerStamp,
         buyerSignatureUrl: buyerSignature,
@@ -830,14 +857,14 @@ export function PurchaseOrderReceiptModal({
                   {/* Header Branding & Title */}
                   <div className="flex items-center justify-between border-b pb-2 mb-2.5">
                     <div className="flex items-center gap-2.5">
-                      {buyerLogo && (
-                        <img src={buyerLogo} alt="Buyer Logo" className="h-10 w-10 object-contain rounded" />
+                      {topLogo && (
+                        <img src={topLogo} alt="Organization Logo" className="h-10 w-10 object-contain rounded" />
                       )}
                       <div>
                         <h2 className="text-base font-black text-slate-950 uppercase tracking-tight font-sans">
-                          {buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement'}
+                          {topOrgName}
                         </h2>
-                        <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Authorized Vendor & MSME Supplier</p>
                       </div>
                     </div>
                     <div className="text-right">

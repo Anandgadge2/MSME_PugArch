@@ -1,6 +1,5 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   CheckCircle2,
@@ -13,896 +12,1536 @@ import {
   IndianRupee,
   RefreshCw,
   Eye,
-  ArrowUp,
-  ArrowDown,
-  ArrowUpDown,
-  XCircle,
-  ShieldCheck,
-  Filter,
+  ArrowRight,
+  ArrowLeft,
+  Check,
   Building2,
-  BarChart3,
-  PackageCheck,
-  TrendingUp,
-  MoreVertical
+  ShieldCheck,
+  AlertCircle,
+  Clock,
+  Sparkles,
+  Copy,
+  Layers,
+  FileCheck,
+  Info,
+  ChevronRight,
+  Lock,
+  CalendarClock,
+  X,
+  Send,
+  PackageCheck
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
-import { ResponsiveFilterBar } from '../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../components/ui/card';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { EmptyState, InlineError } from '../features/shared/FeatureStates';
-import { formatCurrency, formatDate, maskEmail } from '../features/shared/format';
-import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
-import { KpiCard } from '../features/shared/KpiCard';
-import { Pagination } from '../features/shared/Pagination';
-import { EntityIdLink } from '../features/shared/EntityIdLink';
-import { postApi } from '../features/shared/apiClient';
-import { ViewModeToggle } from '../features/shared/ViewModeToggle';
-import { PageToolbar } from '../features/shared/PageToolbar';
+import { EmptyState } from '../features/shared/FeatureStates';
+import { formatCurrency, formatDate } from '../features/shared/format';
+import { useFeatureQuery } from '../features/shared/hooks';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { PageTableSkeleton } from '../components/ui/skeleton';
-import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
-import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
-import { DataTable, ColumnDef } from '../components/ui/data-table';
+import { FocusTrap } from '../components/ui/FocusTrap';
 
-type StatusTab = 'Delivered' | 'All';
+export interface PreviousPoItem {
+  id: number;
+  productId?: number | null;
+  itemName: string;
+  description?: string | null;
+  quantity: number;
+  unitOfMeasure: string;
+  unitPrice: number;
+  taxRate: number;
+  gstRate?: number;
+  hsnSac?: string;
+  hsnCode?: string;
+  specifications?: Record<string, any> | string | null;
+  totalAmount: number;
+}
+
+export interface PreviousPoDto {
+  id: number;
+  poNumber: string;
+  title: string;
+  amount: number;
+  totalValue: number;
+  currency: string;
+  status: string;
+  poStatus?: string;
+  poDate: string;
+  expectedDelivery?: string;
+  tenderId?: number | null;
+  contractId?: number | null;
+  procurementId: string;
+  procurementTitle: string;
+  supplierName: string;
+  procurementDetails: {
+    procurementId: string;
+    procurementTitle: string;
+    category: string;
+    procurementMethod: string;
+    tenderId?: string | null;
+  };
+  buyerDetails: {
+    id: number;
+    name: string;
+    email: string;
+    mobile?: string;
+    organizationName: string;
+    gstin: string;
+    panNumber: string;
+    address: string;
+  };
+  supplierDetails: {
+    id: number;
+    name: string;
+    organizationName: string;
+    email: string;
+    mobile: string;
+    gstin: string;
+    panNumber: string;
+    address: string;
+    isSupplierActive: boolean;
+  };
+  items: PreviousPoItem[];
+  orderedQuantity: number;
+  deliveredQuantity: number;
+  pendingQuantity: number;
+  deliveryLocation: string;
+  paymentTerms: string;
+  deliveryTerms: string;
+  commercialTerms: string;
+  requiredDocs: Array<{ name: string; mandatory: boolean }>;
+  originalProcurementMethod: string;
+  prNumber?: string | null;
+}
+
+type WizardStep = 1 | 2 | 3 | 4;
+type ViewTab = 'wizard' | 'history';
 
 export default function RepeatOrders() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Filters & UI state
-  const [activeTab, setActiveTab] = useState<StatusTab>('All');
-  const [activeKpiFilter, setActiveKpiFilter] = useState<'all' | 'highest_value' | 'vendors' | 'avg_value'>('all');
-  // Filter states
+  const [activeTab, setActiveTab] = useState<ViewTab>('wizard');
+  const [currentStep, setCurrentStep] = useState<WizardStep>(1);
+
+  // Search & Filter state in Step 1
   const [searchTerm, setSearchTerm] = useState('');
-  const [supplierFilter, setSupplierFilter] = useState('All Suppliers');
-  const [procurementFilter, setProcurementFilter] = useState('All Procurements');
-  const [amountFilter, setAmountFilter] = useState('All Amounts');
-  const [qtyFilter, setQtyFilter] = useState('All Quantities');
-  const [deliveredDateFilter, setDeliveredDateFilter] = useState('All Dates');
-  const [customDate, setCustomDate] = useState({ start: '', end: '' });
-  const [sortBy, setSortBy] = useState('newest');
-  const [showFilters, setShowFilters] = useState(false);
-  
-  const [viewMode, setViewMode] = useResponsiveViewMode('repeat-orders:view-mode');
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('All');
 
-  // Repeat order modal
-  const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
+  // Selection & Details state
+  const [selectedPo, setSelectedPo] = useState<PreviousPoDto | null>(null);
+  const [inspectingPo, setInspectingPo] = useState<PreviousPoDto | null>(null);
 
-  // Detail modal
-  const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
-  const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+  // Step 3 Editable Dates
+  const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const defaultDeliveryIso = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d.toISOString().split('T')[0];
+  }, []);
 
-  useEffect(() => {
-    if (!openKebabId) return;
-    const handleClickOutside = () => setOpenKebabId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, [openKebabId]);
+  const [repeatOrderDate, setRepeatOrderDate] = useState<string>(todayIso);
+  const [requiredByDate, setRequiredByDate] = useState<string>(defaultDeliveryIso);
+  const [newDeliveryDate, setNewDeliveryDate] = useState<string>(defaultDeliveryIso);
+  const [remarks, setRemarks] = useState<string>('');
+
+  // Submission state
+  const [submitting, setSubmitting] = useState(false);
+  const [submissionResult, setSubmissionResult] = useState<{
+    purchaseOrder: any;
+    approvalInfo?: { requiresApproval: boolean; currentStage: string; message: string };
+    message?: string;
+  } | null>(null);
+
+  // Active sub-tab in Step 2 read-only details preview
+  const [activeDetailSection, setActiveDetailSection] = useState<'procurement' | 'supplier' | 'items' | 'terms'>('items');
 
   const viewerScope = `${user?.role || 'buyer'}-${user?.id || 'none'}`;
 
-  // Fetch orders for completed frontend filtering with optimized limit
-  const { data: rawAllOrders, reload, loading: loadingAll, refreshing } = useFeatureQuery<PurchaseOrderDto[]>(
+  // Fetch eligible previous POs
+  const {
+    data: rawPosResponse,
+    loading: loadingPreviousPos,
+    reload: reloadPreviousPos
+  } = useFeatureQuery<{ results: PreviousPoDto[] } | PreviousPoDto[]>(
+    `/api/procurement/repeat-order/previous-pos`,
+    { results: [] }
+  );
+
+  const eligibleOrders: PreviousPoDto[] = useMemo(() => {
+    if (!rawPosResponse) return [];
+    if (Array.isArray(rawPosResponse)) return rawPosResponse;
+    if (Array.isArray((rawPosResponse as any).results)) return (rawPosResponse as any).results;
+    return [];
+  }, [rawPosResponse]);
+
+  // Fetch all orders for Repeat Orders History tab
+  const {
+    data: allOrders,
+    loading: loadingAllOrders,
+    reload: reloadAllOrders
+  } = useFeatureQuery<PurchaseOrderDto[]>(
     `/api/purchase-orders?take=100&viewerScope=${encodeURIComponent(viewerScope)}`,
     []
   );
 
-  const allOrdersList = useMemo(() => {
-    return Array.isArray(rawAllOrders) ? rawAllOrders : [];
-  }, [rawAllOrders]);
-
-  const deliveredOrders = useMemo(() => {
-    if (allOrdersList.length === 0) return [];
-    const isRepeatable = (o: PurchaseOrderDto) => {
-      const s = String(o.status || '').toLowerCase();
-      return !['cancelled', 'rejected'].includes(s);
-    };
-    const strictDelivered = allOrdersList.filter(o => {
-      const s = String(o.status || '').toLowerCase();
-      return s === 'delivered' || s === 'completed' || s === 'closed';
+  const repeatOrdersHistory = useMemo(() => {
+    if (!Array.isArray(allOrders)) return [];
+    return allOrders.filter(o => {
+      const isRepeatMeta = (o.metadata as any)?.source === 'repeat_order' || (o.metadata as any)?.repeatOfPoId != null;
+      const isRepeatPoNumber = String(o.poNumber || '').startsWith('PO-REP');
+      const isRepeatTitle = String(o.title || '').toLowerCase().startsWith('repeat order');
+      return isRepeatMeta || isRepeatPoNumber || isRepeatTitle;
     });
-    if (strictDelivered.length > 0) return strictDelivered;
-    return allOrdersList.filter(isRepeatable);
-  }, [allOrdersList]);
+  }, [allOrders]);
 
-  // Dynamic filter dropdown options
-  const uniqueSuppliers = useMemo(() => {
-    const set = new Set(deliveredOrders.map(o => o.seller?.name || `Seller #${o.sellerId || '-'}`).filter(Boolean));
-    return Array.from(set).sort();
-  }, [deliveredOrders]);
-
-  const uniqueProcurements = useMemo(() => {
-    const set = new Set(deliveredOrders.map(o => {
-      const item = o.items?.[0] || { itemName: o.title };
-      return o.title || (o as any).tender?.title || item.itemName || 'Procurement Order';
-    }).filter(Boolean));
-    return Array.from(set).sort();
-  }, [deliveredOrders]);
-
-  // Combined Filtering & Sorting
-  const processedOrders = useMemo(() => {
-    let result = [...deliveredOrders];
-    
-    // Search
-    if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      result = result.filter(o => {
-        const po = String(o.poNumber || '').toLowerCase();
-        const item = o.items?.[0] || { itemName: o.title };
-        const procurementName = String(o.title || (o as any).tender?.title || item.itemName || 'Procurement Order').toLowerCase();
-        const supplier = String(o.seller?.name || '').toLowerCase();
-        const itemDesc = String((item as any).itemDescription || item.itemName || '').toLowerCase();
-        return po.includes(q) || procurementName.includes(q) || supplier.includes(q) || itemDesc.includes(q);
-      });
-    }
-
-    // Supplier Filter
-    if (supplierFilter !== 'All Suppliers') {
-      result = result.filter(o => {
-        const name = o.seller?.name || `Seller #${o.sellerId || '-'}`;
-        return name === supplierFilter;
-      });
-    }
-
-    // Procurement Filter
-    if (procurementFilter !== 'All Procurements') {
-      result = result.filter(o => {
-        const item = o.items?.[0] || { itemName: o.title };
-        const procurementName = o.title || (o as any).tender?.title || item.itemName || 'Procurement Order';
-        return procurementName === procurementFilter;
-      });
-    }
-
-    // Amount Filter
-    if (amountFilter !== 'All Amounts') {
-      result = result.filter(o => {
-        const val = Number(o.amount || o.totalValue || 0);
-        if (amountFilter === 'Below ₹10,000') return val < 10000;
-        if (amountFilter === '₹10,000 – ₹50,000') return val >= 10000 && val <= 50000;
-        if (amountFilter === '₹50,000 – ₹1,00,000') return val > 50000 && val <= 100000;
-        if (amountFilter === 'Above ₹1,00,000') return val > 100000;
-        return true;
-      });
-    }
-
-    // Quantity Filter
-    if (qtyFilter !== 'All Quantities') {
-      result = result.filter(o => {
-        const item = o.items?.[0] || { quantity: 1 };
-        const qty = Number(item.quantity || 0);
-        if (qtyFilter === '1–10') return qty >= 1 && qty <= 10;
-        if (qtyFilter === '11–50') return qty >= 11 && qty <= 50;
-        if (qtyFilter === '51–100') return qty >= 51 && qty <= 100;
-        if (qtyFilter === '100+') return qty > 100;
-        return true;
-      });
-    }
-
-    // Delivered On Filter
-    if (deliveredDateFilter !== 'All Dates') {
-      const now = new Date();
-      result = result.filter(o => {
-        const dt = new Date(o.updatedAt || o.createdAt || 0);
-        if (isNaN(dt.getTime())) return false;
-        
-        if (deliveredDateFilter === 'Today') {
-          return dt.toDateString() === now.toDateString();
-        }
-        if (deliveredDateFilter === 'Last 7 Days') {
-          const sevenDaysAgo = new Date(now);
-          sevenDaysAgo.setDate(now.getDate() - 7);
-          return dt >= sevenDaysAgo && dt <= now;
-        }
-        if (deliveredDateFilter === 'Last 30 Days') {
-          const thirtyDaysAgo = new Date(now);
-          thirtyDaysAgo.setDate(now.getDate() - 30);
-          return dt >= thirtyDaysAgo && dt <= now;
-        }
-        if (deliveredDateFilter === 'Custom Date Range') {
-          if (!customDate.start && !customDate.end) return true;
-          const start = customDate.start ? new Date(customDate.start) : new Date(0);
-          start.setHours(0,0,0,0);
-          const end = customDate.end ? new Date(customDate.end) : new Date(8640000000000000);
-          end.setHours(23,59,59,999);
-          return dt >= start && dt <= end;
-        }
-        return true;
-      });
-    }
-
-    // KPI Filters overriding normal sorts (Optional support, but maintaining feature parity)
-    if (activeKpiFilter === 'highest_value') {
-      return result.sort((a, b) => Number(b.amount || b.totalValue || 0) - Number(a.amount || a.totalValue || 0));
-    }
-    if (activeKpiFilter === 'avg_value') {
-      return result.sort((a, b) => Number(a.amount || a.totalValue || 0) - Number(b.amount || b.totalValue || 0));
-    }
-    if (activeKpiFilter === 'vendors') {
-      return result.sort((a, b) => {
-        const partyA = String(a.seller?.name || '').toLowerCase();
-        const partyB = String(b.seller?.name || '').toLowerCase();
-        return partyA.localeCompare(partyB);
-      });
-    }
-
-    // Sorting
-    result.sort((a, b) => {
-      const getVal = (o: PurchaseOrderDto) => Number(o.amount || o.totalValue || 0);
-      const getQty = (o: PurchaseOrderDto) => Number(o.items?.[0]?.quantity || 1);
-      const getDate = (o: PurchaseOrderDto) => new Date(o.updatedAt || o.createdAt || 0).getTime();
-      const getTitle = (o: PurchaseOrderDto) => String(o.items?.[0]?.itemName || o.title || '').toLowerCase();
-      const getSupplier = (o: PurchaseOrderDto) => String(o.seller?.name || '').toLowerCase();
-
-      switch (sortBy) {
-        case 'value_high':
-          return getVal(b) - getVal(a);
-        case 'value_low':
-          return getVal(a) - getVal(b);
-        case 'qty_high':
-        case 'qty_desc':
-          return getQty(b) - getQty(a);
-        case 'qty_low':
-        case 'qty_asc':
-          return getQty(a) - getQty(b);
-        case 'po_asc':
-          return String(a.poNumber || '').localeCompare(String(b.poNumber || ''));
-        case 'po_desc':
-          return String(b.poNumber || '').localeCompare(String(a.poNumber || ''));
-        case 'title_asc':
-          return getTitle(a).localeCompare(getTitle(b));
-        case 'title_desc':
-          return getTitle(b).localeCompare(getTitle(a));
-        case 'party_asc':
-          return getSupplier(a).localeCompare(getSupplier(b));
-        case 'party_desc':
-          return getSupplier(b).localeCompare(getSupplier(a));
-        case 'oldest':
-        case 'updated_asc':
-          return getDate(a) - getDate(b);
-        case 'updated_desc':
-        case 'newest':
-        default:
-          return getDate(b) - getDate(a);
+  // Handle URL pre-selection: ?selectPo=<id>
+  useEffect(() => {
+    const selectPoId = searchParams.get('selectPo');
+    if (selectPoId && eligibleOrders.length > 0) {
+      const match = eligibleOrders.find(o => String(o.id) === selectPoId);
+      if (match) {
+        handleSelectPo(match);
       }
-    });
+    }
+  }, [searchParams, eligibleOrders]);
+
+  // Filtered orders in Step 1
+  const filteredOrders = useMemo(() => {
+    let result = [...eligibleOrders];
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      result = result.filter(o => {
+        const poNum = String(o.poNumber || '').toLowerCase();
+        const procId = String(o.procurementId || '').toLowerCase();
+        const title = String(o.procurementTitle || o.title || '').toLowerCase();
+        const supplier = String(o.supplierName || o.supplierDetails?.organizationName || '').toLowerCase();
+        return poNum.includes(q) || procId.includes(q) || title.includes(q) || supplier.includes(q);
+      });
+    }
+
+    if (statusFilter !== 'All') {
+      result = result.filter(o => {
+        const s = String(o.status || o.poStatus || '').toLowerCase();
+        return s === statusFilter.toLowerCase();
+      });
+    }
 
     return result;
-  }, [deliveredOrders, searchTerm, supplierFilter, procurementFilter, amountFilter, qtyFilter, deliveredDateFilter, customDate, sortBy, activeKpiFilter]);
+  }, [eligibleOrders, searchTerm, statusFilter]);
 
-  const { page, pageSize, total, pageItems: visibleOrders, setPage, setPageSize } = usePagination(processedOrders, 10);
-
-  // KPI metrics computed from deliveredOrders
-
-  const deliveredCount = deliveredOrders.length;
-  const totalDeliveredValue = useMemo(
-    () => deliveredOrders.reduce((s, o) => s + Number(o.amount || o.totalValue || 0), 0),
-    [deliveredOrders]
-  );
-  const uniqueSuppliersCount = uniqueSuppliers.length;
-  const avgOrderValue = deliveredCount > 0 ? totalDeliveredValue / deliveredCount : 0;
-
-  // Repeat modal handlers
-  const handleOpenRepeatModal = (order: PurchaseOrderDto) => {
-    setRepeatingOrder(order);
+  // Handle selecting a PO
+  const handleSelectPo = (po: PreviousPoDto) => {
+    setSelectedPo(po);
+    setRepeatOrderDate(todayIso);
+    
+    // Set default new delivery date to 14 days out
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    const dIso = d.toISOString().split('T')[0];
+    setNewDeliveryDate(dIso);
+    setRequiredByDate(dIso);
+    setRemarks(`Repeat purchase order as per terms of original PO #${po.poNumber}.`);
+    setCurrentStep(2);
+    toast.success(`Selected PO #${po.poNumber}. All procurement details auto-populated.`);
   };
 
-  const refreshAll = async () => {
-    await Promise.all([reload()]);
+  // Date Presets
+  const applyDatePreset = (days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const dIso = d.toISOString().split('T')[0];
+    setNewDeliveryDate(dIso);
+    setRequiredByDate(dIso);
   };
 
-  // Sort header helper
-  const toggleSort = (key: string) => {
-    if (key === 'value') setSortBy(sortBy === 'value_low' ? 'value_high' : 'value_low');
-    else if (key === 'po') setSortBy(sortBy === 'po_asc' ? 'po_desc' : 'po_asc');
-    else if (key === 'title') setSortBy(sortBy === 'title_asc' ? 'title_desc' : 'title_asc');
-    else if (key === 'party') setSortBy(sortBy === 'party_asc' ? 'party_desc' : 'party_asc');
-    else if (key === 'qty') setSortBy(sortBy === 'qty_asc' ? 'qty_desc' : 'qty_asc');
-    else if (key === 'updated') setSortBy(sortBy === 'updated_asc' ? 'updated_desc' : 'updated_asc');
+  // Submit Repeat Order
+  const handleSubmitRepeatOrder = async () => {
+    if (!selectedPo) return;
+    if (!newDeliveryDate) {
+      toast.error('New Delivery Date is required');
+      return;
+    }
+
+    const delivDateObj = new Date(newDeliveryDate);
+    const todayObj = new Date();
+    todayObj.setHours(0, 0, 0, 0);
+
+    if (delivDateObj < todayObj) {
+      toast.error('New Delivery Date cannot be in the past');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await api.post(`/api/purchase-orders/${selectedPo.id}/repeat`, {
+        expectedDelivery: delivDateObj.toISOString(),
+        repeatOrderDate: repeatOrderDate ? new Date(repeatOrderDate).toISOString() : new Date().toISOString(),
+        requiredByDate: requiredByDate ? new Date(requiredByDate).toISOString() : delivDateObj.toISOString(),
+        remarks: remarks.trim() || undefined
+      });
+
+      const data = await res.json();
+      setSubmissionResult(data);
+      setCurrentStep(4);
+      toast.success(data?.message || 'Repeat order created successfully!');
+      reloadPreviousPos();
+      reloadAllOrders();
+    } catch (err: any) {
+      console.error('Failed to submit repeat order:', err);
+      toast.error(err?.message || 'Failed to submit repeat order. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const SortHeader = ({ label, columnKey, className = '' }: { label: string; columnKey: string; className?: string }) => {
-    let isActive = false;
-    let isAsc = true;
-    if (columnKey === 'value') { isActive = sortBy === 'value_low' || sortBy === 'value_high'; isAsc = sortBy === 'value_low'; }
-    else if (columnKey === 'po') { isActive = sortBy === 'po_asc' || sortBy === 'po_desc'; isAsc = sortBy === 'po_asc'; }
-    else if (columnKey === 'title') { isActive = sortBy === 'title_asc' || sortBy === 'title_desc'; isAsc = sortBy === 'title_asc'; }
-    else if (columnKey === 'party') { isActive = sortBy === 'party_asc' || sortBy === 'party_desc'; isAsc = sortBy === 'party_asc'; }
-    else if (columnKey === 'qty') { isActive = sortBy === 'qty_asc' || sortBy === 'qty_desc'; isAsc = sortBy === 'qty_asc'; }
-    else if (columnKey === 'updated') { isActive = sortBy === 'updated_asc' || sortBy === 'updated_desc'; isAsc = sortBy === 'updated_asc'; }
-    return (
-      <button type="button" onClick={() => toggleSort(columnKey)} className={cn("inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:text-[#12335f] transition-colors", isActive && "text-[#12335f]", className)}>
-        {label}
-        {isActive ? (isAsc ? <ArrowUp className="h-3 w-3 text-[#12335f]" /> : <ArrowDown className="h-3 w-3 text-[#12335f]" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
-      </button>
-    );
+  // Reset to create another repeat order
+  const handleResetWizard = () => {
+    setSelectedPo(null);
+    setSubmissionResult(null);
+    setCurrentStep(1);
+    setSearchTerm('');
   };
-
-  const activeSortKey = sortBy.startsWith('value') ? 'value' :
-    sortBy.startsWith('po') ? 'po' :
-    sortBy.startsWith('title') ? 'title' :
-    sortBy.startsWith('party') ? 'party' :
-    sortBy.startsWith('qty') ? 'qty' :
-    sortBy.startsWith('updated') ? 'updated' : '';
-  const activeSortDirection: 'asc' | 'desc' = (sortBy.endsWith('_asc') || sortBy === 'value_low') ? 'asc' : 'desc';
-
-  const orderColumns: ColumnDef<PurchaseOrderDto>[] = [
-    {
-      key: 'poNumber',
-      header: 'PO Number',
-      sortable: true,
-      sortKey: 'po',
-      width: 'w-[18%]',
-      cell: (order) => (
-        <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-      ),
-    },
-    {
-      key: 'title',
-      header: 'Procurement Name',
-      sortable: true,
-      sortKey: 'title',
-      width: 'w-[26%]',
-      cell: (order) => {
-        const item = order.items?.[0] || { itemName: order.title, quantity: 1 };
-        const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
-        return (
-          <div>
-            <p className="font-bold text-slate-900">{procurementName}</p>
-            {item.itemName && item.itemName !== procurementName && (
-              <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Item: {item.itemName}</p>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      key: 'seller',
-      header: 'Supplier',
-      sortable: true,
-      sortKey: 'party',
-      width: 'w-[18%]',
-      cell: (order) => (
-        <span className="text-slate-600">{order.seller?.name || `Seller #${order.sellerId || '-'}`}</span>
-      ),
-    },
-    {
-      key: 'qty',
-      header: 'Qty',
-      sortable: true,
-      sortKey: 'qty',
-      width: 'w-20',
-      align: 'right',
-      cell: (order) => {
-        const item = order.items?.[0] || { quantity: 1 };
-        return <span className="text-slate-900">{Number(item.quantity || 0).toLocaleString()}</span>;
-      },
-    },
-    {
-      key: 'amount',
-      header: 'Amount',
-      sortable: true,
-      sortKey: 'value',
-      width: 'w-[14%]',
-      align: 'right',
-      cell: (order) => (
-        <span className="font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</span>
-      ),
-    },
-    {
-      key: 'updatedAt',
-      header: 'Delivered On',
-      sortable: true,
-      sortKey: 'updated',
-      width: 'w-[14%]',
-      cell: (order) => <span className="text-slate-500">{formatDate(order.updatedAt)}</span>,
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      width: 'w-24',
-      align: 'right',
-      cell: (order) => (
-        <div onClick={(e) => e.stopPropagation()}>
-          <ActionMenu 
-            order={order}
-            onView={setViewingOrder}
-            onRepeat={handleOpenRepeatModal}
-            openKebabId={openKebabId}
-            setOpenKebabId={setOpenKebabId}
-          />
-        </div>
-      ),
-    },
-  ];
-
-
-
-  if (loadingAll && (!deliveredOrders || deliveredOrders.length === 0)) {
-    return (
-      <PageTableSkeleton
-        kpiCount={4}
-        title="Repeat Orders"
-        subtitle="Re-order materials and items from completed previous orders quickly."
-      />
-    );
-  }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Repeat Orders</h1>
-          <p className="text-xs font-semibold text-slate-500 mt-1">Re-order materials and items from completed previous orders quickly.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className={cn("h-10 rounded-lg text-xs font-black uppercase transition-colors shadow-sm", showFilters ? "bg-[#12335f] text-white border-[#12335f] hover:bg-[#0e2a4f]" : "bg-white hover:bg-slate-50 text-slate-700 border-slate-200")}>
-            <Filter className={cn("mr-2 h-4 w-4", showFilters ? "text-white" : "text-[#12335f]")} />
-            {showFilters ? 'Hide Filters' : 'Filters'}
-          </Button>
-          <Button variant="outline" onClick={refreshAll} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-slate-700">
-            <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} />
-            Refresh
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Repeatable Orders"
-          value={deliveredCount}
-          subtext="Fulfilled orders ready for 1-click re-order"
-          icon={RotateCcw}
-          color="green"
-          loading={loadingAll && allOrdersList.length === 0}
-          active={activeKpiFilter === 'all' && sortBy === 'newest'}
-          onClick={() => {
-            setActiveKpiFilter('all');
-            setSortBy('newest');
-            setSearchTerm('');
-          }}
-        />
-        <KpiCard
-          label="Re-Order Spend Pool"
-          value={formatCurrency(totalDeliveredValue)}
-          subtext="Total historical spend available for repeat"
-          icon={TrendingUp}
-          color="indigo"
-          loading={loadingAll && allOrdersList.length === 0}
-          active={activeKpiFilter === 'highest_value' || sortBy === 'value_high'}
-          onClick={() => {
-            setActiveKpiFilter('highest_value');
-            setSortBy('value_high');
-          }}
-        />
-        <KpiCard
-          label="Active Vendors"
-          value={uniqueSuppliersCount}
-          subtext="Verified suppliers in repeat catalog"
-          icon={Building2}
-          color="blue"
-          loading={loadingAll && allOrdersList.length === 0}
-          active={activeKpiFilter === 'vendors' || sortBy === 'party_asc'}
-          onClick={() => {
-            setActiveKpiFilter('vendors');
-            setSortBy('party_asc');
-          }}
-        />
-        <KpiCard
-          label="Average Order Size"
-          value={formatCurrency(avgOrderValue)}
-          subtext="Average spend per repeated consignment"
-          icon={BarChart3}
-          color="amber"
-          loading={loadingAll && allOrdersList.length === 0}
-          active={activeKpiFilter === 'avg_value' || sortBy === 'value_low'}
-          onClick={() => {
-            setActiveKpiFilter('avg_value');
-            setSortBy('value_low');
-          }}
-        />
-      </div>
-
-      {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
-        <ResponsiveFilterBar
-          activeFilterCount={
-            (searchTerm ? 1 : 0) + 
-            (supplierFilter !== 'All Suppliers' ? 1 : 0) + 
-            (procurementFilter !== 'All Procurements' ? 1 : 0) + 
-            (amountFilter !== 'All Amounts' ? 1 : 0) + 
-            (qtyFilter !== 'All Quantities' ? 1 : 0) + 
-            (deliveredDateFilter !== 'All Dates' ? 1 : 0) + 
-            (sortBy !== 'newest' ? 1 : 0)
-          }
-          searchInput={
-            <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={searchTerm}
-                onChange={event => setSearchTerm(event.target.value)}
-                placeholder="Search PO number, procurement, supplier..."
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-              />
+    <div className="min-h-screen bg-slate-50/50 pb-16">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white border-b border-slate-800 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-bold text-blue-200 ring-1 ring-inset ring-blue-400/30 mb-2">
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Procurement Reordering</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Repeat Order Management</h1>
+              <p className="mt-1 text-xs sm:text-sm text-blue-100/80 max-w-2xl">
+                Reorder identical items directly from previous successful purchase orders under approved contract terms with new delivery scheduling.
+              </p>
             </div>
-          }
-          filters={
-            <>
-              {/* Supplier */}
-              <div className="w-full sm:w-[140px]">
-                <select
-                  value={supplierFilter}
-                  onChange={e => setSupplierFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="All Suppliers">Supplier: All</option>
-                  {uniqueSuppliers.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
 
-              {/* Procurement */}
-              <div className="w-full sm:w-[150px]">
-                <select
-                  value={procurementFilter}
-                  onChange={e => setProcurementFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="All Procurements">Procurement: All</option>
-                  {uniqueProcurements.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
-              </div>
+            {/* View Tab Switcher */}
+            <div className="flex items-center gap-1.5 p-1 bg-white/10 rounded-2xl border border-white/15 backdrop-blur-md shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveTab('wizard')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+                  activeTab === 'wizard'
+                    ? 'bg-white text-[#12335f] shadow-md'
+                    : 'text-blue-100 hover:text-white hover:bg-white/5'
+                )}
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Create Repeat Order</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('history')}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+                  activeTab === 'history'
+                    ? 'bg-white text-[#12335f] shadow-md'
+                    : 'text-blue-100 hover:text-white hover:bg-white/5'
+                )}
+              >
+                <FileCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Repeat Orders History ({repeatOrdersHistory.length})</span>
+              </button>
+            </div>
+          </div>
 
-              {/* Amount */}
-              <div className="w-full sm:w-[130px]">
-                <select
-                  value={amountFilter}
-                  onChange={e => setAmountFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="All Amounts">Amount: All</option>
-                  <option value="Below ₹10,000">Below ₹10,000</option>
-                  <option value="₹10,000 – ₹50,000">₹10,000 – ₹50,000</option>
-                  <option value="₹50,000 – ₹1,00,000">₹50,000 – ₹1,00,000</option>
-                  <option value="Above ₹1,00,000">Above ₹1,00,000</option>
-                </select>
+          {/* Stepper Progress (Visible in Wizard mode) */}
+          {activeTab === 'wizard' && (
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { stepNum: 1, title: 'Step 1', desc: 'Select Previous PO' },
+                  { stepNum: 2, title: 'Step 2 & 3', desc: 'Auto-fill & New Dates' },
+                  { stepNum: 3, title: 'Review', desc: 'Review & Verify' },
+                  { stepNum: 4, title: 'Approval', desc: 'New PO Generation' },
+                ].map((s) => {
+                  const isDone = currentStep > s.stepNum;
+                  const isCurrent = currentStep === s.stepNum;
+                  return (
+                    <div
+                      key={s.stepNum}
+                      className={cn(
+                        'flex items-center gap-3 p-2.5 rounded-xl transition-all border text-left',
+                        isCurrent
+                          ? 'bg-white/15 border-white/30 ring-2 ring-white/20'
+                          : isDone
+                          ? 'bg-white/5 border-emerald-400/40 text-emerald-200'
+                          : 'bg-white/5 border-white/5 opacity-60'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'flex items-center justify-center w-7 h-7 rounded-lg text-xs font-black shrink-0',
+                          isCurrent
+                            ? 'bg-white text-[#12335f]'
+                            : isDone
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-white/10 text-white'
+                        )}
+                      >
+                        {isDone ? <Check className="h-4 w-4" /> : s.stepNum}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-200/90">{s.title}</p>
+                        <p className="text-xs font-bold text-white truncate">{s.desc}</p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-
-              {/* Quantity */}
-              <div className="w-full sm:w-[110px]">
-                <select
-                  value={qtyFilter}
-                  onChange={e => setQtyFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="All Quantities">Qty: All</option>
-                  <option value="1–10">1–10</option>
-                  <option value="11–50">11–50</option>
-                  <option value="51–100">51–100</option>
-                  <option value="100+">100+</option>
-                </select>
-              </div>
-
-              {/* Delivered On Date */}
-              <div className="w-full sm:w-[140px]">
-                <select
-                  value={deliveredDateFilter}
-                  onChange={e => setDeliveredDateFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="All Dates">Delivered: All</option>
-                  <option value="Today">Today</option>
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="Last 30 Days">Last 30 Days</option>
-                  <option value="Custom Date Range">Custom Date Range</option>
-                </select>
-              </div>
-              
-              {deliveredDateFilter === 'Custom Date Range' && (
-                <div 
-                  className="grid items-center gap-1 w-full sm:w-auto h-10"
-                  style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
-                >
-                  <input 
-                    type="date" 
-                    value={customDate.start} 
-                    onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
-                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-                    title="Start Date" 
-                  />
-                  <span className="text-slate-400 font-bold text-center">-</span>
-                  <input 
-                    type="date" 
-                    value={customDate.end} 
-                    onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
-                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-                    title="End Date" 
-                  />
-                </div>
-              )}
-
-              {/* Sorting */}
-              <div className="w-full sm:w-[130px]">
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="value_high">Highest Amount</option>
-                  <option value="value_low">Lowest Amount</option>
-                  <option value="qty_high">Highest Quantity</option>
-                  <option value="qty_low">Lowest Quantity</option>
-                </select>
-              </div>
-              {(searchTerm || supplierFilter !== 'All Suppliers' || procurementFilter !== 'All Procurements' || amountFilter !== 'All Amounts' || qtyFilter !== 'All Quantities' || deliveredDateFilter !== 'All Dates' || sortBy !== 'newest') && (
-                <Button 
-                  variant="ghost" 
-                  onClick={() => {
-                    setSearchTerm('');
-                    setSupplierFilter('All Suppliers');
-                    setProcurementFilter('All Procurements');
-                    setAmountFilter('All Amounts');
-                    setQtyFilter('All Quantities');
-                    setDeliveredDateFilter('All Dates');
-                    setCustomDate({ start: '', end: '' });
-                    setSortBy('newest');
-                    setActiveKpiFilter('all');
-                  }}
-                  className="h-10 px-3 text-xs font-black uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl shrink-0"
-                >
-                  Clear Filters
-                </Button>
-              )}
-            </>
-          }
-          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-        />
+            </div>
+          )}
+        </div>
       </div>
 
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* VIEW TAB 2: REPEAT ORDERS HISTORY */}
+        {activeTab === 'history' && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Repeat Orders History</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Audit log of all repeat purchase orders generated across the organization.</p>
+              </div>
+              <Button
+                onClick={() => {
+                  setActiveTab('wizard');
+                  setCurrentStep(1);
+                }}
+                className="bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black uppercase tracking-wider rounded-xl h-10 px-4 shadow-sm"
+              >
+                <Sparkles className="mr-1.5 h-4 w-4" /> Place New Repeat Order
+              </Button>
+            </div>
 
-      {/* Content */}
-      {processedOrders.length === 0 ? (
-        <EmptyState
-          title="No repeat orders available"
-          description={
-            searchTerm
-              ? 'No orders match your search criteria. Try a different query.'
-              : 'You do not have any completed or delivered purchase orders yet. Orders can be repeated once they are fulfilled.'
-          }
-        />
-      ) : viewMode === 'grid' ? (
-        <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {visibleOrders.map((order, index) => {
-              const rowIndex = (page - 1) * pageSize + index + 1;
-              const item: any = order.items?.[0] || { itemName: order.title, quantity: 1 };
-              const itemCount = order.items?.length || 1;
-              const totalAmount = Number(order.amount || order.totalValue || 0);
-              const procurementName = order.title || (order as any).tender?.title || item.itemName || 'Procurement Order';
+            {loadingAllOrders ? (
+              <PageTableSkeleton rows={5} />
+            ) : repeatOrdersHistory.length === 0 ? (
+              <EmptyState
+                title="No Repeat Orders Placed Yet"
+                description="When you place a repeat order from a previous purchase order, it will appear here with complete tracking and status details."
+                action={{
+                  label: "Create Repeat Order",
+                  onClick: () => {
+                    setActiveTab('wizard');
+                    setCurrentStep(1);
+                  }
+                }}
+              />
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/75 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                        <th className="px-4 py-3.5">PO Number</th>
+                        <th className="px-4 py-3.5">Original PO Reference</th>
+                        <th className="px-4 py-3.5">Procurement Title</th>
+                        <th className="px-4 py-3.5">Supplier</th>
+                        <th className="px-4 py-3.5">Order Date</th>
+                        <th className="px-4 py-3.5">Expected Delivery</th>
+                        <th className="px-4 py-3.5">Order Amount</th>
+                        <th className="px-4 py-3.5">Status</th>
+                        <th className="px-4 py-3.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {repeatOrdersHistory.map((order) => {
+                        const originalPoNum = (order.metadata as any)?.repeatOfPoNumber || 'Original PO';
+                        return (
+                          <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-4 py-3.5 font-mono font-bold text-[#12335f] whitespace-nowrap">
+                              {order.poNumber}
+                            </td>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-purple-50 px-2 py-0.5 text-[11px] font-bold text-purple-700 border border-purple-200">
+                                <RotateCcw className="h-3 w-3" /> {originalPoNum}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 font-bold text-slate-900 max-w-xs truncate">
+                              {order.title}
+                            </td>
+                            <td className="px-4 py-3.5 font-medium text-slate-700">
+                              {order.seller?.name || `Seller #${order.sellerId}`}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
+                              {formatDate(order.createdAt)}
+                            </td>
+                            <td className="px-4 py-3.5 text-slate-700 whitespace-nowrap font-medium">
+                              {order.expectedDelivery ? formatDate(order.expectedDelivery) : '-'}
+                            </td>
+                            <td className="px-4 py-3.5 font-black text-slate-900 whitespace-nowrap">
+                              {formatCurrency(order.amount || order.totalValue || 0)}
+                            </td>
+                            <td className="px-4 py-3.5 whitespace-nowrap">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                                  order.status === 'pending_approval'
+                                    ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                    : order.status === 'order_placed' || order.status === 'issued'
+                                    ? 'bg-blue-50 text-blue-800 border border-blue-200'
+                                    : order.status === 'delivered' || order.status === 'completed'
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                                )}
+                              >
+                                {order.status?.replace(/_/g, ' ') || 'Created'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => router.push(`/buyer/orders`)}
+                                className="h-8 text-xs font-bold rounded-lg"
+                              >
+                                <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" /> View Order
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
-              return (
-                <div
-                  key={order.id}
-                  className="group rounded-2xl border border-slate-200/85 bg-white p-5 shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
-                            {String(rowIndex).padStart(2, '0')}
-                          </span>
-                          <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-                        </div>
-                        <h3 title={procurementName} className="mt-2 line-clamp-2 text-sm font-black leading-snug text-slate-900 group-hover:text-[#12335f] transition-colors">{procurementName}</h3>
+        {/* VIEW TAB 1: REPEAT ORDER WIZARD */}
+        {activeTab === 'wizard' && (
+          <div>
+            {/* ══════════════════════════════════════════════════════════════
+                STEP 1: SELECT PREVIOUS PURCHASE ORDER
+                ══════════════════════════════════════════════════════════════ */}
+            {currentStep === 1 && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Search & Quick Dropdown Bar */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-sm space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                        <span>Step 1: Select Previous Purchase Order</span>
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Choose an eligible delivered or active PO to repeat. All specifications, item quantities, and contract terms will be automatically copied.
+                      </p>
+                    </div>
+
+                    {/* Quick Dropdown Selector */}
+                    {eligibleOrders.length > 0 && (
+                      <div className="w-full sm:w-72">
+                        <label htmlFor="quick-po-select" className="sr-only">Quick Select Purchase Order</label>
+                        <select
+                          id="quick-po-select"
+                          value=""
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val) {
+                              const found = eligibleOrders.find(o => String(o.id) === val);
+                              if (found) handleSelectPo(found);
+                            }
+                          }}
+                          className="w-full h-9 rounded-xl border border-blue-200 bg-blue-50/50 px-3 text-xs font-bold text-[#12335f] focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 outline-none cursor-pointer"
+                        >
+                          <option value="">⚡ Quick Select from List...</option>
+                          {eligibleOrders.map(o => (
+                            <option key={o.id} value={o.id}>
+                              {o.poNumber} — {o.supplierName} ({formatCurrency(o.amount)})
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-700 border border-emerald-200">
-                        <CheckCircle2 className="h-3 w-3" /> Repeatable
+                    )}
+                  </div>
+
+                  {/* Filter Search Input & Status Filter */}
+                  <div className="flex flex-col sm:flex-row items-center gap-3 pt-3 border-t border-slate-100">
+                    <div className="relative flex-1 w-full">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" aria-hidden="true" />
+                      <input
+                        type="text"
+                        placeholder="Search by PO Number, Procurement ID, Title, or Supplier Name..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none transition-all"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+                      <span className="text-xs font-bold text-slate-500 whitespace-nowrap">Filter Status:</span>
+                      <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                        {['All', 'Delivered', 'Completed'].map((st) => (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => setStatusFilter(st)}
+                            className={cn(
+                              'px-3 py-1 text-xs font-bold rounded-lg transition-all',
+                              statusFilter === st
+                                ? 'bg-white text-slate-900 shadow-2xs font-black'
+                                : 'text-slate-600 hover:text-slate-900'
+                            )}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Searchable Orders List */}
+                {loadingPreviousPos ? (
+                  <PageTableSkeleton rows={5} />
+                ) : filteredOrders.length === 0 ? (
+                  <EmptyState
+                    title="No Eligible Purchase Orders Found"
+                    description={
+                      searchTerm
+                        ? `No previous orders matched "${searchTerm}". Try adjusting your search query.`
+                        : "You don't have any eligible completed purchase orders to repeat yet."
+                    }
+                    action={searchTerm ? {
+                      label: 'Clear Search',
+                      onClick: () => setSearchTerm('')
+                    } : undefined}
+                  />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200/80 bg-slate-50/80 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                            <th className="px-4 py-3.5">PO Number</th>
+                            <th className="px-4 py-3.5">Procurement ID</th>
+                            <th className="px-4 py-3.5">Procurement Title</th>
+                            <th className="px-4 py-3.5">Supplier Name</th>
+                            <th className="px-4 py-3.5">PO Date</th>
+                            <th className="px-4 py-3.5">PO Amount</th>
+                            <th className="px-4 py-3.5">PO Status</th>
+                            <th className="px-4 py-3.5 text-right">Options</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-xs">
+                          {filteredOrders.map((po) => (
+                            <tr key={po.id} className="hover:bg-blue-50/40 transition-colors group">
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono font-black text-[#12335f] text-xs">
+                                    {po.poNumber}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(po.poNumber);
+                                      toast.success('PO Number copied to clipboard');
+                                    }}
+                                    className="text-slate-400 hover:text-slate-600 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Copy PO Number"
+                                    aria-label="Copy PO Number"
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-mono font-bold text-slate-700 border border-slate-200">
+                                  {po.procurementId || `PR-${po.id}`}
+                                </span>
+                              </td>
+
+                              <td className="px-4 py-3.5 font-bold text-slate-900 max-w-xs truncate">
+                                {po.procurementTitle || po.title}
+                              </td>
+
+                              <td className="px-4 py-3.5 font-medium text-slate-700 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
+                                  <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                                  <span>{po.supplierName}</span>
+                                </div>
+                              </td>
+
+                              <td className="px-4 py-3.5 text-slate-500 whitespace-nowrap">
+                                {formatDate(po.poDate)}
+                              </td>
+
+                              <td className="px-4 py-3.5 font-black text-slate-900 whitespace-nowrap">
+                                {formatCurrency(po.amount)}
+                              </td>
+
+                              <td className="px-4 py-3.5 whitespace-nowrap">
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider',
+                                    po.status === 'delivered' || po.status === 'completed' || po.poStatus === 'DELIVERED' || po.poStatus === 'CLOSED'
+                                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                      : 'bg-blue-50 text-blue-800 border border-blue-200'
+                                  )}
+                                >
+                                  {po.status?.replace(/_/g, ' ') || 'Delivered'}
+                                </span>
+                              </td>
+
+                              {/* View and Select options as requested */}
+                              <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setInspectingPo(po)}
+                                    className="h-8 border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold rounded-lg px-2.5"
+                                  >
+                                    <Eye className="mr-1 h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                                    <span>View Details</span>
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSelectPo(po)}
+                                    className="h-8 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black rounded-lg px-3 shadow-xs"
+                                  >
+                                    <span>Select PO</span>
+                                    <ArrowRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                STEP 2 & 3: AUTO-POPULATE DETAILS & EDITABLE NEW DATES
+                ══════════════════════════════════════════════════════════════ */}
+            {currentStep === 2 && selectedPo && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                {/* Active Selection Banner */}
+                <div className="bg-gradient-to-r from-blue-900 via-[#12335f] to-indigo-950 text-white p-5 rounded-2xl border border-blue-800 shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-400/20 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-200 border border-blue-300/30">
+                        <Lock className="h-3 w-3" /> Original PO Locked & Copied
+                      </span>
+                      <span className="text-xs text-blue-200 font-mono font-bold">#{selectedPo.poNumber}</span>
+                    </div>
+                    <h2 className="text-lg sm:text-xl font-black text-white">{selectedPo.procurementTitle || selectedPo.title}</h2>
+                    <p className="text-xs text-blue-100/80">
+                      Supplier: <strong className="text-white font-bold">{selectedPo.supplierName}</strong> • Total Contract Value: <strong className="text-white font-bold">{formatCurrency(selectedPo.amount)}</strong>
+                    </p>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentStep(1)}
+                    className="h-9 border-white/30 text-white bg-white/10 hover:bg-white/20 text-xs font-bold rounded-xl px-4 whitespace-nowrap self-start sm:self-auto"
+                  >
+                    <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Choose Different PO
+                  </Button>
+                </div>
+
+                {/* Strict Read-Only Notice */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" aria-hidden="true" />
+                  <div className="text-xs text-blue-900 leading-relaxed">
+                    <strong className="font-bold">Auto-Populated Information (Read-Only): </strong>
+                    All procurement details, supplier details, item specifications, quantities, prices, taxes, and commercial terms below have been automatically retrieved from Purchase Order <strong>{selectedPo.poNumber}</strong>. Per Repeat Order governance, original contractual terms cannot be altered. You only need to provide the new delivery and order dates.
+                  </div>
+                </div>
+
+                {/* Section Tabs for Read-Only Details */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+                  <div className="border-b border-slate-200 bg-slate-50/70 px-4 pt-3 flex items-center gap-2 overflow-x-auto">
+                    {[
+                      { id: 'items', label: 'Item Details & Specs', icon: PackageCheck, count: selectedPo.items.length },
+                      { id: 'procurement', label: 'Procurement & Buyer', icon: Building2 },
+                      { id: 'supplier', label: 'Supplier Details', icon: ShieldCheck },
+                      { id: 'terms', label: 'Delivery & Payment Terms', icon: Truck },
+                    ].map((tab) => {
+                      const Icon = tab.icon;
+                      const isActive = activeDetailSection === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActiveDetailSection(tab.id as any)}
+                          className={cn(
+                            'flex items-center gap-2 px-4 py-2.5 border-b-2 text-xs font-bold transition-colors whitespace-nowrap',
+                            isActive
+                              ? 'border-[#12335f] text-[#12335f] bg-white rounded-t-xl font-black'
+                              : 'border-transparent text-slate-500 hover:text-slate-800'
+                          )}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          <span>{tab.label}</span>
+                          {tab.count !== undefined && (
+                            <span className="rounded-full bg-slate-200 px-1.5 py-0.2 text-[10px] font-mono">
+                              {tab.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="p-5">
+                    {/* SUB-SECTION 1: ITEM DETAILS & SPECS */}
+                    {activeDetailSection === 'items' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <Lock className="h-3.5 w-3.5 text-slate-400" /> Copied Item Details & Specifications
+                          </h3>
+                          <span className="text-xs text-slate-500 font-medium">All item prices and tax rates are locked to contract terms</span>
+                        </div>
+
+                        <div className="overflow-x-auto rounded-xl border border-slate-200">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-600">
+                                <th className="px-3 py-2.5">#</th>
+                                <th className="px-3 py-2.5">Product / Service Info</th>
+                                <th className="px-3 py-2.5">HSN/SAC</th>
+                                <th className="px-3 py-2.5">Quantity</th>
+                                <th className="px-3 py-2.5">Unit</th>
+                                <th className="px-3 py-2.5">Price (₹)</th>
+                                <th className="px-3 py-2.5">GST Rate</th>
+                                <th className="px-3 py-2.5 text-right">Line Total (₹)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {selectedPo.items.map((item, idx) => (
+                                <tr key={item.id || idx} className="hover:bg-slate-50/50">
+                                  <td className="px-3 py-3 text-slate-400 font-mono">{idx + 1}</td>
+                                  <td className="px-3 py-3 font-bold text-slate-900 max-w-sm">
+                                    <div>{item.itemName}</div>
+                                    {item.description && item.description !== item.itemName && (
+                                      <p className="text-[11px] font-normal text-slate-500 mt-0.5">{item.description}</p>
+                                    )}
+                                    {item.specifications && (
+                                      <div className="mt-1.5 p-2 rounded-lg bg-slate-50 border border-slate-100 text-[10px] text-slate-600 font-mono leading-relaxed">
+                                        <strong className="text-[9px] font-black uppercase text-slate-400 block mb-0.5">Specifications:</strong>
+                                        {typeof item.specifications === 'object'
+                                          ? JSON.stringify(item.specifications, null, 2)
+                                          : String(item.specifications)}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-3 font-mono text-slate-600">
+                                    {item.hsnSac || item.hsnCode || '8471'}
+                                  </td>
+                                  <td className="px-3 py-3 font-black text-slate-900">
+                                    {item.quantity}
+                                  </td>
+                                  <td className="px-3 py-3 text-slate-600 uppercase font-medium">
+                                    {item.unitOfMeasure || 'Nos'}
+                                  </td>
+                                  <td className="px-3 py-3 font-mono font-medium text-slate-800">
+                                    {formatCurrency(item.unitPrice)}
+                                  </td>
+                                  <td className="px-3 py-3 text-slate-600 font-medium">
+                                    {item.taxRate ?? item.gstRate ?? 18}%
+                                  </td>
+                                  <td className="px-3 py-3 text-right font-black font-mono text-slate-900">
+                                    {formatCurrency(item.totalAmount || item.quantity * item.unitPrice)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-50 font-black text-slate-900 border-t border-slate-200">
+                                <td colSpan={7} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px]">
+                                  Total Order Value:
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono text-sm text-[#12335f]">
+                                  {formatCurrency(selectedPo.amount)}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SUB-SECTION 2: PROCUREMENT & BUYER DETAILS */}
+                    {activeDetailSection === 'procurement' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <FileText className="h-3.5 w-3.5 text-slate-500" /> Procurement Details
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Procurement ID:</span>
+                              <span className="font-mono font-bold text-slate-900">{selectedPo.procurementId}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Category:</span>
+                              <span className="font-bold text-slate-900">{selectedPo.procurementDetails?.category || 'Goods'}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Original Method:</span>
+                              <span className="font-bold text-slate-900">{selectedPo.originalProcurementMethod}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Original PO Date:</span>
+                              <span className="font-bold text-slate-900">{formatDate(selectedPo.poDate)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-slate-500" /> Buyer / Organization Details
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="col-span-2">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Organization Name:</span>
+                              <span className="font-bold text-slate-900">{selectedPo.buyerDetails?.organizationName}</span>
+                            </div>
+                           
+                            <div className="col-span-2">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Billing / Official Address:</span>
+                              <span className="text-slate-700">{selectedPo.buyerDetails?.address}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SUB-SECTION 3: SUPPLIER DETAILS */}
+                    {activeDetailSection === 'supplier' && (
+                      <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <ShieldCheck className="h-4 w-4 text-emerald-600" /> Contracted Supplier Information
+                          </h4>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                            Verified Supplier
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Supplier / Company:</span>
+                            <span className="font-black text-slate-900">{selectedPo.supplierDetails?.organizationName || selectedPo.supplierName}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Contact Email:</span>
+                            <span className="text-slate-800 font-medium">{selectedPo.supplierDetails?.email || 'supplier@portal.gov.in'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Contact Mobile:</span>
+                            <span className="text-slate-800 font-medium">{selectedPo.supplierDetails?.mobile || '+91 9876543210'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Supplier GSTIN:</span>
+                            <span className="font-mono font-bold text-slate-800">{selectedPo.supplierDetails?.gstin}</span>
+                          </div>
+                         
+                          <div className="sm:col-span-2 md:col-span-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Registered Address:</span>
+                            <span className="text-slate-700 block">{selectedPo.supplierDetails?.address}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SUB-SECTION 4: COMMERCIAL & DELIVERY TERMS */}
+                    {activeDetailSection === 'terms' && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-slate-500" /> Delivery Location & Mode
+                          </h4>
+                          <div className="space-y-2 text-xs">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivery Address:</span>
+                              <span className="font-medium text-slate-900">{selectedPo.deliveryLocation}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivery Terms:</span>
+                              <span className="text-slate-700">{selectedPo.deliveryTerms}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <IndianRupee className="h-3.5 w-3.5 text-slate-500" /> Payment & Contract Conditions
+                          </h4>
+                          <div className="space-y-2 text-xs">
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Payment Terms:</span>
+                              <span className="font-medium text-slate-900">{selectedPo.paymentTerms}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Commercial / Technical Terms:</span>
+                              <span className="text-slate-700">{selectedPo.commercialTerms}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Required Documentation:</span>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {selectedPo.requiredDocs?.map((doc, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 border border-slate-200">
+                                    <FileCheck className="h-3 w-3 text-blue-600" /> {doc.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ══════════════════════════════════════════════════════════════
+                    STEP 3 (EDITABLE FIELDS): NEW DATES SPECIFICATION
+                    ══════════════════════════════════════════════════════════════ */}
+                <div className="bg-gradient-to-b from-white to-slate-50/80 rounded-2xl border-2 border-[#12335f] p-6 shadow-lg space-y-5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-4">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 mb-1">
+                        <Sparkles className="h-3 w-3" /> Step 3: Editable Fields
+                      </div>
+                      <h3 className="text-base font-black text-slate-900">Specify New Order Dates</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Only new dates are customizable for this repeat order. Please enter the new schedule below.
+                      </p>
+                    </div>
+
+                    {/* Quick Date Presets */}
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                      <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Presets:</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyDatePreset(7)}
+                        className="h-7 text-[11px] font-bold rounded-lg border-slate-200 hover:bg-slate-100"
+                      >
+                        +7 Days
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyDatePreset(14)}
+                        className="h-7 text-[11px] font-bold rounded-lg border-blue-200 text-blue-800 bg-blue-50/50 hover:bg-blue-100"
+                      >
+                        +14 Days (Standard)
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => applyDatePreset(30)}
+                        className="h-7 text-[11px] font-bold rounded-lg border-slate-200 hover:bg-slate-100"
+                      >
+                        +30 Days
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                    {/* 1. Repeat Order Date */}
+                    <div>
+                      <label htmlFor="repeat-order-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                        Repeat Order Date <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                        <input
+                          id="repeat-order-date"
+                          type="date"
+                          value={repeatOrderDate}
+                          onChange={(e) => setRepeatOrderDate(e.target.value)}
+                          className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none transition-all cursor-pointer"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Date when this repeat order is initiated.</p>
+                    </div>
+
+                    {/* 2. Required By Date */}
+                    <div>
+                      <label htmlFor="required-by-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                        Required By Date <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <CalendarClock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                        <input
+                          id="required-by-date"
+                          type="date"
+                          min={todayIso}
+                          value={requiredByDate}
+                          onChange={(e) => setRequiredByDate(e.target.value)}
+                          className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none transition-all cursor-pointer"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-1">Target date by which materials are required.</p>
+                    </div>
+
+                    {/* 3. New Delivery Date */}
+                    <div>
+                      <label htmlFor="new-delivery-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                        New Delivery Date <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Truck className="absolute left-3 top-2.5 h-4 w-4 text-emerald-600 pointer-events-none" />
+                        <input
+                          id="new-delivery-date"
+                          type="date"
+                          min={todayIso}
+                          value={newDeliveryDate}
+                          onChange={(e) => setNewDeliveryDate(e.target.value)}
+                          className="w-full h-10 pl-9 pr-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/20 text-xs font-black text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
+                        />
+                      </div>
+                      <p className="text-[10px] text-emerald-700 font-bold mt-1">Contractual delivery deadline for the supplier.</p>
+                    </div>
+
+                    {/* 4. Remarks / Justification */}
+                    <div className="sm:col-span-2 md:col-span-3">
+                      <label htmlFor="repeat-order-remarks" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
+                        Repeat Order Justification / Remarks
+                      </label>
+                      <textarea
+                        id="repeat-order-remarks"
+                        rows={2}
+                        value={remarks}
+                        onChange={(e) => setRemarks(e.target.value)}
+                        placeholder="e.g. Repeat purchase order executed under existing approved rates and specifications with no price variation."
+                        className="w-full p-3 rounded-xl border border-slate-200 bg-white text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none resize-none transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Navigation Buttons */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentStep(1)}
+                      className="h-10 text-xs font-bold rounded-xl px-4"
+                    >
+                      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to Step 1
+                    </Button>
+
+                    <Button
+                      onClick={() => {
+                        if (!newDeliveryDate) {
+                          toast.error('Please specify the New Delivery Date');
+                          return;
+                        }
+                        setCurrentStep(3);
+                      }}
+                      className="h-10 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black uppercase tracking-wider rounded-xl px-6 shadow-md"
+                    >
+                      <span>Proceed to Review</span>
+                      <ArrowRight className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                STEP 3 (REVIEW): COMPREHENSIVE ORDER VERIFICATION
+                ══════════════════════════════════════════════════════════════ */}
+            {currentStep === 3 && selectedPo && (
+              <div className="space-y-6 animate-in fade-in duration-200">
+                <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-6">
+                  <div className="border-b border-slate-100 pb-4">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 mb-1">
+                      Verification Stage
+                    </div>
+                    <h2 className="text-xl font-black text-slate-900">Review Repeat Purchase Order</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Carefully verify the auto-populated contractual terms and newly scheduled delivery dates before submission.
+                    </p>
+                  </div>
+
+                  {/* Side-by-Side Comparison */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {/* Left: Original PO Reference */}
+                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                        <Lock className="h-3.5 w-3.5 text-slate-400" /> Original Reference PO Details
+                      </h4>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500">Original PO Number:</span>
+                          <span className="font-mono font-bold text-slate-900">{selectedPo.poNumber}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500">Procurement ID:</span>
+                          <span className="font-mono font-bold text-slate-900">{selectedPo.procurementId}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500">Original PO Date:</span>
+                          <span className="font-medium text-slate-900">{formatDate(selectedPo.poDate)}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-200/60">
+                          <span className="text-slate-500">Supplier:</span>
+                          <span className="font-bold text-slate-900">{selectedPo.supplierName}</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-slate-500">Original Contract Amount:</span>
+                          <span className="font-black text-slate-900">{formatCurrency(selectedPo.amount)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: New Repeat Order Schedule */}
+                    <div className="p-4 rounded-xl border-2 border-blue-200 bg-blue-50/30 space-y-3">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-blue-600" /> New Repeat Order Parameters
+                      </h4>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between py-1 border-b border-blue-100">
+                          <span className="text-slate-600">Repeat Order Date:</span>
+                          <span className="font-bold text-slate-900">{formatDate(repeatOrderDate)}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-blue-100">
+                          <span className="text-slate-600">Required By Date:</span>
+                          <span className="font-bold text-slate-900">{formatDate(requiredByDate)}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-blue-100">
+                          <span className="text-slate-600">New Delivery Date:</span>
+                          <span className="font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            {formatDate(newDeliveryDate)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-blue-100">
+                          <span className="text-slate-600">Delivery Destination:</span>
+                          <span className="font-medium text-slate-800 text-right truncate max-w-[200px]">{selectedPo.deliveryLocation}</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-slate-600">Total Repeat Value:</span>
+                          <span className="font-black text-[#12335f] text-sm font-mono">{formatCurrency(selectedPo.amount)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Item List Compact Summary */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Line Items to be Reordered</h4>
+                    <div className="rounded-xl border border-slate-200 overflow-hidden">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-600">
+                            <th className="px-3 py-2">Item Description</th>
+                            <th className="px-3 py-2">Qty</th>
+                            <th className="px-3 py-2">Unit Price</th>
+                            <th className="px-3 py-2 text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedPo.items.map((item, idx) => (
+                            <tr key={idx}>
+                              <td className="px-3 py-2 font-bold text-slate-900">{item.itemName}</td>
+                              <td className="px-3 py-2 font-mono">{item.quantity} {item.unitOfMeasure}</td>
+                              <td className="px-3 py-2 font-mono">{formatCurrency(item.unitPrice)}</td>
+                              <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.totalAmount || item.quantity * item.unitPrice)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Approval Routing Notice */}
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                    <div className="text-xs text-amber-900 leading-relaxed">
+                      <strong className="font-bold">Organizational Approval Workflow: </strong>
+                      Upon submission, this repeat order will be automatically placed into the approval chain. The Department Head and Finance will be notified to review the reorder terms before the official PO is generated and transmitted to <strong>{selectedPo.supplierName}</strong>.
+                    </div>
+                  </div>
+
+                  {/* Action Controls */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <Button
+                      variant="outline"
+                      onClick={() => setCurrentStep(2)}
+                      disabled={submitting}
+                      className="h-10 text-xs font-bold rounded-xl px-4"
+                    >
+                      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Modify Dates
+                    </Button>
+
+                    <Button
+                      onClick={handleSubmitRepeatOrder}
+                      disabled={submitting}
+                      className="h-11 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl px-8 shadow-md flex items-center gap-2"
+                    >
+                      {submitting ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          <span>Submitting Repeat Order...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          <span>Submit Repeat Order & Route for Approval</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                STEP 4: APPROVAL & NEW PO GENERATION CONFIRMATION
+                ══════════════════════════════════════════════════════════════ */}
+            {currentStep === 4 && submissionResult && (
+              <div className="max-w-2xl mx-auto space-y-6 animate-in zoom-in-95 duration-200 py-6">
+                <div className="bg-white rounded-3xl border border-slate-200/90 p-8 shadow-xl text-center space-y-6">
+                  {/* Big Success Icon */}
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center ring-8 ring-emerald-50/50">
+                    <CheckCircle2 className="h-10 w-10 text-emerald-600" aria-hidden="true" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800 uppercase tracking-wider">
+                      Repeat Order Successfully Created
+                    </span>
+                    <h2 className="text-2xl font-black text-slate-900">Purchase Order Generated</h2>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {submissionResult.message || 'Your repeat order has been generated and routed into the procurement approval workflow.'}
+                    </p>
+                  </div>
+
+                  {/* Summary Card */}
+                  <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 text-left space-y-3">
+                    <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+                      <div>
+                        <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">New PO Number</span>
+                        <span className="font-mono text-lg font-black text-[#12335f]">
+                          {submissionResult.purchaseOrder?.poNumber}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          'rounded-full px-3 py-1 text-xs font-black uppercase tracking-wider',
+                          submissionResult.purchaseOrder?.status === 'pending_approval'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                        )}
+                      >
+                        {submissionResult.purchaseOrder?.status?.replace(/_/g, ' ') || 'Order Placed'}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Supplier</span>
-                        <span className="font-bold text-slate-800 truncate block mt-0.5" title={order.seller?.name || maskEmail(order.seller?.email)}>
-                          {order.seller?.name || maskEmail(order.seller?.email) || `Seller #${order.sellerId || '-'}`}
-                        </span>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Original PO Reference:</span>
+                        <span className="font-mono font-bold text-slate-800">{selectedPo?.poNumber}</span>
                       </div>
-                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Past Value</span>
-                        <span className="font-bold text-[#12335f] block mt-0.5">{formatCurrency(totalAmount)}</span>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Supplier:</span>
+                        <span className="font-bold text-slate-900">{selectedPo?.supplierName}</span>
                       </div>
-                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Items / Qty</span>
-                        <span className="font-bold text-slate-700 block mt-0.5">{itemCount} item{itemCount !== 1 ? 's' : ''} ({item.quantity || 1} {item.unit || 'unit'})</span>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">New Delivery Date:</span>
+                        <span className="font-bold text-emerald-700">{formatDate(newDeliveryDate)}</span>
                       </div>
-                      <div className="rounded-lg bg-slate-50 p-2 border border-slate-100">
-                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Delivered</span>
-                        <span className="font-bold text-slate-700 block mt-0.5">{formatDate(order.updatedAt || order.createdAt)}</span>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Order Value:</span>
+                        <span className="font-mono font-black text-slate-900">{formatCurrency(selectedPo?.amount || 0)}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="mt-4 border-t border-slate-100 pt-3 flex items-center justify-between gap-2">
+                  {/* Actions */}
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setViewingOrder(order)}
-                      className="h-8 rounded-lg text-xs font-bold border-slate-200 hover:bg-slate-50"
+                      onClick={() => router.push('/buyer/orders')}
+                      className="w-full sm:w-auto h-11 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-black uppercase tracking-wider rounded-xl px-6 shadow-md"
                     >
-                      <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-                      View PO
+                      <Eye className="mr-1.5 h-4 w-4" /> Go to Purchase Orders
                     </Button>
 
                     <Button
-                      size="sm"
-                      onClick={() => handleOpenRepeatModal(order)}
-                      className="h-8 rounded-lg bg-[#12335f] text-xs font-black text-white hover:bg-[#0e274a] shadow-sm"
+                      variant="outline"
+                      onClick={handleResetWizard}
+                      className="w-full sm:w-auto h-11 text-xs font-black uppercase tracking-wider rounded-xl px-6 border-slate-300 hover:bg-slate-50"
                     >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                      Repeat Order
+                      <Sparkles className="mr-1.5 h-4 w-4 text-[#12335f]" /> Place Another Repeat Order
                     </Button>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            )}
           </div>
-          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} label="completed orders" />
-        </div>
-      ) : (
-        <DataTable<PurchaseOrderDto>
-          data={visibleOrders}
-          columns={orderColumns}
-          keyExtractor={(order) => order.id}
-          sortKey={activeSortKey}
-          sortDirection={activeSortDirection}
-          onSort={toggleSort}
-          page={page}
-          pageSize={pageSize}
-          total={total}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-          paginationLabel="completed orders"
-          minWidth="min-w-[860px]"
-        />
-      )}
+        )}
+      </div>
 
-      {/* Purchase Order Receipt Modal (Full Screen & 1st Page Format) */}
-      {viewingOrder && (
-        <PurchaseOrderReceiptModal
-          order={viewingOrder}
-          onClose={() => setViewingOrder(null)}
-          isBuyer={true}
-          isSeller={false}
-          onRepeatOrder={(order) => {
-            setViewingOrder(null);
-            handleOpenRepeatModal(order as PurchaseOrderDto);
-          }}
-        />
-      )}
-
-      {/* Repeat Order Modal */}
-      {repeatingOrder && (
-        <RepeatPurchaseOrderModal
-          order={repeatingOrder}
-          onClose={() => setRepeatingOrder(null)}
-          onSuccess={() => {
-            reload();
-            router.push('/purchase-orders');
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function ActionMenu({ order, onView, onRepeat, openKebabId, setOpenKebabId }: any) {
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const isOpen = openKebabId === order.id;
-
-  useEffect(() => {
-    if (isOpen && buttonRef.current) {
-      setRect(buttonRef.current.getBoundingClientRect());
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (isOpen && buttonRef.current) {
-        setRect(buttonRef.current.getBoundingClientRect());
-      }
-    };
-    if (isOpen) {
-      window.addEventListener('scroll', handleScroll, true);
-      window.addEventListener('resize', handleScroll);
-    }
-    return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleScroll);
-    };
-  }, [isOpen]);
-
-  const spaceBelow = rect ? window.innerHeight - rect.bottom : 0;
-  const shouldOpenUp = spaceBelow < 120;
-
-  return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpenKebabId(isOpen ? null : order.id);
-        }}
-        className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-      >
-        <MoreVertical className="h-4 w-4" />
-      </button>
-
-      {isOpen && rect && typeof window !== 'undefined' && createPortal(
+      {/* ══════════════════════════════════════════════════════════════
+          INSPECT PO PREVIEW MODAL (Triggered by "View Details" in Step 1)
+          ══════════════════════════════════════════════════════════════ */}
+      {inspectingPo && (
         <div
-          className="fixed z-[9999]"
-          style={{
-            top: shouldOpenUp ? undefined : rect.bottom + 4,
-            bottom: shouldOpenUp ? window.innerHeight - rect.top + 4 : undefined,
-            right: window.innerWidth - rect.right,
-          }}
-          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-sm animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inspect-po-title"
         >
-          <div className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in duration-100">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenKebabId(null);
-                onView(order);
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-            >
-              <Eye className="h-3.5 w-3.5 text-slate-500" />
-              <span>View Details</span>
-            </button>
+          <FocusTrap onEscape={() => setInspectingPo(null)} className="w-full max-w-3xl">
+            <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col">
+              {/* Modal Header */}
+              <div className="bg-[#12335f] text-white px-6 py-4 flex items-center justify-between shrink-0">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-blue-200">PO Details Inspection</span>
+                    <span className="font-mono text-sm font-black text-white">#{inspectingPo.poNumber}</span>
+                  </div>
+                  <h3 id="inspect-po-title" className="text-sm font-black text-white truncate max-w-md">
+                    {inspectingPo.procurementTitle || inspectingPo.title}
+                  </h3>
+                </div>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenKebabId(null);
-                onRepeat(order);
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
-            >
-              <RotateCcw className="h-3.5 w-3.5 text-[#12335f]" />
-              <span>Repeat Order</span>
-            </button>
-          </div>
-        </div>,
-        document.body
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const poToSelect = inspectingPo;
+                      setInspectingPo(null);
+                      handleSelectPo(poToSelect);
+                    }}
+                    className="h-8 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black rounded-lg px-3 shadow-xs"
+                  >
+                    <Check className="mr-1 h-3.5 w-3.5" /> Select for Repeat Order
+                  </Button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInspectingPo(null)}
+                    className="text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10"
+                    aria-label="Close Preview"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-5 text-xs">
+                {/* Highlights */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Procurement ID</span>
+                    <span className="font-mono font-bold text-slate-900">{inspectingPo.procurementId}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Supplier</span>
+                    <span className="font-bold text-slate-900 truncate block">{inspectingPo.supplierName}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Original Date</span>
+                    <span className="font-bold text-slate-900">{formatDate(inspectingPo.poDate)}</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[9px] font-bold uppercase text-slate-400 block">Total Amount</span>
+                    <span className="font-mono font-black text-emerald-700">{formatCurrency(inspectingPo.amount)}</span>
+                  </div>
+                </div>
+
+                {/* Items */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-700">Contract Items</h4>
+                  <div className="rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-600">
+                          <th className="px-3 py-2">Item Name & Specs</th>
+                          <th className="px-3 py-2">HSN/SAC</th>
+                          <th className="px-3 py-2">Qty</th>
+                          <th className="px-3 py-2">Unit Price</th>
+                          <th className="px-3 py-2 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {inspectingPo.items?.map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-3 py-2">
+                              <span className="font-bold text-slate-900 block">{item.itemName}</span>
+                              {item.specifications && (
+                                <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
+                                  {typeof item.specifications === 'object' ? JSON.stringify(item.specifications) : String(item.specifications)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 font-mono text-slate-600">{item.hsnSac || '8471'}</td>
+                            <td className="px-3 py-2 font-mono">{item.quantity} {item.unitOfMeasure}</td>
+                            <td className="px-3 py-2 font-mono">{formatCurrency(item.unitPrice)}</td>
+                            <td className="px-3 py-2 text-right font-mono font-bold text-slate-900">
+                              {formatCurrency(item.totalAmount || item.quantity * item.unitPrice)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Terms Overview */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Delivery Location</span>
+                    <span className="text-slate-800">{inspectingPo.deliveryLocation}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-1">
+                    <span className="text-[10px] font-black uppercase text-slate-400 block">Payment Terms</span>
+                    <span className="text-slate-800">{inspectingPo.paymentTerms}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="border-t border-slate-200 bg-slate-50 px-6 py-3 flex items-center justify-between shrink-0">
+                <Button
+                  variant="outline"
+                  onClick={() => setInspectingPo(null)}
+                  className="h-8 text-xs font-bold rounded-lg"
+                >
+                  Close
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    const poToSelect = inspectingPo;
+                    setInspectingPo(null);
+                    handleSelectPo(poToSelect);
+                  }}
+                  className="h-8 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black rounded-lg px-4"
+                >
+                  <Check className="mr-1.5 h-3.5 w-3.5" /> Select PO for Repeat Order
+                </Button>
+              </div>
+            </div>
+          </FocusTrap>
+        </div>
       )}
-    </>
-  );
-}
-
-// ── Sub-components ──────────────────────────────────────────────────────
-
-
-
-function InfoTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-xs font-bold text-slate-800">{value || '-'}</p>
     </div>
   );
 }

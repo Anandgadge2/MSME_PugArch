@@ -164,11 +164,19 @@ export const api = {
     const method = (options.method || 'GET').toUpperCase();
     const headers = normalizeHeaders(options.headers, options.body as BodyInit | null);
 
-    const sendRequest = (requestHeaders: Record<string, string>) => fetch(url, {
-      credentials: 'include',
-      ...options,
-      headers: requestHeaders,
-    });
+    const sendRequest = (requestHeaders: Record<string, string>) => {
+      const fetchOptions: RequestInit = {
+        credentials: 'include',
+        ...options,
+        headers: requestHeaders,
+      };
+      if (options.skipCache) {
+        fetchOptions.cache = 'no-store';
+        requestHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        requestHeaders['Pragma'] = 'no-cache';
+      }
+      return fetch(url, fetchOptions);
+    };
 
     const request = sendRequest(headers).then(async (response) => {
       if (isUnsafeMethod(method) && await isCsrfFailure(response)) {

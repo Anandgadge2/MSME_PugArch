@@ -83,10 +83,35 @@ const TEXT_MUTED: [number, number, number] = [100, 116, 139];
  * Safely converts an image URL or SVG to a base64 PNG data URL via HTML Canvas.
  */
 export async function loadImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
-  if (!url) return null;
-  if (typeof window === 'undefined') return null;
-  if (url.startsWith('data:image/')) return url;
+  if (!url || typeof window === 'undefined') return null;
+  const trimmedUrl = url.trim();
+  if (!trimmedUrl) return null;
+  if (trimmedUrl.startsWith('data:image/')) return trimmedUrl;
 
+  // 1. First attempt: fetch -> blob -> readAsDataURL (cleanest, handles SVG & PNG without canvas taint)
+  try {
+    const fetchUrl = trimmedUrl.startsWith('/') ? `${window.location.origin}${trimmedUrl}` : trimmedUrl;
+    const res = await fetch(fetchUrl, { mode: 'cors' });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob && blob.size > 0) {
+        const dataUrl = await new Promise<string | null>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') resolve(reader.result);
+            else resolve(null);
+          };
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+        if (dataUrl) return dataUrl;
+      }
+    }
+  } catch {
+    // Continue to canvas fallback
+  }
+
+  // 2. Second attempt: HTML Image + Canvas fallback
   return new Promise((resolve) => {
     try {
       const img = new Image();
@@ -109,7 +134,7 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
         }
       };
       img.onerror = () => resolve(null);
-      img.src = url;
+      img.src = trimmedUrl;
     } catch {
       resolve(null);
     }
