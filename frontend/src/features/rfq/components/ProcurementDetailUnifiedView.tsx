@@ -4751,21 +4751,24 @@ export function ProcurementDetailUnifiedView(
     ? cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation
     : undefined;
 
-  const projectDuration = firstPresent(
-    props.projectDuration &&
-      props.projectDuration !== "—" &&
-      props.projectDuration !== "N/A"
-      ? props.projectDuration
-      : undefined,
-    basics.projectDuration,
-    basics.duration,
-    serviceDetails.duration,
-    serviceDetails.contractPeriod,
-    terms.contractPeriod,
-    terms.projectDuration,
-    schedule.contractPeriod,
-    schedule.duration,
-  );
+  const isServices = String(buyingType || "").toLowerCase().includes("service");
+  const projectDuration = (!isRfqType && (isServices || isRateContractType))
+    ? firstPresent(
+        props.projectDuration &&
+          props.projectDuration !== "—" &&
+          props.projectDuration !== "N/A"
+          ? props.projectDuration
+          : undefined,
+        basics.projectDuration,
+        basics.duration,
+        serviceDetails.duration,
+        serviceDetails.contractPeriod,
+        terms.contractPeriod,
+        terms.projectDuration,
+        schedule.contractPeriod,
+        schedule.duration,
+      )
+    : undefined;
 
   const paymentTerms = firstPresent(
     props.paymentTerms &&
@@ -6497,16 +6500,35 @@ export function ProcurementDetailUnifiedView(
                   />
                   <PropertyItem label="Payment Terms" value={paymentTerms} />
                   <PropertyItem label="Delivery Terms" value={deliveryTerms} />
-                  <PropertyItem
-                    label="Contract Period"
-                    value={firstPresent(
-                      serviceDetails.duration,
-                      serviceDetails.contractPeriod,
-                      terms.contractPeriod,
-                      terms.projectDuration,
-                      projectDuration,
-                    )}
-                  />
+                  {!isRfqType &&
+                    (isRateContractType || isServices) &&
+                    (() => {
+                      const periodVal = firstPresent(
+                        terms.contractPeriod,
+                        serviceDetails.contractPeriod,
+                        isRateContractType
+                          ? payload.rateContractConfig?.validityPeriod || payload.rateContract?.validityPeriod || terms.projectDuration
+                          : undefined,
+                        isServices ? serviceDetails.duration : undefined,
+                        projectDuration,
+                      );
+                      if (
+                        !periodVal ||
+                        periodVal === "—" ||
+                        periodVal === "N/A" ||
+                        periodVal === "Not Specified" ||
+                        periodVal === "null" ||
+                        periodVal === "undefined"
+                      ) {
+                        return null;
+                      }
+                      return (
+                        <PropertyItem
+                          label="Contract Period"
+                          value={periodVal}
+                        />
+                      );
+                    })()}
                   {/* Service Parameters & Related Terms */}
                   {(hasDetailData(serviceDetails) ||
                     String(buyingType || "")

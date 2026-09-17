@@ -1003,15 +1003,12 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     deliverables: '',
     inclusions: '',
     exclusions: '',
-    slaResponseTime: '4 hours',
-    duration: '1 Year',
+    slaResponseTime: '',
+    duration: '',
     manpowerRequired: '0',
     experienceRequired: '0',
-    milestones: [
-      { id: makeId(), label: 'Mobilization advance', percentage: '10', trigger: 'Signing of contract' },
-      { id: makeId(), label: 'Monthly running bill', percentage: '90', trigger: 'Completion of monthly service' },
-    ],
-    penaltyClause: '0.5% per week delay up to max 10%',
+    milestones: [],
+    penaltyClause: '',
     location: '',
   },
   boqTable: [
@@ -1056,8 +1053,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     deliveryTerms: 'Door delivery to site',
     freightIncluded: true,
     gstIncluded: false,
-    warrantyTerms: '12 Months standard warranty',
-    penaltyClause: '0.5% per week delay up to max 10%',
+    warrantyTerms: '',
+    penaltyClause: '',
     advanceAllowed: false,
     retentionAmount: 0,
     securityDeposit: 0,
@@ -7720,10 +7717,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     ...draft,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: {
-      ...draft.serviceDetails,
-      serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
-    },
+    serviceDetails: draft.basics.whatAreYouBuying === 'Services'
+      ? {
+          ...draft.serviceDetails,
+          serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
+        }
+      : null,
     evaluationMethod: chosenEvaluationMethod,
     evaluation: {
       ...draft.evaluation,
