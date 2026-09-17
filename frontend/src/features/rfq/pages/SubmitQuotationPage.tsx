@@ -31,6 +31,8 @@ import {
   ExternalLink,
   Check,
   Download,
+  Lock,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -917,6 +919,16 @@ export default function SubmitQuotationPage() {
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
   const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+
+  const techStatusRaw = String(ownResponse?.technicalStatus || (ownResponse as any)?.status || '').toUpperCase();
+  const isTechQualified = techStatusRaw === 'QUALIFIED';
+  const isTechDisqualified = techStatusRaw === 'DISQUALIFIED' || Boolean((ownResponse as any)?.isDisqualified);
+  const techEvaluationRemarks = String(
+    (ownResponse as any)?.technicalRemarks ||
+    (ownResponse as any)?.rejectionReason ||
+    (ownResponse as any)?.remarks ||
+    ''
+  ).trim();
 
   // Save draft strictly when user clicks "Save Draft" button
   const saveDraft = useCallback(async () => {
@@ -2652,6 +2664,15 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
+            {/* Two-Cover Bidding Secrecy Notice */}
+            <div className="flex items-center gap-2.5 rounded-xl border border-indigo-150 bg-indigo-50/60 px-3.5 py-2.5 text-xs text-indigo-950 shadow-2xs">
+              <Lock className="h-4 w-4 text-indigo-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="font-bold">Two-Cover Rule Commercial Bid Secrecy: </span>
+                <span className="text-slate-600 font-medium">Your unit rates and financial schedules are cryptographically sealed and masked until Stage 1 Technical Evaluation is completed by the buyer.</span>
+              </div>
+            </div>
+
             {lineQuotes.length === 0 ? (
               <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <Package className="h-10 w-10 text-slate-400 mx-auto mb-3" />
@@ -3281,6 +3302,31 @@ export default function SubmitQuotationPage() {
               )}
             </div>
 
+            {/* Commercial Bid Secrecy Guarantee (Two-Cover Rule) */}
+            <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-slate-50 p-4 sm:p-5 shadow-2xs space-y-2">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded">
+                      Two-Cover Bidding Standard • Rule 160 Compliance
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Sealed Envelope
+                    </span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                    Commercial Bid Secrecy &amp; Price Protection Guarantee
+                  </h4>
+                  <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                    Your financial quote, line-item pricing, and commercial schedules remain <strong>cryptographically sealed in the database</strong> until the buyer completes <strong>Stage 1 Technical Evaluation</strong>. The evaluation committee scrutinizes only specifications, quality, and eligibility to ensure 100% fair and unbiased technical qualification.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {!isSubmittedQuote && (
               <div className="pt-2">
                 <div
@@ -3372,17 +3418,77 @@ export default function SubmitQuotationPage() {
 
               {isSubmittedQuote ? (
                 <>
-                  <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
-                      <CheckCircle2 className="h-5 w-5" />
+                  {isTechDisqualified ? (
+                    <div className="flex w-full flex-col gap-3 rounded-2xl border border-rose-250 bg-rose-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700 shadow-2xs">
+                          <XCircle className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-rose-900">
+                              Stage 1 Technical Scrutiny: Disqualified
+                            </h2>
+                            <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                              Non-Compliant
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            The buyer's technical evaluation committee has completed technical scrutiny. Your submission was not qualified to proceed to Stage 2 financial opening.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-2 rounded-xl border border-rose-200 bg-white/90 p-3 text-xs shadow-2xs">
+                              <span className="font-bold text-slate-800 block text-[10.5px] uppercase tracking-wide">
+                                Committee Justification Remarks:
+                              </span>
+                              <p className="text-slate-700 mt-1 italic font-medium leading-relaxed">
+                                "{techEvaluationRemarks}"
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
-                      <p className="mt-1 text-xs font-semibold text-slate-600">
-                        {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}.`}
-                      </p>
+                  ) : isTechQualified ? (
+                    <div className="flex w-full flex-col gap-2 rounded-2xl border border-emerald-250 bg-emerald-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700 shadow-2xs">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                              Stage 1 Technical Scrutiny: Qualified
+                            </h2>
+                            <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              Eligible for Stage 2
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            Your technical proposal and compliance documents have met all specification criteria. Your financial bid will be unsealed during Stage 2 Financial Opening / Reverse Auction.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <span className="font-bold">Committee Remarks: </span>
+                              <span className="italic">{techEvaluationRemarks}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
+                        <p className="mt-1 text-xs font-semibold text-slate-600">
+                          {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}. Technical scrutiny by buyer is pending.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <Button
                     type="button"
                     variant="outline"

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Award, RefreshCw } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -6,13 +7,29 @@ import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureState
 import { formatCurrency } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
 
-export default function AuctionResultPage({ id }: { id: number }) {
+export default function AuctionResultPage({ id }: { id: number | string }) {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: ['reverse-auction-result', id], queryFn: () => reverseAuctionApi.result(id), staleTime: 10_000 });
   const award = useMutation({
     mutationFn: (participantId?: number) => reverseAuctionApi.recommendAward(id, participantId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reverse-auction-result', id] })
   });
+
+  // Sync URL to human-readable canonical code (e.g. /seller/procurement/reverse-auction/RA-2026-69UXUD/results)
+  useEffect(() => {
+    if (query.data?.auction?.auctionCode && typeof window !== 'undefined') {
+      const code = query.data.auction.auctionCode;
+      const currentPath = window.location.pathname;
+      const match = currentPath.match(/^(\/(?:seller|shg|buyer)\/procurement\/reverse-auction|\/reverse-auctions)\/([^/]+)(\/results)$/i);
+      if (match) {
+        const [, basePrefix, currentSlug, subRoute] = match;
+        if (decodeURIComponent(currentSlug) !== code) {
+          const newPath = `${basePrefix}/${encodeURIComponent(code)}${subRoute}${window.location.search || ''}${window.location.hash || ''}`;
+          window.history.replaceState(null, '', newPath);
+        }
+      }
+    }
+  }, [query.data?.auction?.auctionCode]);
 
   if (query.isLoading) return <LoadingState label="Loading auction result..." />;
   if (query.error) return <InlineError message={(query.error as Error).message} onRetry={() => query.refetch()} />;

@@ -35,8 +35,10 @@ const SLUG_TO_METHOD: Record<string, ProcurementMethodId> = Object.fromEntries(
 
 /** Convert canonical method to URL slug */
 export function methodToSlug(method: string): string {
-  const upper = method.toUpperCase().replace(/[- ]/g, '_') as ProcurementMethodId;
-  return METHOD_SLUG_MAP[upper] ?? method.toLowerCase().replace(/_/g, '-');
+  if (!method) return 'rfq';
+  const raw = String(method).trim();
+  const upper = raw.toUpperCase().replace(/[- %20]+/g, '_') as ProcurementMethodId;
+  return METHOD_SLUG_MAP[upper] ?? raw.toLowerCase().replace(/[\s_%20]+/g, '-');
 }
 
 /** Convert URL slug back to canonical method */
@@ -147,15 +149,15 @@ export function resolveLegacyUrl(
   }
 
   // /reverse-auctions/:id → /seller/procurement/reverse-auction/:id
-  const raMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
-  if (raMatch) {
+  const raMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
+  if (raMatch && raMatch[1] !== 'create') {
     return { to: sellerRoutes.detail('REVERSE_AUCTION', raMatch[1]), permanent: false };
   }
-  const raLiveMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/live$/);
+  const raLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live$/);
   if (raLiveMatch) {
     return { to: sellerRoutes.auctionLive(raLiveMatch[1]), permanent: false };
   }
-  const raResultMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/results$/);
+  const raResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results$/);
   if (raResultMatch) {
     return { to: sellerRoutes.auctionResults(raResultMatch[1]), permanent: false };
   }

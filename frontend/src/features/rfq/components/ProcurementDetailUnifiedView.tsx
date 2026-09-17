@@ -47,6 +47,7 @@ import {
   Ban,
   Lock,
   Truck,
+  Activity,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -1054,6 +1055,7 @@ function BuyerProfileSection({
   phone,
   address,
   department,
+  deliveryLocation,
 }: {
   orgName?: string;
   contactPerson?: string;
@@ -1061,6 +1063,7 @@ function BuyerProfileSection({
   phone?: string;
   address?: string;
   department?: string;
+  deliveryLocation?: string;
 }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === "boolean" ? ctx : ctx.isBuyer;
@@ -1073,6 +1076,12 @@ function BuyerProfileSection({
   const hasPhone = hasDetailData(phone) && phone !== "—" && phone !== "N/A";
   const hasAddress =
     hasDetailData(address) && address !== "—" && address !== "N/A";
+  const isAddressIdenticalToDelivery = Boolean(
+    hasAddress &&
+      deliveryLocation &&
+      cleanDeliveryAddress(address).toLowerCase().trim() ===
+        cleanDeliveryAddress(deliveryLocation).toLowerCase().trim(),
+  );
 
   return (
     <DataCard
@@ -1171,7 +1180,13 @@ function BuyerProfileSection({
               </dt>
               <dd className="text-xs font-medium text-slate-700 leading-snug">
                 {hasAddress ? (
-                  address
+                  isAddressIdenticalToDelivery ? (
+                    <span className="text-slate-600 italic">
+                      Same as Procurement Delivery Location
+                    </span>
+                  ) : (
+                    address
+                  )
                 ) : (
                   <span className="text-slate-400 font-normal">N/A</span>
                 )}
@@ -1823,6 +1838,290 @@ function RequiredDocumentsList({
         emptyTitle="No documents required"
         emptyDescription="No document checklist specified for this procurement."
       />
+    </div>
+  );
+}
+
+function AuctionWorkflowStepper({
+  isTwoStage,
+  auctionStatus,
+  hasJoined,
+  evaluationPending,
+  startTime,
+  endTime,
+  minDecrement,
+  rankVisibility,
+}: {
+  isTwoStage: boolean;
+  auctionStatus: string;
+  hasJoined?: boolean;
+  evaluationPending?: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
+  minDecrement?: string;
+  rankVisibility?: string;
+}) {
+  const isLive = auctionStatus === "LIVE";
+  const isClosed = [
+    "CLOSED",
+    "COMPLETED",
+    "AWARDED",
+    "CANCELLED",
+  ].includes(auctionStatus);
+
+  if (isTwoStage) {
+    return (
+      <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-white p-4 sm:p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-purple-100 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
+              <Layers className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-purple-950">
+                  Two-Stage Tender with Reverse Auction Sourcing
+                </h4>
+                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-black text-purple-800 uppercase">
+                  Multi-Stage Sourcing
+                </span>
+              </div>
+              <p className="text-xs font-medium text-purple-800/80 mt-0.5">
+                Suppliers qualify through Stage 1 technical compliance before competing in Stage 2 live reverse decrement bidding.
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider bg-white border border-purple-200 text-purple-700 shadow-2xs">
+            {isLive ? (
+              <>
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+                Stage 2: Live Auction Active
+              </>
+            ) : isClosed ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                Reverse Auction Concluded
+              </>
+            ) : (
+              <>
+                <Clock className="h-3.5 w-3.5 text-purple-600" />
+                {evaluationPending
+                  ? "Stage 1: Under Evaluation"
+                  : "Stage 1: Submission / Baseline"}
+              </>
+            )}
+          </span>
+        </div>
+
+        <div className="grid gap-3 pt-3.5 sm:grid-cols-2">
+          {/* Stage 1 Box */}
+          <div
+            className={cn(
+              "rounded-xl border p-3.5 transition-all flex flex-col justify-between",
+              isLive || isClosed
+                ? "border-emerald-200 bg-emerald-50/50"
+                : "border-purple-200 bg-white shadow-2xs",
+            )}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider text-purple-700">
+                  Stage 1: Technical &amp; Baseline Qualification
+                </span>
+                {isLive || isClosed ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-700" /> Qualified / Completed
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-md bg-purple-100 px-2 py-0.5 text-[9px] font-black uppercase text-purple-800">
+                    {evaluationPending ? "Auditing" : "Submissions"}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs font-bold text-slate-900 mt-1">
+                Specification Compliance &amp; Base Price Packet
+              </p>
+              <p className="text-[11px] text-slate-600 leading-snug mt-1">
+                Vendors submit technical packets, mandatory compliance documents, and initial baseline pricing for buyer committee evaluation.
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-purple-100/60 text-[10px] font-semibold text-purple-900/80">
+              Requirement: Only technically approved bidders advance to Stage 2.
+            </div>
+          </div>
+
+          {/* Stage 2 Box */}
+          <div
+            className={cn(
+              "rounded-xl border p-3.5 transition-all flex flex-col justify-between",
+              isLive
+                ? "border-emerald-400 bg-emerald-50/80 ring-2 ring-emerald-400/20 shadow-sm"
+                : isClosed
+                ? "border-slate-200 bg-slate-50/60"
+                : "border-slate-200 bg-white/80 shadow-2xs",
+            )}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={cn(
+                    "text-[10px] font-black uppercase tracking-wider",
+                    isLive ? "text-emerald-700" : "text-slate-500",
+                  )}
+                >
+                  Stage 2: Live Reverse Auction
+                </span>
+                {isLive ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[9px] font-black uppercase text-white shadow-2xs">
+                    <Activity className="h-3 w-3 animate-pulse" /> Live Decrement Console
+                  </span>
+                ) : isClosed ? (
+                  <span className="inline-flex items-center rounded-md bg-slate-200 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-700">
+                    Concluded
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase text-amber-800">
+                    Scheduled Window
+                  </span>
+                )}
+              </div>
+              <p className="text-xs font-bold text-slate-900 mt-1">
+                Dynamic Decrement Bidding Window
+              </p>
+              <p className="text-[11px] text-slate-600 leading-snug mt-1">
+                Qualified vendors submit downward bids against the prevailing L1 price step. Real-time rank feedback guides negotiation.
+              </p>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] font-semibold text-slate-700">
+              <span>Step: {minDecrement || "Dynamic Step"}</span>
+              <span>Visibility: {rankVisibility || "Rank Only"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Standalone Direct Reverse Auction Stepper
+  return (
+    <div className="rounded-2xl border border-rose-200/80 bg-gradient-to-r from-rose-50/60 via-amber-50/30 to-white p-4 sm:p-5 shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-rose-100 pb-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-xs">
+            <Gavel className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-rose-950">
+                Direct Reverse Auction Sourcing
+              </h4>
+              <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[9px] font-black text-rose-800 uppercase">
+                Dynamic Clock Sourcing
+              </span>
+            </div>
+            <p className="text-xs font-medium text-rose-800/80 mt-0.5">
+              Direct live reverse price competition without separate technical pre-qualification round.
+            </p>
+          </div>
+        </div>
+        <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider bg-white border border-rose-200 text-rose-700 shadow-2xs">
+          {isLive ? (
+            <>
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+              Live Bidding Window Active
+            </>
+          ) : isClosed ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              Auction Concluded
+            </>
+          ) : (
+            <>
+              <Clock className="h-3.5 w-3.5 text-rose-600" />
+              {auctionStatus === "SCHEDULED"
+                ? "Scheduled Window"
+                : "Draft / Open"}
+            </>
+          )}
+        </span>
+      </div>
+
+      <div className="grid gap-2.5 pt-3.5 grid-cols-2 sm:grid-cols-4">
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+          <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+            Step 1
+          </span>
+          <span className="text-xs font-bold text-slate-900 block mt-0.5">
+            Terms Acceptance
+          </span>
+          <span className="text-[10.5px] font-semibold text-emerald-700 mt-1 inline-flex items-center gap-1">
+            {hasJoined ? (
+              <>
+                <CheckCircle2 className="h-3 w-3" /> Joined &amp; Ready
+              </>
+            ) : (
+              "Open to Join"
+            )}
+          </span>
+        </div>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+          <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+            Step 2
+          </span>
+          <span className="text-xs font-bold text-slate-900 block mt-0.5">
+            Scheduled Window
+          </span>
+          <span className="text-[10.5px] font-medium text-slate-600 mt-1 block truncate">
+            {startTime ? formatDate(startTime) : "Configured"}
+          </span>
+        </div>
+        <div
+          className={cn(
+            "rounded-xl border p-3 shadow-2xs transition-all",
+            isLive
+              ? "border-emerald-300 bg-emerald-50/60 ring-2 ring-emerald-400/20"
+              : "border-slate-200/80 bg-white",
+          )}
+        >
+          <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+            Step 3
+          </span>
+          <span className="text-xs font-bold text-slate-900 block mt-0.5">
+            Live Decrement
+          </span>
+          <span
+            className={cn(
+              "text-[10.5px] font-bold mt-1 inline-flex items-center gap-1",
+              isLive
+                ? "text-emerald-700"
+                : isClosed
+                ? "text-slate-500"
+                : "text-amber-700",
+            )}
+          >
+            {isLive ? (
+              <>
+                <Activity className="h-3 w-3 animate-pulse" /> Live Now
+              </>
+            ) : isClosed ? (
+              "Ended"
+            ) : (
+              "Scheduled"
+            )}
+          </span>
+        </div>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+          <span className="text-[9.5px] font-black uppercase text-slate-400 block">
+            Step 4
+          </span>
+          <span className="text-xs font-bold text-slate-900 block mt-0.5">
+            L1 Award
+          </span>
+          <span className="text-[10.5px] font-semibold text-slate-600 mt-1 block">
+            {isClosed ? "Award Recommendation" : "Post Auction"}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4157,6 +4456,18 @@ export function ProcurementDetailUnifiedView(
       ),
   );
 
+  const isTwoStageReverseAuction = Boolean(
+    props.linkedAuction?.preBidStage ||
+      props.linkedAuction?.linkedBidId ||
+      (props.linkedAuction?.linkedRequirementId &&
+        props.procurementMethod === "BID_WITH_REVERSE_AUCTION") ||
+      (allowsReverseAuction && !isReverseAuctionType),
+  );
+
+  const isDirectReverseAuction = Boolean(
+    (isReverseAuctionType || props.linkedAuction) && !isTwoStageReverseAuction,
+  );
+
   const documents = props.documents || [];
   const requiredDocuments = firstPresent(
     props.requiredDocuments,
@@ -5657,17 +5968,23 @@ export function ProcurementDetailUnifiedView(
     },
     {
       id: "clarifications",
-      label: isClarificationAllowed
-        ? isRfqType
-          ? "Clarifications & Quotations"
-          : "Clarifications & Proposals"
-        : isRfqType
-          ? "Quotations"
-          : "Proposals",
-      icon: isClarificationAllowed ? MessageSquare : ClipboardList,
-      count:
-        (isClarificationAllowed ? props.totalClarifications || 0 : 0) +
-        (isBuyerOrAdmin ? submittedParticipations.length || 0 : 0),
+      label: isBuyerOrAdmin
+        ? isTwoPacketMode
+          ? "Proposals & Evaluation"
+          : isRfqType
+            ? "Quotations & Evaluation"
+            : "Proposals & Evaluation"
+        : isClarificationAllowed
+          ? isRfqType
+            ? "Clarifications & Quotations"
+            : "Clarifications & Proposals"
+          : isRfqType
+            ? "Quotations"
+            : "Proposals",
+      icon: isBuyerOrAdmin ? ShieldCheck : (isClarificationAllowed ? MessageSquare : ClipboardList),
+      count: isBuyerOrAdmin
+        ? (techEvaluationStats.pending > 0 ? techEvaluationStats.pending : submittedParticipations.length)
+        : ((isClarificationAllowed ? props.totalClarifications || 0 : 0) + (submittedParticipations.length || 0)),
     },
   ];
 
@@ -5859,41 +6176,143 @@ export function ProcurementDetailUnifiedView(
   };
 
   const biddingRules = useMemo(() => {
+    // 1. Reverse Auction Rules (Authentic dynamic parameters from auction or payload)
+    if (isReverseAuctionType || props.linkedAuction) {
+      const minDec = props.linkedAuction?.minDecrementAmount
+        ? formatMoney(props.linkedAuction.minDecrementAmount)
+        : props.linkedAuction?.minDecrementPercent
+        ? `${props.linkedAuction.minDecrementPercent}%`
+        : payload.minDecrementAmount
+        ? formatMoney(payload.minDecrementAmount)
+        : payload.minDecrementPercent
+        ? `${payload.minDecrementPercent}%`
+        : "₹500";
+
+      const visibilityMode = String(
+        props.linkedAuction?.rankVisibility ||
+          payload.rankVisibility ||
+          "SHOW_RANK_ONLY",
+      ).toUpperCase();
+
+      let visibilityLabel = "Seller Rank Only (L1 Price Hidden)";
+      if (
+        visibilityMode.includes("PRICE_AND_RANK") ||
+        visibilityMode.includes("BOTH")
+      ) {
+        visibilityLabel = "L1 Price & Seller Rank Visible";
+      } else if (visibilityMode.includes("LOWEST_PRICE")) {
+        visibilityLabel = "Lowest Price Visible";
+      } else if (
+        visibilityMode.includes("HIDDEN") ||
+        visibilityMode.includes("ANONYMOUS")
+      ) {
+        visibilityLabel = "Anonymous / Blind Bidding";
+      }
+
+      const autoExt =
+        props.linkedAuction?.autoExtensionMinutes ||
+        props.linkedAuction?.bufferMinutes ||
+        payload.autoExtensionMinutes;
+      const autoExtLabel = autoExt
+        ? `+${autoExt} Mins on late bid`
+        : "Fixed Window (No Extension)";
+
+      const minBiddersVal =
+        props.linkedAuction?.minimumQualifiedBidders ||
+        payload.minimumQualifiedBidders ||
+        rules.minimumBidders ||
+        schedule.minimumBidders;
+
+      return [
+        {
+          label: "Bidding Mechanism",
+          value: "Dynamic English Reverse Auction",
+          subtext: "Real-time downward price discovery",
+        },
+        {
+          label: "Minimum Bid Decrement",
+          value: minDec,
+          subtext:
+            "Each subsequent bid must reduce current lowest by this step",
+        },
+        {
+          label: "Rank & Price Visibility",
+          value: visibilityLabel,
+          subtext: "Visible on dynamic console during bidding",
+        },
+        {
+          label: "Auto-Extension (Sniping Protection)",
+          value: autoExtLabel,
+          subtext: autoExt
+            ? "Window automatically extends if bid placed near deadline"
+            : "Window closes strictly at scheduled time",
+        },
+        {
+          label: "Bidding Policy",
+          value: "Real-time Bids Irrevocable",
+          subtext: "All live decrement bids are legally binding",
+        },
+        {
+          label: "Clarification Allowed",
+          value: isClarificationAllowed ? "Yes" : "No",
+        },
+        {
+          label: "Freight Included",
+          value: isFreightIncluded ? "Yes" : "No",
+          icon: Truck,
+          subtext: isFreightIncluded
+            ? "Door delivery in quote"
+            : "Freight charged extra",
+        },
+        ...(isBuyerSide && minBiddersVal
+          ? [
+              {
+                label: "Minimum Qualified Bidders",
+                value: String(minBiddersVal),
+                subtext: "Required participants to proceed with auction",
+              },
+            ]
+          : []),
+        { label: "MSME Preference", value: msmePrefVal },
+      ];
+    }
+
+    // 2. Standard Procurement Bidding Rules
     if (isBuyerSide) {
       return [
         {
           label: "Auto Close",
           value: resolveRuleBool(
             firstPresent(rules.autoClose, schedule.autoClose),
-            "Yes",
+            "No",
           ),
         },
         {
           label: "Allow Revision",
           value: resolveRuleBool(
             firstPresent(rules.allowRevision, schedule.allowRevision),
-            "Yes",
+            "No",
           ),
         },
         {
           label: "Show Seller Rank",
           value: resolveRuleBool(
             firstPresent(rules.showSellerRank, schedule.showSellerRank),
-            "Yes",
+            "No",
           ),
         },
         {
           label: "Allow Withdrawal",
           value: resolveRuleBool(
             firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal),
-            "Yes",
+            "No",
           ),
         },
         {
           label: "Show Lowest Price",
           value: resolveRuleBool(
             firstPresent(rules.showLowestPrice, schedule.showLowestPrice),
-            "Yes",
+            "No",
           ),
         },
         {
@@ -5933,14 +6352,14 @@ export function ProcurementDetailUnifiedView(
         label: "Allow Revision",
         value: resolveRuleBool(
           firstPresent(rules.allowRevision, schedule.allowRevision),
-          "Yes",
+          "No",
         ),
       },
       {
         label: "Allow Withdrawal",
         value: resolveRuleBool(
           firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal),
-          "Yes",
+          "No",
         ),
       },
       {
@@ -5960,17 +6379,24 @@ export function ProcurementDetailUnifiedView(
 
     const showRankVal = resolveRuleBool(
       firstPresent(rules.showSellerRank, schedule.showSellerRank),
-      "Yes",
+      "No",
     );
     const showLowestVal = resolveRuleBool(
       firstPresent(rules.showLowestPrice, schedule.showLowestPrice),
-      "Yes",
+      "No",
     );
 
-    if (allowsReverseAuction || isRateContractType || showRankVal === "Yes") {
+    if (allowsReverseAuction) {
+      list.push({
+        label: "Stage 2 Reverse Auction",
+        value: "Enabled after Technical Evaluation",
+      });
+    }
+
+    if (showRankVal === "Yes") {
       list.push({ label: "Show Seller Rank", value: showRankVal });
     }
-    if (allowsReverseAuction || isRateContractType || showLowestVal === "Yes") {
+    if (showLowestVal === "Yes") {
       list.push({ label: "Show Lowest Price", value: showLowestVal });
     }
 
@@ -5985,6 +6411,9 @@ export function ProcurementDetailUnifiedView(
     return list;
   }, [
     isBuyerSide,
+    isReverseAuctionType,
+    props.linkedAuction,
+    payload,
     rules,
     schedule,
     isClarificationAllowed,
@@ -6102,6 +6531,18 @@ export function ProcurementDetailUnifiedView(
               <div className="min-w-0 flex-1 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={statusLabel} />
+                  {isTwoStageReverseAuction && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
+                      <Layers className="h-3 w-3" />
+                      Two-Stage Tender + Reverse Auction
+                    </span>
+                  )}
+                  {isDirectReverseAuction && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
+                      <Gavel className="h-3 w-3" />
+                      Direct Reverse Auction
+                    </span>
+                  )}
                   {buyerOrgName && buyerOrgName !== "N/A" && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
                       <Building2 className="h-3 w-3" />
@@ -6304,6 +6745,44 @@ export function ProcurementDetailUnifiedView(
             </div>
           </header>
 
+          {/* Reverse Auction Workflow Stepper (Two-Stage Tender vs Direct Reverse Auction) */}
+          {(isTwoStageReverseAuction || isDirectReverseAuction || linkedAuction) && (
+            <AuctionWorkflowStepper
+              isTwoStage={isTwoStageReverseAuction}
+              auctionStatus={String(
+                linkedAuction?.statusEnum ||
+                  linkedAuction?.status ||
+                  props.status ||
+                  "DRAFT",
+              ).toUpperCase()}
+              hasJoined={
+                props.hasSubmittedProposal ||
+                Boolean((linkedAuction as any)?.hasJoined)
+              }
+              evaluationPending={Boolean(
+                (linkedAuction as any)?.evaluationPending,
+              )}
+              startTime={
+                linkedAuction?.startTime ||
+                (props as any).submissionStartDate ||
+                null
+              }
+              endTime={linkedAuction?.endTime || props.deadlineDate || null}
+              minDecrement={
+                linkedAuction?.minDecrementAmount
+                  ? formatMoney(linkedAuction.minDecrementAmount)
+                  : linkedAuction?.minDecrementPercent
+                  ? `${linkedAuction.minDecrementPercent}%`
+                  : undefined
+              }
+              rankVisibility={
+                linkedAuction?.rankVisibility
+                  ? String(linkedAuction.rankVisibility)
+                  : undefined
+              }
+            />
+          )}
+
           {/* EMD Section commented out */}
 
           {/* Summary Metrics */}
@@ -6359,6 +6838,80 @@ export function ProcurementDetailUnifiedView(
           {/* Tab 1: Overview & Dates */}
           {activeTab === "overview" && (
             <div className="space-y-5">
+              {/* Stage 1 Technical Evaluation Quick-Action Shortcut Banner for Buyer */}
+              {isBuyerOrAdmin &&
+                (isDeadlinePassed ||
+                  [
+                    "CLOSED",
+                    "TECHNICAL_EVALUATION",
+                    "FINANCIAL_EVALUATION",
+                    "L1_GENERATED",
+                    "AWARD_RECOMMENDED",
+                  ].includes(String(props.status || "").toUpperCase())) &&
+                submittedParticipations.length > 0 && (
+                  <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-4 sm:p-5 shadow-xs transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3.5">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
+                          <ShieldCheck className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[10.5px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
+                              Two-Packet Evaluation Workflow
+                            </span>
+                            {techEvaluationStats.pending === 0 &&
+                            techEvaluationStats.qualified > 0 ? (
+                              <span className="text-[10.5px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" /> Technical Scrutiny Completed
+                              </span>
+                            ) : (
+                              <span className="text-[10.5px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Clock className="h-3 w-3" /> {techEvaluationStats.pending} Pending Review
+                              </span>
+                            )}
+                          </div>
+                          <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                            {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0
+                              ? "Stage 1 Technical Evaluation Complete — Ready for Stage 2"
+                              : "Stage 1 Technical Scrutiny & Seller Qualification Required"}
+                          </h3>
+                          <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                            {techEvaluationStats.pending > 0
+                              ? `${submittedParticipations.length} supplier quotation(s) received. Review technical specifications, compliance attachments, and qualify suppliers before opening financial bids.`
+                              : `All ${submittedParticipations.length} supplier(s) evaluated (${techEvaluationStats.qualified} qualified, ${techEvaluationStats.disqualified} disqualified). Proceed to Stage 2 financial opening or launch Reverse Auction.`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setActiveTab("clarifications");
+                            setTimeout(() => {
+                              const el = document.getElementById("proposals-section");
+                              if (el) el.scrollIntoView({ behavior: "smooth" });
+                            }, 50);
+                          }}
+                          className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs rounded-xl cursor-pointer"
+                        >
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>
+                            {techEvaluationStats.pending > 0
+                              ? "Start Technical Scrutiny"
+                              : "View Evaluation & Results"}
+                          </span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                        <span className="text-[10.5px] font-semibold text-slate-500">
+                          {techEvaluationStats.qualified} of {submittedParticipations.length} qualified
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               <div className="grid gap-5 lg:grid-cols-2">
                 <DataCard
                   title={
@@ -6389,6 +6942,7 @@ export function ProcurementDetailUnifiedView(
                   phone={phone}
                   address={buyerAddress}
                   department={department}
+                  deliveryLocation={deliveryLocation}
                 />
               </div>
 
@@ -6502,10 +7056,19 @@ export function ProcurementDetailUnifiedView(
                 const validDownloadableDocs = documents.filter(
                   (doc) => doc && (doc.fileAssetId || doc.url),
                 );
+                const checklistDocs = documents.filter(
+                  (doc) => doc && !doc.fileAssetId && !doc.url,
+                );
+                const hasExplicitRequired =
+                  Array.isArray(requiredDocuments) &&
+                  requiredDocuments.length > 0;
+                const effectiveChecklist = hasExplicitRequired
+                  ? requiredDocuments
+                  : checklistDocs;
 
                 return (
                   <div className="space-y-5">
-                    {validDownloadableDocs.length > 0 ? (
+                    {validDownloadableDocs.length > 0 && (
                       <DataCard
                         title={`${procurementTypeLabel} Attached Documents`}
                         icon={FileSpreadsheet}
@@ -6580,18 +7143,27 @@ export function ProcurementDetailUnifiedView(
                           })}
                         </div>
                       </DataCard>
-                    ) : isBuyerSide ? (
+                    )}
+
+                    {effectiveChecklist && effectiveChecklist.length > 0 ? (
+                      <RequiredDocumentsList
+                        data={effectiveChecklist}
+                        title={
+                          validDownloadableDocs.length > 0
+                            ? "Mandatory Submission & Compliance Checklist"
+                            : `${procurementTypeLabel} Required Documents & Checklist`
+                        }
+                      />
+                    ) : validDownloadableDocs.length === 0 ? (
                       <DataCard
                         title={`${procurementTypeLabel} Attached Documents`}
                         icon={FileSpreadsheet}
                       >
                         <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs font-semibold text-slate-400">
-                          No downloadable documents attached (N/A)
+                          No downloadable documents or submission checklist specified for this procurement.
                         </div>
                       </DataCard>
                     ) : null}
-
-                    <RequiredDocumentsList data={requiredDocuments} />
                   </div>
                 );
               })()}
@@ -7083,7 +7655,7 @@ export function ProcurementDetailUnifiedView(
                 )}
 
               {isBuyerOrAdmin && (
-                <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
+                <section id="proposals-section" className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                     <div>
                       <div className="flex items-center gap-2">
@@ -7744,6 +8316,20 @@ export function SellerQuotationReviewModal({
   const statusStr = String(
     participation.submissionStatus || participation.status || "Submitted",
   ).toUpperCase();
+  const techStatus = String(
+    participation.technicalStatus ||
+      participation.responseData?.technicalStatus ||
+      participation.acknowledgement?.technicalStatus ||
+      "PENDING",
+  ).toUpperCase();
+  const techRemarks =
+    participation.technicalRemarks ||
+    participation.responseData?.technicalRemarks ||
+    participation.acknowledgement?.technicalRemarks;
+  const techScore =
+    participation.technicalScore ??
+    participation.responseData?.technicalScore ??
+    participation.score;
 
   const lineItems: any[] =
     Array.isArray(participation.lineItems) && participation.lineItems.length
@@ -7977,6 +8563,103 @@ export function SellerQuotationReviewModal({
               icon={Tag}
               tone="purple"
             />
+          </div>
+ 
+          {/* Stage 1: Technical Packet Evaluation Summary Card */}
+          <div
+            className={`rounded-xl border p-4 transition-all ${
+              techStatus === "QUALIFIED"
+                ? "border-emerald-200 bg-emerald-50/60"
+                : techStatus === "DISQUALIFIED"
+                  ? "border-rose-200 bg-rose-50/60"
+                  : "border-amber-200 bg-amber-50/60"
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                    techStatus === "QUALIFIED"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : techStatus === "DISQUALIFIED"
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                      Stage 1 Evaluation:
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${
+                        techStatus === "QUALIFIED"
+                          ? "bg-emerald-100 border border-emerald-300 text-emerald-800"
+                          : techStatus === "DISQUALIFIED"
+                            ? "bg-rose-100 border border-rose-300 text-rose-800"
+                            : "bg-amber-100 border border-amber-300 text-amber-800"
+                      }`}
+                    >
+                      {techStatus === "QUALIFIED" && (
+                        <CheckCircle2 className="h-3 w-3" />
+                      )}
+                      {techStatus === "DISQUALIFIED" && (
+                        <XCircle className="h-3 w-3" />
+                      )}
+                      {techStatus === "PENDING" && <Clock className="h-3 w-3" />}
+                      {techStatus === "QUALIFIED"
+                        ? "Technically Qualified"
+                        : techStatus === "DISQUALIFIED"
+                          ? "Disqualified (Failed Tech Packet)"
+                          : "Pending Technical Review"}
+                    </span>
+                    {techScore != null && (
+                      <span className="rounded-md bg-white/80 border border-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">
+                        Score: {techScore}/100
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {techStatus === "QUALIFIED"
+                      ? "This vendor has passed technical packet scrutiny and is eligible for Stage 2 commercial opening / reverse auction."
+                      : techStatus === "DISQUALIFIED"
+                        ? "This vendor has been rejected at Stage 1 and will NOT be admitted to Stage 2 financial opening or reverse auction."
+                        : "Technical packet must be evaluated and qualified before this vendor can participate in Stage 2 commercial opening."}
+                  </p>
+                  {techRemarks && (
+                    <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
+                      <span className="font-bold text-slate-500">
+                        Evaluation Remarks:{" "}
+                      </span>
+                      {techRemarks}
+                    </div>
+                  )}
+                </div>
+              </div>
+              {onOpenTechnicalEvaluation && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    onOpenTechnicalEvaluation(participation);
+                  }}
+                  className={`font-bold text-xs shadow-xs ${
+                    techStatus === "QUALIFIED"
+                      ? "border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                      : techStatus === "DISQUALIFIED"
+                        ? "border border-rose-300 bg-white text-rose-800 hover:bg-rose-50"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  {techStatus === "PENDING"
+                    ? "Evaluate Technical Packet"
+                    : "Update Technical Evaluation"}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Supplier & Commercial Info */}
@@ -8264,6 +8947,24 @@ export function SellerQuotationReviewModal({
             Close
           </Button>
           <div className="flex items-center gap-2">
+            {onOpenTechnicalEvaluation && (
+              <Button
+                type="button"
+                onClick={() => {
+                  onOpenTechnicalEvaluation(participation);
+                }}
+                className={`font-bold text-xs shadow-xs ${
+                  techStatus === "PENDING"
+                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                <FileText className="h-4 w-4 mr-1.5" />
+                {techStatus === "PENDING"
+                  ? "Evaluate Technical Packet"
+                  : "Edit Tech Evaluation"}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"

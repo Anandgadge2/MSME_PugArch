@@ -95,7 +95,7 @@ export function LiveOpportunityRadar() {
         let actionLabel = '';
 
         if (type === 'Reverse Auction') {
-          actionHref = `${rolePrefix}/procurement/reverse-auction/${bid.id}/live`;
+          actionHref = `${rolePrefix}/procurement/reverse-auction/${bid.auctionCode || bid.id}/live`;
           actionLabel = 'Join Auction';
         } else if (type === 'RFQ') {
           actionHref = `${rolePrefix}/procurement/rfq/${bid.id}`;
@@ -108,16 +108,16 @@ export function LiveOpportunityRadar() {
         list.push({
           id: String(bid.id || `bid-${idx}`),
           refId: bid.bidNumber || (bid.id ? `BID-${bid.id}` : `TND-${1000 + idx}`),
-          title: bid.title || bid.name || 'Procurement Opportunity',
+          title: bid.title || 'Procurement Opportunity',
           type,
-          buyerName: bid.buyerOrganization?.organizationName || bid.buyerName || 'Govt Department / Enterprise',
-          department: bid.departmentName || bid.department || 'Procurement Division',
-          location: bid.deliveryLocation || bid.location || 'Maharashtra',
-          estimatedValue: Number(bid.estimatedValue || bid.estimatedBudget || 0),
+          buyerName: bid.buyerName || bid.organization?.organizationName || 'Verified Buyer',
+          department: bid.departmentName || 'Procurement Division',
+          location: bid.deliveryLocation || bid.location || [bid.district, bid.state].filter(Boolean).join(', ') || 'National',
+          estimatedValue: Number(bid.estimatedValue || bid.budget || 0),
           closingDate: bid.endDate ? new Date(bid.endDate).toISOString().split('T')[0] : 'Open',
           daysLeft: diffDays,
-          isEmdExempt: true,
-          category: bid.category?.name || bid.category || 'General Procurement',
+          isEmdExempt: Boolean(bid.emdExempt),
+          category: bid.category || 'General',
           actionHref,
           actionLabel,
           urgent: diffDays <= 3
@@ -125,8 +125,8 @@ export function LiveOpportunityRadar() {
       });
     }
 
-    // 2. Process Real Reverse Auctions
-    if (data?.auctions && data.auctions.length > 0) {
+    // Direct Auctions
+    if (Array.isArray(data?.auctions)) {
       data.auctions.forEach((auction: any) => {
         if (!auction) return;
         const closing = auction.endTime ? new Date(auction.endTime) : null;
@@ -145,7 +145,7 @@ export function LiveOpportunityRadar() {
           daysLeft: diffDays,
           isEmdExempt: true,
           category: auction.category || 'Dynamic Auction',
-          actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.id}/live`,
+          actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
           actionLabel: 'Join Auction',
           urgent: diffDays <= 3
         });

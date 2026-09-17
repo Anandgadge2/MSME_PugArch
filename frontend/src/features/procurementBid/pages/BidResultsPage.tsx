@@ -6,16 +6,18 @@ import { usePathname, useRouter } from 'next/navigation';
 import { 
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
-  CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel
+  CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
+  ShieldCheck, AlertCircle
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
+import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
 import { useAuth } from '../../../hooks/useAuth';
 import { PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, ResultsTable, StatusBadge } from '../components';
 import { money, type BidResultRow, type ProcurementBid } from '../data';
 import { procurementBidApi } from '../api';
 import { downloadCsv } from '../../shared/exportUtils';
 import { formatDate, formatDateTime, formatCurrency } from '../../shared/format';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
@@ -78,6 +80,11 @@ export default function BidResultsPage() {
           const priceB = Number(b.totalPrice || (b as any).quotedAmount || 0);
           return (priceA - priceB) * dir;
         }
+        case 'technicalStatus': {
+          const techA = String(a.technicalStatus || '').toLowerCase();
+          const techB = String(b.technicalStatus || '').toLowerCase();
+          return techA.localeCompare(techB) * dir;
+        }
         case 'rank':
         default: {
           const rankA = a.finalRank === 'NA' ? 999 : Number(String(a.finalRank).slice(1));
@@ -95,6 +102,78 @@ export default function BidResultsPage() {
   // Modal state for selecting sellers to compare
   const [showCompareChooser, setShowCompareChooser] = useState(false);
   const [showReverseAuctionModal, setShowReverseAuctionModal] = useState(false);
+
+  // Technical Evaluation state
+  const [selectedForTechEval, setSelectedForTechEval] = useState<any | null>(null);
+  const [isCompletingTechEval, setIsCompletingTechEval] = useState(false);
+
+  const isTwoPacketMode = React.useMemo(() => {
+    if (!bid) return false;
+    const b: any = bid;
+    return (
+      b.packetType === 'TWO_PACKET' ||
+      b.evaluationType === 'TWO_PACKET' ||
+      b.tenderType?.includes('TWO') ||
+      b.packetCount === 2 ||
+      b.stageType === 'TWO_STAGE' ||
+      b.bidType?.includes('TWO') ||
+      b.technicalPacket != null
+    );
+  }, [bid]);
+
+  const techEvaluationStats = React.useMemo(() => {
+    const total = ranking.length;
+    const qualified = ranking.filter(
+      (r) => r.technicalStatus === 'Qualified',
+    ).length;
+    const disqualified = ranking.filter(
+      (r) => r.technicalStatus === 'Disqualified',
+    ).length;
+    const pending = ranking.filter(
+      (r) => r.technicalStatus !== 'Qualified' && r.technicalStatus !== 'Disqualified',
+    ).length;
+    return {
+      total,
+      qualified,
+      disqualified,
+      pending,
+      isComplete: total > 0 && pending === 0,
+    };
+  }, [ranking]);
+
+  const handleCompleteTechnicalEvaluation = async () => {
+    if (techEvaluationStats.pending > 0) {
+      toast.error(
+        `Cannot complete technical evaluation: ${techEvaluationStats.pending} vendor(s) are still pending evaluation.`,
+      );
+      return;
+    }
+    if (techEvaluationStats.qualified === 0) {
+      toast.error(
+        'At least one vendor must be technically qualified to proceed to Stage 2.',
+      );
+      return;
+    }
+    setIsCompletingTechEval(true);
+    try {
+      await postApi(
+        `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/complete-technical-evaluation`,
+        {},
+      );
+      toast.success(
+        'Stage 1 Technical Evaluation completed successfully! Stage 2 Financial Opening is now active.',
+      );
+      loadBid();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(
+        err?.message ||
+          'Failed to finalize technical evaluation. Please check server logs.',
+      );
+    } finally {
+      setIsCompletingTechEval(false);
+    }
+  };
 
   const [awardModal, setAwardModal] = useState<{
     show: boolean;
@@ -285,7 +364,21 @@ export default function BidResultsPage() {
             offeredItem: r.offeredItemDescription || r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
             makeBrand: r.makeBrand || ackData.makeBrand || respData.makeBrand || 'Standard',
             model: r.model || ackData.model || respData.model || 'Standard',
-            technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' || r.technicalStatus === 'QUALIFIED' ? 'Qualified' : (r.status === 'REJECTED' || r.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Pending'),
+            technicalStatus: (() => {
+              const rawTech = String(
+                r.technicalStatus ||
+                r.status ||
+                r.submissionStatus ||
+                ackData.technicalStatus ||
+                respData.technicalStatus ||
+                ''
+              ).toUpperCase();
+              if (rawTech === 'QUALIFIED' || rawTech === 'SHORTLISTED' || rawTech === 'ACCEPTED') return 'Qualified';
+              if (rawTech === 'DISQUALIFIED' || rawTech === 'REJECTED') return 'Disqualified';
+              return 'Pending';
+            })(),
+            technicalRemarks: r.technicalRemarks || ackData.technicalRemarks || respData.technicalRemarks || '',
+            score: r.score ?? r.technicalScore ?? ackData.score ?? respData.score,
             totalPrice: quotedAmt,
             quotedAmount: quotedAmt,
             gstPercentage: Number(r.gstPercentage || ackData.gstPercentage || respData.gstPercentage || 0),
@@ -319,6 +412,21 @@ export default function BidResultsPage() {
               offeredQuantity,
               lineItems: lineItems,
               documents: docs,
+              technicalStatus: (() => {
+                const rawTech = String(
+                  r.technicalStatus ||
+                  r.status ||
+                  r.submissionStatus ||
+                  ackData.technicalStatus ||
+                  respData.technicalStatus ||
+                  ''
+                ).toUpperCase();
+                if (rawTech === 'QUALIFIED' || rawTech === 'SHORTLISTED' || rawTech === 'ACCEPTED') return 'Qualified';
+                if (rawTech === 'DISQUALIFIED' || rawTech === 'REJECTED') return 'Disqualified';
+                return 'Pending';
+              })(),
+              technicalRemarks: r.technicalRemarks || ackData.technicalRemarks || respData.technicalRemarks || '',
+              score: r.score ?? r.technicalScore ?? ackData.score ?? respData.score,
             }
           };
         });
@@ -410,7 +518,26 @@ export default function BidResultsPage() {
       }
 
       setBid(data);
-      const sorted = [...(data.results || [])].sort((a, b) => {
+      const normalizedResults = (data.results || []).map((r: any, idx: number) => {
+        const rawTech = String(
+          r.technicalStatus ||
+          r.status ||
+          r.submissionStatus ||
+          r.acknowledgement?.technicalStatus ||
+          r.responseData?.technicalStatus ||
+          r.details?.technicalStatus ||
+          ''
+        ).toUpperCase();
+        const isQualified = rawTech === 'QUALIFIED' || rawTech === 'SHORTLISTED' || rawTech === 'ACCEPTED';
+        const isDisqualified = rawTech === 'DISQUALIFIED' || rawTech === 'REJECTED';
+        const techStatus = isQualified ? 'Qualified' : isDisqualified ? 'Disqualified' : 'Pending';
+        return {
+          ...r,
+          technicalStatus: r.technicalStatus === 'Qualified' || r.technicalStatus === 'Disqualified' ? r.technicalStatus : techStatus,
+          rawParticipation: r.rawParticipation || r,
+        };
+      });
+      const sorted = [...normalizedResults].sort((a, b) => {
         const rankA = a.finalRank === 'NA' ? 999 : Number(String(a.finalRank).slice(1));
         const rankB = b.finalRank === 'NA' ? 999 : Number(String(b.finalRank).slice(1));
         if (!isNaN(rankA) && !isNaN(rankB) && rankA !== rankB) return rankA - rankB;
@@ -556,6 +683,44 @@ export default function BidResultsPage() {
       )
     },
     {
+      key: 'technicalStatus',
+      header: 'Technical Evaluation',
+      sortable: true,
+      sortKey: 'technicalStatus',
+      width: 'w-48',
+      cell: (row) => {
+        const isQualified = row.technicalStatus === 'Qualified';
+        const isDisqualified = row.technicalStatus === 'Disqualified';
+        const isPending = !isQualified && !isDisqualified;
+        return (
+          <div className="flex flex-col gap-1 items-start">
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                isQualified
+                  ? 'bg-emerald-100 border border-emerald-300 text-emerald-800'
+                  : isDisqualified
+                    ? 'bg-rose-100 border border-rose-300 text-rose-800'
+                    : 'bg-amber-100 border border-amber-300 text-amber-800'
+              }`}
+            >
+              {isQualified && <CheckCircle2 className="h-3 w-3" />}
+              {isDisqualified && <X className="h-3 w-3" />}
+              {isPending && <Clock className="h-3 w-3" />}
+              {row.technicalStatus || 'Pending'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
+            >
+              <FileText className="h-3 w-3" />
+              {isPending ? 'Evaluate Technical Bid' : 'Edit Evaluation'}
+            </button>
+          </div>
+        );
+      }
+    },
+    {
       key: 'actions',
       header: 'Actions',
       align: 'right',
@@ -566,7 +731,7 @@ export default function BidResultsPage() {
         <div className="flex items-center justify-end gap-2">
           <button
             onClick={() => setSelectedResult(row)}
-            className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 px-3 text-[10px] font-bold transition shadow-2xs"
+            className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 px-3 text-[10px] font-bold transition shadow-2xs cursor-pointer"
           >
             <Eye className="h-3.5 w-3.5 text-slate-500" /> View Details
           </button>
@@ -574,10 +739,20 @@ export default function BidResultsPage() {
             <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-3 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
               <CheckCircle2 className="h-3.5 w-3.5" /> PO Generated
             </span>
+          ) : row.technicalStatus === 'Disqualified' ? (
+            <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 px-2.5 text-[10px] font-bold" title="Disqualified at Stage 1 Technical Evaluation">
+              <X className="h-3 w-3" /> Tech Disqualified
+            </span>
           ) : (
             <button
-              onClick={() => setAwardModal({ show: true, row, remarks: '', submitting: false })}
-              className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs"
+              onClick={() => {
+                if (row.technicalStatus === 'Disqualified') {
+                  toast.error('Cannot award to a technically disqualified supplier.');
+                  return;
+                }
+                setAwardModal({ show: true, row, remarks: '', submitting: false });
+              }}
+              className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs cursor-pointer"
             >
               Accept Quotation
             </button>
@@ -873,6 +1048,77 @@ export default function BidResultsPage() {
             </div>
           </div>
 
+          {/* Two-Packet Stage 1 Technical Evaluation Progress Banner */}
+          {ranking.length > 0 && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                        Stage 1: Technical Packet Scrutiny & Evaluation
+                      </span>
+                      {isTwoPacketMode && (
+                        <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2.5 py-0.5 text-[10px] font-black text-indigo-800 uppercase">
+                          2-Packet Mode Active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Only technically qualified vendors advance to Stage 2 financial ranking, commercial comparison, and reverse auction.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Live Evaluation Status Badges */}
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-1 text-xs font-black text-emerald-800">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    {techEvaluationStats.qualified} Qualified
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 border border-rose-200 px-3 py-1 text-xs font-black text-rose-800">
+                    <X className="h-3.5 w-3.5" />
+                    {techEvaluationStats.disqualified} Disqualified
+                  </span>
+                  {techEvaluationStats.pending > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-3 py-1 text-xs font-black text-amber-800">
+                      <Clock className="h-3.5 w-3.5" />
+                      {techEvaluationStats.pending} Pending Review
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress & Action Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-indigo-100 text-xs">
+                <span className="font-semibold text-slate-600">
+                  {techEvaluationStats.pending > 0
+                    ? `⚠️ ${techEvaluationStats.pending} vendor(s) need technical packet review before final stage 2 progression.`
+                    : techEvaluationStats.qualified > 0
+                      ? `✅ All vendors evaluated. ${techEvaluationStats.qualified} qualified vendor(s) are eligible for Stage 2.`
+                      : '⚠️ At least one vendor must be technically qualified to proceed to Stage 2.'}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                    <button
+                      type="button"
+                      disabled={isCompletingTechEval}
+                      onClick={handleCompleteTechnicalEvaluation}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3.5 text-xs font-black text-white shadow-xs transition cursor-pointer disabled:opacity-50"
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      <span>{isCompletingTechEval ? 'Finalizing...' : 'Complete Technical Evaluation'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Conditional View Mode Rendering */}
           {viewMode === 'grid' ? (
             /* Grid View (Matching Screenshot 2 layout & cards) */
@@ -958,16 +1204,40 @@ export default function BidResultsPage() {
                         </span>
                       </div>
 
-                      {/* Technical Status Badge - Commented out */}
-                      {/* <div>
-                        <StatusBadge label={row.technicalStatus} />
-                      </div> */}
+                      {/* Technical Scrutiny & Evaluation Action Row */}
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200/70">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tech Status:</span>
+                          <span
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                              row.technicalStatus === 'Qualified'
+                                ? 'bg-emerald-100 border border-emerald-300 text-emerald-800'
+                                : row.technicalStatus === 'Disqualified'
+                                  ? 'bg-rose-100 border border-rose-300 text-rose-800'
+                                  : 'bg-amber-100 border border-amber-300 text-amber-800'
+                            }`}
+                          >
+                            {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
+                            {row.technicalStatus === 'Disqualified' && <X className="h-3 w-3" />}
+                            {row.technicalStatus !== 'Qualified' && row.technicalStatus !== 'Disqualified' && <Clock className="h-3 w-3" />}
+                            {row.technicalStatus || 'Pending'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 hover:border-blue-400 px-2.5 py-1 rounded-lg shadow-2xs transition cursor-pointer"
+                        >
+                          <FileText className="h-3 w-3" />
+                          {row.technicalStatus === 'Pending' ? 'Evaluate Tech Bid' : 'Edit Evaluation'}
+                        </button>
+                      </div>
 
                       {/* Card Footer Actions */}
                       <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
                         <button
                           onClick={() => handleSelectResult(row)}
-                          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs"
+                          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-2xs cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-500" /> View Quotation Details
                         </button>
@@ -976,10 +1246,20 @@ export default function BidResultsPage() {
                           <span className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wide">
                             <CheckCircle2 className="h-4 w-4" /> PO Generated
                           </span>
+                        ) : row.technicalStatus === 'Disqualified' ? (
+                          <span className="inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold" title="Disqualified at Stage 1 Technical Evaluation">
+                            <X className="h-3.5 w-3.5" /> Disqualified
+                          </span>
                         ) : (
                           <button
-                            onClick={() => setAwardModal({ show: true, row, remarks: '', submitting: false })}
-                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all shadow-xs"
+                            onClick={() => {
+                              if (row.technicalStatus === 'Disqualified') {
+                                toast.error('Cannot award to a technically disqualified supplier.');
+                                return;
+                              }
+                              setAwardModal({ show: true, row, remarks: '', submitting: false });
+                            }}
+                            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black transition-all shadow-xs cursor-pointer"
                           >
                             Accept Quotation
                           </button>
@@ -1036,7 +1316,21 @@ export default function BidResultsPage() {
               {ranking.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowReverseAuctionModal(true)}
+                  onClick={() => {
+                    if (isTwoPacketMode && techEvaluationStats.pending > 0) {
+                      toast.error(
+                        `Stage 1 Technical Evaluation is still pending for ${techEvaluationStats.pending} vendor(s). Please evaluate all vendors before starting Stage 2 Reverse Auction.`
+                      );
+                      return;
+                    }
+                    if (isTwoPacketMode && techEvaluationStats.qualified === 0) {
+                      toast.error(
+                        'No vendors are technically qualified. Reverse auction requires at least 1 qualified vendor.'
+                      );
+                      return;
+                    }
+                    setShowReverseAuctionModal(true);
+                  }}
                   className="inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-4 text-xs font-black text-white transition-all shadow-xs cursor-pointer"
                 >
                   <Gavel className="h-4 w-4" /> Start Reverse Auction
@@ -1238,10 +1532,23 @@ export default function BidResultsPage() {
             deliveryTimeline: (r as any).deliveryTimeline || r.details?.deliveryTimeline,
             makeBrand: (r as any).makeBrand || (r as any).brand || r.details?.makeBrand,
             model: (r as any).model || r.details?.model,
-            technicalStatus: (r as any).technicalStatus || ((r as any).isDisqualified ? 'DISQUALIFIED' : 'QUALIFIED'),
+            technicalStatus: String(r.technicalStatus || '').toUpperCase(),
           }))}
           onAuctionStarted={(newAuction) => {
             router.push(`/reverse-auctions/${newAuction.id}/live`);
+          }}
+        />
+      )}
+
+      {/* Stage 1 Technical Evaluation Modal */}
+      {selectedForTechEval && (
+        <TechnicalEvaluationModal
+          isOpen={Boolean(selectedForTechEval)}
+          onClose={() => setSelectedForTechEval(null)}
+          procurementId={bidId}
+          participation={selectedForTechEval}
+          onSuccess={() => {
+            loadBid();
           }}
         />
       )}

@@ -776,6 +776,10 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     }
 
     const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || pType || '').toLowerCase();
+    if (typeStr.includes('reverse') || typeStr.includes('auction')) {
+      router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(targetId))}/live`);
+      return;
+    }
     let slug = 'rfq';
     if (typeStr.includes('rfp') || typeStr.includes('proposal')) slug = 'rfp';
     else if (typeStr.includes('open') || typeStr.includes('tender')) slug = 'open-tender';
@@ -791,7 +795,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     const targetId = item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier || item.bid?.id || item.bidId || item.requirementId;
     const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || getParticipationType(item) || '').toLowerCase();
     let slug = 'rfq';
-    if (typeStr.includes('rfp') || typeStr.includes('proposal')) slug = 'rfp';
+    if (typeStr.includes('reverse') || typeStr.includes('auction')) slug = 'reverse-auction';
+    else if (typeStr.includes('rfp') || typeStr.includes('proposal')) slug = 'rfp';
     else if (typeStr.includes('open') || typeStr.includes('tender')) slug = 'open-tender';
     else if (typeStr.includes('limited')) slug = 'limited-tender';
     else if (typeStr.includes('rate')) slug = 'rate-contract';

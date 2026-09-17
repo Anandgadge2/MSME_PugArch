@@ -155,6 +155,23 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   });
 
   const effectiveId = auction.data?.id ?? id;
+  const canonicalCode = auction.data?.auctionCode || String(effectiveId);
+
+  // Sync URL to human-readable canonical code (e.g. /seller/procurement/reverse-auction/RA-2026-69UXUD)
+  useEffect(() => {
+    if (auction.data?.auctionCode && typeof window !== 'undefined') {
+      const code = auction.data.auctionCode;
+      const currentPath = window.location.pathname;
+      const match = currentPath.match(/^(\/(?:seller|shg|buyer)\/procurement\/reverse-auction|\/reverse-auctions)\/([^/]+)(\/.*)?$/i);
+      if (match) {
+        const [, basePrefix, currentSlug, subRoute] = match;
+        if (decodeURIComponent(currentSlug) !== code) {
+          const newPath = `${basePrefix}/${encodeURIComponent(code)}${subRoute || ''}${window.location.search || ''}${window.location.hash || ''}`;
+          window.history.replaceState(null, '', newPath);
+        }
+      }
+    }
+  }, [auction.data?.auctionCode]);
 
   const summary = useQuery({
     queryKey: ['reverse-auction-summary', effectiveId],
@@ -275,6 +292,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const reqData: any = auctionData.linkedRequirement || {};
   const linkedBidData: any = linkedBid.data || {};
 
+  // Buyer Organization details (authentic registered location, distinct from delivery location)
+  const buyerOrg = (auctionData as any).buyerOrganization || reqData.buyerOrganization || reqData.organization || null;
+  const buyerRegisteredAddress = buyerOrg?.registeredAddress || null;
+
   // Resolved Line items
   const resolvedItems: any[] =
     (reqData.items && reqData.items.length > 0 ? reqData.items : null) ||
@@ -298,19 +319,19 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         ]
       : []),
     ...((reqData.documents || []).map((d: any, idx: number) => ({
-      id: d.id || `doc-${idx + 1}`,
+      id: d.id || d.fileAssetId || `doc-${idx + 1}`,
       name: d.name || d.fileName || `Tender Document ${idx + 1}`,
       meta: d.required ? 'Mandatory' : 'Optional',
-      fileAssetId: d.fileAssetId || d.id,
-      url: d.url,
+      fileAssetId: d.fileAssetId || null,
+      url: d.url || null,
       required: d.required !== false,
     }))),
     ...((linkedBidData.documents || []).map((d: any, idx: number) => ({
-      id: d.id || `bid-doc-${idx + 1}`,
+      id: d.id || d.fileAssetId || `bid-doc-${idx + 1}`,
       name: d.name || d.fileName || `Bid Document ${idx + 1}`,
       meta: d.documentType || 'Tender Attachment',
-      fileAssetId: d.fileAssetId || d.id,
-      url: d.url,
+      fileAssetId: d.fileAssetId || null,
+      url: d.url || null,
       required: true,
     }))),
   ];
@@ -458,7 +479,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             </div>
           </div>
           <Link
-            href={`/seller/procurement/reverse-auction/${effectiveId}/results`}
+            href={`/seller/procurement/reverse-auction/${canonicalCode}/results`}
             className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm"
           >
             View Auction Results
@@ -499,7 +520,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   // Buyer Action Buttons
   const buyerAuctionActions = isBuyerOrAdmin ? (
     <div className="flex flex-wrap items-center gap-2">
-      <Link href={`/seller/procurement/reverse-auction/${effectiveId}/live`}>
+      <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/live`}>
         <Button
           type="button"
           size="sm"
@@ -588,14 +609,17 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         orgName={auctionData.buyerOrganizationName || 'Verified Buyer'}
         buyerEmail={user?.role === 'buyer' ? user?.email : undefined}
         buyerMobile={user?.role === 'buyer' ? user?.mobile : undefined}
-        buyerAddress={reqData.deliveryLocation || 'Specified in auction terms'}
+        buyerAddress={buyerRegisteredAddress || undefined}
         buyer={{
           name: auctionData.buyerOrganizationName || 'Verified Buyer',
           email: user?.role === 'buyer' ? user?.email : undefined,
           mobile: user?.role === 'buyer' ? user?.mobile : undefined,
           buyerProfile: {
             organizationName: auctionData.buyerOrganizationName || 'Verified Buyer',
-            address: reqData.deliveryLocation,
+            address: buyerRegisteredAddress || undefined,
+            city: buyerOrg?.city,
+            state: buyerOrg?.state,
+            pincode: buyerOrg?.pincode,
           },
         }}
         estimatedValue={auctionData.startPrice || reqData.estimatedValue}
@@ -654,12 +678,12 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         onSubmitClick={
           isSeller
             ? hasJoined
-              ? () => router.push(`/seller/procurement/reverse-auction/${effectiveId}/live`)
+              ? () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
               : isPublicAuction
               ? () => joinAuction.mutate()
               : undefined
             : isBuyerOrAdmin
-            ? () => router.push(`/seller/procurement/reverse-auction/${effectiveId}/live`)
+            ? () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
             : undefined
         }
         onDownloadClick={handleDownloadPdf}

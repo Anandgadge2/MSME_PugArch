@@ -62,7 +62,7 @@ const getCurrentLowest = (auction?: ReverseAuction) =>
 
 const getBidAmount = (bid: ReverseAuctionBid) => numberValue(bid.amount ?? bid.bidAmount, 0);
 
-const liveSummaryCache = new Map<number, any>();
+const liveSummaryCache = new Map<number | string, any>();
 
 const liveAwareRefetch = (query: any) => {
   const auction = query?.state?.data?.auction || query?.state?.data;
@@ -70,7 +70,7 @@ const liveAwareRefetch = (query: any) => {
   return isAuctionLive(auction, query?.state?.data?.serverTime) ? 3_000 : 20_000;
 };
 
-export default function ReverseAuctionLivePage({ id }: { id: number }) {
+export default function ReverseAuctionLivePage({ id }: { id: number | string }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
@@ -97,6 +97,24 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       return undefined;
     }
   });
+
+  const canonicalCode = summary.data?.auction?.auctionCode || String(id);
+
+  // Sync URL to human-readable canonical code (e.g. /seller/procurement/reverse-auction/RA-2026-69UXUD/live)
+  useEffect(() => {
+    if (summary.data?.auction?.auctionCode && typeof window !== 'undefined') {
+      const code = summary.data.auction.auctionCode;
+      const currentPath = window.location.pathname;
+      const match = currentPath.match(/^(\/(?:seller|shg|buyer)\/procurement\/reverse-auction|\/reverse-auctions)\/([^/]+)(\/live)$/i);
+      if (match) {
+        const [, basePrefix, currentSlug, subRoute] = match;
+        if (decodeURIComponent(currentSlug) !== code) {
+          const newPath = `${basePrefix}/${encodeURIComponent(code)}${subRoute}${window.location.search || ''}${window.location.hash || ''}`;
+          window.history.replaceState(null, '', newPath);
+        }
+      }
+    }
+  }, [summary.data?.auction?.auctionCode]);
 
   const participants = useQuery({
     queryKey: ['reverse-auction-participants', id],
@@ -319,7 +337,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
       <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-zinc-200 pb-6">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link href={`/seller/procurement/reverse-auction/${id}`} className="inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition">
+            <Link href={`/seller/procurement/reverse-auction/${canonicalCode}`} className="inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition">
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Auction Details
             </Link>
             
@@ -362,7 +380,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
             <Button type="button" variant="outline" onClick={invalidate} disabled={summary.isFetching} className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">
               <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', summary.isFetching && 'animate-spin')} /> Refresh
             </Button>
-            <Link href={`/seller/procurement/reverse-auction/${id}`}>
+            <Link href={`/seller/procurement/reverse-auction/${canonicalCode}`}>
               <Button type="button" variant="outline" className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">Details</Button>
             </Link>
             
@@ -380,7 +398,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number }) {
                 {['LIVE', 'PAUSED'].includes(status) && (
                   <Button onClick={() => transition.mutate('close')} className="bg-red-600 hover:bg-red-500 text-white font-bold">Close</Button>
                 )}
-                <Link href={`/seller/procurement/reverse-auction/${id}/results`}>
+                <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/results`}>
                   <Button type="button" variant="secondary" className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800">Results</Button>
                 </Link>
               </>

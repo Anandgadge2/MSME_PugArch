@@ -16,9 +16,11 @@ export interface TechnicalEvaluationModalProps {
   isOpen: boolean;
   onClose: () => void;
   participation: any;
-  bidId: string;
+  bidId?: string;
+  procurementId?: string | number;
   procurementTitle?: string;
   onEvaluationSuccess?: () => void;
+  onSuccess?: () => void;
 }
 
 export function TechnicalEvaluationModal({
@@ -26,9 +28,13 @@ export function TechnicalEvaluationModal({
   onClose,
   participation,
   bidId,
+  procurementId,
   procurementTitle,
   onEvaluationSuccess,
+  onSuccess,
 }: TechnicalEvaluationModalProps) {
+  const effectiveBidId = String(bidId || procurementId || '');
+  const handleSuccessCallback = onEvaluationSuccess || onSuccess;
   const queryClient = useQueryClient();
 
   const [decision, setDecision] = useState<'QUALIFIED' | 'DISQUALIFIED'>('QUALIFIED');
@@ -136,7 +142,7 @@ export function TechnicalEvaluationModal({
       // Try primary procurement bids technical evaluation endpoint first
       let success = false;
       try {
-        await procurementBidApi.submitTechnicalEvaluation(bidId, payload);
+        await procurementBidApi.submitTechnicalEvaluation(effectiveBidId, payload);
         success = true;
       } catch (err: any) {
         // Fallback: If this is an RFQ QuoteResponse entity
@@ -168,8 +174,8 @@ export function TechnicalEvaluationModal({
         queryClient.invalidateQueries({ queryKey: ['rfq-detail-v2-full'] });
         queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
 
-        if (onEvaluationSuccess) {
-          onEvaluationSuccess();
+        if (handleSuccessCallback) {
+          handleSuccessCallback();
         }
         onClose();
       }

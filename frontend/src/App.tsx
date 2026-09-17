@@ -765,34 +765,42 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
     }
 
+    // ── URL Normalization: redirect reverse auction URLs with spaces or %20 to canonical hyphenated slug ──
+    {
+      const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results))?$/i);
+      if (spaceAuctionMatch) {
+        const [, role, rawId, subPath] = spaceAuctionMatch;
+        return <Redirect to={`/${role.toLowerCase()}/procurement/reverse-auction/${rawId}${subPath || ''}`} />;
+      }
+    }
+
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/i);
       if (procDetailMatch) {
         const [, , typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
-        switch (typeSlug) {
+        switch (typeSlug.toLowerCase()) {
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
           case 'open-tender':      return <OpenTenderDetailPage />;
           case 'limited-tender':   return <LimitedTenderDetailPage />;
           case 'rate-contract':    return <RateContractDetailPage />;
           case 'reverse-auction': {
-            const numId = Number(id);
-            if (Number.isFinite(numId) && numId > 0) return <ReverseAuctionDetailPage id={numId} />;
+            if (id) return <ReverseAuctionDetailPage id={id} />;
             break;
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/i);
       if (procAuctionLiveMatch) {
-        const id = Number(decodeURIComponent(procAuctionLiveMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const id = decodeURIComponent(procAuctionLiveMatch[2]);
+        if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/i);
       if (procAuctionResultMatch) {
-        const id = Number(decodeURIComponent(procAuctionResultMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const id = decodeURIComponent(procAuctionResultMatch[2]);
+        if (id) return <AuctionResultPage id={id} />;
       }
     }
 
@@ -801,10 +809,10 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
     if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
     {
-      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
+      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
       if (reverseAuctionDetailMatch) {
-        const id = Number(reverseAuctionDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionDetailPage id={id} />;
+        const id = decodeURIComponent(reverseAuctionDetailMatch[1]);
+        if (id && id !== 'create') return <ReverseAuctionDetailPage id={id} />;
       }
     }
 
@@ -1035,15 +1043,15 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <Redirect to="/buyer/procurement/create?method=REVERSE_AUCTION" />;
       }
 
-      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/live$/);
+      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live$/);
       if (reverseAuctionLiveMatch) {
-        const id = Number(reverseAuctionLiveMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const id = decodeURIComponent(reverseAuctionLiveMatch[1]);
+        if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/results$/);
+      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results$/);
       if (reverseAuctionResultMatch) {
-        const id = Number(reverseAuctionResultMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const id = decodeURIComponent(reverseAuctionResultMatch[1]);
+        if (id) return <AuctionResultPage id={id} />;
       }
     }
     if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
