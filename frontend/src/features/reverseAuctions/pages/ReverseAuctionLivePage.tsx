@@ -1,6 +1,7 @@
 import { FormEvent, useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Activity,
   AlertTriangle,
@@ -72,8 +73,16 @@ const liveAwareRefetch = (query: any) => {
 
 export default function ReverseAuctionLivePage({ id }: { id: number | string }) {
   const qc = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname() || '';
   const { user } = useAuth();
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
+  const rolePrefix = pathname.startsWith('/buyer') ? '/buyer' :
+                     pathname.startsWith('/admin') ? '/admin' :
+                     pathname.startsWith('/shg') ? '/shg' :
+                     user?.role === 'buyer' ? '/buyer' :
+                     user?.role === 'admin' ? '/admin' :
+                     user?.role === 'shg' ? '/shg' : '/seller';
   const [amount, setAmount] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -398,9 +407,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                 {['LIVE', 'PAUSED'].includes(status) && (
                   <Button onClick={() => transition.mutate('close')} className="bg-red-600 hover:bg-red-500 text-white font-bold">Close</Button>
                 )}
-                <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/results`}>
-                  <Button type="button" variant="secondary" className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800">Results</Button>
-                </Link>
+                <button
+                  type="button"
+                  onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
+                  className="rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-3 py-1.5 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                >
+                  Results
+                </button>
               </>
             )}
           </div>

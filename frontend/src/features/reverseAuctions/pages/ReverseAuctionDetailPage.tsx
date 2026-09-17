@@ -107,6 +107,12 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const { user } = useAuth();
   const isSeller = user?.role === 'seller' || (!user && pathname.includes('/seller'));
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
+  const rolePrefix = pathname.startsWith('/buyer') ? '/buyer' :
+                     pathname.startsWith('/admin') ? '/admin' :
+                     pathname.startsWith('/shg') ? '/shg' :
+                     user?.role === 'buyer' ? '/buyer' :
+                     user?.role === 'admin' ? '/admin' :
+                     user?.role === 'shg' ? '/shg' : '/seller';
 
   const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -478,12 +484,13 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
               </p>
             </div>
           </div>
-          <Link
-            href={`/seller/procurement/reverse-auction/${canonicalCode}/results`}
-            className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm"
+          <button
+            type="button"
+            onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
+            className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
           >
             View Auction Results
-          </Link>
+          </button>
         </div>
       )}
 

@@ -153,8 +153,8 @@ export const reverseAuctionApi = {
     api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/bids`, { amount }, { headers: headers() }).then(res => json<any>(res)),
   result: (id: number | string) =>
     api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/result`, { headers: headers(), skipCache: true }).then(res => json<any>(res)),
-  recommendAward: (id: number | string, participantId?: number) =>
-    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/award-recommendation`, { participantId }, { headers: headers() }).then(res => json<any>(res)),
+  recommendAward: (id: number | string, participantId?: number, remarks?: string) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/award-recommendation`, { participantId, remarks }, { headers: headers() }).then(res => json<any>(res)),
   startFromBids: (data: {
     procurementId: number | string;
     title?: string;

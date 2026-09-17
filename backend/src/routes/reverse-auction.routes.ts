@@ -1805,8 +1805,32 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    assertAuctionManager(req, auction);
-    const participants = await db.auctionParticipant.findMany({ where: { auctionId: id }, orderBy: [{ currentRank: 'asc' }, { lastBidAmount: 'asc' }] });
+
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+
+    const isPublic = await isAuctionPublic(auction);
+    const isConcluded = ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED', 'ENDED'].includes(auction.status || auction.statusEnum);
+
+    if (!isManager && !myParticipant && !isPublic && !isConcluded) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const participants = await db.auctionParticipant.findMany({
+      where: { auctionId: id },
+      orderBy: [{ currentRank: 'asc' }, { lastBidAmount: 'asc' }]
+    });
     
     // Resolve organization names for the ranking table
     const orgIds = participants.map((p: any) => p.sellerOrgId).filter(Boolean);
@@ -1815,12 +1839,28 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const ranking = participants.map((p: any) => ({
-      ...p,
-      sellerOrgName: orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`
-    }));
 
-    return apiResponse.success(res, { auction: maskSensitive(auction), ranking: maskSensitive(ranking) });
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const ranking = participants.map((p: any, index: number) => {
+      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
+                   (req.user?.id && p.sellerUserId === req.user.id);
+      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+
+      return {
+        ...p,
+        sellerOrgName: displayName,
+        isCurrentViewer: Boolean(isMe)
+      };
+    });
+
+    return apiResponse.success(res, {
+      auction: maskSensitive(auction),
+      ranking: maskSensitive(ranking),
+      canRecommendAward: isManager,
+      isManager,
+      myParticipant: maskSensitive(myParticipant)
+    });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load auction result', error.code || 'REVERSE_AUCTION_RESULT_ERROR');
   }

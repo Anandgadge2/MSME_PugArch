@@ -767,7 +767,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
 
     // ── URL Normalization: redirect reverse auction URLs with spaces or %20 to canonical hyphenated slug ──
     {
-      const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results))?$/i);
+      const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results?))?\/?$/i);
       if (spaceAuctionMatch) {
         const [, role, rawId, subPath] = spaceAuctionMatch;
         return <Redirect to={`/${role.toLowerCase()}/procurement/reverse-auction/${rawId}${subPath || ''}`} />;
@@ -776,7 +776,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
 
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/i);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
         const [, , typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
@@ -792,12 +792,12 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/i);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/live\/?$/i);
       if (procAuctionLiveMatch) {
         const id = decodeURIComponent(procAuctionLiveMatch[2]);
         if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/i);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/results?\/?$/i);
       if (procAuctionResultMatch) {
         const id = decodeURIComponent(procAuctionResultMatch[2]);
         if (id) return <AuctionResultPage id={id} />;
@@ -1043,12 +1043,12 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <Redirect to="/buyer/procurement/create?method=REVERSE_AUCTION" />;
       }
 
-      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live$/);
+      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live\/?$/i);
       if (reverseAuctionLiveMatch) {
         const id = decodeURIComponent(reverseAuctionLiveMatch[1]);
         if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results$/);
+      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results?\/?$/i);
       if (reverseAuctionResultMatch) {
         const id = decodeURIComponent(reverseAuctionResultMatch[1]);
         if (id) return <AuctionResultPage id={id} />;
