@@ -3045,6 +3045,39 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     }
   } catch {}
 
+  // 4. Try FileAsset lookup by key or filename
+  try {
+    const cleanKey = decodeURIComponent(rawKey);
+    const baseName = path.basename(cleanKey);
+    const asset = await db.fileAsset.findFirst({
+      where: {
+        status: 'active',
+        OR: [
+          { key: rawKey },
+          { key: cleanKey },
+          { url: { endsWith: rawKey } },
+          { url: { endsWith: cleanKey } },
+          { originalName: baseName }
+        ]
+      }
+    });
+
+    if (asset) {
+      const publicActor = (await getPublicFileActor(asset.id)) || { id: asset.ownerId, role: asset.ownerRole || 'seller' };
+      const file = await getFileContent(asset.id, publicActor, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      if (file?.buffer) {
+        res.setHeader('Content-Type', file.contentType || contentType);
+        res.setHeader('Content-Length', file.buffer.length);
+        res.setHeader('Cache-Control', cacheControl);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.end(file.buffer);
+      }
+    }
+  } catch {}
+
   throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));
 
@@ -4393,20 +4426,15 @@ router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (re
   };
   const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
   const viewUrl = `/api/files/${asset.id}/view`;
-  // For image assets, return the direct CDN/storage URL so <img> tags can render
-  // without needing an Authorization header. For non-image files, fall back to the
-  // auth-gated view endpoint.
-  const isImage = (asset.mimeType || '').startsWith('image/');
-  const publicUrl = isImage && asset.url && /^https?:\/\//.test(asset.url)
-    ? asset.url
-    : viewUrl;
+  // Return viewUrl as primary URL so all file assets (including images) are served
+  // reliably through the authenticated/public proxy rather than raw private bucket URLs.
   ok(res, {
-    url: publicUrl,
+    url: viewUrl,
     signedUrl: viewUrl,
     fileId: asset.id,
     file: {
       id: asset.id,
-      url: publicUrl,
+      url: viewUrl,
       documentUrl: viewUrl,
       originalName: asset.originalName,
       mimeType: asset.mimeType,

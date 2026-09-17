@@ -34,6 +34,17 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
 };
 
 export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): Promise<DocumentPreview> => {
+  // 1. If local File object is available, create instant local blob
+  if (fileAsset?.file instanceof File) {
+    const blobUrl = URL.createObjectURL(fileAsset.file);
+    const fileName = fileAsset.fileName || fileAsset.file.name || label;
+    return {
+      label: fileName,
+      url: blobUrl,
+      mode: getDocumentPreviewMode(blobUrl, fileAsset.file.type || '', fileName.split('.').pop() || '')
+    };
+  }
+
   let fileId: number | null = null;
   if (typeof fileAsset === 'number') {
     fileId = fileAsset;
@@ -46,6 +57,8 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       fileId = Number(fileAsset.fileId);
     } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
+    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+      fileId = Number(fileAsset.id);
     }
   }
 
@@ -64,70 +77,92 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     }
   }
 
-  if (!fileId) {
-    if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
-    return {
-      label,
-      url: absoluteFallbackUrl,
-      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
-    };
-  }
-
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
   const hasSession = Boolean(token || getCookieValue('csrfToken'));
-  const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
-  const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
-
   const authHeaders: Record<string, string> = {};
   if (token) {
     authHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  try {
-    const res = await api.fetch(signedUrlEndpoint, {
-      method: 'GET',
-      headers: authHeaders,
-      skipCache: true
-    });
+  // 2. If we have a file ID, fetch directly from viewEndpoint for authenticated blob streaming
+  if (fileId) {
+    const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+    try {
+      const res = await api.fetch(viewEndpoint, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
 
-    if (res.ok) {
-      const body = await res.json().catch(() => null);
-      const data = unwrapApiData<any>(body);
-      if (data?.signedUrl) {
-        const previewUrl = resolveMediaUrl(data.signedUrl) || data.signedUrl;
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
         return {
           label,
-          url: previewUrl,
-          mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          url: blobUrl,
+          mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
         };
       }
+    } catch {
+      // Fallback below
     }
-  } catch {
-    // Fallback below
+
+    // Try signed URL endpoint if view endpoint failed
+    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
+    try {
+      const res = await api.fetch(signedUrlEndpoint, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
+
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        const data = unwrapApiData<any>(body);
+        if (data?.signedUrl) {
+          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
+          return {
+            label,
+            url: previewUrl,
+            mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          };
+        }
+      }
+    } catch {
+      // Fallback below
+    }
   }
 
-  try {
-    const res = await api.fetch(viewEndpoint, {
-      method: 'GET',
-      headers: authHeaders,
-      skipCache: true
-    });
-
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      return {
-        label,
-        url: blobUrl,
-        mode: getDocumentPreviewMode(blobUrl, contentType)
-      };
-    }
-  } catch {
-    // Fallback below
-  }
-
+  // 3. If fallback URL is present, try fetching its blob or resolving it
   if (absoluteFallbackUrl) {
+    const isImageOrPdf = /\.(png|jpe?g|webp|gif|svg|pdf)($|\?)/i.test(absoluteFallbackUrl) ||
+      fileAsset?.mimeType?.startsWith('image/') ||
+      fileAsset?.mimeType === 'application/pdf';
+
+    if (isImageOrPdf) {
+      try {
+        const res = await api.fetch(absoluteFallbackUrl, {
+          method: 'GET',
+          headers: authHeaders,
+          skipCache: true
+        });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          return {
+            label,
+            url: blobUrl,
+            mode: getDocumentPreviewMode(blobUrl, contentType)
+          };
+        }
+      } catch {
+        // Fallback to absolute url directly
+      }
+    }
+
     return {
       label,
       url: absoluteFallbackUrl,
@@ -200,12 +235,15 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         const body = await res.json().catch(() => null);
         const data = unwrapApiData<any>(body);
         if (data?.signedUrl) {
-          if (previewWindow) {
-            previewWindow.location.href = data.signedUrl;
-          } else {
-            window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+          if (isRealSignedUrl) {
+            if (previewWindow) {
+              previewWindow.location.href = data.signedUrl;
+            } else {
+              window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+            }
+            return;
           }
-          return;
         }
       }
     } catch {

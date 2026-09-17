@@ -29,12 +29,12 @@ import {
   Circle,
   Truck,
   ExternalLink,
+  Check,
+  Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
@@ -108,6 +108,8 @@ const formatCurrency = (val?: number | string) => {
 };
 
 type UploadState = {
+  id?: number | string;
+  fileAssetId?: number | null;
   file?: File;
   fileName?: string;
   fileSize?: number;
@@ -380,10 +382,10 @@ export default function SubmitQuotationPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
-  const autoSaveTimerRef = useRef<any>(null);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
@@ -917,9 +919,10 @@ export default function SubmitQuotationPage() {
   const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
   const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
 
-  // Save draft to database
+  // Save draft strictly when user clicks "Save Draft" button
   const saveDraft = useCallback(async () => {
-    if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting) return;
+    if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting || savingDraft) return;
+    setSavingDraft(true);
     try {
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
@@ -949,8 +952,10 @@ export default function SubmitQuotationPage() {
       }
       console.warn('Failed to save draft to server', err);
       toast.error(err?.message || 'Failed to save draft to server');
+    } finally {
+      setSavingDraft(false);
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -986,33 +991,7 @@ export default function SubmitQuotationPage() {
     : isLimitedTender ? 'Back to Limited Tender'
     : 'Back to RFQ';
 
-  // Auto-save on field changes (debounced at 5 seconds)
-  React.useEffect(() => {
-    if (!resolvedId || isReadOnly || isSubmittedQuote || submitted || submitting || !rfqData) {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-      return;
-    }
-    const hasDynamicInput = docUploads.some(doc => doc.status === 'done') || lineQuotes.some(line => line.unitPrice !== '');
-    if (!offeredPrice && !offeredQuantity && !deliveryTimeline && !terms && !message && !uploadState && !hasDynamicInput) {
-      return;
-    }
 
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-    }
-    autoSaveTimerRef.current = setTimeout(() => {
-      saveDraft();
-    }, 5000);
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearTimeout(autoSaveTimerRef.current);
-        autoSaveTimerRef.current = null;
-      }
-    };
-  }, [offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes, resolvedId, rfqData, saveDraft, ownResponse, isReadOnly, isSubmittedQuote, submitted, submitting]);
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
@@ -1701,11 +1680,11 @@ export default function SubmitQuotationPage() {
 
   const handlePreviewDocument = async (item: any) => {
     if (!item) return;
-    const rawUrl = item.fileUrl || item.url || '';
     const fileName = item.fileName || item.name || item.file?.name || 'Document Preview';
+    const rawUrl = item.fileUrl || item.url || '';
 
-    // If it's a local File object and no server url
-    if (!rawUrl && item.file instanceof File) {
+    // 1. If it's a local File object in memory, preview immediately via local blob URL
+    if (item.file instanceof File) {
       try {
         const blobUrl = URL.createObjectURL(item.file);
         setPreviewDocument({
@@ -1719,11 +1698,12 @@ export default function SubmitQuotationPage() {
       }
     }
 
-    if (!rawUrl) {
+    if (!rawUrl && !item.fileAssetId && !item.id) {
       toast.error('Preview is not available for this document.');
       return;
     }
 
+    // 2. Fetch preview via getFileAssetPreview
     try {
       const prev = await getFileAssetPreview(
         {
@@ -1799,7 +1779,7 @@ export default function SubmitQuotationPage() {
       toast.error('File size must be under 10 MB');
       return;
     }
-    setUploadState({ file, progress: 0, status: 'pending' });
+    setUploadState({ file, fileName: file.name, fileSize: file.size, progress: 0, status: 'pending' });
     setErrors(prev => {
       const next = { ...prev };
       delete next.attachment;
@@ -1814,7 +1794,15 @@ export default function SubmitQuotationPage() {
       const result = await uploadFile(uploadState.file, (percent) => {
         setUploadState(prev => prev ? { ...prev, progress: percent } : prev);
       });
-      setUploadState(prev => prev ? { ...prev, status: 'done', progress: 100, url: result.url } : prev);
+      setUploadState(prev => prev ? {
+        ...prev,
+        id: result.id,
+        fileAssetId: result.id,
+        status: 'done',
+        progress: 100,
+        url: result.url,
+        fileName: uploadState.file?.name || prev.fileName || prev.file?.name
+      } : prev);
       toast.success('Document uploaded');
     } catch (err: any) {
       setUploadState(prev => prev ? { ...prev, status: 'error', error: err?.message || 'Upload failed' } : prev);
@@ -1837,10 +1825,6 @@ export default function SubmitQuotationPage() {
   const handleSubmit = async () => {
     if (isSubmittedQuote) {
       return;
-    }
-    if (autoSaveTimerRef.current) {
-      clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = null;
     }
     // EMD check commented out as requested
     // if (isEmdActive && !isEmdPaid) {
@@ -2375,10 +2359,10 @@ export default function SubmitQuotationPage() {
                 type="button"
                 variant="outline"
                 onClick={saveDraft}
-                disabled={submitting || isReadOnly}
+                disabled={submitting || savingDraft || isReadOnly}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
-                Save Draft
+                {savingDraft ? 'Saving...' : 'Save Draft'}
               </Button>
               <Button
                 type="button"
@@ -2595,10 +2579,10 @@ export default function SubmitQuotationPage() {
                   type="button"
                   variant="outline"
                   onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
+                  disabled={submitting || savingDraft || isReadOnly}
                   className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
-                  Save Draft
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   type="button"
@@ -2896,10 +2880,10 @@ export default function SubmitQuotationPage() {
                   type="button"
                   variant="outline"
                   onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
+                  disabled={submitting || savingDraft || isReadOnly}
                   className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
-                  Save Draft
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   type="button"
@@ -3166,16 +3150,7 @@ export default function SubmitQuotationPage() {
                             <Eye className="h-3.5 w-3.5" /> Preview
                           </button>
                         )}
-                        {(item.fileUrl || item.url) && !isUploading && (
-                          <a
-                            href={item.fileUrl || item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" /> Open
-                          </a>
-                        )}
+                       
                         {!isReadOnly && !isUploading && (
                           <button
                             type="button"
@@ -3224,10 +3199,10 @@ export default function SubmitQuotationPage() {
                     type="button"
                     variant="outline"
                     onClick={saveDraft}
-                    disabled={submitting || isReadOnly}
+                    disabled={submitting || savingDraft || isReadOnly}
                     className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
                   >
-                    Save Draft
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
                   </Button>
                 )}
                 <Button
@@ -3309,22 +3284,78 @@ export default function SubmitQuotationPage() {
 
             {!isSubmittedQuote && (
               <div className="pt-2">
-                <ComplianceConsentCard
-                  title="MSME Registration & Supplier Participation Agreement"
-                  subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
-                  pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
-                  accepted={declared}
-                  onAcceptedChange={val => {
-                    setDeclared(val);
-                    setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
-                  }}
-                  checkboxLabel="I certify quotation authenticity & accept the MSME Supplier Participation Agreement"
-                  checkboxDescription="I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE."
-                  readerHeightClassName="h-[120px] sm:h-[135px]"
-                  showPolicyLibrary
+                <div
+                  className={cn(
+                    'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+                    declared
+                      ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+                      : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+                  )}
                 >
-                  <SupplierAgreementPolicyContent />
-                </ComplianceConsentCard>
+                  <label
+                    htmlFor="submit-quotation-supplier-consent"
+                    className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+                  >
+                    <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        id="submit-quotation-supplier-consent"
+                        checked={declared}
+                        onChange={(e) => {
+                          setDeclared(e.target.checked);
+                          setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
+                        }}
+                        aria-required="true"
+                        className="peer sr-only"
+                      />
+                      <div
+                        className={cn(
+                          'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                          declared
+                            ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                            : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                        )}
+                        aria-hidden="true"
+                      >
+                        <Check
+                          className={cn(
+                            'h-3 w-3 stroke-[3] transition-transform duration-150',
+                            declared ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+                      <span className="font-bold">
+                        I certify quotation authenticity &amp; accept the{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const pdfUrl = '/docs/MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            const link = document.createElement('a');
+                            link.href = pdfUrl;
+                            link.download = 'MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                          title="Click to download MSME Supplier Participation Agreement (PDF)"
+                        >
+                          <span>MSME Supplier Participation Agreement (T&amp;C)</span>
+                          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                        </button>
+                        <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+                      </span>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                        I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE.
+                      </p>
+                    </div>
+                  </label>
+                </div>
                 {fieldError('declared')}
               </div>
             )}
@@ -3384,11 +3415,11 @@ export default function SubmitQuotationPage() {
                   <Button
                     type="button"
                     onClick={saveDraft}
-                    disabled={submitting || isReadOnly}
+                    disabled={submitting || savingDraft || isReadOnly}
                     variant="outline"
                     className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-[#12335f] hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
                   >
-                    Save Draft
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
                   </Button>
                   <Button
                     type="button"
