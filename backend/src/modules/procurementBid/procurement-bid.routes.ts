@@ -14,6 +14,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../config/logger.js';
 import { fulfillmentWorkflow } from '../../services/workflow/fulfillment-workflow.service.js';
 import { getCache, setCache, deleteCache, getOrSetCache } from '../../services/cache.service.js';
+import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants, formatRequirementNumber } from '../../utils/refIdUtils.js';
 
 const router = Router();
 
@@ -751,11 +752,12 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }
     }
   } catch (err: any) {
-    // Fallback: if no ProcurementBid found, check if this is a Requirement ID, Reference Number, or Rate Contract
-    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))) {
-      const parsedId = (token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))
-        ? Number(token.replace(/^(REQ-|RFQ-|RC-|RATE-|RFP-|TND-|LTND-)/, ''))
-        : Number(token);
+    const isPrefixed = CANONICAL_METHOD_PREFIXES.some(p => token.startsWith(`${p}-`));
+    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || isPrefixed)) {
+      const numMatch = token.match(/\d+$/);
+      const parsedId = /^\d+$/.test(token)
+        ? Number(token)
+        : (numMatch ? Number(numMatch[0]) : null);
       let requirement = null;
 
       if (Number.isFinite(parsedId) && parsedId > 0 && parsedId <= 2147483647) {
@@ -774,7 +776,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           requirement.buyer = buyerReq.createdBy;
           requirement.buyerId = buyerReq.createdById;
           requirement.organizationId = buyerReq.buyerOrganizationId;
-          requirement.requirementNumber = `REQ-${String(Math.abs(Number(buyerReq.id))).padStart(5, '0')}`;
+          requirement.requirementNumber = formatRequirementNumber(buyerReq.id);
           
           requirement.payload = {
             basics: {
@@ -804,13 +806,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }
 
       if (!requirement) {
-        const searchTokens = Array.from(new Set([
-          token,
-          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'REQ-'),
-          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'TND-'),
-          token.replace(/^REQ-/, 'TND-'),
-          token.replace(/^TND-/, 'REQ-'),
-        ]));
+        const searchTokens = getCanonicalLookupVariants(token);
         requirement = await prisma.requirement.findFirst({
           where: {
             OR: [

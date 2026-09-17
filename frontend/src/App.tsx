@@ -117,7 +117,6 @@ const ProcurementDraftsPage = lazy(() => import('./features/procurementWizard/pa
 // The old bidCreationWizardV2 files are preserved but no longer routed.
 const BuyerProcurementHub = lazy(() => import('./features/procurement/pages/BuyerProcurementHub'));
 const MyProcurementsPage = lazy(() => import('./features/procurement/pages/MyProcurementsPage'));
-const SupplierResponsesPage = lazy(() => import('./features/procurement/pages/SupplierResponsesPage'));
 const ProcurementCheckoutPage = lazy(() => import('./features/procurementCheckoutV2/pages/ProcurementCheckoutPage'));
 const SellerOpportunitiesPage = lazy(() => import('./features/sellerOpportunities/pages/SellerOpportunitiesPage'));
 const SellerBidsPage = lazy(() => import('./features/procurementBid/pages/SellerBidsPage'));
@@ -130,7 +129,6 @@ const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContr
 const OpenTenderDetailPage = lazy(() => import('./features/rfq/pages/OpenTenderDetailPage'));
 const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedTenderDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
-const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
@@ -243,7 +241,6 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/buyer/procurement/create': () => import('./features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/drafts': () => import('./features/procurementWizard/pages/ProcurementDraftsPage'),
   '/buyer/procurement/hub': () => import('./features/procurement/pages/BuyerProcurementHub'),
-  '/buyer/procurement/responses': () => import('./features/procurement/pages/SupplierResponsesPage'),
   '/seller/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/buyer/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
@@ -909,15 +906,20 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     }
     if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><CreateProcurementPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><ProcurementDraftsPage /></PermissionRouteGuard>;
-    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><SupplierResponsesPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) {
+      return <Redirect to="/buyer/my-procurements" />;
+    }
     {
       const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
       if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage id={id} /></PermissionRouteGuard>;
+        if (Number.isFinite(id) && id > 0) {
+          return <Redirect to={`/buyer/rfq/detail?requirementId=${id}&tab=clarifications`} />;
+        }
+        return <Redirect to="/buyer/my-procurements" />;
       }
       if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
-        return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage /></PermissionRouteGuard>;
+        return <Redirect to="/buyer/my-procurements" />;
       }
     }
     

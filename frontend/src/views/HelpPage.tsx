@@ -86,8 +86,8 @@ const SOP_WORKFLOWS: SopWorkflow[] = [
         title: 'Supplier Response & Clarifications',
         description: 'Receive quotations and bids from verified district sellers. Use in-platform messaging for transparent, auditable technical clarifications.',
         prerequisites: ['Active Bid Listing', 'Portal In-App Messaging'],
-        actionLabel: 'View Responses',
-        actionHref: '/buyer/procurement/responses'
+        actionLabel: 'View Procurements',
+        actionHref: '/buyer/my-procurements'
       },
       {
         title: 'Evaluation, Approval & Contract Award',

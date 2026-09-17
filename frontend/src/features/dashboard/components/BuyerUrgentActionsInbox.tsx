@@ -63,7 +63,7 @@ export function BuyerUrgentActionsInbox() {
         subtitle: 'Technical evaluation and L1 compliance review required before opening commercials.',
         badge: 'Evaluation Due',
         badgeTone: 'bg-amber-50 text-amber-700 border-amber-200',
-        actionHref: '/buyer/procurement/responses',
+        actionHref: '/buyer/my-procurements',
         actionLabel: 'Evaluate Bids',
         icon: Gavel
       });

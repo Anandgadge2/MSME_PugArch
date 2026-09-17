@@ -69,7 +69,7 @@ const procurementSkeletonColumns: ColumnDef<any>[] = [
   { key: 'title', header: 'Title & Reference', width: 'w-[24.5%]', cell: () => null },
   { key: 'status', header: 'Status', width: 'w-[11%]', cell: () => null },
   { key: 'estimatedValue', header: 'Est. Value', width: 'w-[9.5%]', cell: () => null },
-  { key: 'category', header: 'Category & Location', width: 'w-[13%]', cell: () => null },
+  { key: 'category', header: 'Category & Responses', width: 'w-[13%]', cell: () => null },
   { key: 'updatedAt', header: 'Updated', width: 'w-[9%]', cell: () => null },
   { key: 'action', header: 'Action', align: 'right', width: 'w-[19%]', cell: () => null }
 ];
@@ -827,26 +827,28 @@ export default function MyProcurementsPage() {
     },
     {
       key: 'category',
-      header: 'Category & Location',
+      header: 'Category & Responses',
       sortable: true,
       sortKey: 'category',
       width: 'w-[13%]',
       cell: (p: any) => {
-        const cleanLoc = formatCleanLocation(p.deliveryLocation);
+        const count = Number(p.participantsCount || 0);
         return (
-          <div className="space-y-0.5 min-w-0">
-            <span title={p.category || '—'} className="text-xs font-bold text-slate-700 line-clamp-1 block">
+          <div className="space-y-1 min-w-0">
+            <span title={p.category || '—'} className="text-xs font-bold text-slate-900 line-clamp-1 block">
               {p.category || '—'}
             </span>
-            {cleanLoc && (
-              <span
-                title={p.deliveryLocation || cleanLoc}
-                className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-slate-500 line-clamp-1 cursor-default hover:text-slate-800 transition-colors"
-              >
-                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                <span className="truncate">{cleanLoc}</span>
-              </span>
-            )}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9.5px] font-bold border transition-colors shrink-0",
+                count > 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-slate-200 bg-slate-50 text-slate-500"
+              )}
+            >
+              <Users className="h-3 w-3 shrink-0" />
+              <span>{count} {count === 1 ? 'response' : 'responses'}</span>
+            </span>
           </div>
         );
       }

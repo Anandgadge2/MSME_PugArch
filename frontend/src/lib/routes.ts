@@ -94,8 +94,8 @@ export const buyerRoutes = {
       ? `/buyer/my-procurements?type=${type}`
       : '/buyer/my-procurements',
 
-  /** Supplier responses */
-  responses: '/buyer/procurement/responses' as const,
+  /** Supplier responses (redirected to My Procurements) */
+  responses: '/buyer/my-procurements' as const,
 
   /** Procurement drafts */
   drafts: '/buyer/procurement/drafts' as const,

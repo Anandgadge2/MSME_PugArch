@@ -653,7 +653,7 @@ function SectionHeader({ title, icon: Icon, badge, action }: { title: string; ic
 }
 
 function DetailValue({ value, valueKey }: { value: any; valueKey?: string }) {
-  if (value === null || value === undefined || value === '') {
+  if (value === null || value === undefined || value === '' || value === '—' || value === 'N/A' || value === 'Not Specified' || value === 'null') {
     return <span className="text-slate-400 font-normal">N/A</span>;
   }
 
@@ -781,7 +781,11 @@ function PropertyItem({
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isOpenTender = typeof ctx === 'boolean' ? false : ctx.isOpenTender;
   const isLimitedTender = typeof ctx === 'boolean' ? false : (ctx.isLimitedTender || false);
-  if (!hasDetailData(value)) return null;
+
+  const hasData = hasDetailData(value) && value !== '—' && value !== 'N/A' && value !== 'Not Specified' && value !== 'null';
+  if (!hasData) {
+    if (!isBuyer) return null;
+  }
 
   if (label) {
     const lower = label.toLowerCase().replace(/[^a-z]/g, '');
@@ -809,6 +813,8 @@ function PropertyItem({
     }
   }
 
+  const effectiveValue = hasData ? value : 'N/A';
+
   return (
     <div
       className={cn(
@@ -824,12 +830,12 @@ function PropertyItem({
       <dd
         className={cn(
           'mt-0.5 text-xs font-medium text-slate-900 break-words leading-snug',
-          highlight && 'text-blue-700 font-bold',
-          mono && 'font-mono text-[11px]'
+          highlight && hasData && 'text-blue-700 font-bold',
+          mono && hasData && 'font-mono text-[11px]'
         )}
       >
-        <DetailValue value={value} valueKey={label} />
-        {subtext && (
+        <DetailValue value={effectiveValue} valueKey={label} />
+        {subtext && hasData && (
           <span className="block text-[10.5px] font-medium text-slate-500 mt-0.5">
             {subtext}
           </span>
@@ -877,8 +883,16 @@ function BuyerProfileSection({
   address?: string;
   department?: string;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+
+  const hasContact = hasDetailData(contactPerson) && contactPerson !== '—' && contactPerson !== 'N/A';
+  const hasEmail = hasDetailData(email) && email !== '—' && email !== 'N/A';
+  const hasPhone = hasDetailData(phone) && phone !== '—' && phone !== 'N/A';
+  const hasAddress = hasDetailData(address) && address !== '—' && address !== 'N/A';
+
   return (
-    <DataCard title="Buyer Information" icon={Building2}>
+    <DataCard title={isBuyer ? "Organization & Contact Details" : "Buyer Information"} icon={Building2}>
       <div className="space-y-4">
         {/* Org Banner Card */}
         <div className="flex items-start gap-3 rounded-xl bg-slate-50/80 p-3 border border-slate-150">
@@ -888,7 +902,7 @@ function BuyerProfileSection({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight">
-                {orgName || 'Buyer Organization'}
+                {orgName || (isBuyer ? 'My Organization' : 'Buyer Organization')}
               </h3>
               {department && (
                 <span className="rounded-full bg-indigo-50 border border-indigo-200/70 px-2 py-0.5 text-[9.5px] font-bold text-indigo-700">
@@ -904,51 +918,63 @@ function BuyerProfileSection({
 
         {/* Contact & Location Details in Clean Key-Values */}
         <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2 pt-0.5">
-          {contactPerson && (
+          {(hasContact || isBuyer) && (
             <div className="space-y-0.5">
               <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <User className="h-3 w-3 text-slate-400" />
                 <span>Contact Person</span>
               </dt>
-              <dd className="text-xs font-semibold text-slate-900">{contactPerson}</dd>
+              <dd className="text-xs font-semibold text-slate-900">
+                {hasContact ? contactPerson : <span className="text-slate-400 font-normal">N/A</span>}
+              </dd>
             </div>
           )}
 
-          {email && (
+          {(hasEmail || isBuyer) && (
             <div className="space-y-0.5">
               <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <Mail className="h-3 w-3 text-slate-400" />
                 <span>Email Address</span>
               </dt>
               <dd className="text-xs font-semibold">
-                <a href={`mailto:${email}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors break-all">
-                  {email}
-                </a>
+                {hasEmail ? (
+                  <a href={`mailto:${email}`} className="text-blue-600 hover:text-blue-800 hover:underline transition-colors break-all">
+                    {email}
+                  </a>
+                ) : (
+                  <span className="text-slate-400 font-normal">N/A</span>
+                )}
               </dd>
             </div>
           )}
 
-          {phone && (
+          {(hasPhone || isBuyer) && (
             <div className="space-y-0.5">
               <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <PhoneCall className="h-3 w-3 text-slate-400" />
                 <span>Contact Number</span>
               </dt>
               <dd className="text-xs font-semibold">
-                <a href={`tel:${phone}`} className="text-slate-800 hover:text-blue-600 transition-colors font-mono">
-                  {phone}
-                </a>
+                {hasPhone ? (
+                  <a href={`tel:${phone}`} className="text-slate-800 hover:text-blue-600 transition-colors font-mono">
+                    {phone}
+                  </a>
+                ) : (
+                  <span className="text-slate-400 font-normal">N/A</span>
+                )}
               </dd>
             </div>
           )}
 
-          {address && (
+          {(hasAddress || isBuyer) && (
             <div className="space-y-0.5">
               <dt className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                 <MapPin className="h-3 w-3 text-slate-400" />
                 <span>Registered Location</span>
               </dt>
-              <dd className="text-xs font-medium text-slate-700 leading-snug">{address}</dd>
+              <dd className="text-xs font-medium text-slate-700 leading-snug">
+                {hasAddress ? address : <span className="text-slate-400 font-normal">N/A</span>}
+              </dd>
             </div>
           )}
         </div>
@@ -1117,7 +1143,7 @@ function TimelineRibbon({
           <CalendarDays className="h-3.5 w-3.5" />
         </span>
         <h2 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900">
-          Key Dates &amp; Milestone Schedule
+          Key Dates & Milestone Schedule
         </h2>
       </div>
 
@@ -1388,57 +1414,56 @@ function RequiredDocumentsList({
   title?: string;
   hideIfEmpty?: boolean;
 }) {
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
+
   const rawItems = asArray(documents || data).filter(hasDetailData);
-  if (hideIfEmpty && !rawItems.length) return null;
+  if (!rawItems.length) {
+    if (hideIfEmpty || !isBuyer) return null;
+    return (
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+          <h3 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+            <FileText className="h-3.5 w-3.5 text-indigo-600" />
+            {title}
+          </h3>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs font-semibold text-slate-400">
+          No required documents or checklist specified (N/A)
+        </div>
+      </div>
+    );
+  }
 
-  const standardPresets = [
-    { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true },
-    { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true },
-    { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true },
-    { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true },
-  ];
-
-  const processedItems = (rawItems.length ? rawItems : standardPresets).map((item: any, idx: number) => {
-    const preset = standardPresets[idx % standardPresets.length];
-
+  const processedItems = rawItems.map((item: any, idx: number) => {
     if (typeof item === 'string') {
-      const strLower = item.toLowerCase();
-      if (strLower.includes('gst')) return { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true };
-      if (strLower.includes('pan')) return { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true };
-      if (strLower.includes('bank') || strLower.includes('cheque')) return { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true };
-      if (strLower.includes('tech') || strLower.includes('compliance')) return { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true };
-      if (strLower.includes('price') || strLower.includes('financial') || strLower.includes('rate') || strLower.includes('breakup')) return { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true };
-
-      if (strLower.includes('attached_doc') || strLower.includes('document') || !item.trim()) {
-        return preset;
-      }
-
       return {
         name: item,
         instructions: 'Upload required document according to specifications.',
         fileType: 'PDF, DOCX',
-        maxSize: '5',
+        maxSize: '5 MB',
         required: true,
       };
     }
 
     if (isPlainObject(item)) {
-      const nameStr = String(item.name || item.documentName || item.title || item.label || '');
-      const isGeneric = !nameStr || nameStr.toLowerCase().includes('attached_doc');
-      if (isGeneric) {
-        return {
-          ...preset,
-          ...item,
-          name: preset.name,
-          instructions: item.instructions || preset.instructions,
-          fileType: item.fileType || preset.fileType,
-          maxSize: item.maxSize || preset.maxSize,
-        };
-      }
-      return item;
+      return {
+        ...item,
+        name: item.name || item.documentName || item.title || item.label || `Document ${idx + 1}`,
+        instructions: item.instructions || item.description || 'Upload required document according to specifications.',
+        fileType: item.fileType || item.format || 'PDF, DOCX',
+        maxSize: item.maxSize ? (String(item.maxSize).includes('MB') ? item.maxSize : `${item.maxSize} MB`) : '5 MB',
+        required: item.required !== false,
+      };
     }
 
-    return preset;
+    return {
+      name: `Document ${idx + 1}`,
+      instructions: 'Upload required document according to specifications.',
+      fileType: 'PDF, DOCX',
+      maxSize: '5 MB',
+      required: true,
+    };
   });
 
   return (
@@ -2250,7 +2275,8 @@ const technicalCriteriaColumns: ColumnDef<any>[] = [
 ];
 
 function TechnicalCriteriaTableList({ data }: { data: any }) {
-  if (!hasDetailData(data)) return null;
+  const ctx = React.useContext(BuyerSideContext);
+  const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
 
   let list: any[] = [];
   if (Array.isArray(data)) {
@@ -2260,7 +2286,22 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
   }
   list = list.filter(hasDetailData);
 
-  if (!list.length) return null;
+  if (!list.length) {
+    if (!isBuyer) return null;
+    return (
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+          <h3 className="text-xs sm:text-[13px] font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
+            <ClipboardCheck className="h-3.5 w-3.5 text-indigo-600" />
+            Technical Evaluation Criteria
+          </h3>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs font-semibold text-slate-400">
+          No detailed scoring criteria defined (N/A)
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
@@ -2325,17 +2366,24 @@ const consigneeColumns: ColumnDef<any>[] = [
 function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq, isBuyerSide, isRfqType, isRfpType, isRateContractType }: { data: any; deliveryLocation?: any; deliveryTerms?: any; isBuyerRfq?: boolean; isBuyerSide?: boolean; isRfqType?: boolean; isRfpType?: boolean; isRateContractType?: boolean }) {
   const ctx = React.useContext(BuyerSideContext);
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
-  const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
 
   const hasDeliveryTerms = hasDetailData(deliveryTerms) && deliveryTerms !== 'N/A' && deliveryTerms !== '—';
   // Avoid repeating the exact same delivery location above the consignee table when the table already specifies destination addresses
   const hasConsigneeAddress = items.some(item => isPlainObject(item) && hasDetailData(item.location || item.address || item.deliveryAddress));
   const showGeneralLocation = !hasConsigneeAddress && hasDetailData(deliveryLocation);
-  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && !isRfpType && !isRateContractType && (showGeneralLocation || hasDeliveryTerms);
+  const showDeliveryMeta = !isRfqType && !isRfpType && !isRateContractType && (showGeneralLocation || hasDeliveryTerms);
 
   if (!showDeliveryMeta && items.length === 0) {
-    return null;
+    if (!isBuyer) return null;
+    return (
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
+        <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
+        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs font-semibold text-slate-400">
+          No consignee delivery destinations specified (N/A)
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -2575,15 +2623,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         <Button
           type="button"
           size="sm"
-          onClick={() => router.push(`/bids/${targetId}/results`)}
-          className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs"
+          onClick={() => setSelectedQuotationForReview(participation)}
+          className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs cursor-pointer"
         >
           <Eye className="h-3 w-3" />
           Review Quotation
         </Button>
       ),
     },
-  ], [router, targetId]);
+  ], []);
 
   const linkedAuctionQuery = useQuery({
     queryKey: ['linked-reverse-auction', targetId],
@@ -2665,8 +2713,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         };
       };
 
-      const numericId = Number(String(targetId).replace(/^(REQ-|RFQ-|RC-|RATE-|TND-)/i, '')) || 0;
-      const idsToTry = Array.from(new Set([targetId, numericId > 0 ? String(numericId) : null].filter(Boolean) as string[]));
+      const trailingDigits = String(targetId).match(/\d+/g);
+      const lastNumericPart = trailingDigits ? trailingDigits[trailingDigits.length - 1] : null;
+      const idsToTry = Array.from(new Set([
+        targetId,
+        props.id ? String(props.id) : null,
+        props.requirementNumber ? String(props.requirementNumber) : null,
+        props.displayId && props.displayId !== 'N/A' && props.displayId !== '—' ? String(props.displayId) : null,
+        lastNumericPart
+      ].filter(Boolean) as string[]));
 
       for (const idToken of idsToTry) {
         const candidateResults = await Promise.allSettled([
@@ -3319,12 +3374,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.validityDays,
     rules.validityDays,
     payload.validityDays,
-    props.validityDays,
-    90
+    props.validityDays
   );
   const validityDaysDisplay = rawValidityDays
     ? (String(rawValidityDays).toLowerCase().includes('day') ? String(rawValidityDays) : `${rawValidityDays} Days`)
-    : '90 Days';
+    : undefined;
 
   const bidValidityDateValue = firstPresent(
     schedule.bidValidityDate,
@@ -3338,22 +3392,24 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
       try {
         const cDate = new Date(closingDateValue);
         if (!isNaN(cDate.getTime())) {
-          const daysToAdd = Number(rawValidityDays) || 90;
-          return new Date(cDate.getTime() + daysToAdd * 86_400_000).toISOString();
+          const daysToAdd = Number(rawValidityDays);
+          if (daysToAdd > 0) {
+            return new Date(cDate.getTime() + daysToAdd * 86_400_000).toISOString();
+          }
         }
       } catch {}
     }
     return bidValidityDateValue;
   })();
 
-  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true) : (props.publishedDate ? formatDateString(props.publishedDate, true) : 'N/A');
-  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : 'N/A');
-  const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : 'N/A');
-  const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
-  const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : 'N/A');
-  const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : 'N/A');
-  const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : 'N/A');
-  const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : 'N/A');
+  const publishedDateFormatted = publishedDateValue ? formatDateString(publishedDateValue, true) : (props.publishedDate ? formatDateString(props.publishedDate, true) : undefined);
+  const closingDateFormatted = closingDateValue ? formatDateString(closingDateValue, true, 'endOfDay') : (props.closingDate ? formatDateString(props.closingDate, true, 'endOfDay') : undefined);
+  const clarificationDateFormatted = clarificationDateValue ? formatDateString(clarificationDateValue, true) : (props.clarificationDate ? formatDateString(props.clarificationDate, true) : undefined);
+  const clarificationDeadlineFormatted = clarificationDeadlineValue ? formatDateString(clarificationDeadlineValue, true) : (clarificationDateFormatted && clarificationDateFormatted !== 'N/A' ? clarificationDateFormatted : undefined);
+  const technicalDateFormatted = technicalDateValue ? formatDateString(technicalDateValue, true) : (props.technicalDate || props.technicalOpeningDate ? formatDateString(props.technicalDate || props.technicalOpeningDate, true) : undefined);
+  const presentationDateFormatted = presentationDateValue ? formatDateString(presentationDateValue, true) : (props.presentationDate ? formatDateString(props.presentationDate, true) : undefined);
+  const financialDateFormatted = financialDateValue ? formatDateString(financialDateValue, true) : (props.financialDate || props.financialOpeningDate ? formatDateString(props.financialDate || props.financialOpeningDate, true) : undefined);
+  const awardDateFormatted = awardDateValue ? formatDateString(awardDateValue, true) : (props.awardDate ? formatDateString(props.awardDate, true) : undefined);
   const submissionStartDateFormatted = submissionStartDateValue ? formatDateString(submissionStartDateValue, true) : publishedDateFormatted;
   const requiredByDateFormatted = requiredByDateValue ? formatDateString(requiredByDateValue, true) : undefined;
   const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
@@ -3370,8 +3426,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.deliveryLocation,
     buyerOrg.city ? `${buyerOrg.city}, ${buyerOrg.state || ''}` : undefined,
     buyerProfile.city ? `${buyerProfile.city}, ${buyerProfile.state || ''}` : undefined
-  ) || 'Door Delivery to Site';
-  const deliveryLocation = cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation;
+  );
+  const deliveryLocation = rawDeliveryLocation ? (cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation) : undefined;
 
   const projectDuration = firstPresent(
     props.projectDuration && props.projectDuration !== '—' && props.projectDuration !== 'N/A' ? props.projectDuration : undefined,
@@ -3383,13 +3439,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     terms.projectDuration,
     schedule.contractPeriod,
     schedule.duration
-  ) || '30 Days';
+  );
 
   const paymentTerms = firstPresent(
     props.paymentTerms && props.paymentTerms !== '—' && props.paymentTerms !== 'N/A' ? props.paymentTerms : undefined,
     terms.paymentTerms,
     terms.paymentMode
-  ) || 'ON_DELIVERY';
+  );
 
   const scopeText = firstPresent(
     props.description && props.description !== 'No description provided.' && props.description !== '—' ? props.description : undefined,
@@ -3412,60 +3468,105 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     props.buyer?.name
   ) || 'Buyer Organization';
 
+  const isCandidateSameAsOrg = (candidate?: string | null) => {
+    if (!candidate) return false;
+    const c = candidate.trim().toLowerCase();
+    const org = buyerOrgName.trim().toLowerCase();
+    return c === org || c === 'buyer' || c === 'buyer organization' || c === 'authorized procurement officer';
+  };
+
   const contactPerson = firstPresent(
-    props.buyerName && props.buyerName !== '—' && props.buyerName !== 'N/A' ? props.buyerName : undefined,
-    props.contactPerson && props.contactPerson !== '—' && props.contactPerson !== 'N/A' ? props.contactPerson : undefined,
-    internal.contactPerson,
-    internal.contactPersonName,
-    buyerOrg.contactPerson,
+    // Specific representative / person names first
     buyerProfile.representativeName,
-    buyerProfile.contactPersonName,
-    buyerProfile.contactPerson,
-    buyerProfile.name,
-    props.buyer?.name,
     props.buyer?.buyerProfile?.representativeName,
-    props.buyer?.buyerProfile?.contactPersonName,
-    props.buyer?.buyerProfile?.contactPerson
+    props.contactPerson && !isCandidateSameAsOrg(props.contactPerson) ? props.contactPerson : undefined,
+    internal.contactPerson && !isCandidateSameAsOrg(internal.contactPerson) ? internal.contactPerson : undefined,
+    internal.contactPersonName && !isCandidateSameAsOrg(internal.contactPersonName) ? internal.contactPersonName : undefined,
+    buyerProfile.contactPersonName && !isCandidateSameAsOrg(buyerProfile.contactPersonName) ? buyerProfile.contactPersonName : undefined,
+    buyerProfile.contactPerson && !isCandidateSameAsOrg(buyerProfile.contactPerson) ? buyerProfile.contactPerson : undefined,
+    props.buyer?.buyerProfile?.contactPerson && !isCandidateSameAsOrg(props.buyer?.buyerProfile?.contactPerson) ? props.buyer?.buyerProfile?.contactPerson : undefined,
+    props.buyerName && !isCandidateSameAsOrg(props.buyerName) ? props.buyerName : undefined,
+    buyerOrg.contactPerson && !isCandidateSameAsOrg(buyerOrg.contactPerson) ? buyerOrg.contactPerson : undefined,
+    props.buyer?.name && !isCandidateSameAsOrg(props.buyer?.name) ? props.buyer?.name : undefined,
+    buyerProfile.name && !isCandidateSameAsOrg(buyerProfile.name) ? buyerProfile.name : undefined,
+    // Fallback to buyerName / contactPerson if no other person name
+    props.buyerName && props.buyerName !== '—' && props.buyerName !== 'N/A' && props.buyerName !== 'Buyer' ? props.buyerName : undefined,
+    props.contactPerson && props.contactPerson !== '—' && props.contactPerson !== 'N/A' ? props.contactPerson : undefined
   ) || (buyerOrgName && buyerOrgName !== 'N/A' && buyerOrgName !== 'Buyer Organization' ? `${buyerOrgName} Purchase Officer` : 'Authorized Procurement Officer');
 
   const email = firstPresent(
     props.buyerEmail && props.buyerEmail !== 'N/A' && props.buyerEmail !== '' ? props.buyerEmail : undefined,
+    buyerProfile.representativeEmail,
+    buyerProfile.email,
     props.buyer?.email,
+    props.buyer?.buyerProfile?.email,
+    props.buyer?.buyerProfile?.contactPersonEmail,
     internal.email,
     internal.contactEmail,
     buyerOrg.email,
-    buyerProfile.contactPersonEmail,
-    buyerProfile.email,
-    props.buyer?.buyerProfile?.contactPersonEmail,
-    props.buyer?.buyerProfile?.email
+    buyerProfile.contactPersonEmail
   ) || '';
 
   const phone = firstPresent(
     props.buyerMobile && props.buyerMobile !== 'N/A' && props.buyerMobile !== '' ? props.buyerMobile : undefined,
+    buyerProfile.representativeMobile,
+    buyerProfile.mobile,
+    buyerProfile.phone,
     props.buyer?.mobile,
     props.buyer?.phone,
+    props.buyer?.buyerProfile?.mobile,
+    props.buyer?.buyerProfile?.phone,
+    props.buyer?.buyerProfile?.contactPersonMobile,
     internal.mobile,
     internal.phone,
     buyerOrg.mobile,
     buyerOrg.phone,
-    buyerProfile.contactPersonMobile,
-    buyerProfile.mobile,
-    buyerProfile.phone,
-    props.buyer?.buyerProfile?.contactPersonMobile,
-    props.buyer?.buyerProfile?.mobile
+    buyerProfile.contactPersonMobile
   ) || '';
 
-  const addressParts = [
-    buyerOrg.registeredAddress || buyerOrg.address || buyerProfile.registeredAddress || buyerProfile.address,
-    buyerOrg.city || buyerProfile.city,
-    buyerOrg.district || buyerProfile.district,
-    buyerOrg.state || buyerProfile.state,
-  ].filter(Boolean);
+  const rawStreet = buyerProfile.registeredAddress || buyerOrg.registeredAddress || buyerProfile.address || buyerOrg.address;
+  const rawCity = buyerProfile.city || buyerOrg.city;
+  const rawDistrict = buyerProfile.district || buyerOrg.district;
+  const rawState = buyerProfile.state || buyerOrg.state;
+  const rawPin = buyerProfile.pincode || buyerOrg.pincode || props.buyer?.buyerProfile?.pincode;
+
+  let computedAddress = '';
+  if (rawStreet) {
+    computedAddress = rawStreet.trim();
+    const lowerStreet = computedAddress.toLowerCase();
+    const partsToAdd: string[] = [];
+    if (rawCity && !lowerStreet.includes(rawCity.toLowerCase())) {
+      partsToAdd.push(rawCity);
+    }
+    if (rawDistrict && rawDistrict.toLowerCase() !== rawCity?.toLowerCase() && !lowerStreet.includes(rawDistrict.toLowerCase())) {
+      partsToAdd.push(rawDistrict);
+    }
+    if (rawState && !lowerStreet.includes(rawState.toLowerCase())) {
+      partsToAdd.push(rawState);
+    }
+    if (partsToAdd.length > 0) {
+      computedAddress = `${computedAddress}, ${partsToAdd.join(', ')}`;
+    }
+    if (rawPin && !computedAddress.includes(String(rawPin))) {
+      computedAddress = `${computedAddress} - ${rawPin}`;
+    }
+  } else {
+    const locParts = [
+      rawCity,
+      rawDistrict && rawDistrict.toLowerCase() !== rawCity?.toLowerCase() ? rawDistrict : null,
+      rawState,
+    ].filter(Boolean);
+    computedAddress = locParts.join(', ');
+    if (rawPin && computedAddress) {
+      computedAddress = `${computedAddress} - ${rawPin}`;
+    }
+  }
 
   const rawBuyerAddress = firstPresent(
     props.buyerAddress,
-    addressParts.length ? addressParts.join(', ') : undefined,
-    props.buyer?.buyerProfile?.address
+    props.buyer?.buyerProfile?.address,
+    props.buyer?.buyerProfile?.registeredAddress,
+    computedAddress || undefined
   ) || '';
   const buyerAddress = cleanDeliveryAddress(rawBuyerAddress) || rawBuyerAddress;
 
@@ -3482,11 +3583,11 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   ) || 'Procurement & Stores Department';
 
   const deliveryTerms = firstPresent(
-    props.deliveryTerms,
+    props.deliveryTerms && props.deliveryTerms !== 'N/A' && props.deliveryTerms !== '—' ? props.deliveryTerms : undefined,
     terms.deliveryTerms,
     terms.deliveryMode,
     terms.deliverySchedule
-  ) || 'N/A';
+  );
 
   const rawConsignee = props.consigneeDetails || payload.consigneeDetails || payload.consignee || payload.consignees || payload.consigneeList;
   const consigneeList = asArray(rawConsignee);
@@ -4068,7 +4169,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             <div className="min-w-0 flex-1 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={statusLabel} />
-                {!isBuyerSide && buyerOrgName !== 'N/A' && (
+                {buyerOrgName && buyerOrgName !== 'N/A' && (
                   <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
                     <Building2 className="h-3 w-3" />
                     {formatPrimitiveValue(buyerOrgName, 'organization')}
@@ -4091,8 +4192,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {resolvedSubject}
               </h1>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500 tracking-normal">
-                {/* Requisition ID badge - hidden on buyer side */}
-                {!isBuyerSide && (
+                {/* Requisition ID badge */}
+                {displayIdStr && displayIdStr !== 'N/A' && displayIdStr !== '—' && (
                   <>
                     <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60">{displayIdStr}</span>
                     <span>•</span>
@@ -4234,35 +4335,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
         {activeTab === 'overview' && (
           <div className="space-y-5">
             <div className="grid gap-5 lg:grid-cols-2">
-              <DataCard title={`Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
+              <DataCard title={isBuyerSide ? `${procurementTypeLabel} Information` : `Buyer ${procurementTypeLabel} Information`} icon={ClipboardList}>
                 <PropertyGrid columns={2}>
                   <PropertyItem label="Procurement Method" value={procurementMethod} />
                   <PropertyItem label="Buying Type" value={buyingType} />
                   <PropertyItem label="Category" value={category} />
-                  {/* Sub Category - displayed if exists */}
-                  {subCategory && (
-                    <PropertyItem label="Sub Category" value={subCategory} />
-                  )}
-                  <PropertyItem label="Published Date & Time" value={publishedDateFormatted} />
-                  {submissionStartDateValue && submissionStartDateFormatted !== publishedDateFormatted && (
-                    <PropertyItem label="Submission Start" value={submissionStartDateFormatted} />
-                  )}
-                  <PropertyItem label="Submission Deadline" value={closingDateFormatted} />
-                  {requiredByDateFormatted && (
-                    <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
-                  )}
-                  {/* Delivery Location - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                    <PropertyItem label="Delivery Location" value={deliveryLocation} />
-                  )}
-                  {/* Project Duration - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                    <PropertyItem label="Project Duration" value={projectDuration} />
-                  )}
-                  {/* Payment Terms - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                    <PropertyItem label="Payment Terms" value={paymentTerms} />
-                  )}
+                  <PropertyItem label="Sub Category" value={subCategory} />
+                  <PropertyItem label="Delivery Location" value={deliveryLocation} />
                 </PropertyGrid>
               </DataCard>
 
@@ -4318,8 +4397,8 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
               )}
 
-              {/* BOQ Table - hidden on buyer side, RFQ, and Rate Contract */}
-              {hasDetailData(boqTable) && !isBuyerSide && !isRfqType && !isRateContractType && (
+              {/* BOQ Table */}
+              {hasDetailData(boqTable) && !isRfqType && !isRateContractType && (
                 <BoqTableList data={boqTable} defaultSubject={resolvedSubject} defaultCategory={category} defaultEstimatedValue={props.estimatedValue} />
               )}
             </DataCard>
@@ -4329,7 +4408,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
 
               return (
                 <div className="space-y-5">
-                  {validDownloadableDocs.length > 0 && (
+                  {validDownloadableDocs.length > 0 ? (
                     <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
                       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
                         {validDownloadableDocs.map((doc, index) => {
@@ -4376,7 +4455,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                         })}
                       </div>
                     </DataCard>
-                  )}
+                  ) : isBuyerSide ? (
+                    <DataCard title={`${procurementTypeLabel} Attached Documents`} icon={FileSpreadsheet}>
+                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs font-semibold text-slate-400">
+                        No downloadable documents attached (N/A)
+                      </div>
+                    </DataCard>
+                  ) : null}
 
                   <RequiredDocumentsList data={requiredDocuments} />
                 </div>
@@ -4399,27 +4484,15 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     <PropertyGrid columns={3}>
                       <PropertyItem label="Publish Date & Time" value={publishedDateFormatted} />
                       <PropertyItem label="Submission Start Date" value={submissionStartDateFormatted} />
-                      {isClarificationAllowed && (
-                        <PropertyItem label="Clarification Deadline" value={clarificationDeadlineFormatted || 'N/A'} />
-                      )}
+                      <PropertyItem label="Clarification Deadline" value={isClarificationAllowed ? clarificationDeadlineFormatted : undefined} />
                       <PropertyItem label="Submission Deadline" value={closingDateFormatted} highlight />
-                      {hasTechnicalOpening && (
-                        <PropertyItem label="Technical Opening Date" value={technicalDateFormatted || 'N/A'} />
-                      )}
-                      {hasFinancialOpening && (
-                        <PropertyItem label="Financial Opening Date" value={financialDateFormatted || 'N/A'} />
-                      )}
-                      <PropertyItem label="Bid Validity Date" value={bidValidityDateFormatted || 'N/A'} />
+                      <PropertyItem label="Technical Opening Date" value={hasTechnicalOpening ? technicalDateFormatted : undefined} />
+                      <PropertyItem label="Financial Opening Date" value={hasFinancialOpening ? financialDateFormatted : undefined} />
+                      <PropertyItem label="Bid Validity Date" value={bidValidityDateFormatted} />
                       <PropertyItem label="Validity Days" value={validityDaysDisplay} />
-                      {requiredByDateFormatted && (
-                        <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
-                      )}
-                      {preBidDateFormatted && (
-                        <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
-                      )}
-                      {awardDateFormatted && awardDateFormatted !== 'N/A' && (
-                        <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
-                      )}
+                      <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
+                      <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
+                      <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
                     </PropertyGrid>
                   </div>
                 </div>
@@ -4448,31 +4521,17 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   value={isFreightIncluded ? 'Freight Included (Door Delivery)' : 'Freight Excluded (Extra as per actuals)'}
                   subtext={isFreightIncluded ? 'Bid price must include all shipping, insurance & delivery to destination.' : 'Freight is not included in bid price and will be paid extra.'}
                 />
-                {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
-                {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
-                {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-                {/* Contract Period */}
-                {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                  <PropertyItem label="Contract Period" value={firstPresent(serviceDetails.duration, serviceDetails.contractPeriod, terms.contractPeriod, terms.projectDuration, projectDuration)} />
-                )}
+                <PropertyItem label="Payment Terms" value={paymentTerms} />
+                <PropertyItem label="Delivery Terms" value={deliveryTerms} />
+                <PropertyItem label="Contract Period" value={firstPresent(serviceDetails.duration, serviceDetails.contractPeriod, terms.contractPeriod, terms.projectDuration, projectDuration)} />
                 {/* Service Parameters & Related Terms */}
-                {hasDetailData(serviceDetails) && !isRfqType && (
+                {(hasDetailData(serviceDetails) || String(buyingType || '').toLowerCase().includes('service')) && !isRfqType && (
                   <>
-                    {hasDetailData(serviceDetails.serviceTitle || serviceDetails.title) && (
-                      <PropertyItem label="Service Title" value={serviceDetails.serviceTitle || serviceDetails.title} />
-                    )}
-                    {hasDetailData(serviceDetails.slaResponseTime) && (
-                      <PropertyItem label="SLA Response Time" value={serviceDetails.slaResponseTime} />
-                    )}
-                    {hasDetailData(serviceDetails.penaltyClause || terms.penaltyClause) && (
-                      <PropertyItem label="Penalty Clause" value={serviceDetails.penaltyClause || terms.penaltyClause} />
-                    )}
-                    {hasDetailData(serviceDetails.manpowerRequired) && (
-                      <PropertyItem label="Manpower Required" value={formatPrimitiveValue(serviceDetails.manpowerRequired)} />
-                    )}
-                    {hasDetailData(serviceDetails.experienceRequired) && (
-                      <PropertyItem label="Experience Required" value={formatPrimitiveValue(serviceDetails.experienceRequired)} />
-                    )}
+                    <PropertyItem label="Service Title" value={serviceDetails.serviceTitle || serviceDetails.title} />
+                    <PropertyItem label="SLA Response Time" value={serviceDetails.slaResponseTime} />
+                    <PropertyItem label="Penalty Clause" value={serviceDetails.penaltyClause || terms.penaltyClause} />
+                    <PropertyItem label="Manpower Required" value={formatPrimitiveValue(serviceDetails.manpowerRequired)} />
+                    <PropertyItem label="Experience Required" value={formatPrimitiveValue(serviceDetails.experienceRequired)} />
                     {(() => {
                       const {
                         duration: _dur,
@@ -4525,7 +4584,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           <div className="space-y-5">
             <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
               <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150 space-y-4">
-                <PropertyGrid columns={4}>
+                <PropertyGrid columns={5}>
                   <PropertyItem
                     label="Evaluation Method"
                     value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')}
@@ -4533,9 +4592,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     subtext={evalDetails.badge}
                   />
                   <PropertyItem label="Award Basis" value={evalDetails.basisLabel} />
-                  {requireDemo && requireDemo !== 'No' && <PropertyItem label="Require Demo" value={formatPrimitiveValue(requireDemo)} />}
-                  {isQcbsMethod && hasDetailData(qcbsRatio) && <PropertyItem label="QCBS Ratio" value={qcbsRatio} />}
-                  {(isQcbsMethod || isTechEvalNeeded) && hasDetailData(passingScore) && <PropertyItem label="Passing Score" value={passingScore} />}
+                  <PropertyItem label="Require Demo" value={requireDemo && requireDemo !== 'No' ? formatPrimitiveValue(requireDemo) : undefined} />
+                  <PropertyItem label="QCBS Ratio" value={isQcbsMethod && hasDetailData(qcbsRatio) ? qcbsRatio : undefined} />
+                  <PropertyItem label="Passing Score" value={(isQcbsMethod || isTechEvalNeeded) && hasDetailData(passingScore) ? passingScore : undefined} />
                 </PropertyGrid>
 
                 {/* Short, clear, informative method explanation */}
@@ -4575,7 +4634,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               </div>
             </DataCard>
 
-            {hasExplicitTechCriteria && (
+            {(hasExplicitTechCriteria || (isBuyerSide && (isTechEvalNeeded || isQcbsMethod))) && (
               <TechnicalCriteriaTableList data={technicalCriteria} />
             )}
 
@@ -4654,14 +4713,33 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     </p>
                   </div>
 
-                  {/* Start Reverse Auction Button */}
+                  {/* Action Buttons: Compare Quotes & Reverse Auction */}
                   <div className="flex flex-wrap items-center gap-2">
+                    {submittedParticipations.length >= 2 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (submittedParticipations.length === 2) {
+                            setSelectedCompareIds(submittedParticipations.map((p: any) => String(p.sellerId || p.sellerUserId || p.id)));
+                            setIsComparisonModalOpen(true);
+                          } else {
+                            setIsCompareChooserOpen(true);
+                          }
+                        }}
+                        className="h-7.5 gap-1.5 text-xs font-bold border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 shadow-2xs rounded-lg px-3 cursor-pointer"
+                      >
+                        <Scale className="h-3.5 w-3.5 text-indigo-600" />
+                        <span>Compare Quotations ({submittedParticipations.length})</span>
+                      </Button>
+                    )}
                     {allowsReverseAuction && (!linkedAuction || (linkedAuction as any).auctionPlanned === true || ['DRAFT', 'CANCELLED'].includes(String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase())) && submittedParticipations.length > 0 && (
                       <Button
                         type="button"
                         size="sm"
                         onClick={() => setIsStartAuctionModalOpen(true)}
-                        className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3"
+                        className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3 cursor-pointer"
                       >
                         <Gavel className="h-3 w-3" />
                         <span>Launch Stage 2 Reverse Auction</span>

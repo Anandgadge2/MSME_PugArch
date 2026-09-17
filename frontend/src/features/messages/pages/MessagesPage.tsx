@@ -1083,9 +1083,9 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                         deliveryTimeline: submittedQuote.deliveryDays ? `${submittedQuote.deliveryDays} Days` : undefined,
                                                         notes: (submittedQuote as any).notes || undefined
                                                     });
-                                                } else {
+                                                 } else {
                                                     const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                    router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                    router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
                                                 }
                                             }}
                                         >
@@ -1097,7 +1097,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                             className="h-7 border-slate-300 text-[11px] font-semibold hover:bg-slate-100"
                                             onClick={() => {
                                                 const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
                                             }}
                                         >
                                             <FileText className="mr-1 h-3.5 w-3.5" /> Review
@@ -1300,9 +1300,9 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                                             deliveryTimeline: parsedQuote.timeline || undefined,
                                                                                             notes: parsedQuote.notes || undefined
                                                                                         });
-                                                                                    } else {
+                                                                                      } else {
                                                                                         const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                                                        router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                                                        router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
                                                                                     }
                                                                                 }}
                                                                             >
@@ -1314,7 +1314,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                                 className={cn("h-8 text-[11px] font-bold", isMe ? "border-white/20 text-white hover:bg-white/10" : "border-slate-300 text-slate-700 hover:bg-slate-100")}
                                                                                 onClick={() => {
                                                                                     const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                                                    router.push(targetId ? `/buyer/rfq/${targetId}/compare?conversationId=${conversation.id}` : `/buyer/rfq/compare?conversationId=${conversation.id}`);
+                                                                                    router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
                                                                                 }}
                                                                             >
                                                                                 <FileText className="mr-1.5 h-3.5 w-3.5" /> Review Comparison

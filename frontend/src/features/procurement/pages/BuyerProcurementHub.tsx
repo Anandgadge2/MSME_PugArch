@@ -648,9 +648,9 @@ export default function BuyerProcurementHub() {
           icon: Globe,
         },
         {
-          title: 'Supplier Responses',
+          title: 'My Procurements',
           description: 'Review quotes, clarifying queries, and files submitted by sellers.',
-          href: '/buyer/procurement/responses',
+          href: '/buyer/my-procurements',
           cta: 'Analyze Responses',
           icon: MessageSquare,
           count: summary?.myRfqsCount || 0,

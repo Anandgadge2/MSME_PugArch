@@ -10,6 +10,7 @@ import { auditLog } from '../audit/audit.service.js';
 import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 import { logger } from '../../config/logger.js';
 import { getOrGeneratePurchaseOrderPdfBuffer } from '../../services/invoice-pdf.service.js';
+import { formatRefId } from '../../utils/refIdUtils.js';
 
 const db = prisma as any;
 
@@ -284,7 +285,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
         metadata: {
           source: 'procurement_bid_award',
           bidId: bid.id,
-          bidNumber: bid.bidNumber || `BID-${bid.id}`,
+          bidNumber: bid.bidNumber || formatRefId('TND', bid.id),
           awardId: award.id,
           participationId: participation.id,
           buyerOrganizationName: bid.buyerOrganizationName || buyer?.organization?.organizationName || 'Buyer Organization',

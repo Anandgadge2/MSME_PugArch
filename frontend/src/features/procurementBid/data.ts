@@ -109,6 +109,13 @@ export interface ProcurementBid {
   version?: number;
   buyer?: any;
   buyerOrganization?: any;
+  buyerOrganizationName?: string;
+  buyerPersonName?: string;
+  buyerOrgName?: string;
+  buyerEmail?: string;
+  buyerMobile?: string;
+  buyerAddress?: string;
+  buyerProfile?: any;
   invitations?: any[];
   invitedCount?: number;
   invitationsCount?: number;

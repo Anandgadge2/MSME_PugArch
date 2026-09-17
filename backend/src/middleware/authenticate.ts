@@ -32,10 +32,14 @@ const isNoisyNotificationStream = (req: Request) =>
 // Native EventSource cannot attach an Authorization header. Keep query-string
 // bearer support limited to the single SSE endpoint; accepting it globally
 // exposes access tokens through URLs, logs, browser history, and referrers.
-const getNotificationStreamToken = (req: Request) =>
-  isNoisyNotificationStream(req) && typeof req.query.token === 'string'
-    ? req.query.token
-    : '';
+const getNotificationStreamToken = (req: Request) => {
+  if (!isNoisyNotificationStream(req) || typeof req.query.token !== 'string') return '';
+  const queryToken = req.query.token.trim();
+  if (!queryToken || ['cookie-session', 'null', 'undefined'].includes(queryToken)) {
+    return '';
+  }
+  return queryToken;
+};
 
 export const authenticate = async (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization || '';

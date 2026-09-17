@@ -592,7 +592,7 @@ function DocumentsPanel({
 
 /* ================== Rating CTA ================== */
 
-const RATEABLE_STATUSES: DeliveryStatus[] = ['ACCEPTED', 'INVOICE_VERIFIED', 'PAYMENT_APPROVED', 'PAYMENT_RELEASED', 'CLOSED'];
+const RATEABLE_STATUSES: DeliveryStatus[] = ['DELIVERED', 'ACCEPTED', 'INVOICE_VERIFIED', 'PAYMENT_APPROVED', 'PAYMENT_RELEASED', 'CLOSED'];
 
 function RatingCTACard({
   deliveryStatus,

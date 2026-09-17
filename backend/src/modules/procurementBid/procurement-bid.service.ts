@@ -7,6 +7,7 @@ import { createOrReuseProcurementPOForAward } from './procurement-order.service.
 import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
+import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
 
 const db = prisma as any;
 
@@ -292,10 +293,20 @@ export const bidInclude: any = {
       role: true,
       buyerProfile: {
         select: {
-          departmentName: true,
+          id: true,
+          organizationName: true,
+          organizationType: true,
+          department: true,
+          designation: true,
           representativeName: true,
           email: true,
-          mobile: true
+          mobile: true,
+          registeredAddress: true,
+          corporateAddress: true,
+          city: true,
+          district: true,
+          state: true,
+          pincode: true
         }
       }
     }
@@ -326,16 +337,25 @@ export const leanBidInclude = {
       id: true,
       name: true,
       email: true,
+      mobile: true,
       role: true,
       organizationId: true,
       buyerProfile: {
         select: {
+          id: true,
           organizationName: true,
+          organizationType: true,
           department: true,
           designation: true,
+          representativeName: true,
+          email: true,
+          mobile: true,
+          registeredAddress: true,
+          corporateAddress: true,
           city: true,
           district: true,
-          state: true
+          state: true,
+          pincode: true
         }
       }
     }
@@ -389,10 +409,10 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     ? Number(token)
     : (cleanDigits && !isNaN(Number(cleanDigits)) && Number(cleanDigits) <= 2147483647 ? Number(cleanDigits) : null);
 
-  const candidateTokens = new Set<string>([token]);
+  const candidateTokens = new Set<string>(getCanonicalLookupVariants(token));
   if (cleanDigits) {
     const padded5 = cleanDigits.padStart(5, '0');
-    for (const p of ['REQ', 'RFP', 'RFQ', 'TND', 'LTND', 'RC', 'DP', 'RA', 'PB', 'PRQ']) {
+    for (const p of CANONICAL_METHOD_PREFIXES) {
       candidateTokens.add(`${p}-${cleanDigits}`);
       candidateTokens.add(`${p}-${padded5}`);
       candidateTokens.add(`${p}-2026-${padded5}`);
@@ -768,9 +788,19 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     title: bid.title,
     description: bid.description,
     buyerId: bid.buyerId,
+    buyerName: bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
+    buyerEmail: bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
+    buyerMobile: bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
+    buyerAddress: [
+      bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.corporateAddress || bid.buyer?.buyerProfile?.address || bid.buyerOrganization?.registeredAddress,
+      bid.buyer?.buyerProfile?.city || bid.buyerOrganization?.city,
+      bid.buyer?.buyerProfile?.district || bid.buyerOrganization?.district,
+      bid.buyer?.buyerProfile?.state || bid.buyerOrganization?.state,
+      bid.buyer?.buyerProfile?.pincode || bid.buyerOrganization?.pincode
+    ].filter(Boolean).join(', ') || undefined,
     buyerOrganizationName: bid.buyerOrganizationName,
     buyerType: bid.buyerType,
-    departmentName: bid.buyer?.buyerProfile?.departmentName || null,
+    departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
     subCategory: bid.subCategory,
@@ -829,10 +859,22 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       email: bid.buyer.email,
       mobile: bid.buyer.mobile,
       buyerProfile: bid.buyer.buyerProfile ? {
-        departmentName: bid.buyer.buyerProfile.departmentName,
-        representativeName: bid.buyer.buyerProfile.representativeName,
-        email: bid.buyer.buyerProfile.email,
-        mobile: bid.buyer.buyerProfile.mobile
+        id: bid.buyer.buyerProfile.id,
+        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName,
+        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        designation: bid.buyer.buyerProfile.designation || null,
+        representativeName: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
+        contactPerson: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
+        email: bid.buyer.buyerProfile.email || bid.buyer.email || null,
+        mobile: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        phone: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        registeredAddress: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
+        address: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
+        city: bid.buyer.buyerProfile.city || null,
+        district: bid.buyer.buyerProfile.district || null,
+        state: bid.buyer.buyerProfile.state || null,
+        pincode: bid.buyer.buyerProfile.pincode || null,
       } : null
     } : null,
     buyerOrganization: bid.buyerOrganization,
@@ -1047,8 +1089,17 @@ const getTenderBidActivityWhere = (query: any = {}) => {
 export const serializeTenderBidActivity = (tender: any) => {
   const profile = tender.buyer?.buyerProfile;
   const latestBid = tender.bids?.[0];
-  const location = [profile?.city, profile?.state].filter(Boolean).join(', ');
+  const fullAddress = [
+    profile?.registeredAddress || profile?.corporateAddress || profile?.address,
+    profile?.city,
+    profile?.district,
+    profile?.state,
+    profile?.pincode
+  ].filter(Boolean).join(', ');
+  const location = fullAddress || [profile?.city, profile?.state].filter(Boolean).join(', ');
   const closesAt = tender.closesAt || latestBid?.createdAt || tender.updatedAt || tender.createdAt;
+  const contactName = profile?.representativeName || tender.buyer?.name || 'Authorized Procurement Officer';
+  const orgName = profile?.organizationName || tender.buyer?.name || 'Verified buyer';
 
   return {
     id: `TENDER-${tender.id}`,
@@ -1057,8 +1108,13 @@ export const serializeTenderBidActivity = (tender: any) => {
     bidNumber: tender.tenderId,
     title: tender.title,
     description: tender.description,
-    buyerOrganizationName: profile?.organizationName || tender.buyer?.name || 'Verified buyer',
+    buyerName: contactName,
+    buyerEmail: profile?.email || tender.buyer?.email || '',
+    buyerMobile: profile?.mobile || tender.buyer?.mobile || '',
+    buyerAddress: location || 'Location not specified',
+    buyerOrganizationName: orgName,
     buyerType: profile?.organizationType || 'Private Enterprise',
+    departmentName: profile?.department || 'Procurement & Stores Department',
     category: tender.category,
     subCategory: null,
     bidType: 'Tender',
@@ -1068,7 +1124,7 @@ export const serializeTenderBidActivity = (tender: any) => {
     estimatedValue: moneyNumber(tender.budget),
     deliveryLocation: location || 'Location not specified',
     state: profile?.state || null,
-    district: profile?.city || null,
+    district: profile?.district || profile?.city || null,
     startDate: tender.publishedAt || tender.createdAt,
     endDate: closesAt,
     status: tender.status,
@@ -1080,6 +1136,38 @@ export const serializeTenderBidActivity = (tender: any) => {
     createdAt: tender.createdAt,
     updatedAt: latestBid?.createdAt || tender.updatedAt,
     participantsCount: tender._count?.bids ?? 0,
+    buyer: tender.buyer ? {
+      id: tender.buyer.id,
+      name: tender.buyer.name || contactName,
+      email: tender.buyer.email || profile?.email || '',
+      mobile: tender.buyer.mobile || profile?.mobile || '',
+      buyerProfile: profile ? {
+        id: profile.id,
+        organizationName: orgName,
+        department: profile.department,
+        departmentName: profile.department,
+        designation: profile.designation,
+        representativeName: profile.representativeName,
+        contactPerson: profile.representativeName,
+        email: profile.email || tender.buyer?.email,
+        phone: profile.mobile || tender.buyer?.mobile,
+        mobile: profile.mobile || tender.buyer?.mobile,
+        address: profile.registeredAddress || profile.corporateAddress || profile.address || location,
+        registeredAddress: profile.registeredAddress || profile.corporateAddress || profile.address,
+        corporateAddress: profile.corporateAddress,
+        city: profile.city,
+        district: profile.district,
+        state: profile.state,
+        pincode: profile.pincode,
+      } : null
+    } : null,
+    buyerOrganization: profile ? {
+      organizationName: orgName,
+      organizationType: profile.organizationType,
+      city: profile.city,
+      district: profile.district,
+      state: profile.state,
+    } : null,
     documents: tender.documentUrl ? [{
       id: `tender-doc-${tender.id}`,
       documentType: 'TENDER_DOCUMENT',
@@ -1094,12 +1182,30 @@ export const serializeTenderBidActivity = (tender: any) => {
 };
 
 export const resolveTenderBidActivity = async (idOrNumber: string | number) => {
-  const token = String(idOrNumber);
-  const tenderId = token.startsWith('TENDER-') ? Number(token.replace('TENDER-', '')) : null;
-  const where = tenderId ? { id: tenderId } : { tenderId: token };
+  const token = String(idOrNumber).trim();
+  const digits = token.match(/\d+/g);
+  const lastDigits = digits ? digits[digits.length - 1] : null;
+  const numId = Number(token) || (token.startsWith('TENDER-') ? Number(token.replace('TENDER-', '')) : null);
+
+  const searchOr: any[] = [
+    { tenderId: token },
+    { tenderId: token.replace(/-2026-/, '-') },
+    { tenderId: token.replace(/^TND-/, 'TENDER-') },
+    { tenderId: token.replace(/^TENDER-/, 'TND-') },
+  ];
+  if (numId && Number.isFinite(numId)) searchOr.push({ id: numId });
+  if (lastDigits) {
+    searchOr.push({ tenderId: `TND-${lastDigits}` });
+    searchOr.push({ tenderId: `TND-2026-${lastDigits}` });
+    searchOr.push({ tenderId: `TND-2026-${lastDigits.padStart(5, '0')}` });
+    const parsedLast = Number(lastDigits);
+    if (Number.isFinite(parsedLast) && parsedLast > 0 && parsedLast <= 2147483647) {
+      searchOr.push({ id: parsedLast });
+    }
+  }
 
   const tender = await db.tender.findFirst({
-    where,
+    where: { OR: searchOr },
     select: {
       id: true,
       tenderId: true,
@@ -1117,7 +1223,26 @@ export const resolveTenderBidActivity = async (idOrNumber: string | number) => {
         select: {
           id: true,
           name: true,
-          buyerProfile: { select: { organizationName: true, organizationType: true, city: true, state: true } }
+          email: true,
+          mobile: true,
+          buyerProfile: {
+            select: {
+              id: true,
+              organizationName: true,
+              organizationType: true,
+              department: true,
+              designation: true,
+              representativeName: true,
+              email: true,
+              mobile: true,
+              registeredAddress: true,
+              corporateAddress: true,
+              city: true,
+              district: true,
+              state: true,
+              pincode: true
+            }
+          }
         }
       },
       bids: {

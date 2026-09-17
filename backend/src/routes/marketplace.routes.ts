@@ -9,7 +9,7 @@ import { authorize, checkFeatureEnabled } from '../middleware/authorize.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
-import { formatRequirementNumber } from '../utils/refIdUtils.js';
+import { formatRequirementNumber, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 
 const db = prisma as any;
@@ -2896,17 +2896,7 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
 router.post('/marketplace/requirements/:id/responses', authenticate, authorize('seller'), async (req: AuthRequest, res: Response) => {
     try {
         const idToken = String(req.params.id || '').trim();
-        // Generate comprehensive token variants across all known procurement prefixes
-        const KNOWN_PREFIXES = ['REQ', 'RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA', 'OT', 'TENDER', 'BID', 'PRQ', 'PR'];
-        const prefixMatch = idToken.match(/^([A-Z]{2,6})-(.+)$/i);
-        const strippedSuffix = prefixMatch ? prefixMatch[2] : null;
-        const tokenVariants = [idToken];
-        if (strippedSuffix) {
-            for (const pfx of KNOWN_PREFIXES) {
-                const variant = `${pfx}-${strippedSuffix}`;
-                if (!tokenVariants.includes(variant)) tokenVariants.push(variant);
-            }
-        }
+        const tokenVariants = getCanonicalLookupVariants(idToken);
         const packetObject = (value: any) => {
             if (!value) return {};
             if (typeof value === 'object') return value;
@@ -3654,29 +3644,18 @@ const findRequirementRecord = async (idParam: string | number) => {
         }
     }
 
-    const tokenVariants = [
-        token,
-        token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
-    ];
+    const tokenVariants = getCanonicalLookupVariants(token);
 
     const [bid, legacyMatch] = await Promise.all([
         db.procurementBid.findFirst({
             where: {
-                OR: tokenVariants.flatMap(t => [
-                    { bidNumber: t },
-                    { bidNumber: `REQ-${t}` },
-                    { bidNumber: `RFQ-${t}` }
-                ])
+                OR: tokenVariants.map(t => ({ bidNumber: t }))
             },
             select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
         }).catch(() => null),
         db.requirement.findFirst({
             where: {
-                OR: tokenVariants.flatMap(t => [
-                    { requirementNumber: t },
-                    { requirementNumber: `REQ-${t}` },
-                    { requirementNumber: `RFQ-${t}` }
-                ])
+                OR: tokenVariants.map(t => ({ requirementNumber: t }))
             },
             select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null)

@@ -242,7 +242,58 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin';
   const rawStatus = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(rawStatus);
+  const statusUpper = rawStatus;
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const rawBuyerProfile =
+    bid.buyer?.buyerProfile ||
+    reqObj.buyer?.buyerProfile ||
+    null;
+
+  const resolvedOrgName =
+    bid.buyer?.buyerProfile?.organizationName ||
+    bid.buyerOrganizationName ||
+    reqObj.buyerOrganization?.organizationName ||
+    reqObj.organization?.organizationName ||
+    (bid.buyer?.name && bid.buyer.name !== bid.buyer?.buyerProfile?.representativeName ? bid.buyer.name : '') ||
+    'Buyer Organization';
+
+  const resolvedContactPerson =
+    bid.buyer?.buyerProfile?.contactPerson ||
+    bid.buyer?.buyerProfile?.representativeName ||
+    (bid.buyer?.name && bid.buyer.name !== resolvedOrgName && bid.buyer.name !== 'Buyer' ? bid.buyer.name : '') ||
+    (bid.buyerName && bid.buyerName !== resolvedOrgName && bid.buyerName !== 'Buyer' ? bid.buyerName : '') ||
+    reqObj.contactPerson ||
+    (reqObj.buyer?.name && reqObj.buyer.name !== resolvedOrgName && reqObj.buyer.name !== 'Buyer' ? reqObj.buyer.name : '') ||
+    'Authorized Procurement Officer';
+
+  const resolvedBuyerEmail =
+    bid.buyer?.buyerProfile?.email ||
+    bid.buyer?.email ||
+    bid.buyerEmail ||
+    reqObj.buyerEmail ||
+    reqObj.buyer?.email ||
+    '';
+
+  const resolvedBuyerMobile =
+    bid.buyer?.buyerProfile?.phone ||
+    bid.buyer?.buyerProfile?.mobile ||
+    bid.buyer?.mobile ||
+    bid.buyerMobile ||
+    reqObj.buyerMobile ||
+    reqObj.buyer?.mobile ||
+    '';
+
+  const resolvedBuyerAddress =
+    bid.buyerAddress ||
+    bid.buyer?.buyerProfile?.registeredAddress ||
+    bid.buyer?.buyerProfile?.address ||
+    reqObj.buyerAddress ||
+    reqObj.buyer?.buyerProfile?.registeredAddress ||
+    rawBuyerProfile?.registeredAddress ||
+    rawBuyerProfile?.address ||
+    '';
+
+  const resolvedBuyerProfile = rawBuyerProfile || bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization || {};
 
   return (
     <>
@@ -253,13 +304,28 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         displayId={rfpNumber}
         subject={title}
         status={bid.status || reqObj.status || 'OPEN'}
-        buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
-        orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
+        buyerName={resolvedContactPerson}
+        contactPerson={resolvedContactPerson}
+        orgName={resolvedOrgName}
+        buyerEmail={resolvedBuyerEmail}
+        buyerMobile={resolvedBuyerMobile}
+        buyerAddress={resolvedBuyerAddress}
         buyer={{
-          name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
-          email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
-          mobile: bid.buyerMobile || reqObj.buyerMobile || reqObj.buyer?.mobile || '',
-          buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
+          name: resolvedContactPerson,
+          email: resolvedBuyerEmail,
+          mobile: resolvedBuyerMobile,
+          buyerProfile: {
+            ...resolvedBuyerProfile,
+            organizationName: resolvedOrgName,
+            representativeName: resolvedContactPerson,
+            contactPerson: resolvedContactPerson,
+            email: resolvedBuyerEmail,
+            mobile: resolvedBuyerMobile,
+            phone: resolvedBuyerMobile,
+            registeredAddress: resolvedBuyerAddress || resolvedBuyerProfile?.registeredAddress,
+            address: resolvedBuyerAddress || resolvedBuyerProfile?.address,
+            department: bid.buyer?.buyerProfile?.department || resolvedBuyerProfile?.department,
+          },
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
         discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
@@ -286,15 +352,11 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         subCategory={basics.subCategory || reqObj.subCategory}
         projectDuration={terms.projectDuration || terms.contractPeriod}
         department={payload.internal?.departmentName || bid.departmentName}
-        contactPerson={bid.buyerName || reqObj.contactPerson}
-        buyerEmail={bid.buyerEmail || reqObj.buyerEmail}
-        buyerMobile={bid.buyerMobile || reqObj.buyerMobile}
-        buyerAddress={reqObj.buyerAddress || reqObj.location}
         procurementMethod="Request for Proposal"
         buyingType={basics.buyingType || 'Services / Solutions'}
         deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
-        paymentTerms={bid.paymentTerms || terms.paymentTerms || 'Milestone Based Payment'}
-        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'SLA Dependent'}
+        paymentTerms={bid.paymentTerms || terms.paymentTerms || undefined}
+        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || undefined}
         description={bid.description || reqObj.description || basics.description || serviceDetails.scopeOfWork}
         payload={payload}
         approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}

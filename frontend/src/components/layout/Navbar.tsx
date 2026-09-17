@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { api, unwrapApiData, readJsonResponse, BASE_URL } from '../../lib/api';
+import { COOKIE_SESSION_TOKEN } from '../../lib/auth';
 import { formatDateTime } from '../../features/shared/format';
 import {
   AlertTriangle,
@@ -123,7 +124,6 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/messages': () => import('../../features/messages/pages/MessagesPage'),
   '/buyer/procurement': () => import('../../features/procurement/pages/BuyerProcurementHub'),
   '/buyer/my-procurements': () => import('../../features/procurement/pages/MyProcurementsPage'),
-  '/buyer/procurement/responses': () => import('../../features/procurement/pages/SupplierResponsesPage'),
   '/buyer/procurement/checkout': () => import('../../features/procurementCheckoutV2/pages/ProcurementCheckoutPage'),
   '/buyer/direct-purchase/orders': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
   '/buyer/address-book': () => import('../../features/directPurchase/pages/AddressBookPage'),
@@ -204,7 +204,6 @@ const HIGH_PRIORITY_PREFETCH_ROUTES = [
 const ALL_MENU_PATHS = [
   '/buyer/procurement/create',
   '/buyer/procurement/drafts',
-  '/buyer/procurement/responses',
   '/buyer/procurement/approvals',
   '/seller/procurement/events',
   '/orders/delivery-confirmation',
@@ -517,9 +516,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
       { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
       { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
-      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
-      { label: 'Quotations & RFQs', path: '/buyer/rfq/compare', icon: FileCheck, roles: ['buyer'], permission: 'requirement.view' },
-      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], permission: 'requirement.view' }
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' }
     ] },
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
@@ -919,14 +916,23 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     fetchNotifications();
     const handleUpdate = () => { void fetchNotifications(); };
     window.addEventListener('notifications:updated', handleUpdate);
-    return () => window.removeEventListener('notifications:updated', handleUpdate);
+    const pollTimer = setInterval(() => {
+      void fetchNotifications();
+    }, 30000);
+    return () => {
+      clearInterval(pollTimer);
+      window.removeEventListener('notifications:updated', handleUpdate);
+    };
   }, [authToken]);
 
   useEffect(() => {
     if (!authToken) return;
 
     const baseUrl = BASE_URL;
-    const streamUrl = `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`;
+    const isRealToken = authToken && authToken !== COOKIE_SESSION_TOKEN && authToken !== 'cookie-session';
+    const streamUrl = isRealToken
+      ? `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`
+      : `${baseUrl}/api/notifications/stream`;
 
     let eventSource: EventSource | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;
@@ -935,6 +941,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
     const scheduleReconnect = () => {
       if (disposed || retryTimeout) return;
+      if (!isRealToken || retryCount >= 2) return;
       const delay = Math.min(30000, 1000 * (2 ** retryCount));
       retryCount += 1;
       retryTimeout = setTimeout(() => {
@@ -944,7 +951,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     };
 
     const connectStream = () => {
-      if (disposed || retryCount > 5) return;
+      if (disposed || retryCount >= 2) return;
       try {
         eventSource?.close();
         eventSource = new EventSource(streamUrl, { withCredentials: true });
@@ -976,14 +983,19 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
         eventSource.addEventListener('error', (err) => {
           if (disposed) return;
-          console.warn('[SSE] EventSource connection error. Reconnecting with backoff...', err);
           eventSource?.close();
           eventSource = null;
+          if (!isRealToken || retryCount >= 1) {
+            console.info('[SSE] Notification stream unavailable; notifications synchronized via polling.');
+            return;
+          }
           scheduleReconnect();
         });
       } catch (err) {
-        console.error('[SSE] Failed to initialize EventSource:', err);
-        scheduleReconnect();
+        if (isRealToken) {
+          console.error('[SSE] Failed to initialize EventSource:', err);
+          scheduleReconnect();
+        }
       }
     };
 

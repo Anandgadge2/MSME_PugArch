@@ -163,8 +163,12 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       displayId={bid.id}
       subject={bid.title}
       status={bid.status || 'OPEN'}
-      buyerName={bid.buyer?.name}
-      orgName={bid.buyerOrganization?.organizationName || bid.buyer?.name}
+      buyerName={bid.buyerPersonName || bid.buyer?.buyerProfile?.representativeName || bid.buyerName || bid.buyer?.name}
+      contactPerson={bid.buyerPersonName || bid.buyer?.buyerProfile?.representativeName || bid.buyerName || bid.buyer?.name}
+      orgName={bid.buyerOrgName || bid.buyerOrganization?.organizationName || bid.buyer?.name}
+      buyerEmail={bid.buyerEmail || bid.buyer?.buyerProfile?.email || bid.buyer?.email}
+      buyerMobile={bid.buyerMobile || bid.buyer?.buyerProfile?.phone || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile}
+      buyerAddress={bid.buyerAddress || bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.address}
       buyer={bid.buyer}
       estimatedValue={bid.estimatedValue}
       discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? (bid.technicalPacket as any)?.discloseEstimatedCost ?? false)}

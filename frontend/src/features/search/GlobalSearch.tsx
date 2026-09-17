@@ -30,7 +30,7 @@ const QUICK_PAGES = (role: string): Result[] => {
         { id: 'p:grn', label: 'Delivery Confirmation', secondary: 'GRN', icon: ArrowRight, href: '/orders/delivery-confirmation', roles: ['buyer'] },
         { id: 'p:tenders-buyer', label: 'Active Procurements', secondary: 'Large procurements and tenders', icon: FileText, href: '/buyer/procurements', roles: ['buyer'] },
         { id: 'p:tenders-seller', label: 'Large Procurements', secondary: 'Tenders and procurement bids', icon: FileText, href: '/bids', roles: ['seller'] },
-        { id: 'p:rfq-buyer', label: 'Supplier Responses', secondary: 'RFQ responses and quotations', icon: FileText, href: '/buyer/procurement/responses', roles: ['buyer'] },
+        { id: 'p:rfq-buyer', label: 'My Procurements', secondary: 'Procurements and supplier quotations', icon: FileText, href: '/buyer/my-procurements', roles: ['buyer'] },
         { id: 'p:rfq-seller', label: 'Request Quotations', secondary: 'RFQs received', icon: FileText, href: '/seller/opportunities/rfqs', roles: ['seller'] },
         { id: 'p:saved-suppliers', label: 'Saved Suppliers', secondary: 'Buyer supplier shortlist', icon: Store, href: '/buyer/saved-suppliers', roles: ['buyer'] },
         { id: 'p:orders-buyer', label: 'Active Orders', icon: ArrowRight, href: '/orders', roles: ['buyer'] },

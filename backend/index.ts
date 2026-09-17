@@ -1766,17 +1766,22 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
           id: true,
           name: true,
           email: true,
+          mobile: true,
           buyerProfile: {
             select: {
               id: true,
               organizationName: true,
               department: true,
-              contactPerson: true,
+              representativeName: true,
+              designation: true,
               email: true,
-              phone: true,
-              address: true,
+              mobile: true,
+              registeredAddress: true,
+              corporateAddress: true,
               state: true,
-              district: true
+              city: true,
+              district: true,
+              pincode: true
             }
           }
         }
@@ -1785,17 +1790,51 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
       tenderDocuments: { include: { fileAsset: true } }
     };
 
-    let tender = null;
+    let tender: any = null;
     if (isNumeric) {
-      tender = await prisma.tender.findUnique({
-        where: { id: Number(paramId) },
+      const numId = Number(paramId);
+      tender = await prisma.tender.findFirst({
+        where: {
+          OR: [
+            { id: numId },
+            { tenderId: paramId },
+            { tenderId: `TND-${paramId}` },
+            { tenderId: `TND-2026-${String(numId).padStart(5, '0')}` }
+          ]
+        },
         include: tenderInclude
       });
     } else {
-      tender = await prisma.tender.findUnique({
-        where: { tenderId: paramId },
+      const digits = paramId.match(/\d+/g);
+      const lastDigits = digits ? digits[digits.length - 1] : null;
+      const searchOr: any[] = [
+        { tenderId: paramId },
+        { tenderId: paramId.replace(/-2026-/, '-') },
+        { tenderId: paramId.replace(/^TND-/, 'TENDER-') },
+        { tenderId: paramId.replace(/^TENDER-/, 'TND-') }
+      ];
+      if (lastDigits) {
+        searchOr.push({ tenderId: `TND-${lastDigits}` });
+        searchOr.push({ tenderId: `TND-2026-${lastDigits}` });
+        searchOr.push({ tenderId: `TND-2026-${lastDigits.padStart(5, '0')}` });
+        const pNum = Number(lastDigits);
+        if (Number.isFinite(pNum) && pNum > 0 && pNum <= 2147483647) {
+          searchOr.push({ id: pNum });
+        }
+      }
+      tender = await prisma.tender.findFirst({
+        where: { OR: searchOr },
         include: tenderInclude
       });
+    }
+
+    if (tender && tender.buyer) {
+      const bp = tender.buyer.buyerProfile;
+      if (bp) {
+        bp.contactPerson = bp.representativeName || tender.buyer.name || '';
+        bp.phone = bp.mobile || tender.buyer.mobile || '';
+        bp.address = bp.registeredAddress || bp.corporateAddress || [bp.city, bp.district, bp.state, bp.pincode].filter(Boolean).join(', ');
+      }
     }
     
     if (!tender) {
@@ -1826,7 +1865,7 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
         
         tender = {
           id: bid.id,
-          tenderId: bid.bidNumber || `OT-${bid.id}`,
+          tenderId: bid.bidNumber || `TND-${bid.id}`,
           title: bid.title || '',
           category: bid.category || '',
           subCategory: bid.subCategory || '',
@@ -1861,18 +1900,24 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
           buyerId: bid.buyerId,
           buyer: {
             id: bid.buyer?.id || bid.buyerId,
-            name: bid.buyer?.name || bid.buyerOrganizationName || '',
-            email: bid.buyer?.email || '',
+            name: bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || bid.buyerOrganizationName || '',
+            email: bid.buyer?.buyerProfile?.email || bid.buyer?.email || '',
+            mobile: bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || '',
             buyerProfile: bid.buyer?.buyerProfile ? {
               id: bid.buyer.buyerProfile.id,
               organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName,
-              department: bid.buyer.buyerProfile.departmentName,
-              contactPerson: bid.buyer.buyerProfile.representativeName,
-              email: bid.buyer.buyerProfile.email,
-              phone: bid.buyer.buyerProfile.mobile,
-              address: bid.buyer.buyerProfile.address || bid.deliveryLocation,
-              state: bid.state,
-              district: bid.district,
+              department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName,
+              contactPerson: bid.buyer.buyerProfile.representativeName || bid.buyer?.name,
+              representativeName: bid.buyer.buyerProfile.representativeName || bid.buyer?.name,
+              email: bid.buyer.buyerProfile.email || bid.buyer?.email,
+              phone: bid.buyer.buyerProfile.mobile || bid.buyer?.mobile,
+              mobile: bid.buyer.buyerProfile.mobile || bid.buyer?.mobile,
+              address: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || bid.deliveryLocation,
+              registeredAddress: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address,
+              state: bid.buyer.buyerProfile.state || bid.state,
+              district: bid.buyer.buyerProfile.district || bid.district,
+              city: bid.buyer.buyerProfile.city,
+              pincode: bid.buyer.buyerProfile.pincode,
             } : null
           },
           tenderItems: items.map((item: any, idx: number) => ({
@@ -6577,39 +6622,11 @@ app.post('/api/admin/users/:id/unlock', authenticate, authorizeAdmin, async (req
   }
 });
 
-app.get('/api/notifications/stream', async (req, res) => {
-  const unauthorizedAuditAction = 'security.unauthorized_access';
+app.get('/api/notifications/stream', authenticate, async (req: AuthRequest, res) => {
   try {
-    const token = String(
-      (req as any).cookies?.token ||
-      req.headers.cookie
-        ?.split(';')
-        .map(part => part.trim())
-        .find(part => part.startsWith('token='))
-        ?.slice('token='.length) ||
-      ''
-    ).trim();
-    if (!token) throw new ApiError(401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
-
-    let decoded;
-    try {
-      decoded = verifyAccessToken(decodeURIComponent(token));
-    } catch (jwtErr: any) {
-      throw new ApiError(401, jwtErr.name === 'TokenExpiredError' ? 'Authentication token expired' : 'Invalid authentication token', 'AUTH_TOKEN_INVALID');
-    }
-    const userId = Number(decoded.id);
-    const sessionVersion = Number(decoded.sessionVersion);
-    if (!userId || Number.isNaN(sessionVersion)) throw new ApiError(401, 'Invalid authentication token', 'AUTH_TOKEN_INVALID');
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, role: true, sessionVersion: true, lockedUntil: true }
-    });
-    if (!user || user.sessionVersion !== sessionVersion || user.role !== decoded.role) {
-      throw new ApiError(401, 'Session expired. Please sign in again.', 'SESSION_INVALID');
-    }
-    if (user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new ApiError(423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
+    const userId = Number(req.user?.id);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication token is required', code: 'AUTH_TOKEN_MISSING' });
     }
 
     req.socket.setKeepAlive(true);
@@ -6666,14 +6683,7 @@ app.get('/api/notifications/stream', async (req, res) => {
     req.on('close', cleanup);
     res.on('error', cleanup);
   } catch (err: any) {
-    await auditLog({
-      action: unauthorizedAuditAction,
-      entityType: 'notifications',
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      metadata: { path: req.originalUrl, reason: err?.code || 'notification_stream_auth_failed' }
-    });
-    return handleSecureRouteError(res, err, 'Notification stream authentication failed');
+    return handleSecureRouteError(res, err, 'Notification stream error');
   }
 });
 

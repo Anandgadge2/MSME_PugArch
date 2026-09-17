@@ -154,9 +154,9 @@ function RoleAwareActionCards() {
             subtext: 'Orders in fulfillment'
         },
         {
-            label: 'Supplier Responses',
+            label: 'My Procurements',
             count: data.supplierResponsesCount ?? data.myRfqsCount ?? 0,
-            href: '/buyer/procurement/responses',
+            href: '/buyer/my-procurements',
             icon: Send,
             tone: 'blue',
             show: isBuyer,

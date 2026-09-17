@@ -391,8 +391,9 @@ export default function TenderDetailPage() {
       procurementMethod={tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
       buyingType={basics.buyingType || 'Goods'}
       deliveryLocation={basics.deliveryLocation || internal.deliveryAddress || tender.buyer?.buyerProfile?.address}
-      paymentTerms={tender.paymentTerms || terms.paymentTerms}
-      deliveryTerms={tender.deliveryType || terms.deliveryTerms}
+      paymentTerms={tender.paymentTerms || terms.paymentTerms || undefined}
+      deliveryTerms={tender.deliveryType || terms.deliveryTerms || undefined}
+      projectDuration={(tender as any).duration || (tender as any).contractPeriod || basics.projectDuration || terms.projectDuration || terms.contractPeriod || undefined}
       description={tender.description}
       payload={draft}
       documents={tenderDocs}

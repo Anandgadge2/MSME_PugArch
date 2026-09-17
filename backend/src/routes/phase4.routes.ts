@@ -28,7 +28,7 @@ import { maskSensitive } from '../utils/maskSensitive.js';
 import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
-import { formatRequirementNumber, formatRefId } from '../utils/refIdUtils.js';
+import { formatRequirementNumber, formatRefId, CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
 import { bankVerificationService } from '../services/verification/bank.service.js';
 import { GstService, hasValidGstinChecksum } from '../services/gstService.js';
 import {
@@ -6397,15 +6397,11 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
     }
   }
 
-  const isBidToken = token.startsWith('TND-') || token.startsWith('BID-') || token.startsWith('RA-') || token.startsWith('RFQ-');
+  const isBidToken = CANONICAL_METHOD_PREFIXES.some(p => token.startsWith(`${p}-`));
   if (isBidToken) {
     const bid = await db.procurementBid.findFirst({
       where: {
-        OR: [
-          { bidNumber: token },
-          { bidNumber: token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : token },
-          { bidNumber: token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token }
-        ]
+        OR: getCanonicalLookupVariants(token).map(t => ({ bidNumber: t }))
       }
     });
     if (bid) {
@@ -6422,28 +6418,17 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
     }
   }
 
-  const tokenVariants = [
-    token,
-    token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
-  ];
+  const tokenVariants = getCanonicalLookupVariants(token);
 
   const [bidMatch, reqMatch] = await Promise.all([
     db.procurementBid.findFirst({
       where: {
-        OR: tokenVariants.flatMap(t => [
-          { bidNumber: t },
-          { bidNumber: `REQ-${t}` },
-          { bidNumber: `RFQ-${t}` }
-        ])
+        OR: tokenVariants.map(t => ({ bidNumber: t }))
       }
     }).catch(() => null),
     db.requirement.findFirst({
       where: {
-        OR: tokenVariants.flatMap(t => [
-          { requirementNumber: t },
-          { requirementNumber: `REQ-${t}` },
-          { requirementNumber: `RFQ-${t}` }
-        ])
+        OR: tokenVariants.map(t => ({ requirementNumber: t }))
       }
     }).catch(() => null)
   ]);
@@ -11522,6 +11507,23 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   }
 
   // 5) Requirement
+  const buyerReqIds = requirements.map(r => r.id);
+  const matchedRequirementResponses = buyerReqIds.length > 0
+    ? await db.requirementResponse.findMany({
+        where: {
+          requirementId: { in: buyerReqIds },
+          status: { not: 'DRAFT' }
+        },
+        select: { id: true, requirementId: true }
+      }).catch(() => [])
+    : [];
+
+  const reqResponseCountMap = new Map<number, number>();
+  for (const resp of matchedRequirementResponses) {
+    const rid = Number(resp.requirementId);
+    reqResponseCountMap.set(rid, (reqResponseCountMap.get(rid) || 0) + 1);
+  }
+
   for (const r of requirements) {
     const payload = (r as any).payload || {};
 
@@ -11646,6 +11648,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       quantity: String((r as any).quantity || ''),
       unit: (r as any).unit || '',
       organizationName: (r as any).organization?.organizationName || payload.basics?.buyerOrganizationName || loggedInOrgName || '',
+      participantsCount: reqResponseCountMap.get(r.id) || 0,
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
       evaluationMethod: payload.evaluation?.method || payload.evaluation?.evaluationMethod || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1 Basis',

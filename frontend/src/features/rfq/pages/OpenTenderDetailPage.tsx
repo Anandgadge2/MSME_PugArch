@@ -80,10 +80,28 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     staleTime: 60_000,
   });
 
-  const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
+  const { data: tenderData } = useQuery({
+    queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId],
+    queryFn: async () => {
+      const candidates = [targetReqId, activeOpenId, requestId].filter(Boolean);
+      for (const cand of candidates) {
+        try {
+          const res = await getApi<any>(`/api/tenders/${encodeURIComponent(String(cand))}`);
+          const unwrapped = res?.tender || res?.data?.tender || res?.data || res;
+          if (unwrapped && (unwrapped.id || unwrapped.tenderId || unwrapped.title)) return unwrapped;
+        } catch {}
+      }
+      return null;
+    },
+    enabled: !!(targetReqId || activeOpenId || requestId),
+    staleTime: 60_000,
+  });
+
+  const isLoading = !initialData && !bidData && !reqData && !tenderData && (isBidLoading || isReqLoading);
   const bid: any = bidData || {};
   const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
-  const payload = bid.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
+  const tender: any = tenderData || {};
+  const payload = bid.technicalPacket || tender.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
   const basics = payload.basics || {};
   const schedule = payload.schedule || {};
   const terms = payload.terms || {};
@@ -148,6 +166,70 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const resolvedTender = tenderData || {};
+  const resolvedBuyer = resolvedTender.buyer || bid.buyer || reqObj.buyer || null;
+  const rawBuyerProfile =
+    resolvedTender.buyer?.buyerProfile ||
+    bid.buyer?.buyerProfile ||
+    reqObj.buyer?.buyerProfile ||
+    null;
+
+  const resolvedOrgName =
+    resolvedTender.buyer?.buyerProfile?.organizationName ||
+    bid.buyer?.buyerProfile?.organizationName ||
+    bid.buyerOrganizationName ||
+    reqObj.buyerOrganization?.organizationName ||
+    reqObj.organization?.organizationName ||
+    (resolvedTender.buyer?.name && resolvedTender.buyer.name !== resolvedTender.buyer?.buyerProfile?.representativeName ? resolvedTender.buyer.name : '') ||
+    'Buyer Organization';
+
+  const resolvedContactPerson =
+    resolvedTender.buyer?.buyerProfile?.contactPerson ||
+    resolvedTender.buyer?.buyerProfile?.representativeName ||
+    bid.buyer?.buyerProfile?.representativeName ||
+    bid.buyer?.buyerProfile?.contactPerson ||
+    (resolvedTender.buyer?.name && resolvedTender.buyer.name !== resolvedOrgName && resolvedTender.buyer.name !== 'Buyer' ? resolvedTender.buyer.name : '') ||
+    (bid.buyer?.name && bid.buyer.name !== resolvedOrgName && bid.buyer.name !== 'Buyer' ? bid.buyer.name : '') ||
+    (bid.buyerName && bid.buyerName !== resolvedOrgName && bid.buyerName !== 'Buyer' ? bid.buyerName : '') ||
+    reqObj.contactPerson ||
+    (reqObj.buyer?.name && reqObj.buyer.name !== resolvedOrgName && reqObj.buyer.name !== 'Buyer' ? reqObj.buyer.name : '') ||
+    'Authorized Procurement Officer';
+
+  const resolvedBuyerEmail =
+    resolvedTender.buyer?.buyerProfile?.email ||
+    resolvedTender.buyer?.email ||
+    bid.buyer?.buyerProfile?.email ||
+    bid.buyer?.email ||
+    bid.buyerEmail ||
+    reqObj.buyerEmail ||
+    reqObj.buyer?.email ||
+    '';
+
+  const resolvedBuyerMobile =
+    resolvedTender.buyer?.buyerProfile?.phone ||
+    resolvedTender.buyer?.buyerProfile?.mobile ||
+    resolvedTender.buyer?.mobile ||
+    bid.buyer?.buyerProfile?.mobile ||
+    bid.buyer?.buyerProfile?.phone ||
+    bid.buyer?.mobile ||
+    bid.buyerMobile ||
+    reqObj.buyerMobile ||
+    reqObj.buyer?.mobile ||
+    '';
+
+  const resolvedBuyerAddress =
+    resolvedTender.buyer?.buyerProfile?.address ||
+    resolvedTender.buyer?.buyerProfile?.registeredAddress ||
+    bid.buyerAddress ||
+    bid.buyer?.buyerProfile?.registeredAddress ||
+    bid.buyer?.buyerProfile?.address ||
+    reqObj.buyerAddress ||
+    reqObj.buyer?.buyerProfile?.registeredAddress ||
+    rawBuyerProfile?.registeredAddress ||
+    rawBuyerProfile?.address ||
+    '';
+
+  const resolvedBuyerProfile = rawBuyerProfile || bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization || {};
 
   return (
     <>
@@ -158,13 +240,28 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         displayId={openTenderNumber}
         subject={title}
         status={bid.status || reqObj.status || 'OPEN'}
-        buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
-        orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
+        buyerName={resolvedContactPerson}
+        contactPerson={resolvedContactPerson}
+        orgName={resolvedOrgName}
+        buyerEmail={resolvedBuyerEmail}
+        buyerMobile={resolvedBuyerMobile}
+        buyerAddress={resolvedBuyerAddress}
         buyer={{
-          name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
-          email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
-          mobile: bid.buyerMobile || reqObj.buyerMobile || reqObj.buyer?.mobile || '',
-          buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
+          name: resolvedContactPerson,
+          email: resolvedBuyerEmail,
+          mobile: resolvedBuyerMobile,
+          buyerProfile: {
+            ...resolvedBuyerProfile,
+            organizationName: resolvedOrgName,
+            representativeName: resolvedContactPerson,
+            contactPerson: resolvedContactPerson,
+            email: resolvedBuyerEmail,
+            mobile: resolvedBuyerMobile,
+            phone: resolvedBuyerMobile,
+            registeredAddress: resolvedBuyerAddress || resolvedBuyerProfile?.registeredAddress,
+            address: resolvedBuyerAddress || resolvedBuyerProfile?.address,
+            department: resolvedTender.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.department || resolvedBuyerProfile?.department,
+          },
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
         discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
@@ -190,8 +287,9 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         procurementMethod="Open Tender"
         buyingType={basics.buyingType || 'Goods / Products'}
         deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
-        paymentTerms={bid.paymentTerms || terms.paymentTerms || 'Standard Payment Terms'}
-        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'Door delivery'}
+        projectDuration={bid.projectDuration || bid.contractPeriod || basics.projectDuration || basics.duration || terms.projectDuration || terms.contractPeriod || undefined}
+        paymentTerms={bid.paymentTerms || terms.paymentTerms || undefined}
+        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || undefined}
         description={bid.description || reqObj.description || basics.description}
         payload={payload}
         approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}

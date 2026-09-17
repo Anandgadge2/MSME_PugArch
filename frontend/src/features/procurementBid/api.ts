@@ -314,9 +314,20 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     ? String(candidateTitle).trim()
     : (raw.bidNumber ? `Procurement ${raw.bidNumber}` : (raw.id ? `Procurement Bid #${raw.id}` : 'Procurement Bid'));
 
-  // Buyer name: prefer direct, then from organization, then payload
-  const buyerName = raw.buyerOrganizationName
+  // Buyer name: prefer direct person name, then from organization, then payload
+  const buyerPersonName = raw.buyer?.buyerProfile?.representativeName
+    || raw.buyer?.buyerProfile?.contactPerson
+    || raw.buyer?.buyerProfile?.contactPersonName
+    || raw.buyer?.name
+    || raw.contactPerson
+    || (raw.buyerName && raw.buyerName !== raw.buyerOrganizationName ? raw.buyerName : '')
+    || '';
+
+  // Organization name: prefer direct organization name
+  const buyerOrgName = raw.buyerOrganizationName
     || raw.buyerOrganization?.organizationName
+    || raw.buyer?.buyerProfile?.organizationName
+    || raw.organization?.organizationName
     || internal.orgName
     || basics.buyerOrganizationName
     || '';
@@ -382,9 +393,19 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     sourceId: linkedRequirementId || raw.id,
     title,
     itemName: itemName || 'Procurement requirement',
-    buyerName: buyerName || 'Buyer organization',
+    buyerName: buyerPersonName || buyerOrgName || 'Buyer organization',
+    buyerOrganizationName: buyerOrgName,
+    buyerEmail: raw.buyerEmail || raw.buyer?.buyerProfile?.email || raw.buyer?.email || '',
+    buyerMobile: raw.buyerMobile || raw.buyer?.buyerProfile?.mobile || raw.buyer?.buyerProfile?.phone || raw.buyer?.mobile || raw.buyer?.phone || '',
+    buyerAddress: raw.buyerAddress || [
+      raw.buyer?.buyerProfile?.registeredAddress || raw.buyer?.buyerProfile?.corporateAddress || raw.buyer?.buyerProfile?.address || raw.buyerOrganization?.registeredAddress,
+      raw.buyer?.buyerProfile?.city || raw.buyerOrganization?.city,
+      raw.buyer?.buyerProfile?.district || raw.buyerOrganization?.district,
+      raw.buyer?.buyerProfile?.state || raw.buyerOrganization?.state,
+      raw.buyer?.buyerProfile?.pincode || raw.buyerOrganization?.pincode
+    ].filter(Boolean).join(', ') || '',
     buyerType: (raw.buyerType || basics.buyerType || 'Private Enterprise') as ProcurementBid['buyerType'],
-    departmentName: raw.departmentName || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
+    departmentName: raw.departmentName || raw.buyer?.buyerProfile?.department || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
     bidType: (raw.bidType || basics.whatAreYouBuying || 'Product') as ProcurementBid['bidType'],
     procurementType: raw.procurementType || raw.bidType || 'Open Bid',
     category: category || 'General procurement',
@@ -520,7 +541,30 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     internalDetails: pkt?.internal || (raw as any).internalDetails || null,
     approvalAuthority: pkt?.internal?.approvalAuthority || (raw as any).approvalAuthority || '',
     justification: pkt?.internal?.justification || pkt?.basics?.justification || pkt?.limitedTenderJustification || (raw as any).justification || '',
-    buyer: raw.buyer || null,
+    buyer: raw.buyer ? {
+      ...raw.buyer,
+      name: raw.buyer.name || buyerPersonName,
+      email: raw.buyer.email || raw.buyer?.buyerProfile?.email || raw.buyerEmail || '',
+      mobile: raw.buyer.mobile || raw.buyer?.buyerProfile?.mobile || raw.buyer?.buyerProfile?.phone || raw.buyerMobile || '',
+      buyerProfile: raw.buyer.buyerProfile ? {
+        ...raw.buyer.buyerProfile,
+        organizationName: raw.buyer.buyerProfile.organizationName || buyerOrgName,
+        representativeName: raw.buyer.buyerProfile.representativeName || buyerPersonName,
+        contactPerson: raw.buyer.buyerProfile.representativeName || raw.buyer.buyerProfile.contactPerson || buyerPersonName,
+        email: raw.buyer.buyerProfile.email || raw.buyer.email || raw.buyerEmail || '',
+        mobile: raw.buyer.buyerProfile.mobile || raw.buyer.buyerProfile.phone || raw.buyer.mobile || raw.buyerMobile || '',
+        phone: raw.buyer.buyerProfile.mobile || raw.buyer.buyerProfile.phone || raw.buyer.mobile || raw.buyerMobile || '',
+        department: raw.buyer.buyerProfile.department || raw.buyer.buyerProfile.departmentName || '',
+        departmentName: raw.buyer.buyerProfile.department || raw.buyer.buyerProfile.departmentName || '',
+        address: raw.buyer.buyerProfile.registeredAddress || raw.buyer.buyerProfile.corporateAddress || raw.buyer.buyerProfile.address || raw.deliveryLocation || '',
+        registeredAddress: raw.buyer.buyerProfile.registeredAddress || raw.buyer.buyerProfile.corporateAddress || raw.buyer.buyerProfile.address || '',
+      } : (raw.buyerOrganization || raw.organization || null)
+    } : {
+      name: buyerPersonName || 'Buyer',
+      email: raw.buyerEmail || '',
+      mobile: raw.buyerMobile || '',
+      buyerProfile: raw.buyerOrganization || raw.organization || null
+    },
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
   };
 };

@@ -361,16 +361,36 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const orgName = rcData.buyerOrganization?.organizationName
     || rcData.buyer?.buyerProfile?.organizationName
     || internal.orgName
-    || rcData.buyer?.name
     || rcData.buyerOrganizationName
+    || (rcData.buyer?.name && rcData.buyer.name !== rcData.buyer?.buyerProfile?.representativeName ? rcData.buyer.name : null)
     || null;
-  const contactName = rcData.buyerOrganization?.contactPerson
+  const contactName = rcData.buyer?.buyerProfile?.representativeName
+    || rcData.buyerProfile?.representativeName
+    || rcData.buyer?.buyerProfile?.contactPerson
+    || (rcData.buyer?.name && rcData.buyer.name !== orgName && rcData.buyer.name !== 'Buyer' ? rcData.buyer.name : null)
     || rcData.contactPerson
     || internal.contactPerson
-    || rcData.buyer?.name
+    || rcData.buyerOrganization?.contactPerson
     || null;
-  const buyerEmail = rcData.buyerEmail || rcData.buyer?.email || internal.email || null;
-  const buyerMobile = rcData.buyerMobile || rcData.buyer?.mobile || internal.mobile || null;
+  const buyerEmail = rcData.buyerEmail
+    || rcData.buyer?.buyerProfile?.email
+    || rcData.buyerProfile?.email
+    || rcData.buyer?.email
+    || internal.email
+    || null;
+  const buyerMobile = rcData.buyerMobile
+    || rcData.buyer?.buyerProfile?.phone
+    || rcData.buyer?.buyerProfile?.mobile
+    || rcData.buyerProfile?.mobile
+    || rcData.buyer?.mobile
+    || internal.mobile
+    || null;
+  const buyerAddress = rcData.buyerAddress
+    || rcData.buyer?.buyerProfile?.registeredAddress
+    || rcData.buyer?.buyerProfile?.address
+    || rcData.buyerProfile?.registeredAddress
+    || rcData.buyerOrganization?.registeredAddress
+    || null;
   const locationText = rcData.location
     || rateContractConfig.deliverySla
     || basics.deliveryLocation
@@ -668,8 +688,30 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         subject={subject}
         status={rcData.status || 'OPEN'}
         buyerName={contactName}
+        contactPerson={contactName}
         orgName={orgName}
-        buyer={{ name: contactName, email: buyerEmail, mobile: buyerMobile, buyerProfile: rcData.buyerOrganization || rcData.buyer?.buyerProfile }}
+        buyerEmail={buyerEmail}
+        buyerMobile={buyerMobile}
+        buyerAddress={buyerAddress}
+        buyer={{
+          name: contactName,
+          email: buyerEmail,
+          mobile: buyerMobile,
+          buyerProfile: {
+            ...(rcData.buyerOrganization || {}),
+            ...(rcData.buyer?.buyerProfile || {}),
+            ...(rcData.buyerProfile || {}),
+            organizationName: orgName,
+            representativeName: contactName,
+            contactPerson: contactName,
+            email: buyerEmail,
+            mobile: buyerMobile,
+            phone: buyerMobile,
+            registeredAddress: buyerAddress || rcData.buyerOrganization?.registeredAddress,
+            address: buyerAddress || rcData.buyerOrganization?.registeredAddress,
+            department: rcData.buyer?.buyerProfile?.department || rcData.buyerProfile?.department || rcData.departmentName,
+          }
+        }}
         estimatedValue={rcData.estimatedValue}
         discloseEstimatedCost={Boolean(rcData.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? payload.basics?.discloseEstimatedCost ?? false)}
         deadlineDate={periodEnd || rcData.deadlineDate}

@@ -607,9 +607,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
-  const contact    = preferReq ? (reqObj?.contactPerson || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.technicalPacket?.internal?.contactPerson || '—') : (rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.buyer?.name || reqObj?.contactPerson || reqObj?.buyer?.name || '—');
-  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.createdBy?.email || rawBid?.buyer?.email || '') : (rawBid?.technicalPacket?.internal?.email || rawBid?.buyer?.email || reqObj?.buyerEmail || reqObj?.createdBy?.email || '');
-  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.createdBy?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.technicalPacket?.internal?.mobile || rawBid?.buyer?.mobile || reqObj?.buyerMobile || reqObj?.createdBy?.mobile || '');
+  const contact    = preferReq ? (reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyerPersonName || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.technicalPacket?.internal?.contactPerson || '—') : (rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.contactPerson || rawBid?.buyer?.name || reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyer?.name || '—');
+  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || reqObj?.buyer?.email || reqObj?.createdBy?.email || rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyer?.email || '') : (rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyerProfile?.email || rawBid?.buyer?.email || rawBid?.technicalPacket?.internal?.email || reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.createdBy?.email || '');
+  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.phone || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || reqObj?.buyer?.mobile || reqObj?.createdBy?.mobile || rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || rawBid?.buyerProfile?.mobile || rawBid?.buyer?.mobile || rawBid?.technicalPacket?.internal?.mobile || reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.createdBy?.mobile || '');
+  const buyerAddress = preferReq ? (reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || reqObj?.buyerProfile?.registeredAddress || reqObj?.buyerOrganization?.registeredAddress || rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '') : (rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || rawBid?.buyerProfile?.registeredAddress || rawBid?.buyerOrganization?.registeredAddress || reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || '');
   const payTerms   = preferReq ? (reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || rawBid?.technicalPacket?.terms?.paymentTerms || '100% after delivery and acceptance') : (rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance');
   const delTerms   = preferReq ? (reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || rawBid?.technicalPacket?.terms?.deliveryTerms || 'Door delivery to site') : (rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site');
   const warranty   = preferReq ? (reqObj?.payload?.terms?.warrantyTerms || rawBid?.technicalPacket?.terms?.warrantyTerms || '12 Months') : (rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months');
@@ -1047,8 +1048,33 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       subject={title}
       status={status}
       buyerName={contact}
+      contactPerson={contact}
       orgName={buyerOrg}
-      buyer={{ name: contact, email, mobile, buyerProfile: reqObj?.buyerOrganization || rawBid?.buyerOrganization || rawBid?.buyer?.buyerProfile }}
+      buyerEmail={email}
+      buyerMobile={mobile}
+      buyerAddress={buyerAddress}
+      buyer={{
+        name: contact,
+        email,
+        mobile,
+        buyerProfile: {
+          ...(reqObj?.buyerOrganization || {}),
+          ...(rawBid?.buyerOrganization || {}),
+          ...(rawBid?.buyer?.buyerProfile || {}),
+          ...(reqObj?.buyer?.buyerProfile || {}),
+          ...(rawBid?.buyerProfile || {}),
+          ...(reqObj?.buyerProfile || {}),
+          organizationName: buyerOrg,
+          representativeName: contact,
+          contactPerson: contact,
+          email,
+          mobile,
+          phone: mobile,
+          registeredAddress: buyerAddress,
+          address: buyerAddress,
+          department,
+        }
+      }}
       estimatedValue={value}
       discloseEstimatedCost={Boolean(
         rawBid?.discloseEstimatedCost ??
@@ -1073,9 +1099,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       subCategory={subCategory}
       projectDuration={projectDuration}
       department={department}
-      contactPerson={contact}
-      buyerEmail={email}
-      buyerMobile={mobile}
       procurementMethod={method}
       buyingType={buyType}
       deliveryLocation={location}
