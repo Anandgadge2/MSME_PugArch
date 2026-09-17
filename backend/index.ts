@@ -47,6 +47,7 @@ import { notificationService } from './src/services/notification.service.js';
 import { GstService } from './src/services/gstService.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from './src/services/password.service.js';
 import { issueAuthResponse, signAccessToken, verifyAccessToken, verifyRefreshToken } from './src/services/token.service.js';
+import { getAccessTokenFromRequest } from './src/services/auth-cookie.service.js';
 import {
   deleteFile as deleteStoredFile,
   getFileContent as getStoredFileContent,
@@ -3025,8 +3026,27 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
 
     let user = req.user;
     if (!user) {
+      // Resolve the actual JWT token:
+      // 1. Check Authorization header (skip literal "cookie-session" placeholder)
+      // 2. Check query ?token= (skip literal "cookie-session" placeholder)
+      // 3. Fall back to reading the HTTP-only session cookie
       const authHeader = req.headers.authorization;
-      const token = (req.query?.token as string) || (authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null);
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+      const queryToken = req.query?.token as string | undefined;
+
+      const isCookieSession = (t: string | null | undefined) =>
+        !t || t === 'cookie-session' || t === 'null' || t === 'undefined';
+
+      let token: string | null = null;
+      if (bearerToken && !isCookieSession(bearerToken)) {
+        token = bearerToken;
+      } else if (queryToken && !isCookieSession(queryToken)) {
+        token = queryToken;
+      } else {
+        // Read JWT from the HTTP-only "token" cookie (same as authenticate middleware)
+        token = getAccessTokenFromRequest(req) || null;
+      }
+
       if (token) {
         try {
           user = verifyAccessToken(token);

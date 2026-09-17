@@ -246,7 +246,21 @@ const exchangeTokenWithProvider = async (
   redirectUri?: string
 ): Promise<TokenExchangeResult> => {
   const actualRedirectUri = redirectUri || config.redirectUri;
-  const basicAuth = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64');
+
+  // Sanitize: trim whitespace/quotes that may have leaked from env var
+  const clientId = config.clientId.trim().replace(/^["']|["']$/g, '');
+  const clientSecret = config.clientSecret.trim().replace(/^["']|["']$/g, '');
+
+  // Diagnostic log (masked) to surface config issues in production
+  const masked = clientId.length > 8
+    ? `${clientId.slice(0, 4)}...${clientId.slice(-4)} (len=${clientId.length})`
+    : `[TOO_SHORT len=${clientId.length}]`;
+  logger.info(
+    { clientIdMasked: masked, tokenUrl: config.tokenUrl, redirectUri: actualRedirectUri },
+    '[MeriPehchaan] Starting token exchange'
+  );
+
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   // Multi-strategy token exchange for DigiLocker / MeriPehchaan / API Setu compatibility:
   // 1. Basic Auth Header (Official DigiLocker / MeriPehchaan recommendation) with PKCE
@@ -284,8 +298,8 @@ const exchangeTokenWithProvider = async (
         grant_type: 'authorization_code',
         code,
         redirect_uri: actualRedirectUri,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
+        client_id: clientId,
+        client_secret: clientSecret,
         ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
       },
     },
@@ -299,8 +313,8 @@ const exchangeTokenWithProvider = async (
         grant_type: 'authorization_code',
         code,
         redirect_uri: actualRedirectUri,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
+        client_id: clientId,
+        client_secret: clientSecret,
         ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
       },
     },
@@ -331,8 +345,8 @@ const exchangeTokenWithProvider = async (
           grant_type: 'authorization_code',
           code,
           redirect_uri: actualRedirectUri,
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
+          client_id: clientId,
+          client_secret: clientSecret,
         },
       }
     );
