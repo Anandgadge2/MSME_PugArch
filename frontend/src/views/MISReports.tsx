@@ -307,7 +307,7 @@ export default function MISReports() {
     }
   };
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
     setIsExporting('pdf');
     try {
       const engine = new PdfEngine('l');
@@ -333,15 +333,15 @@ export default function MISReports() {
         ],
         infoGrid: {
           'Total Network Size': String(stats?.totalNetwork || 0),
-          'Active Procurement Value': String(stats?.activeProcurementValue || '₹0.00Cr'),
+          'Active Procurement Value': String(stats?.activeProcurementValue || 'INR 0.00Cr').replace('₹', 'INR '),
           'MSMED 45-Day Payment Rate': String(settlementHealth.complianceRate),
           'Avg Onboarding Velocity': String(stats?.avgOnboardingTime || '0 Days'),
         },
-        tableHeaders: ['Sector / Cluster', 'Orders Placed', 'Procurement Spend (₹)', 'Cluster Weightage', 'Local Vendor Ratio'],
+        tableHeaders: ['Sector / Cluster', 'Orders Placed', 'Procurement Spend (INR)', 'Cluster Weightage', 'Local Vendor Ratio'],
         tableData: clusterData.map((c: any) => [
           c.name,
           String(c.orders),
-          `Rs. ${Number(c.spend).toLocaleString('en-IN')}`,
+          `INR ${Number(c.spend).toLocaleString('en-IN')}`,
           `${c.percentage}%`,
           'High (District Priority)'
         ]),
@@ -352,7 +352,7 @@ export default function MISReports() {
         footerNote: 'CONFIDENTIAL • FOR INTERNAL ADMINISTRATIVE AND STATUTORY REVIEW ONLY'
       };
 
-      const doc = engine.generate(docConfig);
+      const doc = await engine.generate(docConfig);
       doc.save(`jsg-smile-executive-mis-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
       console.error('PDF Export Failed:', err);

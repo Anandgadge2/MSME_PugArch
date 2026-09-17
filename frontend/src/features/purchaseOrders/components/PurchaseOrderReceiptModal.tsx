@@ -293,43 +293,113 @@ export function PurchaseOrderReceiptModal({
 
   if (!order) return null;
 
-  // Extract Seller Information
+  // Authentic Seller & Buyer data extraction with strict N/A fallback (Zero dummy/mock data)
+  const sellerReg = (order.seller?.registrationDetails as Record<string, any>) || {};
   const sellerOrg =
     order.seller?.organization?.organizationName ||
-    order.seller?.sellerProfile?.organizationName ||
+    order.seller?.sellerProfile?.businessName ||
     order.seller?.sellerProfile?.companyName ||
+    sellerReg.companyName ||
+    sellerReg.businessName ||
     order.seller?.name ||
-    'XYZ Supplier';
+    'N/A';
 
   const sellerAddress =
     order.seller?.organization?.address ||
     order.seller?.sellerProfile?.registeredAddress ||
     order.seller?.sellerProfile?.address ||
-    order.seller?.organization?.city ||
-    'Registered MSME Facility, Industrial Area';
+    sellerReg.registeredAddress ||
+    sellerReg.address ||
+    'N/A';
 
-  const sellerContact =
-    order.seller?.sellerProfile?.contactPerson ||
-    order.seller?.name ||
+  const sellerPhone =
     order.seller?.mobile ||
-    (order.seller?.email || 'Procurement Desk');
+    order.seller?.sellerProfile?.mobile ||
+    sellerReg.mobile ||
+    'N/A';
 
-  // Extract Buyer Information
+  const sellerEmail = order.seller?.email || sellerReg.email || 'N/A';
+
+  const sellerGstin =
+    order.seller?.organization?.gstin ||
+    order.seller?.sellerProfile?.gst ||
+    sellerReg.gstin ||
+    sellerReg.gstDetails?.gstin ||
+    'N/A';
+
+  const sellerPan =
+    order.seller?.organization?.panNumber ||
+    order.seller?.sellerProfile?.pan ||
+    sellerReg.pan ||
+    sellerReg.gstDetails?.pan ||
+    'N/A';
+
+  const buyerReg = (order.buyer?.registrationDetails as Record<string, any>) || {};
   const buyerOrg =
     order.buyer?.organization?.organizationName ||
     order.buyer?.buyerProfile?.organizationName ||
-    order.buyer?.buyerProfile?.department ||
+    order.buyer?.buyerProfile?.companyName ||
+    buyerReg.companyName ||
+    buyerReg.businessName ||
     order.buyer?.name ||
-    'ABC Corporation';
+    'N/A';
+
   const buyerAddress =
     order.buyer?.organization?.address ||
+    order.buyer?.buyerProfile?.registeredAddress ||
     order.buyer?.buyerProfile?.address ||
-    order.buyer?.organization?.city;
+    buyerReg.registeredAddress ||
+    buyerReg.address ||
+    'N/A';
+
   const deliveryAddress =
     order.deliveryAddress ||
     order.buyer?.organization?.address ||
     order.buyer?.buyerProfile?.address ||
-    'Designated Consignee Warehouse, Main Campus';
+    buyerAddress;
+
+  const buyerPhone =
+    order.buyer?.mobile ||
+    order.buyer?.buyerProfile?.mobile ||
+    buyerReg.mobile ||
+    'N/A';
+
+  const buyerEmail = order.buyer?.email || buyerReg.email || 'N/A';
+
+  const buyerGstin =
+    order.buyer?.organization?.gstin ||
+    order.buyer?.buyerProfile?.gst ||
+    buyerReg.gstin ||
+    buyerReg.gstDetails?.gstin ||
+    'N/A';
+
+  const buyerPan =
+    order.buyer?.organization?.panNumber ||
+    order.buyer?.buyerProfile?.pan ||
+    buyerReg.pan ||
+    buyerReg.gstDetails?.pan ||
+    'N/A';
+
+  // Resolving Logos, Stamps and Signatures (Primary: OrganizationProfile -> Backup: registrationDetails -> FileAsset FK)
+  const sellerLogo =
+    order.seller?.organization?.profile?.logoUrl ||
+    sellerReg.logoUrl ||
+    order.seller?.organization?.organizationLogoFile?.url ||
+    order.seller?.organization?.organizationLogoFile?.fileUrl ||
+    (order.seller?.organization?.organizationLogoFileId ? `/api/files/${order.seller.organization.organizationLogoFileId}/download` : null);
+
+  const buyerLogo =
+    order.buyer?.organization?.profile?.logoUrl ||
+    buyerReg.logoUrl ||
+    order.buyer?.organization?.organizationLogoFile?.url ||
+    order.buyer?.organization?.organizationLogoFile?.fileUrl ||
+    (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/download` : null);
+
+  const sellerSignature = sellerReg.signatureUrl || null;
+  const sellerStamp = sellerReg.stampUrl || null;
+
+  const buyerSignature = buyerReg.signatureUrl || null;
+  const buyerStamp = buyerReg.stampUrl || null;
 
   const shipVia =
     order.deliveryType ? readableStatus(order.deliveryType) : 'Standard Ground Logistics';
@@ -337,7 +407,7 @@ export function PurchaseOrderReceiptModal({
   const trackingNumber =
     activeDelivery?.trackingNumber ||
     (order.deliveryTrackings && order.deliveryTrackings[0]?.trackingNumber) ||
-    'TRK-' + (order.id * 1847 + 1000);
+    'N/A';
 
   const poDate = formatIsoDate(order.createdAt);
   const dueDate = formatIsoDate(order.expectedDelivery || order.createdAt);
@@ -358,6 +428,10 @@ export function PurchaseOrderReceiptModal({
     const unitPrice = Number(it.unitPrice || (qty > 0 ? Number(it.totalAmount || order.totalValue || 0) / qty : 0));
     const total = Number(it.totalAmount || qty * unitPrice);
     const specs = it.description || it.specifications?.description || (it.product?.brand ? `Brand: ${it.product.brand}` : '');
+    const productCode = it.product?.code || (it.productId ? `PRD-${it.productId}` : `SKU-${idx + 101}`);
+    const hsn = it.hsnCode || it.product?.hsnCode || 'N/A';
+    const unit = it.unitOfMeasure || it.unit || it.product?.unitOfMeasure || 'nos';
+    const taxRate = it.taxRate !== undefined && it.taxRate !== null ? `${it.taxRate}%` : '18%';
 
     return {
       name,
@@ -365,6 +439,10 @@ export function PurchaseOrderReceiptModal({
       quantity: qty,
       unitPrice,
       total,
+      productCode,
+      hsn,
+      unit,
+      taxRate,
     };
   });
 
@@ -387,28 +465,45 @@ export function PurchaseOrderReceiptModal({
 
     try {
       setIsGeneratingPdf(true);
-      toast.loading('Generating PDF receipt...', { id: 'po-pdf-dl' });
-      const { PdfEngine } = await import('../../../lib/pdfEngine');
+      toast.loading('Generating Purchase Order PDF...', { id: 'po-pdf-dl' });
+      const { PdfEngine, moneyPdf } = await import('../../../lib/pdfEngine');
 
       const config: DocumentConfig = {
-        documentTitle: 'Receipt Purchase Order',
+        documentTitle: 'PURCHASE ORDER',
         documentNumber: order.poNumber || `PO-${order.id}`,
         dateStr: poDate,
         status: readableStatus(order.status),
+        issuerName: buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement',
+        issuerSubtitle: 'Official Purchase Order',
+        issuerLogo: buyerLogo || sellerLogo,
+        sellerSignatureUrl: sellerSignature,
+        sellerStampUrl: sellerStamp,
+        buyerSignatureUrl: buyerSignature,
+        buyerStampUrl: buyerStamp,
         parties: [
-          {
-            title: 'Vendor / Seller',
-            name: sellerOrg,
-            address: sellerAddress,
-            phone: sellerContact !== 'Procurement Desk' ? sellerContact : undefined,
-          },
           {
             title: 'Ship To / Buyer',
             name: buyerOrg,
             address: deliveryAddress,
+            phone: buyerPhone,
+            email: buyerEmail,
+            gstin: buyerGstin,
+            pan: buyerPan,
             details: [
               `Ship Via: ${shipVia}`,
               `Tracking: ${trackingNumber}`,
+            ],
+          },
+          {
+            title: 'Vendor / Seller',
+            name: sellerOrg,
+            address: sellerAddress,
+            phone: sellerPhone,
+            email: sellerEmail,
+            gstin: sellerGstin,
+            pan: sellerPan,
+            details: [
+              `Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`,
             ],
           },
         ],
@@ -420,13 +515,16 @@ export function PurchaseOrderReceiptModal({
           'Tracking Number': trackingNumber,
           'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
         },
-        tableHeaders: ['Sr.', 'Product Description', 'Quantity', 'Unit Price', 'Total'],
+        tableHeaders: ['#', 'Product Code', 'Product Description', 'HSN/SAC', 'Qty', 'Unit', 'Rate', 'Total'],
         tableData: displayItems.map((item, idx) => [
           String(idx + 1),
+          item.productCode,
           item.name + (item.specs ? `\n${item.specs}` : ''),
+          item.hsn,
           String(item.quantity),
-          `₹${formatNumber(item.unitPrice)}`,
-          `₹${formatNumber(item.total)}`,
+          item.unit,
+          moneyPdf(item.unitPrice),
+          moneyPdf(item.total),
         ]),
         financials: {
           subtotal: subtotal,
@@ -435,18 +533,18 @@ export function PurchaseOrderReceiptModal({
           grandTotal: grandTotal,
         },
         notes: [
-          '1. Please deliver to the designated address by the due date.',
-          `2. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
-          `3. If you have any questions, contact ${sellerContact || 'the designated procurement officer'}.`,
+          '1. Delivery must strictly adhere to agreed specifications and timeline.',
+          '2. Invoice raised must contain this Purchase Order Number and Date.',
+          `3. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
           ...(order.metadata?.notes ? [`4. ${order.metadata.notes}`] : []),
         ],
       };
 
       const engine = new PdfEngine('p');
-      const doc = engine.generate(config);
+      const doc = await engine.generate(config);
       const filename = `${order.poNumber || `PO-${order.id}`}.pdf`;
       doc.save(filename);
-      toast.success('PDF downloaded directly', { id: 'po-pdf-dl' });
+      toast.success('Purchase Order PDF downloaded', { id: 'po-pdf-dl' });
     } catch (err) {
       console.error('Failed to generate PDF:', err);
       toast.error('Failed to download PDF. Please try again.', { id: 'po-pdf-dl' });
@@ -729,34 +827,47 @@ export function PurchaseOrderReceiptModal({
                   )}
                 >
                 <div>
-                  {/* Header Title */}
-                  <div className="text-center pb-1 mb-2.5">
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-950 uppercase tracking-widest font-sans">
-                      RECEIPT PURCHASE ORDER
-                    </h1>
-                    <div className={cn("h-1 w-full mt-1.5 rounded-full transition-colors", currentTheme.accentLine)} />
+                  {/* Header Branding & Title */}
+                  <div className="flex items-center justify-between border-b pb-2 mb-2.5">
+                    <div className="flex items-center gap-2.5">
+                      {buyerLogo && (
+                        <img src={buyerLogo} alt="Buyer Logo" className="h-10 w-10 object-contain rounded" />
+                      )}
+                      <div>
+                        <h2 className="text-base font-black text-slate-950 uppercase tracking-tight font-sans">
+                          {buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement'}
+                        </h2>
+                        <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <h1 className="text-xl sm:text-2xl font-black text-slate-950 uppercase tracking-widest font-sans">
+                        PURCHASE ORDER
+                      </h1>
+                      <p className="text-[10px] font-mono text-slate-600 font-bold">{order.poNumber || `PO-${order.id}`}</p>
+                    </div>
                   </div>
 
                   {/* Table 1: Vendor & PO Info */}
                   <table className="w-full border-collapse border border-black text-xs mb-2">
                     <tbody>
                       <tr className="border-b border-slate-300">
-                        <td className={cn("w-1/6 font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Name:</td>
-                        <td className="w-2/6 font-semibold p-1.5 sm:p-2 text-slate-900 border-r border-black">{sellerOrg}</td>
-                        <td className={cn("w-1/6 font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Date:</td>
-                        <td className="w-2/6 font-semibold p-1.5 sm:p-2 text-slate-900 font-mono">{poDate}</td>
+                        <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Name:</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">{sellerOrg}</td>
+                        <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>PO Date:</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 font-mono">{poDate}</td>
                       </tr>
                       <tr className="border-b border-slate-300">
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Address:</td>
-                        <td className="font-semibold p-1.5 sm:p-2 text-slate-900 border-r border-black leading-tight">{sellerAddress}</td>
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>PO Number:</td>
-                        <td className="font-black p-1.5 sm:p-2 text-slate-950 font-mono">{order.poNumber}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Address:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 border-r border-black leading-tight">{sellerAddress}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Code:</td>
+                        <td className="font-black p-1.5 text-slate-950 font-mono">{order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}</td>
                       </tr>
                       <tr>
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Contact:</td>
-                        <td className="font-semibold p-1.5 sm:p-2 text-slate-900 border-r border-black">{sellerContact}</td>
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Due Date:</td>
-                        <td className="font-semibold p-1.5 sm:p-2 text-slate-900 font-mono">{dueDate}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Tax Info:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 border-r border-black font-mono">GSTIN: {sellerGstin} | PAN: {sellerPan}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Contact:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 font-mono">{sellerPhone} | {sellerEmail}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -765,50 +876,68 @@ export function PurchaseOrderReceiptModal({
                   <table className="w-full border-collapse border border-black text-xs mb-2">
                     <tbody>
                       <tr className="border-b border-slate-300">
-                        <td className={cn("w-1/6 font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship To:</td>
-                        <td className="w-2/6 font-semibold p-1.5 sm:p-2 text-slate-900 border-r border-black">{buyerOrg}</td>
-                        <td className={cn("w-1/6 font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship Via:</td>
-                        <td className="w-2/6 font-semibold p-1.5 sm:p-2 text-slate-900">{shipVia}</td>
+                        <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship To:</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">{buyerOrg}</td>
+                        <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship Via:</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900">{shipVia}</td>
+                      </tr>
+                      <tr className="border-b border-slate-300">
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Delivery Address:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 border-r border-black leading-tight">{deliveryAddress}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Tracking Number:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 font-mono">{trackingNumber}</td>
                       </tr>
                       <tr>
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship To Address:</td>
-                        <td className="font-semibold p-1.5 sm:p-2 text-slate-900 border-r border-black leading-tight">{deliveryAddress}</td>
-                        <td className={cn("font-bold p-1.5 sm:p-2 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Tracking Number:</td>
-                        <td className="font-semibold p-1.5 sm:p-2 text-slate-900 font-mono">{trackingNumber}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Buyer GSTIN:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 border-r border-black font-mono">{buyerGstin}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Due Date:</td>
+                        <td className="font-semibold p-1.5 text-slate-900 font-mono">{dueDate}</td>
                       </tr>
                     </tbody>
                   </table>
 
-                  {/* Table 3: Line Items (Matching Image 1 Format) */}
+                  {/* Table 3: Line Items (Full Enterprise 8-Column Format) */}
                   <table className="w-full border-collapse border border-black text-xs mb-2">
                     <thead>
                       <tr className={cn("border-b border-black font-bold transition-colors", currentTheme.headerBg, currentTheme.headerText)}>
-                        <th className={cn("p-2 text-left border-r w-1/2", currentTheme.tableHeaderBorder)}>Product Description</th>
-                        <th className={cn("p-2 text-center border-r w-1/6", currentTheme.tableHeaderBorder)}>Quantity</th>
-                        <th className={cn("p-2 text-right border-r w-1/6", currentTheme.tableHeaderBorder)}>Unit Price</th>
-                        <th className="p-2 text-right w-1/6">Total [₹]</th>
+                        <th className={cn("p-1.5 text-center border-r w-10", currentTheme.tableHeaderBorder)}>#</th>
+                        <th className={cn("p-1.5 text-left border-r w-24", currentTheme.tableHeaderBorder)}>Code</th>
+                        <th className={cn("p-1.5 text-left border-r", currentTheme.tableHeaderBorder)}>Product Description</th>
+                        <th className={cn("p-1.5 text-center border-r w-20", currentTheme.tableHeaderBorder)}>HSN/SAC</th>
+                        <th className={cn("p-1.5 text-center border-r w-14", currentTheme.tableHeaderBorder)}>Qty</th>
+                        <th className={cn("p-1.5 text-center border-r w-14", currentTheme.tableHeaderBorder)}>Units</th>
+                        <th className={cn("p-1.5 text-right border-r w-24", currentTheme.tableHeaderBorder)}>Rate [₹]</th>
+                        <th className="p-1.5 text-right w-24">Total [₹]</th>
                       </tr>
                     </thead>
                     <tbody>
                       {displayItems.map((item, idx) => (
                         <tr key={idx} className="border-b border-slate-200 hover:bg-slate-50/50">
-                          <td className="p-2 border-r border-slate-300">
+                          <td className="p-1.5 text-center border-r border-slate-300 font-mono">{idx + 1}</td>
+                          <td className="p-1.5 text-left border-r border-slate-300 font-mono text-[11px]">{item.productCode}</td>
+                          <td className="p-1.5 border-r border-slate-300">
                             <span className="font-bold text-slate-950 block">{item.name}</span>
                             {item.specs && <span className="text-[10px] text-slate-500 block leading-tight">{item.specs}</span>}
                           </td>
-                          <td className="p-2 text-center border-r border-slate-300 font-mono font-semibold">{item.quantity}</td>
-                          <td className="p-2 text-right border-r border-slate-300 font-mono">₹{formatNumber(item.unitPrice)}</td>
-                          <td className="p-2 text-right font-mono font-bold text-slate-950">₹{formatNumber(item.total)}</td>
+                          <td className="p-1.5 text-center border-r border-slate-300 font-mono text-[11px]">{item.hsn}</td>
+                          <td className="p-1.5 text-center border-r border-slate-300 font-mono font-semibold">{item.quantity}</td>
+                          <td className="p-1.5 text-center border-r border-slate-300 font-mono text-[11px]">{item.unit}</td>
+                          <td className="p-1.5 text-right border-r border-slate-300 font-mono">₹{formatNumber(item.unitPrice)}</td>
+                          <td className="p-1.5 text-right font-mono font-bold text-slate-950">₹{formatNumber(item.total)}</td>
                         </tr>
                       ))}
 
-                      {/* Placeholder rows matching Image 1 to maintain physical receipt balance */}
+                      {/* Placeholder rows matching standard balance */}
                       {fillerRows.map((_, idx) => (
                         <tr key={`fill-${idx}`} className="border-b border-slate-200/60 h-6">
-                          <td className="p-1.5 border-r border-slate-300">&nbsp;</td>
-                          <td className="p-1.5 text-center border-r border-slate-300 text-slate-300 font-mono">-</td>
-                          <td className="p-1.5 text-right border-r border-slate-300 text-slate-300 font-mono">-</td>
-                          <td className="p-1.5 text-right text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300 text-center text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300 text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300">&nbsp;</td>
+                          <td className="p-1 border-r border-slate-300 text-center text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300 text-center text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300 text-center text-slate-300 font-mono">-</td>
+                          <td className="p-1 border-r border-slate-300 text-right text-slate-300 font-mono">-</td>
+                          <td className="p-1 text-right text-slate-300 font-mono">-</td>
                         </tr>
                       ))}
                     </tbody>
@@ -816,16 +945,16 @@ export function PurchaseOrderReceiptModal({
                 </div>
 
                 {/* Bottom Section: ADDITIONAL NOTES & TOTAL AMOUNT */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs mt-2 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs mt-1 pt-1">
                   {/* Left: ADDITIONAL NOTES */}
                   <div className="border border-black overflow-hidden flex flex-col">
                     <div className={cn("border-b border-black p-1.5 font-bold uppercase tracking-wide transition-colors", currentTheme.notesHeaderBg, currentTheme.notesHeaderText)}>
-                      ADDITIONAL NOTES
+                      ADDITIONAL NOTES & TERMS
                     </div>
                     <div className="p-2 text-[11px] text-slate-800 space-y-1 font-medium leading-relaxed bg-white flex-1">
-                      <p>1. Please deliver to the designated address by the due date.</p>
+                      <p>1. Delivery must strictly adhere to agreed specifications and timeline.</p>
                       <p>2. Payment Terms: {order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.</p>
-                      <p>3. If you have any questions, contact {sellerContact || 'the designated procurement officer'}.</p>
+                      <p>3. Vendor invoice must cross-reference this PO Number and Date.</p>
                       {order.metadata?.notes && <p>4. {order.metadata.notes}</p>}
                     </div>
                   </div>
@@ -852,6 +981,35 @@ export function PurchaseOrderReceiptModal({
                         </tr>
                       </tbody>
                     </table>
+                  </div>
+                </div>
+
+                {/* Signatures & Stamp Row */}
+                <div className="grid grid-cols-2 gap-4 mt-2 pt-2 border-t border-slate-300">
+                  <div className="text-left text-xs">
+                    <span className="font-bold text-slate-800">For {buyerOrg !== 'N/A' ? buyerOrg : 'Buyer'}:</span>
+                    <div className="h-10 flex items-center gap-2 mt-0.5">
+                      {buyerStamp && (
+                        <img src={buyerStamp} alt="Buyer Stamp" className="h-9 w-9 object-contain mix-blend-multiply" />
+                      )}
+                      {buyerSignature && (
+                        <img src={buyerSignature} alt="Buyer Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Buyer)</span>
+                  </div>
+
+                  <div className="text-right text-xs">
+                    <span className="font-bold text-slate-800">For {sellerOrg !== 'N/A' ? sellerOrg : 'Supplier'}:</span>
+                    <div className="h-10 flex items-center justify-end gap-2 mt-0.5">
+                      {sellerStamp && (
+                        <img src={sellerStamp} alt="Supplier Stamp" className="h-9 w-9 object-contain mix-blend-multiply" />
+                      )}
+                      {sellerSignature && (
+                        <img src={sellerSignature} alt="Supplier Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Supplier)</span>
                   </div>
                 </div>
               </div>

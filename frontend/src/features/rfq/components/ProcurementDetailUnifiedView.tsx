@@ -54,7 +54,7 @@ import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
-import { PdfEngine } from '../../../lib/pdfEngine';
+import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
 import { getApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { KpiCard } from '../../shared/KpiCard';
@@ -3932,25 +3932,37 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     ? (props.procurementType === 'RFQ' ? 'View Quotation' : 'View Proposal')
     : (props.procurementType === 'RFQ' ? 'Submit Quotation' : 'Submit Proposal');
 
-  const handleDefaultPdfDownload = () => {
+  const handleDefaultPdfDownload = async () => {
     try {
       toast.info(`Generating ${procurementTypeLabel} PDF…`);
-      const engine = new PdfEngine();
-      const doc = engine.generate({
+      const buyerReg = (props.buyer?.registrationDetails as Record<string, any>) || {};
+      const buyerLogo =
+        props.buyer?.organization?.profile?.logoUrl ||
+        buyerReg.logoUrl ||
+        props.buyer?.organization?.organizationLogoFile?.url ||
+        props.buyer?.organization?.organizationLogoFile?.fileUrl ||
+        (props.buyer?.organization?.organizationLogoFileId ? `/api/files/${props.buyer.organization.organizationLogoFileId}/download` : null);
+
+      const engine = new PdfEngine('p');
+      const doc = await engine.generate({
         documentTitle: `${procurementTypeLabel.toUpperCase()} PROCUREMENT DETAILS`,
         documentNumber: displayIdStr,
         dateStr: publishedDateFormatted || 'N/A',
         status: statusLabel,
+        issuerName: buyerOrgName !== 'N/A' ? buyerOrgName : 'Enterprise Procurement',
+        issuerSubtitle: `${procurementTypeLabel.toUpperCase()} Notice`,
+        issuerLogo: buyerLogo,
         parties: [
           {
             title: 'BUYER ORGANIZATION',
             name: buyerOrgName !== 'N/A' ? buyerOrgName : 'Verified Buyer',
-            address: deliveryLocation !== 'N/A' ? deliveryLocation : 'Location not specified',
-            email: props.buyer?.email || undefined,
-            phone: props.buyer?.mobile || props.buyer?.phone || undefined,
+            address: deliveryLocation !== 'N/A' ? deliveryLocation : 'N/A',
+            email: props.buyer?.email || buyerReg.email || 'N/A',
+            phone: props.buyer?.mobile || props.buyer?.phone || buyerReg.mobile || 'N/A',
+            gstin: props.buyer?.organization?.gstin || buyerReg.gstin || 'N/A',
             details: [
-              `Contact: ${contactPerson}`,
-              `Category: ${category}`,
+              `Contact: ${contactPerson !== 'N/A' ? contactPerson : 'Procurement Officer'}`,
+              `Category: ${category !== 'N/A' ? category : 'General'}`,
             ],
           },
           {
@@ -3959,8 +3971,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
             details: [
               `Method: ${procurementMethod}`,
               `Deadline: ${closingDateFormatted}`,
-              // `EMD Required: ${props.isEmdRequired ? formatCurrency(props.emdAmount || 0) : 'Nil'}`, // Commented out as requested
-              `Estimated Value: ${shouldShowEstimatedCost ? formatCurrency(props.estimatedValue) : 'Confidential (Competitive Bidding)'}`,
+              `Estimated Value: ${shouldShowEstimatedCost ? moneyPdf(props.estimatedValue) : 'Confidential (Competitive Bidding)'}`,
             ],
           },
         ],
@@ -3976,7 +3987,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           it.itemName || it.name || it.description || `Item ${i + 1}`,
           String(it.quantity || it.qty || 1),
           it.unit || 'Units',
-          shouldShowEstimatedCost ? (it.estimatedPrice || it.unitPrice || it.price ? formatCurrency(it.estimatedPrice || it.unitPrice || it.price) : '—') : 'Confidential',
+          shouldShowEstimatedCost ? (it.estimatedPrice || it.unitPrice || it.price ? moneyPdf(it.estimatedPrice || it.unitPrice || it.price) : 'N/A') : 'Confidential',
           it.gstRate || it.gst ? `${it.gstRate || it.gst}%` : 'Standard',
         ]),
         financials: shouldShowEstimatedCost ? { grandTotal: Number(props.estimatedValue || 0) } : undefined,
@@ -5079,16 +5090,32 @@ export function SellerQuotationReviewModal({
   const docs: any[] = Array.isArray(participation.documents) ? participation.documents : (Array.isArray(participation.responseData?.documents) ? participation.responseData.documents : []);
   const message = participation.offeredItemDescription || participation.message || participation.responseData?.message || '';
 
-  const handleDownloadQuotationPdf = () => {
+  const handleDownloadQuotationPdf = async () => {
     try {
       toast.info(`Generating Quotation PDF for ${sellerOrg}…`);
+      const supplierReg = (participation.supplier?.registrationDetails as Record<string, any>) || {};
+      const supplierLogo =
+        participation.supplier?.organization?.profile?.logoUrl ||
+        supplierReg.logoUrl ||
+        participation.supplier?.organization?.organizationLogoFile?.url ||
+        participation.supplier?.organization?.organizationLogoFile?.fileUrl ||
+        (participation.supplier?.organization?.organizationLogoFileId ? `/api/files/${participation.supplier.organization.organizationLogoFileId}/download` : null);
+
+      const supplierSig = supplierReg.signatureUrl || null;
+      const supplierStamp = supplierReg.stampUrl || null;
+
       const engine = new PdfEngine('p');
       const hasLineItems = lineItems.length > 0;
-      const doc = engine.generate({
+      const doc = await engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${targetId}`,
         dateStr: formatDate(submittedAt || new Date()),
         status: statusStr,
+        issuerName: sellerOrg,
+        issuerSubtitle: 'Supplier Official Quotation Response',
+        issuerLogo: supplierLogo,
+        sellerSignatureUrl: supplierSig,
+        sellerStampUrl: supplierStamp,
         parties: [
           {
             title: 'BUYER ORGANIZATION',
@@ -5098,10 +5125,10 @@ export function SellerQuotationReviewModal({
           {
             title: 'SUPPLIER / QUOTING ORGANIZATION',
             name: sellerOrg,
-            email: email !== 'N/A' ? email : undefined,
-            phone: phone !== 'N/A' ? phone : undefined,
+            email: email !== 'N/A' ? email : 'N/A',
+            phone: phone !== 'N/A' ? phone : 'N/A',
             details: [
-              `Contact Person: ${contactPerson}`,
+              `Contact Person: ${contactPerson !== 'N/A' ? contactPerson : 'Authorized Representative'}`,
               `Submitted Date: ${formatDateTime(submittedAt)}`,
             ],
           },
@@ -5128,9 +5155,9 @@ export function SellerQuotationReviewModal({
               item.itemName || item.name || item.description || `Item #${idx + 1}`,
               item.makeBrand || item.brand || '—',
               `${q} ${item.unitOfMeasure || item.unit || 'Nos'}`,
-              `₹${uPrice.toLocaleString('en-IN')}`,
+              moneyPdf(uPrice),
               `${gst}%`,
-              `₹${tot.toLocaleString('en-IN')}`
+              moneyPdf(tot)
             ];
           })
           : [
@@ -5138,7 +5165,7 @@ export function SellerQuotationReviewModal({
               '1',
               message || 'Procurement item quotation',
               String(offeredQty),
-              quotedAmount > 0 ? `₹${quotedAmount.toLocaleString('en-IN')}` : 'Sealed Rate',
+              quotedAmount > 0 ? moneyPdf(quotedAmount) : 'Sealed Rate',
             ]
           ],
         financials: {

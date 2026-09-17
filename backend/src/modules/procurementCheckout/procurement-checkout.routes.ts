@@ -14,7 +14,7 @@ import {
 } from './procurement-checkout.service.js';
 
 const router = Router();
-router.use(authenticate);
+router.use('/procurement-checkout', authenticate);
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
   async (req: AuthRequest, res: Response) => {

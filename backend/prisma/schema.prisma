@@ -3163,8 +3163,14 @@ model DisputeAttachment {
 
 model GrievanceTicket {
   id                Int                   @id @default(autoincrement())
-  userId            Int
+  ticketNumber      String?               @unique
+  userId            Int?
   assignedAdminId   Int?
+  complainantName   String?
+  complainantEmail  String?
+  complainantMobile String?
+  enterpriseName    String?
+  referenceNumber   String?
   category          String
   subject           String
   description       String
@@ -3180,13 +3186,15 @@ model GrievanceTicket {
   attachments       GrievanceAttachment[]
   comments          GrievanceComment[]
   assignedAdmin     User?                 @relation("GrievanceAssignee", fields: [assignedAdminId], references: [id])
-  user              User                  @relation("GrievanceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  user              User?                 @relation("GrievanceOwner", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status])
   @@index([assignedAdminId, status])
   @@index([statusEnum])
   @@index([slaStatus])
   @@index([slaDueAt])
+  @@index([complainantEmail])
+  @@index([ticketNumber])
 }
 
 model GrievanceComment {

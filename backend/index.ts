@@ -958,6 +958,20 @@ const grievanceCreateSchema = z.object({
   priority: z.enum(['low', 'normal', 'high', 'urgent']).default('normal'),
   fileAssetIds: idArraySchema.optional()
 });
+const publicGrievanceSchema = z.object({
+  category: z.string().trim().min(2).max(100),
+  type: z.string().trim().max(100).optional(),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email(),
+  mobile: z.string().trim().max(20).optional().or(z.literal('')),
+  orgName: z.string().trim().max(160).optional().or(z.literal('')),
+  referenceNumber: z.string().trim().max(100).optional().or(z.literal('')),
+  subject: z.string().trim().min(3).max(200),
+  description: z.string().trim().min(10).max(4000),
+  priority: z.string().optional().transform(v => (v ? v.toLowerCase() : 'normal')).pipe(
+    z.enum(['low', 'normal', 'high', 'urgent'])
+  )
+});
 const grievanceCommentSchema = z.object({
   content: z.string().trim().min(1).max(3000),
   internal: z.boolean().optional(),
@@ -968,8 +982,10 @@ const grievanceAssignSchema = z.object({
   remarks: z.string().trim().min(5).max(500).optional()
 });
 const grievanceStatusSchema = z.object({
-  status: z.enum(['open', 'assigned', 'in_progress', 'waiting_on_user', 'resolved', 'closed', 'rejected']),
-  remarks: z.string().trim().min(10).max(1000).optional()
+  status: z.string().transform(v => v.toLowerCase()).pipe(
+    z.enum(['open', 'assigned', 'in_progress', 'waiting_on_user', 'resolved', 'closed', 'rejected'])
+  ),
+  remarks: z.string().trim().min(5).max(2000).optional()
 });
 
 const parseSchema = <T,>(schema: z.ZodType<T>, payload: unknown) => {
@@ -6452,11 +6468,173 @@ app.put('/api/disputes/:id/status', authenticate, authorizeAdmin, async (req: Au
   }
 });
 
-// --- Secure Grievances ---
+// --- Stakeholder Grievance Redressal & Public Feedback ---
+
+app.post('/api/public/grievances', async (req, res) => {
+  try {
+    await consumeActionBudget(req as any, 'public_grievances', 10, 3600);
+    const payload = parseSchema(publicGrievanceSchema, req.body);
+
+    // Generate authentic ticket reference: JSG-GRV-YYYY-XXXXX
+    let ticketNumber = `JSG-GRV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+    const collision = await prisma.grievanceTicket.findUnique({ where: { ticketNumber } }).catch(() => null);
+    if (collision) {
+      ticketNumber = `JSG-GRV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
+    }
+
+    // Check if complainant email belongs to a registered user
+    const existingUser = await prisma.user.findUnique({
+      where: { email: payload.email.toLowerCase().trim() },
+      select: { id: true, name: true }
+    });
+
+    const categoryText = payload.type ? `${payload.category} - ${payload.type}` : payload.category;
+
+    const grievance = await prisma.grievanceTicket.create({
+      data: {
+        ticketNumber,
+        userId: existingUser?.id ?? null,
+        complainantName: sanitizePortalText(payload.name, 120),
+        complainantEmail: sanitizePortalText(payload.email.toLowerCase().trim(), 160),
+        complainantMobile: payload.mobile ? sanitizePortalText(payload.mobile, 20) : null,
+        enterpriseName: payload.orgName ? sanitizePortalText(payload.orgName, 160) : null,
+        referenceNumber: payload.referenceNumber ? sanitizePortalText(payload.referenceNumber, 100) : null,
+        category: sanitizePortalText(categoryText, 100),
+        subject: sanitizePortalText(payload.subject, 200),
+        description: sanitizePortalText(payload.description, 4000),
+        priority: payload.priority || 'normal',
+        status: 'open',
+        slaDueAt: new Date(Date.now() + 48 * 3600 * 1000)
+      }
+    });
+
+    // 1. Dispatch automated acknowledgment email to complainant's entered email
+    const ackSubject = `[${ticketNumber}] Grievance Acknowledgment: ${grievance.subject}`;
+    const ackHtml = `
+      <div style="margin-bottom: 20px;">
+        <p style="font-size: 15px; line-height: 1.6; color: #1e293b;">
+          Your formal grievance has been registered with the District MSME Facilitation &amp; Grievance Redressal Cell under statutory provisions.
+        </p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #12335f; padding: 16px; border-radius: 6px; margin: 18px 0;">
+          <table style="width: 100%; font-size: 13px; color: #334155; line-height: 1.8;">
+            <tr>
+              <td style="width: 35%; font-weight: bold; color: #64748b;">Ticket Reference:</td>
+              <td><strong style="font-family: monospace; font-size: 15px; color: #0b2447;">${ticketNumber}</strong></td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; color: #64748b;">Category:</td>
+              <td>${grievance.category}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; color: #64748b;">Subject:</td>
+              <td>${grievance.subject}</td>
+            </tr>
+            <tr>
+              <td style="font-weight: bold; color: #64748b;">SLA Review Target:</td>
+              <td>Within 24 to 48 business hours</td>
+            </tr>
+            ${grievance.referenceNumber ? `
+            <tr>
+              <td style="font-weight: bold; color: #64748b;">Associated Ref No:</td>
+              <td>${grievance.referenceNumber}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 14px 16px; border-radius: 6px; margin: 18px 0;">
+          <p style="margin: 0; font-size: 13px; color: #166534; line-height: 1.5;">
+            <strong>Next Steps:</strong> A designated Nodal Officer will examine the facts and record findings. You will receive an official email resolution directly at this address once administrative action is taken.
+          </p>
+        </div>
+        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+          You can also track the real-time status of your complaint on the portal using Reference ID <strong>${ticketNumber}</strong>.
+        </p>
+      </div>
+    `;
+
+    void notificationService.sendDirectEmail(payload.email.toLowerCase().trim(), payload.name, {
+      subject: ackSubject,
+      html: ackHtml
+    }).catch(err => logger.warn({ err, email: payload.email }, 'Failed to dispatch grievance acknowledgment email'));
+
+    // 2. Notify Portal Administrators
+    void notificationService.notifyAdminsWithEmail({
+      title: 'New Stakeholder Grievance Lodged',
+      message: `Ticket [${ticketNumber}] "${grievance.subject}" filed by ${payload.name} (${payload.email}).`,
+      type: 'grievance_created',
+      priority: payload.priority === 'urgent' ? 'urgent' : 'high',
+      redirectUrl: `/admin/disputes?tab=grievances`
+    }).catch(() => null);
+
+    // 3. Security Audit Log
+    await auditLog({
+      actorUserId: existingUser?.id,
+      actorRole: existingUser ? 'user' : 'guest',
+      action: 'grievance.public_created',
+      entityType: 'grievance',
+      entityId: grievance.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { ticketNumber, category: grievance.category, priority: grievance.priority }
+    });
+
+    res.status(201).json({
+      success: true,
+      ticketNumber,
+      message: 'Grievance submitted successfully. An official acknowledgment email has been dispatched.'
+    });
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to register grievance');
+  }
+});
+
+app.get('/api/public/grievances/track/:ticketNumber', async (req, res) => {
+  try {
+    await consumeActionBudget(req as any, 'public_grievance_track', 30, 60);
+    const ticketNumber = sanitizePortalText(req.params.ticketNumber.trim(), 50);
+    const grievance = await prisma.grievanceTicket.findUnique({
+      where: { ticketNumber },
+      select: {
+        ticketNumber: true,
+        category: true,
+        subject: true,
+        description: true,
+        status: true,
+        priority: true,
+        slaDueAt: true,
+        createdAt: true,
+        resolvedAt: true,
+        resolutionRemarks: true,
+        enterpriseName: true,
+        referenceNumber: true
+      }
+    });
+
+    if (!grievance) {
+      return res.status(404).json({ message: 'No grievance record found with this reference ID.' });
+    }
+
+    res.json(maskSensitive(grievance));
+  } catch (err: any) {
+    handleSecureRouteError(res, err, 'Unable to track grievance');
+  }
+});
+
+// --- Secure Grievances Management ---
 app.get('/api/grievances', authenticate, async (req: AuthRequest, res) => {
   try {
     const where = req.user?.role === 'admin' ? {} : { userId: Number(req.user?.id) };
-    const grievances = await prisma.grievanceTicket.findMany({ where, orderBy: { updatedAt: 'desc' } });
+    const grievances = await prisma.grievanceTicket.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+        assignedAdmin: { select: { id: true, name: true, email: true } },
+        comments: {
+          include: { author: { select: { id: true, name: true, email: true, role: true } } },
+          orderBy: { createdAt: 'asc' }
+        }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
     res.json(maskSensitive(grievances));
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to load grievances');
@@ -6468,8 +6646,10 @@ app.post('/api/grievances', authenticate, async (req: AuthRequest, res) => {
     await consumeActionBudget(req, 'grievances', 5, 3600);
     const payload = parseSchema(grievanceCreateSchema, req.body);
     await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
+    const ticketNumber = `JSG-GRV-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`;
     const grievance = await prisma.grievanceTicket.create({
       data: {
+        ticketNumber,
         userId: Number(req.user?.id),
         category: sanitizePortalText(payload.category, 80),
         subject: sanitizePortalText(payload.subject, 160),
@@ -6493,7 +6673,15 @@ app.get('/api/grievances/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const grievance = await prisma.grievanceTicket.findUnique({
       where: { id: Number(req.params.id) },
-      include: { comments: { orderBy: { createdAt: 'asc' } }, attachments: true }
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+        assignedAdmin: { select: { id: true, name: true, email: true } },
+        comments: {
+          include: { author: { select: { id: true, name: true, email: true, role: true } } },
+          orderBy: { createdAt: 'asc' }
+        },
+        attachments: true
+      }
     });
     if (!grievance || !canAccessGrievance(grievance, req.user!)) return res.status(404).json({ message: 'Grievance not found' });
     const response = req.user?.role === 'admin' ? grievance : { ...grievance, comments: grievance.comments.filter(comment => !comment.internal) };
@@ -6507,18 +6695,44 @@ app.post('/api/grievances/:id/comments', authenticate, async (req: AuthRequest, 
   try {
     await consumeActionBudget(req, 'grievance_comments', 15, 60);
     const payload = parseSchema(grievanceCommentSchema, req.body);
-    const grievance = await prisma.grievanceTicket.findUnique({ where: { id: Number(req.params.id) } });
+    const grievance = await prisma.grievanceTicket.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { user: { select: { name: true, email: true } } }
+    });
     if (!grievance || !canAccessGrievance(grievance, req.user!)) return res.status(404).json({ message: 'Grievance not found' });
     if (payload.internal && req.user?.role !== 'admin') return res.status(403).json({ message: 'Only admins can post internal notes' });
     await assertFileAssetsAccessible(payload.fileAssetIds || [], req.user!);
     const comment = await prisma.grievanceComment.create({
-      data: { grievanceId: grievance.id, authorId: Number(req.user?.id), content: sanitizePortalText(payload.content, 3000), internal: Boolean(payload.internal) }
+      data: { grievanceId: grievance.id, authorId: Number(req.user?.id), content: sanitizePortalText(payload.content, 3000), internal: Boolean(payload.internal) },
+      include: { author: { select: { id: true, name: true, email: true, role: true } } }
     });
     if ((payload.fileAssetIds || []).length > 0) {
       await prisma.grievanceAttachment.createMany({
         data: (payload.fileAssetIds || []).map(fileAssetId => ({ grievanceId: grievance.id, fileAssetId, uploadedById: Number(req.user?.id) }))
       });
     }
+
+    // If admin replies publicly, dispatch email to complainant
+    if (!payload.internal && req.user?.role === 'admin') {
+      const recipientEmail = grievance.complainantEmail || grievance.user?.email;
+      const recipientName = grievance.complainantName || grievance.user?.name || 'Citizen / Stakeholder';
+      if (recipientEmail) {
+        const ticketRef = grievance.ticketNumber || `GRV-${grievance.id}`;
+        void notificationService.sendDirectEmail(recipientEmail, recipientName, {
+          subject: `[${ticketRef}] Official Update on your Grievance`,
+          html: `
+            <div style="margin-bottom: 20px;">
+              <p style="font-size: 15px; line-height: 1.6; color: #1e293b;">An official update has been added to your grievance by the Portal Administration:</p>
+              <div style="background-color: #f8fafc; border-left: 4px solid #12335f; padding: 16px; border-radius: 4px; margin: 16px 0;">
+                <p style="margin: 0; color: #1e293b; font-size: 14px; line-height: 1.6; white-space: pre-line;">${sanitizePortalText(payload.content, 3000)}</p>
+              </div>
+              <p style="font-size: 12px; color: #64748b;">Ticket Reference: <strong>${ticketRef}</strong> | Subject: ${grievance.subject}</p>
+            </div>
+          `
+        }).catch(err => logger.warn({ err, recipientEmail }, 'Failed to send comment email to complainant'));
+      }
+    }
+
     await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.comment_added', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'] });
     res.status(201).json(maskSensitive(comment));
   } catch (err: any) {
@@ -6535,7 +6749,9 @@ app.put('/api/grievances/:id/assign', authenticate, authorizeAdmin, async (req: 
       where: { id: Number(req.params.id) },
       data: { assignedAdminId: admin.id, status: 'assigned' }
     });
-    await createNotificationSafe({ userId: grievance.userId, title: 'Grievance assigned', message: `Your grievance ${grievance.subject} has been assigned for review.`, type: 'grievance_assigned' });
+    if (grievance.userId) {
+      await createNotificationSafe({ userId: grievance.userId, title: 'Grievance assigned', message: `Your grievance ${grievance.subject} has been assigned for review.`, type: 'grievance_assigned' });
+    }
     await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.assigned', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { assignedAdminId: admin.id, remarks: payload.remarks } });
     res.json(maskSensitive(grievance));
   } catch (err: any) {
@@ -6547,18 +6763,90 @@ app.put('/api/grievances/:id/status', authenticate, authorizeAdmin, async (req: 
   try {
     const payload = parseSchema(grievanceStatusSchema, req.body);
     if (['resolved', 'closed', 'rejected'].includes(payload.status) && !payload.remarks) {
-      return res.status(400).json({ message: 'Admin remarks are required' });
+      return res.status(400).json({ message: 'Official resolution remarks are required when resolving, closing, or rejecting a grievance.' });
     }
+    const existing = await prisma.grievanceTicket.findUnique({
+      where: { id: Number(req.params.id) },
+      include: { user: { select: { name: true, email: true } } }
+    });
+    if (!existing) return res.status(404).json({ message: 'Grievance not found' });
+
     const grievance = await prisma.grievanceTicket.update({
       where: { id: Number(req.params.id) },
       data: {
         status: payload.status,
-        resolutionRemarks: payload.remarks ? sanitizePortalText(payload.remarks, 1000) : undefined,
+        resolutionRemarks: payload.remarks ? sanitizePortalText(payload.remarks, 2000) : undefined,
         resolvedAt: ['resolved', 'closed', 'rejected'].includes(payload.status) ? new Date() : undefined
+      },
+      include: {
+        user: { select: { name: true, email: true } },
+        assignedAdmin: { select: { name: true, email: true } },
+        comments: {
+          include: { author: { select: { id: true, name: true, email: true, role: true } } },
+          orderBy: { createdAt: 'asc' }
+        }
       }
     });
-    await createNotificationSafe({ userId: grievance.userId, title: 'Grievance updated', message: `Your grievance ${grievance.subject} is now ${payload.status.replace(/_/g, ' ')}.`, type: 'grievance_status_updated' });
-    await auditLog({ actorUserId: Number(req.user?.id), actorRole: req.user?.role, action: 'grievance.resolved', entityType: 'grievance', entityId: grievance.id, ipAddress: req.ip, userAgent: req.headers['user-agent'], metadata: { status: payload.status } });
+
+    if (grievance.userId) {
+      await createNotificationSafe({
+        userId: grievance.userId,
+        title: `Grievance #${grievance.ticketNumber || grievance.id} Status: ${payload.status.toUpperCase()}`,
+        message: `Your grievance "${grievance.subject}" status is now ${payload.status.replace(/_/g, ' ')}. Remarks: ${payload.remarks || 'No remarks provided.'}`,
+        type: 'grievance_status_updated'
+      });
+    }
+
+    // Dispatch official resolution and reply email to registered or entered complainant email
+    const recipientEmail = grievance.complainantEmail || grievance.user?.email;
+    const recipientName = grievance.complainantName || grievance.user?.name || 'Citizen / Stakeholder';
+
+    if (recipientEmail) {
+      const statusLabel = payload.status.replace(/_/g, ' ').toUpperCase();
+      const ticketRef = grievance.ticketNumber || `GRV-${grievance.id}`;
+      const emailSubject = `[${ticketRef}] Official Grievance Resolution & Reply: ${statusLabel}`;
+      const emailHtml = `
+        <div style="margin-bottom: 20px;">
+          <p style="font-size: 15px; line-height: 1.6; color: #1e293b;">
+            This is an official communication from the District MSME Grievance Redressal Cell regarding your registered grievance.
+          </p>
+          <div style="background-color: #f1f5f9; border-left: 4px solid #0284c7; padding: 16px; border-radius: 4px; margin: 16px 0;">
+            <p style="margin: 0 0 8px; font-weight: 600; color: #0f172a;">Ticket Reference: <span style="font-family: monospace; color: #0284c7; font-size: 15px;">${ticketRef}</span></p>
+            <p style="margin: 0 0 8px; color: #334155;"><strong>Category:</strong> ${grievance.category}</p>
+            <p style="margin: 0 0 8px; color: #334155;"><strong>Subject:</strong> ${grievance.subject}</p>
+            <p style="margin: 0; color: #334155;"><strong>Updated Status:</strong> <span style="display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 12px; font-weight: 800; background: #e0f2fe; color: #0369a1;">${statusLabel}</span></p>
+          </div>
+
+          <div style="background-color: #ffffff; border: 1px solid #cbd5e1; padding: 18px; border-radius: 6px; margin: 18px 0;">
+            <h4 style="margin: 0 0 10px; color: #0f172a; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Official Resolution &amp; Admin Reply Remarks:</h4>
+            <p style="margin: 0; color: #1e293b; line-height: 1.7; font-size: 14px; white-space: pre-line;">${payload.remarks || 'Your grievance has been processed and addressed by the portal administration.'}</p>
+          </div>
+
+          <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
+            If you have further questions or require additional support, please quote your reference <strong>${ticketRef}</strong> when communicating with the portal support desk.
+          </p>
+        </div>
+      `;
+
+      void notificationService.sendDirectEmail(recipientEmail, recipientName, {
+        subject: emailSubject,
+        html: emailHtml
+      }).catch(err => {
+        logger.warn({ err, recipientEmail }, 'Failed to send resolution email to complainant');
+      });
+    }
+
+    await auditLog({
+      actorUserId: Number(req.user?.id),
+      actorRole: req.user?.role,
+      action: 'grievance.resolved',
+      entityType: 'grievance',
+      entityId: grievance.id,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+      metadata: { status: payload.status, remarks: payload.remarks, emailDispatchedTo: recipientEmail }
+    });
+
     res.json(maskSensitive(grievance));
   } catch (err: any) {
     handleSecureRouteError(res, err, 'Unable to update grievance');

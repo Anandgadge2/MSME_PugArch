@@ -366,5 +366,91 @@ export const notificationService = {
     } catch (error) {
       logger.warn({ error, type: opts.type }, 'Failed to notify admins with email');
     }
+  },
+
+  /** Send direct email to an arbitrary email address (e.g. citizen / unregistered grievance complainant) */
+  async sendDirectEmail(
+    toEmail: string,
+    recipientName: string,
+    opts: {
+      subject: string;
+      html: string;
+      attachments?: Array<{
+        filename: string;
+        content?: Buffer | string;
+        path?: string;
+        contentType?: string;
+      }>;
+    }
+  ) {
+    try {
+      if (!toEmail || !toEmail.includes('@')) return null;
+
+      const companyId = 1;
+      let portalName = 'JsgSmile Portal';
+      if (db.company) {
+        const company = await db.company.findUnique({
+          where: { id: companyId },
+          select: { portalDisplayName: true, name: true }
+        }).catch(() => null);
+        portalName = company?.portalDisplayName || company?.name || portalName;
+      }
+
+      const settings = db.companySetting
+        ? await db.companySetting.findUnique({
+            where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+          }).catch(() => null)
+        : (db.globalSetting
+            ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+            : null);
+      const val = settings?.value || {};
+      const fromEmail = val.fromEmail || env.SMTP_USER;
+      const fromName = val.fromName || portalName;
+
+      const emailEnabled = val.emailEnabled ?? Boolean(env.SMTP_USER && env.SMTP_PASS);
+      if (!emailEnabled) {
+        logger.warn({ toEmail }, `Email sending is disabled for company ${companyId}. Direct Email: ${opts.subject}`);
+        return null;
+      }
+
+      const finalHtml = `
+        <div style="font-family: 'Noto Sans', Arial, sans-serif; max-width: 640px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="background: #0c2340; padding: 24px; text-align: center; border-bottom: 4px solid #c5a556;">
+            <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${portalName}</h1>
+            <p style="color: #c5a556; font-size: 12px; margin: 6px 0 0; letter-spacing: 1px; font-weight: 600; text-transform: uppercase;">Grievance Redressal &amp; Citizen Services</p>
+          </div>
+          <div style="padding: 32px 24px; color: #1e293b; line-height: 1.6; font-size: 15px;">
+            <p style="margin-top: 0; font-weight: 600; color: #0c2340;">Dear ${recipientName || 'Citizen / Stakeholder'},</p>
+            ${opts.html}
+          </div>
+          <div style="background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
+            <p style="margin: 0; font-weight: 500;">This is an official automated notification from the ${portalName} Grievance Cell.</p>
+            <p style="margin: 4px 0 0;">Please do not reply directly to this automated email.</p>
+            <p style="margin: 12px 0 0; font-size: 11px; opacity: 0.8;">© ${new Date().getFullYear()} ${portalName}. All rights reserved.</p>
+          </div>
+        </div>
+      `;
+
+      const transporter = await getTransporterForCompany(companyId);
+      const hasAuth = val.username || (env.SMTP_USER && env.SMTP_PASS);
+      if (!hasAuth) {
+        logger.warn({ toEmail }, 'No SMTP credentials configured; direct email not sent');
+        return null;
+      }
+
+      const info = await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: toEmail,
+        subject: opts.subject,
+        html: finalHtml,
+        attachments: opts.attachments
+      });
+
+      logger.info({ toEmail, subject: opts.subject, messageId: info?.messageId }, 'Direct email sent successfully');
+      return info;
+    } catch (error) {
+      logger.warn({ error, toEmail }, 'Failed to send direct email');
+      return null;
+    }
   }
 };

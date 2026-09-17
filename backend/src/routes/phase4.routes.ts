@@ -1432,7 +1432,7 @@ const rateContractConfigSchema = z.object({
     supplierName: z.string().trim().max(180).optional().nullable()
   })).min(1),
   itemRateSchedule: z.array(rateContractItemSchema).min(1),
-  priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']),
+  priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']).optional().default('FIXED_PRICE'),
   callOffOrderAllowed: z.coerce.boolean(),
   maximumOrderQuantityPerCallOff: z.coerce.number().positive().optional().nullable(),
   minimumOrderQuantity: z.coerce.number().nonnegative().default(0),
@@ -1442,7 +1442,7 @@ const rateContractConfigSchema = z.object({
   securityDepositAmount: z.coerce.number().nonnegative().default(0),
   pbgRequired: z.coerce.boolean().default(false),
   pbgAmount: z.coerce.number().nonnegative().default(0),
-  approvalWorkflow: z.string().trim().min(2).max(200),
+  approvalWorkflow: z.string().trim().max(200).optional().default('Finance + Procurement'),
   contractDocument: z.object({
     fileAssetId: z.coerce.number().int().positive().optional().nullable(),
     fileName: z.string().trim().max(2000).optional().nullable()
@@ -7551,8 +7551,58 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
     db.purchaseOrder.findMany({
       where,
       include: {
-        buyer: { select: { id: true, name: true, email: true } },
-        seller: { select: { id: true, name: true, email: true } },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            role: true,
+            registrationDetails: true,
+            organizationId: true,
+            organization: {
+              select: {
+                id: true,
+                organizationName: true,
+                gstin: true,
+                panNumber: true,
+                address: true,
+                city: true,
+                state: true,
+                pincode: true,
+                profile: { select: { logoUrl: true } },
+                organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+              }
+            },
+            buyerProfile: true
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            role: true,
+            registrationDetails: true,
+            organizationId: true,
+            organization: {
+              select: {
+                id: true,
+                organizationName: true,
+                gstin: true,
+                panNumber: true,
+                address: true,
+                city: true,
+                state: true,
+                pincode: true,
+                profile: { select: { logoUrl: true } },
+                organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+              }
+            },
+            sellerProfile: true
+          }
+        },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
@@ -7567,7 +7617,67 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
-  const po = await db.purchaseOrder.findUnique({ where: { id }, include: { items: { include: { product: { select: { name: true, unitOfMeasure: true } } } }, invoices: true, deliveryTrackings: true, inspectionReports: true } });
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: {
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          role: true,
+          registrationDetails: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              address: true,
+              city: true,
+              state: true,
+              pincode: true,
+              profile: { select: { logoUrl: true } },
+              organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+            }
+          },
+          buyerProfile: true
+        }
+      },
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          role: true,
+          registrationDetails: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              address: true,
+              city: true,
+              state: true,
+              pincode: true,
+              profile: { select: { logoUrl: true } },
+              organizationLogoFile: { select: { id: true, url: true, fileUrl: true } }
+            }
+          },
+          sellerProfile: true
+        }
+      },
+      items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
+      invoices: true,
+      deliveryTrackings: true,
+      inspectionReports: true
+    }
+  });
   
   let isAllowed = false;
   if (po) {

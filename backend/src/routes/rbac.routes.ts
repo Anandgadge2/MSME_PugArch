@@ -15,7 +15,7 @@ import { generateAlphanumericUserId } from '../utils/userId.js';
 import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 
 const router = Router();
-router.use(authenticate);
+router.use('/rbac', authenticate);
 
 const roleScopeSchema = z.enum(['PLATFORM', 'DISTRICT', 'ORGANIZATION']);
 const roleStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']);

@@ -1356,23 +1356,35 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
     const invNumber = `INV-${po?.poNumber || `PO-${delivery.purchaseOrderId}`}`;
     const dateStr = formatDate(new Date());
 
+    const sellerOrg = (po?.seller as any)?.organization;
+    const sellerReg = (po?.seller as any)?.registrationDetails || {};
+    const sellerProfile = sellerOrg?.profile || (po?.seller as any)?.organizationProfile || (po?.seller as any)?.sellerProfile;
+    const sellerLogo = sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : undefined);
+    const sellerSignature = sellerReg?.signatureUrl || undefined;
+    const sellerStamp = sellerReg?.stampUrl || undefined;
+    const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (po?.seller as any)?.organizationName || po?.seller?.name || 'N/A';
+    const buyerOrg = (po?.buyer as any)?.organization;
+    const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (po?.buyer as any)?.organizationName || po?.buyer?.name || 'N/A';
+
     const config: DocumentConfig = {
         documentTitle: 'Official Tax Invoice',
         documentNumber: invNumber,
         dateStr,
         status: 'OFFICIAL INVOICE',
+        issuerName: sellerName,
+        issuerLogo: sellerLogo,
         parties: [
             {
                 title: 'Seller / Supplier Organization',
-                name: po?.seller?.name || 'Seller Organization',
+                name: sellerName,
                 email: po?.seller?.email,
                 details: [`Delivery Tracking: DLV-${delivery.id}`]
             },
             {
                 title: 'Buyer / Billed To',
-                name: po?.buyer?.name || 'Buyer Organization',
+                name: buyerName,
                 email: po?.buyer?.email,
-                details: [`Purchase Order: ${po?.poNumber || ''}`]
+                details: [`Purchase Order: ${po?.poNumber || 'N/A'}`]
             }
         ],
         infoGrid: {
@@ -1393,11 +1405,17 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
         notes: [
             '1. Computer-generated Tax Invoice produced for MSME Procurement Dispatch.',
             '2. Payment release is governed by portal escrow settlement upon buyer acceptance & GRN verification.'
-        ]
+        ],
+        signatures: {
+            sellerTitle: 'Seller Signature & Stamp',
+            sellerName: po?.seller?.name || 'Authorized Signatory',
+            sellerSignatureUrl: sellerSignature,
+            sellerStampUrl: sellerStamp,
+        }
     };
 
     const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
+    const doc = await engine.generate(config);
     return { doc, filename: `${invNumber}-TaxInvoice.pdf`, invNumber, grandTotal };
 };
 
@@ -1531,9 +1549,35 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
         const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || po?.amount || 0);
 
-        const sellerName = fetchedInvoice?.seller?.name || po?.seller?.name || 'DNYANESHWAR DHOMAN PATIL';
-        const sellerEmail = fetchedInvoice?.seller?.email || po?.seller?.email || 'kolhesnehal35@gmail.com';
-        const buyerName = fetchedInvoice?.buyer?.name || po?.buyer?.name || 'PROAID';
+        const sellerUser = fetchedInvoice?.seller || po?.seller;
+        const sellerOrg = (sellerUser as any)?.organization || (sellerUser as any)?.sellerProfile?.organization;
+        const sellerProfile = sellerOrg?.profile || (sellerUser as any)?.organizationProfile || (sellerUser as any)?.sellerProfile;
+        const sellerReg = (sellerUser as any)?.registrationDetails || {};
+
+        const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (sellerUser as any)?.organizationName || sellerUser?.name || 'N/A';
+        const sellerEmail = sellerUser?.email || sellerReg?.email || undefined;
+        const sellerPhone = sellerUser?.mobile || sellerReg?.phone || sellerReg?.mobile || undefined;
+        const sellerAddress = sellerOrg?.address || sellerProfile?.address || sellerReg?.address || (sellerUser as any)?.address || 'N/A';
+        const sellerGstin = sellerOrg?.gstin || sellerProfile?.gstin || sellerReg?.gstin || undefined;
+        const sellerCin = sellerOrg?.cin || sellerProfile?.cin || sellerReg?.cin || undefined;
+
+        const resolvedSellerLogo = logoUrl || sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : null);
+        const resolvedSellerStamp = stampUrl || sellerReg?.stampUrl || null;
+        const resolvedSellerSig = signatureUrl || sellerReg?.signatureUrl || null;
+
+        const buyerUser = fetchedInvoice?.buyer || po?.buyer;
+        const buyerOrg = (buyerUser as any)?.organization || (buyerUser as any)?.buyerProfile?.organization;
+        const buyerProfile = buyerOrg?.profile || (buyerUser as any)?.organizationProfile || (buyerUser as any)?.buyerProfile;
+        const buyerReg = (buyerUser as any)?.registrationDetails || {};
+
+        const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (buyerUser as any)?.organizationName || buyerUser?.name || 'N/A';
+        const buyerAddress = po?.deliveryAddress || buyerOrg?.address || buyerProfile?.address || buyerReg?.address || (buyerUser as any)?.address || 'N/A';
+        const buyerPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerReg?.pan || undefined;
+        const buyerGstin = buyerOrg?.gstin || buyerProfile?.gstin || buyerReg?.gstin || undefined;
+
+        const bankName = sellerReg?.bankName || sellerProfile?.bankName || 'N/A';
+        const accountNo = sellerReg?.accountNumber || sellerProfile?.accountNumber || sellerReg?.accountNo || 'N/A';
+        const ifscCode = sellerReg?.ifscCode || sellerProfile?.ifscCode || 'N/A';
 
         const rawItems: any[] = po?.items || [];
         const items: TaxInvoiceItem[] = rawItems.length > 0
@@ -1571,27 +1615,27 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             copyType,
             invoiceNumber: invNo,
             dateStr,
-            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : (sellerOrg?.state || 'State Registered'),
             seller: {
                 name: sellerName,
-                address: 'block no 78, Snehal Kolhe, at girls hostel SSBT COET Jalgaon, area complex',
-                gstin: '27BMOPP7706E2Z1',
-                phone: '9326546128',
+                address: sellerAddress,
+                gstin: sellerGstin,
+                phone: sellerPhone,
                 email: sellerEmail,
-                cin: 'U62013MH2023PTC416118',
-                logoUrl,
-                stampUrl,
-                signatureUrl
+                cin: sellerCin,
+                logoUrl: resolvedSellerLogo,
+                stampUrl: resolvedSellerStamp,
+                signatureUrl: resolvedSellerSig
             },
             billTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201. India',
-                pan: 'PFGPK6340B',
-                gstin: '27AALCS2063D1ZG'
+                address: buyerAddress,
+                pan: buyerPan,
+                gstin: buyerGstin
             },
             shipTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'ganesh complex jharsuguda, odisa, Jharsuguda, Odisha. 345678. INDIA'
+                address: buyerAddress
             },
             items,
             subtotal,
@@ -1603,9 +1647,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             igstAmount,
             totalAmount: grandTotal,
             bankDetails: {
-                bankName: 'State Bank of India',
-                accountNo: '39820194812',
-                ifscCode: 'SBIN0001892',
+                bankName,
+                accountNo,
+                ifscCode,
                 accountName: sellerName
             }
         };

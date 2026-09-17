@@ -852,11 +852,11 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       itemRateSchedule,
       deliverySla: base.deliverySla || draft.terms.deliveryTerms,
       penaltyClause: base.penaltyClause || draft.terms.penaltyClause,
-      securityDepositRequired: base.securityDepositRequired || draft.terms.emdRequired,
-      securityDepositAmount: base.securityDepositAmount || draft.terms.securityDeposit || draft.terms.emdAmount || 0,
-      pbgRequired: base.pbgRequired || draft.terms.pbgRequired,
-      pbgAmount: base.pbgAmount || draft.terms.securityDeposit || 0,
-      approvalWorkflow: base.approvalWorkflow || draft.approval.workflow,
+      securityDepositRequired: false,
+      securityDepositAmount: 0,
+      pbgRequired: false,
+      pbgAmount: 0,
+      approvalWorkflow: base.approvalWorkflow || draft.approval.workflow || 'Finance + Procurement',
     },
   };
 };
@@ -934,7 +934,7 @@ const stepLibrary = {
   items: { id: 'items', label: 'Item / Service / BOQ', description: 'Quantities, specs and BOQ items', icon: Package },
   vendors: { id: 'vendors', label: 'Suppliers', description: 'MSME reach, invite selection pool', icon: Users },
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
-  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: BadgeCheck },
+  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
   evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
@@ -1702,8 +1702,6 @@ export default function CreateProcurementPage() {
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
         if (!contract.deliverySla.trim()) return false;
         if (!contract.penaltyClause.trim()) return false;
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
-        if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -2017,14 +2015,6 @@ export default function CreateProcurementPage() {
         }
         if (!contract.penaltyClause.trim()) {
           toast.error('Penalty clause is required.');
-          return false;
-        }
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
-          toast.error('Security deposit amount is required.');
-          return false;
-        }
-        if (contract.pbgRequired && contract.pbgAmount <= 0) {
-          toast.error('PBG amount is required.');
           return false;
         }
       }
@@ -5892,6 +5882,55 @@ function ScheduleStepForm({
     toast.success('Auction terms document removed');
   };
 
+  const [uploadingRateContractDoc, setUploadingRateContractDoc] = useState(false);
+
+  const handleRateContractDocUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds maximum limit of 10MB.');
+      return;
+    }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      toast.error('Unsupported file format. Please upload PDF, DOC, DOCX, XLS, XLSX, JPG, or PNG.');
+      return;
+    }
+
+    setUploadingRateContractDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'rate_contract_document');
+
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData.fileAsset || resData;
+      const fileId = Number(resData.fileId || asset.id || asset.fileAssetId || 0);
+
+      updateRateContract('contractDocument', {
+        fileAssetId: fileId || null,
+        fileName: asset.originalName || asset.fileName || file.name,
+      });
+      toast.success('Rate contract document uploaded successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload document');
+    } finally {
+      setUploadingRateContractDoc(false);
+    }
+  };
+
+  const handleRemoveRateContractDoc = () => {
+    updateRateContract('contractDocument', {
+      fileAssetId: null,
+      fileName: '',
+    });
+    toast.success('Rate contract document removed');
+  };
+
   // Warnings collection
   const warnings: string[] = [];
   if (draft.schedule.submissionDate && draft.schedule.submissionStartDate) {
@@ -6339,57 +6378,155 @@ function ScheduleStepForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Price Variation Clause" required>
-              <select value={draft.rateContractConfig.priceVariationClause} onChange={e => updateRateContract('priceVariationClause', e.target.value as RateContractConfig['priceVariationClause'])} className={inputClass}>
-                <option value="FIXED_PRICE">Fixed Price</option>
-                <option value="INDEX_BASED_VARIATION">Index-based Variation</option>
-                <option value="MUTUALLY_AGREED_REVISION">Mutually Agreed Revision</option>
-              </select>
-            </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.callOffOrderAllowed} onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Call-off Order Allowed?</span>
-            </label>
-            {draft.rateContractConfig.callOffOrderAllowed && (
-              <>
-                <Field label="Maximum Order Quantity Per Call-off">
-                  <input type="number" min={0} value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''} onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))} className={inputClass} />
-                </Field>
-                <Field label="Minimum Order Quantity">
-                  <input type="number" min={0} value={draft.rateContractConfig.minimumOrderQuantity || ''} onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))} className={inputClass} />
-                </Field>
-              </>
-            )}
             <Field label="Delivery SLA" required>
               <input value={draft.rateContractConfig.deliverySla} onChange={e => updateRateContract('deliverySla', e.target.value)} className={inputClass} />
             </Field>
             <Field label="Penalty Clause" required>
               <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
             </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.securityDepositRequired} onChange={e => updateRateContract('securityDepositRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Security Deposit Required?</span>
-            </label>
-            {draft.rateContractConfig.securityDepositRequired && (
-              <Field label="Security Deposit Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.securityDepositAmount || ''} onChange={e => updateRateContract('securityDepositAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.pbgRequired} onChange={e => updateRateContract('pbgRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Performance Bank Guarantee Required?</span>
-            </label>
-            {draft.rateContractConfig.pbgRequired && (
-              <Field label="PBG Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.pbgAmount || ''} onChange={e => updateRateContract('pbgAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
-            <Field label="Approval Workflow" required>
-              <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Document Upload">
-              <input value={draft.rateContractConfig.contractDocument.fileName} onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })} className={inputClass} placeholder="Document name or uploaded file reference" />
-            </Field>
+
+            <div className="sm:col-span-2 space-y-3">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+                <input type="checkbox" checked={draft.rateContractConfig.callOffOrderAllowed} onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
+                <span>Call-off Order Allowed?</span>
+              </label>
+              {draft.rateContractConfig.callOffOrderAllowed && (
+                <div className="grid gap-4 sm:grid-cols-2 pt-1">
+                  <Field label="Maximum Order Quantity Per Call-off">
+                    <input type="number" min={0} value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''} onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))} className={inputClass} />
+                  </Field>
+                  <Field label="Minimum Order Quantity">
+                    <input type="number" min={0} value={draft.rateContractConfig.minimumOrderQuantity || ''} onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))} className={inputClass} />
+                  </Field>
+                </div>
+              )}
+            </div>
+
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                Contract Document Upload
+              </label>
+              {draft.rateContractConfig.contractDocument?.fileName ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#12335f] border border-blue-100">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-900 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
+                        {draft.rateContractConfig.contractDocument.fileName}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-500">
+                        Rate Contract Reference Document
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {draft.rateContractConfig.contractDocument.fileAssetId && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank')}
+                          className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                          View
+                        </Button>
+                        <a
+                          href={`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
+                          download={draft.rateContractConfig.contractDocument.fileName}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                            Download
+                          </Button>
+                        </a>
+                      </>
+                    )}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleRateContractDocUpload(file);
+                        }}
+                        disabled={uploadingRateContractDoc}
+                      />
+                      <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
+                        {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                        Replace
+                      </span>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveRateContractDoc}
+                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative">
+                  <label
+                    onDragOver={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file) handleRateContractDocUpload(file);
+                    }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
+                      uploadingRateContractDoc && "opacity-50 pointer-events-none"
+                    )}
+                  >
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleRateContractDocUpload(file);
+                      }}
+                      disabled={uploadingRateContractDoc}
+                    />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
+                      {uploadingRateContractDoc ? (
+                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
+                      ) : (
+                        <Upload className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">
+                        {uploadingRateContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

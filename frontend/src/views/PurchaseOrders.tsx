@@ -732,48 +732,95 @@ export default function PurchaseOrders() {
 
     const subtotal = tableData.reduce((sum, row) => sum + Number(row[4] || 0), 0) || totalValue;
 
+    const seller = (order.seller as any) || {};
+    const buyer = (order.buyer as any) || {};
+    const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+    const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
+
+    const buyerName =
+      buyer.organization?.organizationName ||
+      buyer.buyerProfile?.organizationName ||
+      buyer.buyerProfile?.companyName ||
+      buyerReg.companyName ||
+      buyer.name ||
+      'N/A';
+
+    const sellerName =
+      seller.organization?.organizationName ||
+      seller.sellerProfile?.businessName ||
+      seller.sellerProfile?.companyName ||
+      sellerReg.companyName ||
+      seller.name ||
+      'N/A';
+
+    const sellerLogo =
+      seller.organization?.profile?.logoUrl ||
+      sellerReg.logoUrl ||
+      seller.organization?.organizationLogoFile?.url ||
+      seller.organization?.organizationLogoFile?.fileUrl ||
+      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/download` : null);
+
+    const buyerLogo =
+      buyer.organization?.profile?.logoUrl ||
+      buyerReg.logoUrl ||
+      buyer.organization?.organizationLogoFile?.url ||
+      buyer.organization?.organizationLogoFile?.fileUrl ||
+      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/download` : null);
+
     const config: DocumentConfig = {
-      documentTitle: 'Purchase Order / Supplier Invoice Copy',
+      documentTitle: 'PURCHASE ORDER',
       documentNumber: order.poNumber || `PO-${order.id}`,
       dateStr: formatTimestamp(new Date()),
       status: readableStatus(order.status),
+      issuerName: buyerName !== 'N/A' ? buyerName : 'Enterprise Procurement',
+      issuerSubtitle: 'Official Purchase Order Copy',
+      issuerLogo: buyerLogo || sellerLogo,
+      sellerSignatureUrl: sellerReg.signatureUrl || null,
+      sellerStampUrl: sellerReg.stampUrl || null,
+      buyerSignatureUrl: buyerReg.signatureUrl || null,
+      buyerStampUrl: buyerReg.stampUrl || null,
       parties: [
         {
           title: 'Buyer / Requesting Organization',
-          name: order.buyer?.name || 'MSME Portal Buyer',
-          email: order.buyer?.email || undefined,
-          address: order.deliveryAddress || 'Ship To: As per purchase order',
+          name: buyerName,
+          email: buyer.email || buyerReg.email || 'N/A',
+          phone: buyer.mobile || buyerReg.mobile || 'N/A',
+          gstin: buyer.organization?.gstin || buyerReg.gstin || 'N/A',
+          address: order.deliveryAddress || buyer.organization?.address || buyerReg.address || 'N/A',
         },
         {
           title: 'Seller / Supplier Organization',
-          name: order.seller?.name || 'MSME Portal Seller',
-          email: order.seller?.email || undefined,
-          details: [`Seller ID: ${order.sellerId || '-'}`]
+          name: sellerName,
+          email: seller.email || sellerReg.email || 'N/A',
+          phone: seller.mobile || sellerReg.mobile || 'N/A',
+          gstin: seller.organization?.gstin || sellerReg.gstin || 'N/A',
+          address: seller.organization?.address || sellerReg.address || 'N/A',
+          details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
         }
       ],
       infoGrid: {
-        'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'As per portal workflow',
+        'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Pay on Invoice',
         'Delivery Type': order.deliveryType ? readableStatus(order.deliveryType) : 'Standard delivery',
         'Acknowledged At': order.acceptedAt ? formatTimestamp(order.acceptedAt) : 'Pending / Not recorded',
         'PO Reference': `ID ${order.id}`,
         'PO Title': order.title || 'N/A',
         'Expected Delivery': formatDate(order.expectedDelivery)
       },
-      tableHeaders: ['Sr.', 'Description of Goods / Services', 'Qty', 'Rate', 'Line Total'],
+      tableHeaders: ['#', 'Description of Goods / Services', 'Qty', 'Rate', 'Line Total'],
       tableData: tableData.map(row => [row[0], row[1], row[2], moneyPdf(row[3]), moneyPdf(row[4])]),
       financials: {
         subtotal: subtotal,
         grandTotal: totalValue || subtotal
       },
       notes: [
-        '1. This document is generated from the JSGSMILE MSME procurement workflow and must be read with linked GRN, invoice and payment records.',
+        '1. This document is generated from the MSME enterprise procurement workflow and must be read with linked GRN, invoice and payment records.',
         '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
         '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
       ]
     };
 
     const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
+    const doc = await engine.generate(config);
     
     const filename = `${order.poNumber || `PO-${order.id}`}-procurement-invoice.pdf`;
     if (mode === 'print') {

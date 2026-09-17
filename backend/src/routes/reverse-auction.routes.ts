@@ -199,16 +199,59 @@ const withEffectiveStatus = async (auction: any) => {
   const start = auction.startTime ? new Date(auction.startTime).getTime() : NaN;
   const end = auction.endTime ? new Date(auction.endTime).getTime() : NaN;
   let effective = current;
+  let evaluationPending = false;
+
+  // Check if qualification is required and pending
+  const hasPreBidStage = Boolean(
+    auction.preBidStage ||
+    auction.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+    auction.visibilityMode === 'TECHNICALLY_QUALIFIED_ONLY' ||
+    auction.linkedBidId ||
+    auction.linkedRequirementId
+  );
+
+  if (hasPreBidStage && ['SCHEDULED', 'LIVE', 'ACTIVE'].includes(current)) {
+    const [qualifiedCount, pendingSubmissions] = await Promise.all([
+      db.auctionParticipant.count({
+        where: {
+          auctionId: auction.id,
+          status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+        }
+      }).catch(() => 0),
+      db.auctionParticipant.count({
+        where: {
+          auctionId: auction.id,
+          qualificationStatus: 'SUBMITTED'
+        }
+      }).catch(() => 0)
+    ]);
+
+    const minimumRequired = Math.max(1, Number(auction.minimumQualifiedBidders) || 1);
+    // If submissions are waiting for buyer review, or qualified count is below threshold
+    if (pendingSubmissions > 0 || qualifiedCount < minimumRequired) {
+      evaluationPending = true;
+    }
+  }
+
   if (Number.isFinite(end) && end <= now) {
     effective = 'CLOSED';
   } else if (['SCHEDULED', 'LIVE', 'ACTIVE'].includes(current) && Number.isFinite(start) && start <= now) {
-    effective = 'LIVE';
+    if (evaluationPending) {
+      // Evaluation is delayed: keep auction on hold in SCHEDULED
+      effective = 'SCHEDULED';
+    } else {
+      effective = 'LIVE';
+    }
   }
-  if (effective === current) return auction;
-  const data: any = { status: effective, statusEnum: effective };
-  if (effective === 'CLOSED' && !auction.actualClosedAt) data.actualClosedAt = new Date();
-  await db.auction.update({ where: { id: auction.id }, data }).catch(() => undefined);
-  return { ...auction, ...data };
+
+  const data: any = {};
+  if (effective !== current) {
+    data.status = effective;
+    data.statusEnum = effective;
+    if (effective === 'CLOSED' && !auction.actualClosedAt) data.actualClosedAt = new Date();
+    await db.auction.update({ where: { id: auction.id }, data }).catch(() => undefined);
+  }
+  return { ...auction, ...data, evaluationPending };
 };
 
 /**
@@ -484,16 +527,25 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       authorized = true;
     }
 
+    let myParticipant = null;
     if (req.user) {
       if (isAdmin(req) || auction.createdByUserId === req.user.id || (auction.buyerOrgId && auction.buyerOrgId === req.user.organizationId)) {
         authorized = true;
       }
-      const participant = await db.auctionParticipant.findFirst({
-        where: { auctionId: id, sellerOrgId: req.user.organizationId || -1 }
-      });
-      if (participant) {
-        hasJoined = true;
-        authorized = true;
+      if (req.user.role === 'seller') {
+        myParticipant = await db.auctionParticipant.findFirst({
+          where: {
+            auctionId: id,
+            OR: [
+              ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+              ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+            ]
+          }
+        });
+        if (myParticipant) {
+          hasJoined = true;
+          authorized = true;
+        }
       }
     }
 
@@ -522,7 +574,15 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
     }
 
     const linkedRequirement = await linkedRequirementSummary(auction);
-    return apiResponse.success(res, maskSensitive({ ...auction, isPublic, hasJoined, linkedRequirement, buyerOrganizationName }));
+    return apiResponse.success(res, maskSensitive({
+      ...auction,
+      isPublic,
+      hasJoined,
+      evaluationPending: Boolean(auction.evaluationPending),
+      linkedRequirement,
+      buyerOrganizationName,
+      myParticipant
+    }));
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load auction', error.code || 'REVERSE_AUCTION_DETAIL_ERROR');
   }
@@ -569,10 +629,26 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       return apiResponse.error(res, 404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
+    const canBid = Boolean(
+      participant &&
+      ['TECHNICALLY_QUALIFIED', 'ACCEPTED'].includes(participant.status) &&
+      !auction.evaluationPending
+    );
+    const disqualificationReason = participant?.disqualificationReason || participant?.rejectionReason || participant?.qualificationRemarks || null;
+
     return apiResponse.success(res, {
       serverTime: new Date(),
-      auction: maskSensitive({ ...auction, isPublic, hasJoined: !!participant }),
-      participant: maskSensitive(participant),
+      auction: maskSensitive({
+        ...auction,
+        isPublic,
+        hasJoined: !!participant,
+        evaluationPending: Boolean(auction.evaluationPending)
+      }),
+      participant: maskSensitive(participant ? {
+        ...participant,
+        canBid,
+        disqualificationReason
+      } : null),
       minimumNextBid: toNumber(auction.currentLowestAmount ?? auction.currentLowestBid ?? auction.currentBid ?? auction.startPrice) - toNumber(auction.minDecrementAmount ?? auction.minDecrement, 0)
     });
   } catch (error: any) {
@@ -952,7 +1028,7 @@ const assertEnoughQualifiedBidders = async (auction: any) => {
   }
 };
 
-const transition = (target: string, enumStatus: string, extra?: (req: AuthRequest) => Record<string, unknown>, guard?: (auction: any) => Promise<void>) =>
+const transition = (target: string, enumStatus: string, extra?: (req: AuthRequest, auction?: any) => Record<string, unknown>, guard?: (auction: any) => Promise<void>) =>
   async (req: AuthRequest, res: Response) => {
     try {
       const id = Number(req.params.id);
@@ -964,7 +1040,7 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
         throw new ApiError(400, 'Cannot transition an auction that is closed or cancelled', 'AUCTION_ALREADY_FINALIZED');
       }
       if (guard) await guard(auction);
-      const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req) : {}) };
+      const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req, auction) : {}) };
       const updated = await db.auction.update({ where: { id }, data });
       await writeAuctionEvent(req, id, target.toLowerCase(), `Auction moved to ${target}`, data);
       return apiResponse.success(res, maskSensitive(updated));
@@ -974,7 +1050,17 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
   };
 
 router.post('/reverse-auctions/:id/schedule', requirePermission('reverse_auction.publish', orgScope), transition('SCHEDULED', 'SCHEDULED'));
-router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', () => ({ actualStartedAt: new Date() }), assertEnoughQualifiedBidders));
+router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', (req, auction) => {
+  const now = new Date();
+  let endTime = auction?.endTime;
+  const currentEnd = auction?.endTime ? new Date(auction.endTime).getTime() : 0;
+  // If the auction was delayed past scheduled end time or less than 10 mins remain, preserve full duration
+  if (!currentEnd || currentEnd <= now.getTime() + (10 * 60_000)) {
+    const durationMinutes = Number(auction?.durationMinutes) || (auction?.startTime && auction?.endTime ? Math.round((new Date(auction.endTime).getTime() - new Date(auction.startTime).getTime()) / 60000) : 60);
+    endTime = new Date(now.getTime() + Math.max(15, durationMinutes) * 60_000);
+  }
+  return { actualStartedAt: now, startTime: now, endTime };
+}, assertEnoughQualifiedBidders));
 router.post('/reverse-auctions/:id/pause', requirePermission('reverse_auction.update', orgScope), transition('PAUSED', 'PAUSED'));
 router.post('/reverse-auctions/:id/resume', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE'));
 router.post('/reverse-auctions/:id/close', requirePermission('reverse_auction.close', orgScope), transition('CLOSED', 'CLOSED', () => ({ actualClosedAt: new Date() })));

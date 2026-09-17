@@ -4,17 +4,22 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   AlertTriangle,
+  Building,
   CheckCircle2,
   Clock,
   ExternalLink,
   FileText,
   Filter,
+  Mail,
   MessageSquare,
+  Phone,
   Plus,
   RefreshCw,
   Search,
   Send,
   Shield,
+  ShieldAlert,
+  ShieldCheck,
   UserCheck,
   UserX,
   X
@@ -41,24 +46,32 @@ export interface GrievanceComment {
 
 export interface GrievanceTicket {
   id: number;
-  ticketNumber: string;
+  ticketNumber?: string | null;
   subject: string;
   description: string;
   category: string;
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  priority: string;
+  status: string;
   slaDueAt?: string | null;
   createdAt: string;
   updatedAt: string;
-  userId?: number;
-  user?: { id: number; name?: string; email?: string; role?: string };
+  userId?: number | null;
+  user?: { id: number; name?: string; email?: string; role?: string } | null;
   assignedAdminId?: number | null;
-  assignedAdmin?: { id: number; name?: string; email?: string };
+  assignedAdmin?: { id: number; name?: string; email?: string } | null;
+  complainantName?: string | null;
+  complainantEmail?: string | null;
+  complainantMobile?: string | null;
+  enterpriseName?: string | null;
+  referenceNumber?: string | null;
+  resolutionRemarks?: string | null;
+  resolvedAt?: string | null;
   comments?: GrievanceComment[];
 }
 
 const PRIORITY_BADGES: Record<string, string> = {
   LOW: 'border-slate-200 bg-slate-100 text-slate-700',
+  NORMAL: 'border-blue-200 bg-blue-50 text-blue-800',
   MEDIUM: 'border-blue-200 bg-blue-50 text-blue-800',
   HIGH: 'border-amber-200 bg-amber-50 text-amber-800',
   URGENT: 'border-red-300 bg-red-50 text-red-800 font-black'
@@ -66,9 +79,12 @@ const PRIORITY_BADGES: Record<string, string> = {
 
 const STATUS_BADGES: Record<string, string> = {
   OPEN: 'border-amber-300 bg-amber-50 text-amber-900',
+  ASSIGNED: 'border-purple-300 bg-purple-50 text-purple-900',
   IN_PROGRESS: 'border-blue-300 bg-blue-50 text-blue-900',
+  WAITING_ON_USER: 'border-slate-300 bg-slate-100 text-slate-800',
   RESOLVED: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-  CLOSED: 'border-slate-200 bg-slate-100 text-slate-700'
+  CLOSED: 'border-slate-200 bg-slate-100 text-slate-700',
+  REJECTED: 'border-red-200 bg-red-50 text-red-800'
 };
 
 export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
@@ -81,7 +97,7 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
   const [newStatus, setNewStatus] = useState<string>('');
   const [statusRemarks, setStatusRemarks] = useState('');
 
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['adminGrievances'],
     queryFn: async () => {
       const res = await getApi<GrievanceTicket[]>('/api/grievances');
@@ -92,15 +108,17 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
 
   const tickets = useMemo(() => data || [], [data]);
 
-  // Mutations
+  // Status mutation with automatic email dispatch notice
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, remarks }: { id: number; status: string; remarks?: string }) => {
-      return putApi(`/api/grievances/${id}/status`, { status, remarks });
+      return putApi(`/api/grievances/${id}/status`, { status: status.toLowerCase(), remarks });
     },
-    onSuccess: () => {
-      toast.success('Grievance status updated successfully');
+    onSuccess: (updated: any) => {
+      toast.success('Grievance status updated & resolution email dispatched to registered address');
       queryClient.invalidateQueries({ queryKey: ['adminGrievances'] });
-      setSelectedTicket(null);
+      if (selectedTicket) {
+        setSelectedTicket(prev => prev ? { ...prev, ...updated, status: newStatus || prev.status, resolutionRemarks: statusRemarks || prev.resolutionRemarks } : null);
+      }
       setNewStatus('');
       setStatusRemarks('');
     },
@@ -113,9 +131,12 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
     mutationFn: async ({ id, content }: { id: number; content: string }) => {
       return postApi(`/api/grievances/${id}/comments`, { content, internal: false });
     },
-    onSuccess: () => {
-      toast.success('Comment added to grievance ticket');
+    onSuccess: (newComment: any) => {
+      toast.success('Response logged and update email dispatched to complainant');
       queryClient.invalidateQueries({ queryKey: ['adminGrievances'] });
+      if (selectedTicket) {
+        setSelectedTicket(prev => prev ? { ...prev, comments: [...(prev.comments || []), newComment] } : null);
+      }
       setCommentText('');
     },
     onError: (err: any) => {
@@ -127,31 +148,38 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
   const counts = useMemo(() => {
     return {
       total: tickets.length,
-      open: tickets.filter(t => t.status === 'OPEN').length,
-      inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
-      urgent: tickets.filter(t => t.priority === 'URGENT').length,
-      resolved: tickets.filter(t => t.status === 'RESOLVED' || t.status === 'CLOSED').length
+      open: tickets.filter(t => (t.status || '').toLowerCase() === 'open').length,
+      inProgress: tickets.filter(t => ['in_progress', 'assigned'].includes((t.status || '').toLowerCase())).length,
+      urgent: tickets.filter(t => (t.priority || '').toLowerCase() === 'urgent').length,
+      resolved: tickets.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase())).length
     };
   }, [tickets]);
 
   // Filters
   const filteredTickets = useMemo(() => {
     return tickets.filter(t => {
-      if (statusFilter && t.status !== statusFilter) return false;
-      if (priorityFilter && t.priority !== priorityFilter) return false;
+      const s = (t.status || '').toLowerCase();
+      const p = (t.priority || '').toLowerCase();
+      if (statusFilter && s !== statusFilter.toLowerCase()) return false;
+      if (priorityFilter && p !== priorityFilter.toLowerCase()) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        const matchTicket = t.ticketNumber?.toLowerCase().includes(q);
+        const matchTicket = t.ticketNumber?.toLowerCase().includes(q) || String(t.id).includes(q);
         const matchSubject = t.subject?.toLowerCase().includes(q);
         const matchDesc = t.description?.toLowerCase().includes(q);
         const matchUser = t.user?.name?.toLowerCase().includes(q) || t.user?.email?.toLowerCase().includes(q);
-        if (!matchTicket && !matchSubject && !matchDesc && !matchUser) return false;
+        const matchComplainant = t.complainantName?.toLowerCase().includes(q) || t.complainantEmail?.toLowerCase().includes(q);
+        const matchOrg = t.enterpriseName?.toLowerCase().includes(q) || t.referenceNumber?.toLowerCase().includes(q);
+        if (!matchTicket && !matchSubject && !matchDesc && !matchUser && !matchComplainant && !matchOrg) return false;
       }
       return true;
     });
   }, [tickets, statusFilter, priorityFilter, searchQuery]);
 
   const { pageItems, page, total, pageSize, setPage, setPageSize } = usePagination(filteredTickets, 10);
+
+  const recipientEmail = selectedTicket?.complainantEmail || selectedTicket?.user?.email;
+  const submitterName = selectedTicket?.complainantName || selectedTicket?.user?.name || 'Citizen / Stakeholder';
 
   return (
     <div className="space-y-5">
@@ -160,7 +188,7 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
         <KpiCard
           label="Total Grievances"
           value={counts.total}
-          subtext="All stakeholder grievance tickets"
+          subtext="All stakeholder tickets"
           icon={FileText}
           tone="blue"
           active={statusFilter === ''}
@@ -169,20 +197,20 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
         <KpiCard
           label="Open Tickets"
           value={counts.open}
-          subtext="Awaiting initial administrative review"
+          subtext="Pending administrative review"
           icon={AlertTriangle}
           tone="amber"
-          active={statusFilter === 'OPEN'}
-          onClick={() => setStatusFilter(statusFilter === 'OPEN' ? '' : 'OPEN')}
+          active={statusFilter === 'open'}
+          onClick={() => setStatusFilter(statusFilter === 'open' ? '' : 'open')}
         />
         <KpiCard
           label="In Progress"
           value={counts.inProgress}
-          subtext="Active inquiry or investigation"
+          subtext="Active inquiry / investigation"
           icon={Clock}
           tone="indigo"
-          active={statusFilter === 'IN_PROGRESS'}
-          onClick={() => setStatusFilter(statusFilter === 'IN_PROGRESS' ? '' : 'IN_PROGRESS')}
+          active={statusFilter === 'in_progress'}
+          onClick={() => setStatusFilter(statusFilter === 'in_progress' ? '' : 'in_progress')}
         />
         <KpiCard
           label="Urgent Priority"
@@ -190,17 +218,17 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
           subtext="SLA critical grievances"
           icon={AlertTriangle}
           tone="red"
-          active={priorityFilter === 'URGENT'}
-          onClick={() => setPriorityFilter(priorityFilter === 'URGENT' ? '' : 'URGENT')}
+          active={priorityFilter === 'urgent'}
+          onClick={() => setPriorityFilter(priorityFilter === 'urgent' ? '' : 'urgent')}
         />
         <KpiCard
           label="Resolved / Closed"
           value={counts.resolved}
-          subtext="Resolved grievance cases"
+          subtext="Redressed & dispatched"
           icon={CheckCircle2}
           tone="green"
-          active={statusFilter === 'RESOLVED'}
-          onClick={() => setStatusFilter(statusFilter === 'RESOLVED' ? '' : 'RESOLVED')}
+          active={statusFilter === 'resolved'}
+          onClick={() => setStatusFilter(statusFilter === 'resolved' ? '' : 'resolved')}
         />
       </div>
 
@@ -215,7 +243,7 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search ticket #, subject, or submitter..."
+                placeholder="Search ticket #, subject, complainant name or email..."
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
             </div>
@@ -230,10 +258,12 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                   aria-label="Filter by grievance status"
                 >
                   <option value="">All Statuses</option>
-                  <option value="OPEN">Open</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="RESOLVED">Resolved</option>
-                  <option value="CLOSED">Closed</option>
+                  <option value="open">Open</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="waiting_on_user">Waiting on User</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                  <option value="rejected">Rejected</option>
                 </select>
               </div>
               <div className="w-full sm:w-auto sm:min-w-[150px]">
@@ -244,10 +274,10 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                   aria-label="Filter by grievance priority"
                 >
                   <option value="">All Priorities</option>
-                  <option value="URGENT">Urgent</option>
-                  <option value="HIGH">High</option>
-                  <option value="MEDIUM">Medium</option>
-                  <option value="LOW">Low</option>
+                  <option value="urgent">Urgent</option>
+                  <option value="high">High</option>
+                  <option value="normal">Normal</option>
+                  <option value="low">Low</option>
                 </select>
               </div>
             </>
@@ -277,15 +307,24 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-          <div className={selectedTicket ? 'lg:col-span-6 xl:col-span-7' : 'lg:col-span-12'}>
+          <div className={selectedTicket ? 'lg:col-span-6 xl:col-span-6' : 'lg:col-span-12'}>
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="divide-y divide-slate-100">
                 {pageItems.map(ticket => {
                   const isSelected = selectedTicket?.id === ticket.id;
+                  const normPriority = (ticket.priority || 'NORMAL').toUpperCase();
+                  const normStatus = (ticket.status || 'OPEN').toUpperCase();
+                  const displayName = ticket.complainantName || ticket.user?.name || 'Citizen';
+                  const displayEmail = ticket.complainantEmail || ticket.user?.email;
+
                   return (
                     <div
                       key={ticket.id}
-                      onClick={() => setSelectedTicket(ticket)}
+                      onClick={() => {
+                        setSelectedTicket(ticket);
+                        setNewStatus(ticket.status || 'open');
+                        setStatusRemarks(ticket.resolutionRemarks || '');
+                      }}
                       className={`cursor-pointer p-4 transition-all hover:bg-slate-50 ${
                         isSelected ? 'bg-blue-50/70 border-l-4 border-[#12335f]' : ''
                       }`}
@@ -297,15 +336,18 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                           </span>
                           <span
                             className={`rounded-md border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide ${
-                              PRIORITY_BADGES[ticket.priority] || 'border-slate-200 bg-slate-100 text-slate-700'
+                              PRIORITY_BADGES[normPriority] || 'border-slate-200 bg-slate-100 text-slate-700'
                             }`}
                           >
-                            {ticket.priority}
+                            {normPriority}
+                          </span>
+                          <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                            {ticket.category}
                           </span>
                         </div>
                         <span
                           className={`rounded-md border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                            STATUS_BADGES[ticket.status] || 'border-slate-200 bg-slate-100 text-slate-700'
+                            STATUS_BADGES[normStatus] || 'border-slate-200 bg-slate-100 text-slate-700'
                           }`}
                         >
                           {ticket.status.replace(/_/g, ' ')}
@@ -316,7 +358,11 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                       <p className="mt-1 text-xs text-slate-600 line-clamp-2">{ticket.description}</p>
 
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] font-semibold text-slate-500">
-                        <span>Submitted by: {ticket.user?.name || ticket.user?.email || `User #${ticket.userId || 'N/A'}`}</span>
+                        <div className="flex items-center gap-1.5 truncate max-w-sm">
+                          <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="text-slate-700 font-bold">{displayName}</span>
+                          {displayEmail && <span className="text-slate-400 truncate">({displayEmail})</span>}
+                        </div>
                         <div className="flex items-center gap-2">
                           {ticket.slaDueAt && (
                             <span className="flex items-center gap-1 text-amber-700">
@@ -345,14 +391,23 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
 
           {/* Selected Ticket Detail Panel */}
           {selectedTicket && (
-            <div className="lg:col-span-6 xl:col-span-5 animate-in fade-in duration-200">
+            <div className="lg:col-span-6 xl:col-span-6 animate-in fade-in duration-200">
               <Card className="rounded-2xl border border-slate-200 shadow-sm bg-white overflow-hidden">
                 <div className="flex items-center justify-between border-b border-slate-100 p-4 bg-slate-50">
                   <div>
-                    <span className="font-mono text-xs font-black text-[#12335f]">
-                      {selectedTicket.ticketNumber || `#GRV-${selectedTicket.id}`}
-                    </span>
-                    <h2 className="text-sm font-black text-slate-900 mt-0.5">{selectedTicket.subject}</h2>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-black text-[#12335f]">
+                        {selectedTicket.ticketNumber || `#GRV-${selectedTicket.id}`}
+                      </span>
+                      <span
+                        className={`rounded-md border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                          STATUS_BADGES[(selectedTicket.status || 'OPEN').toUpperCase()] || 'border-slate-200 bg-slate-100 text-slate-700'
+                        }`}
+                      >
+                        {selectedTicket.status.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    <h2 className="text-sm font-black text-slate-900 mt-1">{selectedTicket.subject}</h2>
                   </div>
                   <button
                     onClick={() => setSelectedTicket(null)}
@@ -364,108 +419,197 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                 </div>
 
                 <CardContent className="space-y-4 p-4 text-xs font-semibold">
-                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                  {/* Complainant & Case Dossier Info */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl bg-slate-50 p-3.5 border border-slate-200/80">
                     <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Priority</span>
-                      <p className="mt-0.5 font-bold text-slate-800">{selectedTicket.priority}</p>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Complainant / Submitter</span>
+                      <p className="mt-0.5 font-bold text-slate-900">{submitterName}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Current Status</span>
-                      <p className="mt-0.5 font-bold text-slate-800">{selectedTicket.status.replace(/_/g, ' ')}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Submitter</span>
-                      <p className="mt-0.5 font-bold text-slate-800">
-                        {selectedTicket.user?.name || selectedTicket.user?.email || 'N/A'}
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Registered Email (Resolution Recipient)</span>
+                      <p className="mt-0.5 font-mono font-bold text-blue-800 flex items-center gap-1 truncate">
+                        <Mail className="h-3 w-3 shrink-0 text-blue-600" />
+                        <span className="truncate">{recipientEmail || 'None entered'}</span>
                       </p>
                     </div>
+                    {selectedTicket.complainantMobile && (
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Mobile Contact</span>
+                        <p className="mt-0.5 font-mono font-bold text-slate-800 flex items-center gap-1">
+                          <Phone className="h-3 w-3 text-slate-500" />
+                          {selectedTicket.complainantMobile}
+                        </p>
+                      </div>
+                    )}
+                    {selectedTicket.enterpriseName && (
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Enterprise / Legal Entity</span>
+                        <p className="mt-0.5 font-bold text-slate-800 flex items-center gap-1">
+                          <Building className="h-3 w-3 text-slate-500" />
+                          {selectedTicket.enterpriseName}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Classification</span>
+                      <p className="mt-0.5 font-bold text-slate-800">{selectedTicket.category}</p>
+                    </div>
+                    {selectedTicket.referenceNumber && (
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Associated Reference No.</span>
+                        <p className="mt-0.5 font-mono font-bold text-slate-800">{selectedTicket.referenceNumber}</p>
+                      </div>
+                    )}
                     <div>
                       <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">SLA Due At</span>
                       <p className="mt-0.5 font-bold text-slate-800">
                         {selectedTicket.slaDueAt ? formatDateTime(selectedTicket.slaDueAt) : 'Standard 48h SLA'}
                       </p>
                     </div>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Filing Date</span>
+                      <p className="mt-0.5 font-bold text-slate-800">{formatDateTime(selectedTicket.createdAt)}</p>
+                    </div>
                   </div>
 
+                  {/* Grievance Narrative */}
                   <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Grievance Description</span>
-                    <p className="mt-1 rounded-xl border border-slate-100 bg-slate-50/50 p-3 text-xs leading-relaxed text-slate-700 font-normal">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Statement of Grievance Facts</span>
+                    <p className="mt-1 rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs leading-relaxed text-slate-800 font-normal whitespace-pre-line">
                       {selectedTicket.description}
                     </p>
                   </div>
 
-                  {/* Admin Status Resolution Controls */}
+                  {/* Display existing resolution if already recorded */}
+                  {selectedTicket.resolutionRemarks && (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-1">
+                      <div className="flex items-center justify-between text-emerald-900 font-black text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          Official Administrative Resolution
+                        </span>
+                        {selectedTicket.resolvedAt && (
+                          <span className="text-[10px] font-semibold text-emerald-700">
+                            {formatDateTime(selectedTicket.resolvedAt)}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-800 font-normal leading-relaxed whitespace-pre-line pt-1">
+                        {selectedTicket.resolutionRemarks}
+                      </p>
+                      <p className="text-[10px] font-bold text-emerald-800 pt-1">
+                        ✓ Dispatched via registered email to {recipientEmail || 'complainant'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Admin Resolution & Official Reply Utility */}
                   {isAdmin && (
-                    <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3.5 space-y-2.5">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">
-                        Admin Resolution Action
-                      </span>
-                      <div className="flex gap-2">
+                    <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase tracking-wider text-[#12335f] flex items-center gap-1.5">
+                          <ShieldCheck className="h-4 w-4 text-blue-600" />
+                          Admin Resolution &amp; Email Dispatch Utility
+                        </span>
+                        {recipientEmail && (
+                          <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full">
+                            Email Alert Active
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
+                        Selecting a resolution status and providing official remarks will record the decision and automatically transmit an official resolution email directly to{' '}
+                        <strong className="text-blue-900 font-mono">{recipientEmail || 'the entered email address'}</strong>.
+                      </p>
+
+                      <div className="space-y-2">
+                        <label htmlFor="grv-update-status" className="block text-[11px] font-bold text-slate-700">
+                          Target Workflow Status <span className="text-red-500">*</span>
+                        </label>
                         <select
+                          id="grv-update-status"
                           value={newStatus || selectedTicket.status}
                           onChange={e => setNewStatus(e.target.value)}
-                          className="h-9 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-800"
+                          className="h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 focus:border-[#12335f] outline-none shadow-xs"
                         >
-                          <option value="OPEN">Open</option>
-                          <option value="IN_PROGRESS">In Progress</option>
-                          <option value="RESOLVED">Resolved</option>
-                          <option value="CLOSED">Closed</option>
+                          <option value="open">Open (Under Review)</option>
+                          <option value="in_progress">In Progress (Active Investigation)</option>
+                          <option value="waiting_on_user">Waiting on User / Clarification Requested</option>
+                          <option value="resolved">Resolved (Redressal Completed)</option>
+                          <option value="closed">Closed (Case Concluded)</option>
+                          <option value="rejected">Rejected (Ineligible / Unsubstantiated)</option>
                         </select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                          <label htmlFor="grv-update-remarks">
+                            Official Resolution Findings &amp; Email Reply Remarks <span className="text-red-500">*</span>
+                          </label>
+                          <span className="text-[10px] text-slate-400 font-mono">{statusRemarks.length} / 2000</span>
+                        </div>
+                        <textarea
+                          id="grv-update-remarks"
+                          rows={4}
+                          value={statusRemarks}
+                          onChange={e => setStatusRemarks(e.target.value)}
+                          placeholder="Provide detailed statutory findings, actions taken by the Nodal Officer, and resolution notes that will be emailed to the stakeholder..."
+                          className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs font-normal text-slate-900 placeholder-slate-400 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] leading-relaxed shadow-xs"
+                        />
+                      </div>
+
+                      <div className="pt-1 flex items-center justify-end">
                         <Button
-                          disabled={updateStatusMutation.isPending}
+                          disabled={updateStatusMutation.isPending || !statusRemarks.trim()}
                           onClick={() => {
                             const statusToSet = newStatus || selectedTicket.status;
                             updateStatusMutation.mutate({
                               id: selectedTicket.id,
                               status: statusToSet,
-                              remarks: statusRemarks
+                              remarks: statusRemarks.trim()
                             });
                           }}
-                          className="h-9 bg-[#12335f] hover:bg-[#0b2447] text-white text-xs font-bold px-3"
+                          className="h-10 bg-[#12335f] hover:bg-[#0b2447] text-white text-xs font-bold px-5 rounded-xl shadow transition active:scale-95"
                         >
-                          Update Status
+                          <Send className="h-3.5 w-3.5 mr-1.5" />
+                          <span>{updateStatusMutation.isPending ? 'Sending & Updating...' : 'Save Resolution & Dispatch Email Reply'}</span>
                         </Button>
                       </div>
-                      <input
-                        type="text"
-                        value={statusRemarks}
-                        onChange={e => setStatusRemarks(e.target.value)}
-                        placeholder="Resolution / status change remarks..."
-                        className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs placeholder-slate-400 outline-none"
-                      />
                     </div>
                   )}
 
                   {/* Comments Thread */}
-                  <div className="space-y-2 border-t border-slate-100 pt-3">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
-                      Inquiry & Notes Log
+                  <div className="space-y-2.5 border-t border-slate-100 pt-3">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Inquiry &amp; Discussion Log
                     </span>
                     <div className="max-h-48 space-y-2 overflow-y-auto pr-1">
                       {(!selectedTicket.comments || selectedTicket.comments.length === 0) ? (
                         <p className="text-xs text-slate-400 italic">No notes logged yet.</p>
                       ) : (
                         selectedTicket.comments.map(c => (
-                          <div key={c.id} className="rounded-lg bg-slate-50 p-2 text-xs border border-slate-100">
-                            <div className="flex justify-between text-[10px] text-slate-400 font-bold mb-1">
+                          <div key={c.id} className="rounded-xl bg-slate-50 p-2.5 text-xs border border-slate-200/70">
+                            <div className="flex justify-between text-[10px] text-slate-500 font-bold mb-1">
                               <span>{c.author?.name || 'Administrator'}</span>
                               <span>{formatDateTime(c.createdAt)}</span>
                             </div>
-                            <p className="text-slate-700 font-normal">{c.content}</p>
+                            <p className="text-slate-800 font-normal leading-relaxed">{c.content}</p>
                           </div>
                         ))
                       )}
                     </div>
 
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2 pt-1">
                       <input
                         type="text"
                         value={commentText}
                         onChange={e => setCommentText(e.target.value)}
-                        placeholder="Add response or administrative note..."
-                        className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-xs placeholder-slate-400 outline-none focus:border-[#12335f]"
+                        placeholder="Add response note (dispatches email alert to complainant)..."
+                        className="h-10 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-xs placeholder-slate-400 outline-none focus:border-[#12335f]"
                         onKeyDown={e => {
-                          if (e.key === 'Enter' && commentText.trim()) {
+                          if (e.key === 'Enter' && commentText.trim() && !addCommentMutation.isPending) {
                             addCommentMutation.mutate({ id: selectedTicket.id, content: commentText.trim() });
                           }
                         }}
@@ -473,7 +617,7 @@ export function GrievancesSection({ isAdmin }: { isAdmin: boolean }) {
                       <Button
                         disabled={!commentText.trim() || addCommentMutation.isPending}
                         onClick={() => addCommentMutation.mutate({ id: selectedTicket.id, content: commentText.trim() })}
-                        className="h-9 bg-slate-900 text-white hover:bg-slate-800 text-xs px-3"
+                        className="h-10 bg-slate-900 text-white hover:bg-slate-800 text-xs px-4 rounded-xl"
                       >
                         <Send className="h-3.5 w-3.5" />
                       </Button>

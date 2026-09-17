@@ -39,7 +39,9 @@ import {
   Layers,
   ExternalLink,
   Download,
-  Ban
+  Ban,
+  Lock,
+  XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -442,25 +444,86 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
               </p>
             </div>
 
-            {user && user.role === 'seller' && (
-              hasJoined ? (
-                <Link href={`/seller/procurement/reverse-auction/${effectiveId}/live`} className="shrink-0">
-                  <Button type="button" className="h-11 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:via-indigo-500 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-blue-500/25 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2">
-                    <Play className="h-4 w-4 fill-white" /> Live Bid Console
+            {user && user.role === 'seller' && (() => {
+              const myPart = (auction.data as any).myParticipant;
+              const evalPending = (auction.data as any).evaluationPending;
+              const myStatus = myPart?.status?.toUpperCase?.() || '';
+
+              // 1. Disqualified — locked out with reason
+              if (myStatus === 'DISQUALIFIED') {
+                return (
+                  <div className="shrink-0 flex flex-col items-end gap-2 max-w-xs">
+                    <Button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      aria-label="Bidding disqualified — you cannot participate in this auction"
+                      className="h-11 rounded-xl bg-gradient-to-r from-red-600/80 to-red-700/80 px-6 text-xs font-black uppercase tracking-wider text-white/90 shadow-sm cursor-not-allowed flex items-center gap-2 opacity-80"
+                    >
+                      <Ban className="h-4 w-4" aria-hidden="true" /> Bidding Disqualified
+                    </Button>
+                    {myPart.disqualificationReason && (
+                      <p role="alert" className="text-[10px] font-semibold text-red-600 text-right leading-snug max-w-[260px]">
+                        {myPart.disqualificationReason}
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+
+              // 2. Qualification submitted but not yet reviewed
+              if (myPart && (myPart.qualificationStatus === 'SUBMITTED' || myStatus === 'SUBMITTED' || myStatus === 'IN_PROGRESS')) {
+                return (
+                  <Button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    aria-label="Your qualification is under review — bidding access will be enabled after approval"
+                    className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-amber-500/80 to-amber-600/80 px-6 text-xs font-black uppercase tracking-wider text-white/90 shadow-sm cursor-not-allowed flex items-center gap-2 opacity-80"
+                  >
+                    <Lock className="h-4 w-4" aria-hidden="true" /> Qualification Under Review
                   </Button>
-                </Link>
-              ) : isPublicAuction ? (
-                <Button
-                  type="button"
-                  onClick={() => joinAuction.mutate()}
-                  disabled={joinAuction.isPending}
-                  className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-[#0b2447] via-[#123668] to-[#0b2447] hover:from-blue-600 hover:via-indigo-600 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2"
-                >
-                  {joinAuction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                  {joinAuction.isPending ? 'Joining…' : 'Join to Bid'}
-                </Button>
-              ) : null
-            )}
+                );
+              }
+
+              // 3. Evaluation pending — auction on hold
+              if (evalPending) {
+                return (
+                  <div className="shrink-0 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-2.5" role="status" aria-live="polite">
+                    <Hourglass className="h-4 w-4 text-blue-600 animate-pulse" aria-hidden="true" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-blue-700">Auction On Hold — Evaluation In Progress</span>
+                  </div>
+                );
+              }
+
+              // 4. Qualified and already joined → Live Bid Console
+              if (hasJoined) {
+                return (
+                  <Link href={`/seller/procurement/reverse-auction/${effectiveId}/live`} className="shrink-0">
+                    <Button type="button" className="h-11 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:via-indigo-500 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-blue-500/25 transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2">
+                      <Play className="h-4 w-4 fill-white" /> Live Bid Console
+                    </Button>
+                  </Link>
+                );
+              }
+
+              // 5. Public auction, not yet joined → Join to Bid
+              if (isPublicAuction) {
+                return (
+                  <Button
+                    type="button"
+                    onClick={() => joinAuction.mutate()}
+                    disabled={joinAuction.isPending}
+                    className="h-11 shrink-0 rounded-xl bg-gradient-to-r from-[#0b2447] via-[#123668] to-[#0b2447] hover:from-blue-600 hover:via-indigo-600 hover:to-blue-600 px-6 text-xs font-black uppercase tracking-wider text-white shadow-md transition-all duration-300 hover:scale-105 active:scale-95 flex items-center gap-2"
+                  >
+                    {joinAuction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                    {joinAuction.isPending ? 'Joining…' : 'Join to Bid'}
+                  </Button>
+                );
+              }
+
+              return null;
+            })()}
           </div>
 
           {/* Banner message next step */}
@@ -614,35 +677,96 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                 <Users className="h-4 w-4 text-blue-600" /> Your Participation
               </h2>
             </div>
-            {participants.length === 0 ? (
-              isPublicAuction ? (
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs sm:text-sm font-semibold text-slate-600">
-                    This is an open reverse auction. Join to place bids in the live console.
+            {(() => {
+              const myPart = (auction.data as any).myParticipant;
+              const evalPending = (auction.data as any).evaluationPending;
+              const myStatus = (myPart?.status || '').toUpperCase();
+              const hasParticipation = participants.length > 0 || myPart;
+
+              if (!hasParticipation) {
+                return isPublicAuction ? (
+                  <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-xs sm:text-sm font-semibold text-slate-600">
+                      This is an open reverse auction. Join to place bids in the live console.
+                    </p>
+                    <Button
+                      type="button"
+                      onClick={() => joinAuction.mutate()}
+                      disabled={joinAuction.isPending}
+                      className="h-10 shrink-0 rounded-xl bg-[#0b2447] hover:bg-blue-600 px-5 text-xs font-black uppercase tracking-wider text-white shadow-sm flex items-center gap-2 transition"
+                    >
+                      {joinAuction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                      {joinAuction.isPending ? 'Joining…' : 'Join this auction'}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-4 text-xs font-semibold text-slate-500">
+                    This is an invite-only reverse auction. You will be able to participate once the buyer invites your organization.
                   </p>
-                  <Button
-                    type="button"
-                    onClick={() => joinAuction.mutate()}
-                    disabled={joinAuction.isPending}
-                    className="h-10 shrink-0 rounded-xl bg-[#0b2447] hover:bg-blue-600 px-5 text-xs font-black uppercase tracking-wider text-white shadow-sm flex items-center gap-2 transition"
-                  >
-                    {joinAuction.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                    {joinAuction.isPending ? 'Joining…' : 'Join this auction'}
-                  </Button>
+                );
+              }
+
+              const p0 = myPart || participants[0];
+              const statusLabel = myStatus === 'TECHNICALLY_QUALIFIED' ? 'Qualified' :
+                myStatus === 'DISQUALIFIED' ? 'Disqualified' :
+                myStatus === 'SUBMITTED' || myStatus === 'IN_PROGRESS' ? 'Under Review' :
+                myStatus === 'ACCEPTED' ? 'Accepted' :
+                p0?.status || 'INVITED';
+              const statusColor = myStatus === 'TECHNICALLY_QUALIFIED' || myStatus === 'ACCEPTED'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : myStatus === 'DISQUALIFIED'
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : myStatus === 'SUBMITTED' || myStatus === 'IN_PROGRESS'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : 'bg-blue-50 text-blue-700 border-blue-200';
+
+              return (
+                <div className="mt-4 space-y-4">
+                  {/* Qualification status pill row */}
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="flex items-center justify-between py-2 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <ShieldAlert className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 truncate">Qualification Status</span>
+                      </div>
+                      <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider", statusColor)}>
+                        {myStatus === 'DISQUALIFIED' && <XCircle className="h-3 w-3" aria-hidden="true" />}
+                        {(myStatus === 'TECHNICALLY_QUALIFIED' || myStatus === 'ACCEPTED') && <CheckCircle2 className="h-3 w-3" aria-hidden="true" />}
+                        {(myStatus === 'SUBMITTED' || myStatus === 'IN_PROGRESS') && <Lock className="h-3 w-3" aria-hidden="true" />}
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <RowItem icon={Award} label="Your Current Rank" value={p0?.currentRank ? `L${p0.currentRank}` : 'Not ranked'} />
+                    <RowItem icon={IndianRupee} label="Your Last Bid" value={p0?.lastBidAmount ? formatCurrency(p0.lastBidAmount) : 'No bid yet'} />
+                    <RowItem icon={Clock} label="Last Bid Time" value={p0?.lastBidTime ? formatDateTime(p0.lastBidTime) : 'N/A'} />
+                  </div>
+
+                  {/* Disqualification reason alert */}
+                  {myStatus === 'DISQUALIFIED' && myPart?.disqualificationReason && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/80 p-3.5 flex items-start gap-2.5" role="alert">
+                      <Ban className="h-4 w-4 shrink-0 text-red-600 mt-0.5" aria-hidden="true" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-red-700">Disqualification Reason</p>
+                        <p className="mt-1 text-xs font-semibold leading-relaxed text-red-800/90">{myPart.disqualificationReason}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Evaluation pending notice */}
+                  {evalPending && myStatus !== 'DISQUALIFIED' && (
+                    <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3.5 flex items-start gap-2.5" role="status" aria-live="polite">
+                      <Hourglass className="h-4 w-4 shrink-0 text-blue-600 mt-0.5 animate-pulse" aria-hidden="true" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">Evaluation In Progress</p>
+                        <p className="mt-1 text-xs font-semibold leading-relaxed text-blue-800/90">
+                          The buyer is currently reviewing seller qualifications. The auction will start once evaluation is complete.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <p className="mt-4 text-xs font-semibold text-slate-500">
-                  This is an invite-only reverse auction. You will be able to participate once the buyer invites your organization.
-                </p>
-              )
-            ) : (
-              <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <RowItem icon={ShieldAlert} label="Invitation Status" value={String(participants[0]?.status || 'INVITED')} highlight />
-                <RowItem icon={Award} label="Your Current Rank" value={participants[0]?.currentRank ? `L${participants[0].currentRank}` : 'Not ranked'} />
-                <RowItem icon={IndianRupee} label="Your Last Bid" value={participants[0]?.lastBidAmount ? formatCurrency(participants[0].lastBidAmount) : 'No bid yet'} />
-                <RowItem icon={Clock} label="Last Bid Time" value={participants[0]?.lastBidTime ? formatDateTime(participants[0].lastBidTime) : 'N/A'} />
-              </div>
-            )}
+              );
+            })()}
           </section>
         )}
 

@@ -17,7 +17,7 @@ import { downloadCsv } from '../../shared/exportUtils';
 import { formatDate, formatDateTime, formatCurrency } from '../../shared/format';
 import { getApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
-import { PdfEngine } from '../../../lib/pdfEngine';
+import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
 import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
 import { SupplierQuotationDetailModal, SupplierQuotationDetailView, normalizeQuotationDocuments } from '../components/SupplierQuotationDetailModal';
@@ -108,46 +108,54 @@ export default function BidResultsPage() {
     submitting: false,
   });
 
-  const handleDownloadQuotationPdf = (result: any) => {
+  const handleDownloadQuotationPdf = async (result: any) => {
     if (!result) return;
     try {
-      toast.info(`Generating Quotation PDF for ${result.sellerName}…`);
+      toast.info(`Generating Quotation PDF for ${result.sellerName || 'Supplier'}…`);
       const engine = new PdfEngine('p');
       const quotedAmt = Number(result.quotedAmount || result.totalAmount || result.totalPrice || result.details?.quotedAmount || 0);
       const gst = Number(result.gstPercentage || result.details?.gstPercentage || 0);
       const totalAmt = Number(result.totalAmount || result.totalPrice || result.details?.totalAmount || quotedAmt);
       const qty = result.offeredQuantity || result.details?.offeredQuantity || 1;
 
-      const doc = engine.generate({
+      const sellerLogo = result.sellerLogo || result.details?.logoUrl || result.details?.sellerLogo || undefined;
+      const sellerSignature = result.signatureUrl || result.details?.signatureUrl || undefined;
+      const sellerStamp = result.stampUrl || result.details?.stampUrl || undefined;
+      const sellerOrgName = result.details?.organizationName || result.sellerName || 'N/A';
+
+      const doc = await engine.generate({
         documentTitle: 'SUPPLIER QUOTATION RESPONSE',
         documentNumber: `QUOTE-${result.id || result.participationId || 'REF'}`,
         dateStr: formatDate(result.submittedAt),
         status: result.technicalStatus || 'Submitted',
+        issuerName: sellerOrgName,
+        issuerSubtitle: 'Supplier Quotation Submission',
+        issuerLogo: sellerLogo,
         parties: [
           {
             title: 'BUYER ORGANIZATION',
-            name: (bid as any)?.buyerOrganization || (bid as any)?.buyerOrganizationName || bid?.buyer?.name || 'Procurement Buyer',
+            name: (bid as any)?.buyerOrganization || (bid as any)?.buyerOrganizationName || bid?.buyer?.name || 'N/A',
             details: [
-              `Requirement / Bid ID: ${bidId}`,
-              `Procurement Title: ${bid?.title || `Requirement ${bidId}`}`,
+              `Requirement / Bid ID: ${bidId || 'N/A'}`,
+              `Procurement Title: ${bid?.title || 'N/A'}`,
             ],
           },
           {
             title: 'SUPPLIER / QUOTING ORGANIZATION',
-            name: result.sellerName || 'Quoting Supplier',
-            address: result.sellerAddress || undefined,
-            email: result.sellerEmail !== 'Not provided' ? result.sellerEmail : undefined,
-            phone: result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
+            name: sellerOrgName,
+            address: result.sellerAddress || result.details?.address || undefined,
+            email: result.sellerEmail && result.sellerEmail !== 'Not provided' ? result.sellerEmail : undefined,
+            phone: result.sellerMobile && result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
             details: [
-              `Contact Person: ${result.contactPerson || 'Representative'}`,
+              `Contact Person: ${result.contactPerson || result.details?.contactPerson || 'N/A'}`,
               `Submitted Date: ${formatDateTime(result.submittedAt)}`,
             ],
           },
         ],
         infoGrid: {
-          'Make / Brand': result.makeBrand || 'As quoted',
-          'Model': result.model || 'Standard',
-          'Delivery Timeline': result.deliveryTimeline || 'Standard',
+          'Make / Brand': result.makeBrand || result.details?.makeBrand || 'N/A',
+          'Model': result.model || result.details?.model || 'N/A',
+          'Delivery Timeline': result.deliveryTimeline || result.details?.deliveryTimeline || 'N/A',
           'Offered Quantity': String(qty),
         },
         tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Rate', 'GST %', 'Total Amount'],
@@ -156,9 +164,9 @@ export default function BidResultsPage() {
             '1',
             result.offeredItem || result.details?.offeredItemDescription || 'Procurement requirement',
             String(qty),
-            quotedAmt ? `₹${quotedAmt.toLocaleString('en-IN')}` : '—',
+            quotedAmt ? moneyPdf(quotedAmt) : 'N/A',
             gst ? `${gst}%` : '0%',
-            totalAmt ? `₹${totalAmt.toLocaleString('en-IN')}` : '—',
+            totalAmt ? moneyPdf(totalAmt) : 'N/A',
           ]
         ],
         financials: {
@@ -170,6 +178,12 @@ export default function BidResultsPage() {
           result.details?.complianceRemarks ? `Technical Compliance: ${result.details.complianceRemarks}` : '',
           result.details?.rfqNotes ? `Additional Notes: ${result.details.rfqNotes}` : '',
         ].filter(Boolean),
+        signatures: {
+          sellerTitle: 'Quoting Supplier Signature & Stamp',
+          sellerName: result.contactPerson || result.sellerName || 'Authorized Signatory',
+          sellerSignatureUrl: sellerSignature,
+          sellerStampUrl: sellerStamp,
+        },
         footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
       });
 

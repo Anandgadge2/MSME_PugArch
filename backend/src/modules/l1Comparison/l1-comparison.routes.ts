@@ -12,7 +12,7 @@ import {
 } from './l1-comparison.service.js';
 
 const router = Router();
-router.use(authenticate);
+router.use('/l1-comparisons', authenticate);
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
   async (req: AuthRequest, res: Response) => {

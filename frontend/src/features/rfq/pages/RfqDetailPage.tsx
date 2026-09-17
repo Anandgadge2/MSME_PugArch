@@ -18,8 +18,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
-import { openFileAsset } from '../../../lib/files';
-import { PdfEngine } from '../../../lib/pdfEngine';
+import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
@@ -893,24 +892,25 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const isEmdPaid = !emdInfo?.isEmdRequired || ['PAID','VERIFIED'].includes(emdInfo?.status ?? '');
 
   /* ── Handlers ── */
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     try {
       toast.info('Generating PDF…');
       const engine = new PdfEngine();
-      const doc = engine.generate({
+      const doc = await engine.generate({
         documentTitle: 'REQUEST FOR QUOTATION (RFQ)',
         documentNumber: ref,
         dateStr: fmtDate(published),
         status,
+        issuerName: buyerOrg !== '—' ? buyerOrg : 'Procuring Entity',
         parties: [
-          { title: 'BUYER', name: buyerOrg, address: location, email: email || undefined, phone: mobile || undefined, details: [`Contact: ${contact}`, `Category: ${category}`] },
-          { title: 'RFQ',   name: title,    details: [`Method: ${method}`, `Deadline: ${fmtDate(deadline, true)}`] },
+          { title: 'BUYER', name: buyerOrg !== '—' ? buyerOrg : 'N/A', address: location || undefined, email: email || undefined, phone: mobile || undefined, details: [`Contact: ${contact || 'N/A'}`, `Category: ${category || 'N/A'}`] },
+          { title: 'RFQ',   name: title || 'N/A',    details: [`Method: ${method || 'N/A'}`, `Deadline: ${fmtDate(deadline, true) || 'N/A'}`] },
         ],
-        infoGrid: { Delivery: location, 'Payment Terms': payTerms, 'Delivery SLA': delTerms, 'Evaluation': evalMethod },
+        infoGrid: { Delivery: location || 'N/A', 'Payment Terms': payTerms || 'N/A', 'Delivery SLA': delTerms || 'N/A', 'Evaluation': evalMethod || 'N/A' },
         tableHeaders: ['#', 'Item', 'Qty', 'Unit', 'Est. Price', 'GST'],
-        tableData: items.map((it, i) => [String(i + 1), it.name, String(it.qty), it.unit, it.price ? fmt(it.price) : '—', `${it.gst}%`]),
+        tableData: items.map((it, i) => [String(i + 1), it.name, String(it.qty), it.unit, it.price ? moneyPdf(it.price) : 'N/A', `${it.gst}%`]),
         financials: { grandTotal: Number(value || 0) },
-        terms: [`Payment: ${payTerms}`, `Delivery: ${delTerms}`, `Evaluation: ${evalMethod}`, `Warranty: ${warranty}`],
+        terms: [`Payment: ${payTerms || 'Standard'}`, `Delivery: ${delTerms || 'Standard'}`, `Evaluation: ${evalMethod || 'Standard'}`, `Warranty: ${warranty || 'Standard'}`],
         footerNote: 'MSME Enterprise Procurement Portal',
       });
       doc.save(`${ref.replace(/[^a-zA-Z0-9-]/g, '_')}-RFQ.pdf`);
