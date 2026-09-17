@@ -269,6 +269,76 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     }
   }
 
+  // Delivery Document check (regardless of entityId or entityType)
+  const deliveryDoc = await prisma.deliveryDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: {
+      deliveryTracking: {
+        include: {
+          purchaseOrder: true,
+          participants: true
+        }
+      }
+    }
+  }).catch(() => null);
+
+  if (deliveryDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (deliveryDoc.uploadedById === user.id) return true;
+    const po = deliveryDoc.deliveryTracking?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    const participants = deliveryDoc.deliveryTracking?.participants || [];
+    if (participants.some((p: any) => p.userId === user.id && p.isActive !== false)) return true;
+  }
+
+  // Delivery Status Log check (e.g. POD photos attached on checkpoint)
+  const deliveryLog = await prisma.deliveryStatusLog.findFirst({
+    where: { fileAssetId: asset.id },
+    include: {
+      deliveryTracking: {
+        include: {
+          purchaseOrder: true,
+          participants: true
+        }
+      }
+    }
+  }).catch(() => null);
+
+  if (deliveryLog) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (deliveryLog.changedById === user.id) return true;
+    const po = deliveryLog.deliveryTracking?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    const participants = deliveryLog.deliveryTracking?.participants || [];
+    if (participants.some((p: any) => p.userId === user.id && p.isActive !== false)) return true;
+  }
+
+  // Invoice file check
+  const invoiceDoc = await prisma.invoice.findFirst({
+    where: { OR: [{ invoiceFileId: asset.id }, { fileAssetId: asset.id }] },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+
+  if (invoiceDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (invoiceDoc.sellerId === user.id || invoiceDoc.buyerId === user.id) return true;
+    const po = invoiceDoc.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+  }
+
+  // GRN Document check
+  const grnDoc = await prisma.grnDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: { grn: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+
+  if (grnDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (grnDoc.uploadedById === user.id) return true;
+    const po = (grnDoc as any).grn?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+  }
+
   if (!asset.entityId) {
     if (['procurement_bid', 'procurement_draft'].includes(asset.entityType) && user.role === 'seller') {
       try {
@@ -471,6 +541,25 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     const sellerDoc = await prisma.sellerDocument.findUnique({ where: { id: fileId } }).catch(() => null);
     if (sellerDoc?.fileAssetId) {
       asset = await prisma.fileAsset.findUnique({ where: { id: sellerDoc.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
+    const delDoc = await prisma.deliveryDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (delDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: delDoc.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
+    const grnDocItem = await prisma.grnDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (grnDocItem?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: grnDocItem.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
+    const inv = await prisma.invoice.findUnique({ where: { id: fileId } }).catch(() => null);
+    const invFid = inv?.invoiceFileId || inv?.fileAssetId;
+    if (invFid) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: invFid } }).catch(() => null);
     }
   }
   if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');

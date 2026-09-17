@@ -39,6 +39,7 @@ import type { GrnStatus } from '../api';
 import { DataTable } from '../../../components/ui/data-table';
 import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
 import { downloadGrnPdf } from '../lib/grnPdfGenerator';
+import { openFileAsset } from '../../../lib/files';
 
 const STATUS_CONFIG: Record<GrnStatus, { label: string; tone: string; icon: typeof Clock }> = {
     DRAFT: {
@@ -606,23 +607,35 @@ export default function GrnDetailPage({ id }: Props) {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1 shrink-0">
-                                        <a
-                                            href={`/api/files/${doc.fileAsset.id}/view`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const fileTarget = doc.fileAsset || (doc as any).fileAssetId || doc.id;
+                                                openFileAsset(fileTarget, doc.documentType || 'GRN Document').catch(err => {
+                                                    notify.error(err?.message || 'Failed to open document');
+                                                });
+                                            }}
+                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
                                             title="Open document in new tab"
+                                            aria-label={`View ${doc.documentType || 'Document'}`}
                                         >
                                             <ExternalLink className="h-3 w-3" />
                                             View
-                                        </a>
-                                        <a
-                                            href={`/api/files/${doc.fileAsset.id}/download`}
-                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition-colors"
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const fileTarget = doc.fileAsset || (doc as any).fileAssetId || doc.id;
+                                                openFileAsset(fileTarget, doc.documentType || 'GRN Document').catch(err => {
+                                                    notify.error(err?.message || 'Failed to download document');
+                                                });
+                                            }}
+                                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-slate-400"
                                             title="Download document"
+                                            aria-label={`Download ${doc.documentType || 'Document'}`}
                                         >
                                             <Download className="h-3 w-3" />
-                                        </a>
+                                        </button>
                                     </div>
                                 </div>
                             ))}

@@ -23,6 +23,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
+import { openFileAsset } from '../../../lib/files';
 import { compressImage } from '../../../lib/compress';
 import { PdfEngine, type DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { TaxInvoiceCard } from '../../invoices/components/TaxInvoiceCard';
@@ -1929,15 +1930,20 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                     </p>
                                 </div>
                             </div>
-                            {existingChallanDoc.fileAsset?.id && (
-                                <a
-                                    href={`/api/files/${existingChallanDoc.fileAsset.id}/view`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs"
+                            {(existingChallanDoc.fileAsset?.id || existingChallanDoc.fileAssetId) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const fileTarget = existingChallanDoc.fileAsset || existingChallanDoc.fileAssetId;
+                                        openFileAsset(fileTarget, 'Delivery Challan').catch(err => {
+                                            toast.error(err?.message || 'Failed to open Delivery Challan');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                    aria-label="View Delivery Challan"
                                 >
                                     View Challan
-                                </a>
+                                </button>
                             )}
                         </div>
                     ) : null}
@@ -1971,15 +1977,31 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                         </p>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
-                                    className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100"
-                                    title="Remove attached challan file"
-                                    aria-label="Remove delivery challan file"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {challanFileAssetId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                openFileAsset(challanFileAssetId, 'Delivery Challan').catch(err => {
+                                                    toast.error(err?.message || 'Failed to open Delivery Challan');
+                                                });
+                                            }}
+                                            className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                            aria-label="View uploaded Delivery Challan"
+                                        >
+                                            View
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
+                                        className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                        title="Remove attached challan file"
+                                        aria-label="Remove delivery challan file"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div
@@ -3125,6 +3147,41 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                 Attach Proof of Delivery (POD) or recipient receipt for DLV-{delivery.id}.
             </p>
 
+            {delivery.documents && delivery.documents.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Previously Uploaded Documents</p>
+                    <div className="space-y-1.5">
+                        {delivery.documents.map((d: any) => {
+                            const fileTarget = d.fileAsset || d.fileAssetId || d.id;
+                            const docLabel = d.documentType?.replace(/_/g, ' ') || 'Document';
+                            return (
+                                <div key={d.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200/80 px-2.5 py-1.5 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <FileText className="h-3.5 w-3.5 shrink-0 text-[#12335f]" />
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-900 truncate text-[11px]">{docLabel}</p>
+                                            <p className="text-[10px] text-slate-500 truncate">{d.description || d.fileAsset?.originalName || `Asset #${d.fileAssetId}`}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            openFileAsset(fileTarget, docLabel).catch(err => {
+                                                toast.error(err?.message || 'Failed to open document');
+                                            });
+                                        }}
+                                        className="shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-[#12335f] hover:bg-slate-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                                        aria-label={`View ${docLabel}`}
+                                    >
+                                        <ExternalLink className="h-2.5 w-2.5" /> View
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <Field label="Document Type">
                 <select
                     value={docType}
@@ -3166,14 +3223,31 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleRemoveFile}
-                            className="ml-2 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition"
-                            title="Remove attached file"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {fileAssetId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        openFileAsset(Number(fileAssetId), 'Proof of Delivery').catch(err => {
+                                            toast.error(err?.message || 'Failed to open POD document');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    aria-label="View uploaded Proof of Delivery"
+                                >
+                                    View
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleRemoveFile}
+                                className="ml-1 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition cursor-pointer"
+                                title="Remove attached file"
+                                aria-label="Remove attached POD file"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div

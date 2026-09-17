@@ -620,7 +620,8 @@ export const deliveryService = {
               seller: { select: { id: true, name: true } }
             }
           },
-          logisticsPartner: { select: { id: true, name: true } }
+          logisticsPartner: { select: { id: true, name: true } },
+          documents: { include: { fileAsset: true } }
         },
         skip,
         take
@@ -945,8 +946,23 @@ export const deliveryService = {
         uploadedById: actor.id,
         uploaderRole: actor.role,
         description: body.description
+      },
+      include: {
+        fileAsset: true,
+        uploadedBy: { select: { id: true, name: true, role: true } }
       }
     });
+
+    // Update FileAsset metadata to mark it linked to this delivery
+    await db.fileAsset.update({
+      where: { id: body.fileAssetId },
+      data: {
+        entityType: 'procurement_delivery_document',
+        entityId: id,
+        status: 'active'
+      }
+    }).catch(err => console.warn('[DeliveryService] Failed to link fileAsset entityId:', err?.message || err));
+
     void safeAudit(actor, 'delivery.document_uploaded', 'deliveryDocument', document.id, {
       documentType: body.documentType,
       accessRole

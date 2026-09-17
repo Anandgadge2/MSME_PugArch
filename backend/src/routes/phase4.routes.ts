@@ -2753,6 +2753,44 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   }).catch(() => null);
   if (procurementDoc?.bid?.buyerId) return { id: Number(procurementDoc.bid.buyerId), role: 'buyer' };
 
+  // Delivery Document check
+  const deliveryDoc = await db.deliveryDocument.findFirst({
+    where: { fileAssetId: fileId },
+    include: { deliveryTracking: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+  if (deliveryDoc) {
+    const po = deliveryDoc.deliveryTracking?.purchaseOrder;
+    const actorId = deliveryDoc.uploadedById || po?.sellerId || po?.buyerId;
+    if (actorId) {
+      return { id: Number(actorId), role: deliveryDoc.uploaderRole || 'seller' };
+    }
+  }
+
+  // Invoice check
+  const invDoc = await db.invoice.findFirst({
+    where: { OR: [{ invoiceFileId: fileId }, { fileAssetId: fileId }] },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+  if (invDoc) {
+    const actorId = invDoc.sellerId || invDoc.buyerId || invDoc.purchaseOrder?.sellerId || invDoc.purchaseOrder?.buyerId;
+    if (actorId) {
+      return { id: Number(actorId), role: 'seller' };
+    }
+  }
+
+  // GRN Document check
+  const grnDoc = await db.grnDocument.findFirst({
+    where: { fileAssetId: fileId },
+    include: { grn: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+  if (grnDoc) {
+    const po = (grnDoc as any).grn?.purchaseOrder;
+    const actorId = grnDoc.uploadedById || po?.buyerId || po?.sellerId;
+    if (actorId) {
+      return { id: Number(actorId), role: 'buyer' };
+    }
+  }
+
   // Check if file is an organization profile branding asset (logo or banner)
   const orgProfile = await db.organizationProfile.findFirst({
     where: {
@@ -2953,6 +2991,29 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
 router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const { id } = parse(idParams, req.params);
   let actor: any = req.user;
+  if (!actor && typeof req.query.token === 'string' && req.query.token.trim()) {
+    try {
+      const decoded = verifyAccessToken(req.query.token.trim());
+      if (decoded?.id) {
+        const u = await db.user.findUnique({
+          where: { id: Number(decoded.id) },
+          select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
+        });
+        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+          actor = {
+            id: u.id,
+            role: u.role,
+            sessionVersion: u.sessionVersion,
+            permissions: [],
+            organizationId: u.organizationId,
+            enabledFeatures: []
+          };
+        }
+      }
+    } catch {
+      // ignore invalid query token
+    }
+  }
   if (!actor) {
     actor = (await getPublicFileActor(id)) || undefined;
   }
