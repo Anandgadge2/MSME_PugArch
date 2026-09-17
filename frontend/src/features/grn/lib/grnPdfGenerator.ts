@@ -156,7 +156,7 @@ export function generateGrnPdf(grn: GrnDto, options: GrnPdfOptions = {}): jsPDF 
   doc.text('CONSIGNEE & RECEIVING DETAILS', leftX + 3, currentY + 4.2);
 
   let fieldY = currentY + 10;
-  const buyerOrgName = grn.organization?.name || grn.purchaseOrder?.buyer?.organization?.name || 'District Administration Jharsuguda';
+  const buyerOrgName = grn.organization?.organizationName || grn.organization?.name || grn.purchaseOrder?.buyer?.organization?.name || 'District Administration Jharsuguda';
   const buyerUserName = grn.purchaseOrder?.buyer?.name || 'Consignee Officer';
   const buyerEmail = grn.purchaseOrder?.buyer?.email || '—';
   const storeInCharge = `${grn.receivedBy?.name || 'Store Officer'} (${grn.receivedBy?.email || '—'})`;

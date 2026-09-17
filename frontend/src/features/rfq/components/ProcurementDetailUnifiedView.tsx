@@ -66,7 +66,7 @@ import LiveAuctionLeaderboard from '../../reverseAuctions/components/LiveAuction
 import SellerLiveAuctionBanner from '../../reverseAuctions/components/SellerLiveAuctionBanner';
 import SellerAuctionPlannedBanner from '../../reverseAuctions/components/SellerAuctionPlannedBanner';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
-import { formatDate, formatDateTime } from '../../shared/format';
+import { formatDate, formatDateTime, cleanDeliveryAddress } from '../../shared/format';
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone = 'slate' | 'emerald' | 'rose' | 'amber' | 'sky' | 'indigo' | 'violet';
@@ -1527,14 +1527,18 @@ function ScopeSummaryCard({
   const isUrgent = String(effectiveUrgency).toLowerCase().includes('urgent');
 
   const visibleKeyValues = parsedKeyValues.filter(kv => {
+    const lk = kv.label.toLowerCase();
+    if (lk === 'urgency') {
+      return false;
+    }
     if (!shouldShowCost) {
-      const lk = kv.label.toLowerCase();
       if (lk.includes('value') || lk.includes('price') || lk.includes('cost') || lk.includes('rate') || lk.includes('budget')) {
         return false;
       }
     }
     return true;
   });
+
 
   return (
     <div className="space-y-3">
@@ -2311,8 +2315,9 @@ const consigneeColumns: ColumnDef<any>[] = [
     header: 'Delivery Location / Address',
     cell: (item) => {
       if (!isPlainObject(item)) return <span className="text-slate-400">-</span>;
-      const loc = firstPresent(item.location, item.address, item.deliveryAddress, '-');
-      return <span className="text-slate-700">{formatPrimitiveValue(loc)}</span>;
+      const rawLoc = firstPresent(item.location, item.address, item.deliveryAddress, '-');
+      const cleanLoc = cleanDeliveryAddress(rawLoc);
+      return <span className="text-slate-700">{cleanLoc || formatPrimitiveValue(rawLoc)}</span>;
     },
   },
 ];
@@ -2322,7 +2327,12 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
   const isBuyer = typeof ctx === 'boolean' ? ctx : ctx.isBuyer;
   const isHiddenOnBuyer = Boolean(isBuyer || isBuyerSide || isBuyerRfq);
   const items = asArray(data).filter(hasDetailData);
-  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && !isRfpType && !isRateContractType && (hasDetailData(deliveryLocation) || hasDetailData(deliveryTerms));
+
+  const hasDeliveryTerms = hasDetailData(deliveryTerms) && deliveryTerms !== 'N/A' && deliveryTerms !== '—';
+  // Avoid repeating the exact same delivery location above the consignee table when the table already specifies destination addresses
+  const hasConsigneeAddress = items.some(item => isPlainObject(item) && hasDetailData(item.location || item.address || item.deliveryAddress));
+  const showGeneralLocation = !hasConsigneeAddress && hasDetailData(deliveryLocation);
+  const showDeliveryMeta = !isHiddenOnBuyer && !isRfqType && !isRfpType && !isRateContractType && (showGeneralLocation || hasDeliveryTerms);
 
   if (!showDeliveryMeta && items.length === 0) {
     return null;
@@ -2332,14 +2342,14 @@ function ConsigneeTableList({ data, deliveryLocation, deliveryTerms, isBuyerRfq,
     <div className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5">
       <SectionHeader title="Consignee & Delivery Information" icon={MapPin} />
 
-      {/* General Delivery Location & Delivery Terms - commented out / hidden on buyer side */}
+      {/* General Delivery Location & Delivery Terms */}
       {showDeliveryMeta && (
         <div className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
-          <PropertyGrid columns={2}>
-            {hasDetailData(deliveryLocation) && (
-              <PropertyItem label="General Delivery Location" value={deliveryLocation} />
+          <PropertyGrid columns={showGeneralLocation && hasDeliveryTerms ? 2 : 1}>
+            {showGeneralLocation && (
+              <PropertyItem label="General Delivery Location" value={cleanDeliveryAddress(deliveryLocation)} />
             )}
-            {hasDetailData(deliveryTerms) && (
+            {hasDeliveryTerms && (
               <PropertyItem label="Delivery Terms" value={deliveryTerms} />
             )}
           </PropertyGrid>
@@ -3350,7 +3360,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
   const preBidDateFormatted = preBidDateValue ? formatDateString(preBidDateValue, true) : undefined;
   const bidValidityDateFormatted = bidValidityDateComputed ? formatDateString(bidValidityDateComputed, false) : undefined;
 
-  const deliveryLocation = firstPresent(
+  const rawDeliveryLocation = firstPresent(
     props.deliveryLocation && props.deliveryLocation !== '—' && props.deliveryLocation !== 'N/A' && props.deliveryLocation !== 'Delivery location not specified' ? props.deliveryLocation : undefined,
     payload.deliveryLocation,
     basics.deliveryLocation,
@@ -3362,6 +3372,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerOrg.city ? `${buyerOrg.city}, ${buyerOrg.state || ''}` : undefined,
     buyerProfile.city ? `${buyerProfile.city}, ${buyerProfile.state || ''}` : undefined
   ) || 'Door Delivery to Site';
+  const deliveryLocation = cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation;
 
   const projectDuration = firstPresent(
     props.projectDuration && props.projectDuration !== '—' && props.projectDuration !== 'N/A' ? props.projectDuration : undefined,
@@ -3452,11 +3463,13 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     buyerOrg.state || buyerProfile.state,
   ].filter(Boolean);
 
-  const buyerAddress = firstPresent(
+  const rawBuyerAddress = firstPresent(
     props.buyerAddress,
     addressParts.length ? addressParts.join(', ') : undefined,
     props.buyer?.buyerProfile?.address
   ) || '';
+  const buyerAddress = cleanDeliveryAddress(rawBuyerAddress) || rawBuyerAddress;
+
 
   const department = firstPresent(
     props.department && props.department !== 'N/A' && props.department !== '—' ? props.department : undefined,
@@ -4251,10 +4264,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                   {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
                     <PropertyItem label="Payment Terms" value={paymentTerms} />
                   )}
-                  {/* Procurement Brief - hidden on buyer side, RFQ, RFP, and Rate Contract globally */}
-                  {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                    <PropertyItem label="Procurement Brief" value={props.description && props.description.length < 160 && !props.description.includes('\n') ? props.description : (basics.description && basics.description.length < 160 ? basics.description : `${resolvedSubject} (${category})`)} fullWidth />
-                  )}
                 </PropertyGrid>
               </DataCard>
 
@@ -4292,17 +4301,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
               ]}
             />
 
-            {/* Clarification Threads & Status grid - hidden on buyer side, and RFQ, RFP, Rate Contract */}
-            {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && !isBuyerOpenTender && !isBuyerLimitedTender && (
-              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
-                <PropertyGrid columns={4}>
-                  <PropertyItem label="Clarification Threads" value={(props.totalClarifications || 0).toLocaleString('en-IN')} />
-                  <PropertyItem label={isRfqType ? 'Quotation Status' : 'Proposal Status'} value={proposalStatusDisplay} />
-                  <PropertyItem label="Deadline Status" value={isDeadlinePassed ? 'Closed' : 'Open'} />
-                  <PropertyItem label="Source Record" value={procurementTypeLabel} />
-                </PropertyGrid>
-              </div>
-            )}
           </div>
         )}
 
@@ -4317,11 +4315,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 urgency={payload.urgency || rules.urgency || 'Normal'}
                 procurementMethod={procurementMethod}
               />
-
-              {/* Service Details & Parameters - hidden globally on RFQ, and on buyer side for Open & Limited Tender */}
-              {hasDetailData(serviceDetails) && !isRfqType && !isBuyerRfq && !isBuyerOpenTender && !isBuyerLimitedTender && (
-                <ServiceDetailsSection serviceDetails={serviceDetails} isRfqType={isRfqType} />
-              )}
 
               {hasDetailData(lineItems) && (
                 <LineItemsTable items={lineItems} defaultSubject={resolvedSubject} isBuyer={isBuyerSide} />
@@ -4460,9 +4453,54 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                 {/* Payment Terms and Delivery Terms commented out as they already appear in Terms & Conditions */}
                 {/* <PropertyItem label="Payment Terms" value={paymentTerms} /> */}
                 {/* <PropertyItem label="Delivery Terms" value={deliveryTerms} /> */}
-                {/* Contract Period commented out / hidden on buyer side and RFQ/RFP/Rate Contract globally */}
+                {/* Contract Period */}
                 {!isBuyerSide && !isRfqType && !isRfpType && !isRateContractType && (
-                  <PropertyItem label="Contract Period" value={firstPresent(terms.contractPeriod, terms.projectDuration, projectDuration)} />
+                  <PropertyItem label="Contract Period" value={firstPresent(serviceDetails.duration, serviceDetails.contractPeriod, terms.contractPeriod, terms.projectDuration, projectDuration)} />
+                )}
+                {/* Service Parameters & Related Terms */}
+                {hasDetailData(serviceDetails) && !isRfqType && (
+                  <>
+                    {hasDetailData(serviceDetails.serviceTitle || serviceDetails.title) && (
+                      <PropertyItem label="Service Title" value={serviceDetails.serviceTitle || serviceDetails.title} />
+                    )}
+                    {hasDetailData(serviceDetails.slaResponseTime) && (
+                      <PropertyItem label="SLA Response Time" value={serviceDetails.slaResponseTime} />
+                    )}
+                    {hasDetailData(serviceDetails.penaltyClause || terms.penaltyClause) && (
+                      <PropertyItem label="Penalty Clause" value={serviceDetails.penaltyClause || terms.penaltyClause} />
+                    )}
+                    {hasDetailData(serviceDetails.manpowerRequired) && (
+                      <PropertyItem label="Manpower Required" value={formatPrimitiveValue(serviceDetails.manpowerRequired)} />
+                    )}
+                    {hasDetailData(serviceDetails.experienceRequired) && (
+                      <PropertyItem label="Experience Required" value={formatPrimitiveValue(serviceDetails.experienceRequired)} />
+                    )}
+                    {(() => {
+                      const {
+                        duration: _dur,
+                        projectDuration: _projDur,
+                        contractPeriod: _cPer,
+                        penaltyClause: _pen,
+                        slaResponseTime: _sla,
+                        manpowerRequired: _man,
+                        experienceRequired: _exp,
+                        milestones: _miles,
+                        warranty: _warr,
+                        warrantyTerms: _warrT,
+                        warrantyPeriod: _warrP,
+                        paymentTerms: _payT,
+                        serviceTitle: _sTitle,
+                        title: _t,
+                        scopeOfWork: _sow,
+                        description: _desc,
+                        ...restService
+                      } = serviceDetails || {};
+                      const extraEntries = detailEntries(compactObject(restService));
+                      return extraEntries.map(([k, v]) => (
+                        <PropertyItem key={k} label={humanizeKey(k)} value={v} />
+                      ));
+                    })()}
+                  </>
                 )}
                 {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
                 {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}

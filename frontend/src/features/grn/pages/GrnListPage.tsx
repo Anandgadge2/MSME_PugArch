@@ -94,10 +94,17 @@ function DateFilterPopover({
             </Button>
             
             {isOpen && typeof document !== 'undefined' && createPortal(
-                <div id="date-popover-portal" className="fixed z-[100] w-[340px] rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col overflow-hidden text-left" style={{ top: position.top, left: position.left }}>
+                <div 
+                    id="date-popover-portal" 
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Date Filters"
+                    className="fixed z-[100] w-[340px] rounded-xl border border-slate-200 bg-white shadow-xl flex flex-col overflow-hidden text-left" 
+                    style={{ top: position.top, left: position.left }}
+                >
                     <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                         <span className="text-xs font-black text-[#12335f] uppercase tracking-widest">Date Filters</span>
-                        <button onClick={closePopover} className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4"/></button>
+                        <button type="button" onClick={closePopover} aria-label="Close date filters" className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4"/></button>
                     </div>
                     <div className="p-4 space-y-4">
                         <div className="space-y-2">

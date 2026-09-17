@@ -73,6 +73,7 @@ import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
 import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
+import { cleanDeliveryAddress } from '../../shared/format';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
 import { SearchableSelect } from '../../../components/ui/SearchableSelect';
@@ -2472,6 +2473,24 @@ function BasicsStepForm({
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
 
+  // Helper to format clean, non-redundant delivery address string
+  const formatDeliveryAddressString = (addr: DeliveryAddressDto): string => {
+    const street = [addr.addressLine1, addr.addressLine2].filter(Boolean).map(s => s?.trim()).filter(Boolean).join(', ');
+    const city = addr.city?.trim() || '';
+    const dist = addr.district?.trim() || '';
+    const isCitySameDist = city && dist && (
+      city.toLowerCase() === dist.toLowerCase() ||
+      (city.length >= 5 && dist.length >= 5 && (city.toLowerCase().startsWith(dist.toLowerCase().slice(0, 5)) || dist.toLowerCase().startsWith(city.toLowerCase().slice(0, 5))))
+    );
+    const locParts = [
+      isCitySameDist ? (dist.length >= city.length ? dist : city) : [city, dist].filter(Boolean).join(', '),
+      addr.state?.trim(),
+    ].filter(Boolean).join(', ');
+    const pin = addr.pincode ? ` - ${addr.pincode.trim()}` : '';
+    const raw = `${street}${street && locParts ? ', ' : ''}${locParts}${pin}`;
+    return cleanDeliveryAddress(raw) || raw;
+  };
+
   // Filter allowed buying options strictly by selected procurement method
   const allowedBuyingOptions = useMemo(() => {
     return BUYING_OPTIONS_BY_METHOD[draft.type] || [
@@ -2597,7 +2616,7 @@ function BasicsStepForm({
       setDeliveryAddressesList(prev => [newAddr, ...prev]);
       
       // Autofetch and populate delivery location
-      const fullAddr = `${newAddr.addressLabel}: ${newAddr.addressLine1}${newAddr.addressLine2 ? ', ' + newAddr.addressLine2 : ''}, ${newAddr.city}, ${newAddr.district}, ${newAddr.state} - ${newAddr.pincode}. Contact: ${newAddr.contactPersonName} (${newAddr.mobileNumber})`;
+      const fullAddr = formatDeliveryAddressString(newAddr);
       updateDraft(c => ({
         ...c,
         basics: { ...c.basics, deliveryLocation: fullAddr }
@@ -2917,7 +2936,7 @@ function BasicsStepForm({
                         if (!val) return;
                         const selected = deliveryAddressesList.find(a => String(a.id) === String(val));
                         if (selected) {
-                          const fullAddr = `${selected.addressLabel}: ${selected.addressLine1}${selected.addressLine2 ? ', ' + selected.addressLine2 : ''}, ${selected.city}, ${selected.district}, ${selected.state} - ${selected.pincode}. Contact: ${selected.contactPersonName} (${selected.mobileNumber})`;
+                          const fullAddr = formatDeliveryAddressString(selected);
                           updateDraft(c => ({
                             ...c,
                             basics: { ...c.basics, deliveryLocation: fullAddr }

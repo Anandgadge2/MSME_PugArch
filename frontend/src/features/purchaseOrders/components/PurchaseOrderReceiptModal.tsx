@@ -33,6 +33,7 @@ import { toast } from 'sonner';
 import { api } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 import type { DocumentConfig } from '../../../lib/pdfEngine';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -515,14 +516,15 @@ export function PurchaseOrderReceiptModal({
       }} />
 
       {/* Main Container Card */}
-      <div
-        className={cn(
-          'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-300 w-full',
-          isFullscreen
-            ? 'h-full w-full rounded-none'
-            : 'h-[92vh] max-h-[95vh] max-w-[880px] rounded-2xl border border-slate-200'
-        )}
-      >
+      <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-[880px]")}>
+        <div
+          className={cn(
+            'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-300 w-full',
+            isFullscreen
+              ? 'h-full w-full rounded-none'
+              : 'h-full rounded-2xl border border-slate-200'
+          )}
+        >
         {/* Top Control Header Bar (Hidden in Print) */}
         <header className="no-print bg-[#0b1f3a] text-white px-2.5 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-1.5 sm:gap-2 overflow-hidden">
           {/* Left: Navigation, PO info */}
@@ -1359,6 +1361,7 @@ export function PurchaseOrderReceiptModal({
           </div>
         </footer>
       </div>
+      </FocusTrap>
     </div>
   );
 }

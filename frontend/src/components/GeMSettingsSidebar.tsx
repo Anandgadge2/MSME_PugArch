@@ -39,6 +39,12 @@ export const GeMSettingsSidebar: React.FC<GeMSettingsSidebarProps> = ({ currentS
       ]
     },
     {
+      title: 'PRIVACY & COMPLIANCE',
+      items: [
+        { id: 'privacy', label: 'Data Consents & DPDP', icon: ShieldCheck },
+      ]
+    },
+    {
       title: 'DANGER ZONE',
       items: [
         { id: 'close', label: 'Close Account', icon: UserX, danger: true },

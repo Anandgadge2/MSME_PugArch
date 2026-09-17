@@ -216,3 +216,62 @@ export const cleanOpportunitySummary = (desc?: string | null): string => {
   text = text.replace(/^[-:|,.\s]+|[-:|,.\s]+$/g, '').trim();
   return text;
 };
+
+/**
+ * Normalizes full delivery addresses by stripping repetitive labels,
+ * removing trailing inline contact metadata, and deduplicating repeating/typo
+ * city & district tokens (e.g. "Jharsugda, Jharsuguda" -> "Jharsuguda").
+ */
+export const cleanDeliveryAddress = (raw?: string | null): string => {
+  if (!raw) return '';
+  let str = String(raw).trim();
+  if (!str || str === '—' || str === 'N/A' || str.toLowerCase() === 'location not specified') return '';
+
+  // 1. Remove redundant prefixes like "Office Delivery Address:", "Delivery Location:", "Delivery Address:", etc.
+  str = str.replace(/^(?:Office\s+(?:Delivery\s+)?Address|General\s+Delivery\s+Location|Delivery\s+Location|Delivery\s+Address|Consignee\s+(?:Delivery\s+)?Address|Address)\s*:\s*/i, '');
+
+  // 2. Remove redundant inline contact details like ". Contact: Snehal Kolhe (8835155245)" or ", Contact: ..."
+  str = str.replace(/(?:[.,;]?\s*(?:Contact|Phone|Tel|Mobile)\s*:\s*.*)$/i, '');
+
+  // 3. Clean any literal 'undefined' or 'null'
+  str = str.replace(/\b(?:undefined|null)\b/gi, '').trim();
+
+  // 4. Split segments by comma and deduplicate repetitive city/district names (e.g. "Jharsugda, Jharsuguda", "Jharsuguda, Jharsuguda")
+  const rawSegments = str.split(',').map(s => s.trim()).filter(Boolean);
+  const dedupedSegments: string[] = [];
+
+  const normalizeToken = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  for (let i = 0; i < rawSegments.length; i++) {
+    const seg = rawSegments[i];
+    const prevSeg = dedupedSegments[dedupedSegments.length - 1];
+
+    if (!prevSeg) {
+      dedupedSegments.push(seg);
+      continue;
+    }
+
+    const normSeg = normalizeToken(seg);
+    const normPrev = normalizeToken(prevSeg);
+
+    // Check if identical or one is sub-spelling/typo of the other (like "jharsugda" and "jharsuguda")
+    const isSimilar = normSeg === normPrev ||
+      (normSeg.length >= 5 && normPrev.length >= 5 && (
+        (normSeg.startsWith(normPrev.slice(0, 5)) && Math.abs(normSeg.length - normPrev.length) <= 3) ||
+        (normPrev.startsWith(normSeg.slice(0, 5)) && Math.abs(normSeg.length - normPrev.length) <= 3)
+      ));
+
+    if (isSimilar) {
+      // Keep the longer/more complete spelling
+      if (seg.length > prevSeg.length) {
+        dedupedSegments[dedupedSegments.length - 1] = seg;
+      }
+      continue;
+    }
+
+    dedupedSegments.push(seg);
+  }
+
+  return dedupedSegments.join(', ');
+};
+

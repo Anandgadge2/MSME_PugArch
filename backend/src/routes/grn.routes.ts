@@ -61,7 +61,7 @@ const grnIncludes = {
         },
         orderBy: { createdAt: 'desc' as const }
     },
-    organization: { select: { id: true, name: true, code: true } },
+    organization: { select: { id: true, organizationName: true, organizationType: true } },
     purchaseOrder: {
         select: {
             id: true, poNumber: true, title: true, amount: true, status: true,

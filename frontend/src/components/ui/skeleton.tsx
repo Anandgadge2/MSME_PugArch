@@ -15,7 +15,8 @@ export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 
 export function CardSkeleton({ rows = 3 }: { rows?: number }) {
     return (
-        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+        <div role="status" aria-busy="true" aria-live="polite" className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-2xs">
+            <span className="sr-only">Loading card data...</span>
             <Skeleton className="h-4 w-1/3" />
             <Skeleton className="h-3 w-2/3" />
             {Array.from({ length: rows - 2 }).map((_, idx) => (
@@ -51,7 +52,8 @@ export function TableSkeleton({
     const displayCols = Math.min(Math.max(cols, 4), colHeaderWidths.length);
 
     return (
-        <div className={cn("overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xs", className)}>
+        <div role="status" aria-busy="true" aria-live="polite" className={cn("overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xs", className)}>
+            <span className="sr-only">Loading table data...</span>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                     <thead className="border-b border-slate-200/90 bg-slate-50/75 text-[10px] font-black uppercase tracking-wider text-slate-500">
@@ -96,7 +98,8 @@ export function TableSkeleton({
 
 export function ListSkeleton({ rows = 4 }: { rows?: number }) {
     return (
-        <div className="space-y-3">
+        <div role="status" aria-busy="true" aria-live="polite" className="space-y-3">
+            <span className="sr-only">Loading list items...</span>
             {Array.from({ length: rows }).map((_, idx) => (
                 <CardSkeleton key={idx} />
             ))}
@@ -106,7 +109,8 @@ export function ListSkeleton({ rows = 4 }: { rows?: number }) {
 
 export function MetricCardSkeleton() {
     return (
-        <div className="flex items-start justify-between rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-2xs">
+        <div role="status" aria-busy="true" aria-live="polite" className="flex items-start justify-between rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-2xs">
+            <span className="sr-only">Loading metric data...</span>
             <div className="space-y-1.5 min-w-0 flex-1">
                 <Skeleton className="h-2.5 w-16 rounded" />
                 <Skeleton className="h-6 w-20 rounded-md" />
@@ -123,7 +127,8 @@ export function KpiSkeleton() {
 
 export function ChartSkeleton() {
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div role="status" aria-busy="true" aria-live="polite" className="rounded-xl border border-slate-200 bg-white p-4">
+            <span className="sr-only">Loading chart data...</span>
             <div className="mb-4 flex items-center justify-between">
                 <Skeleton className="h-4 w-32" />
                 <Skeleton className="h-8 w-24 rounded-md" />
@@ -139,7 +144,8 @@ export function ChartSkeleton() {
 
 export function FormSectionSkeleton({ fields = 6 }: { fields?: number }) {
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div role="status" aria-busy="true" aria-live="polite" className="rounded-xl border border-slate-200 bg-white p-4">
+            <span className="sr-only">Loading form fields...</span>
             <Skeleton className="mb-4 h-4 w-40" />
             <div className="grid gap-3 sm:grid-cols-2">
                 {Array.from({ length: fields }).map((_, index) => (

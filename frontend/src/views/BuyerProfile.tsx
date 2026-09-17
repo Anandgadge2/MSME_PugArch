@@ -43,6 +43,8 @@ import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 import { BuyerProfileSkeleton, BuyerShowcaseFormSkeleton } from '../components/ui/skeleton';
 import { DataTable, ColumnDef } from '../components/ui/data-table';
+import { FocusTrap } from '../components/ui/FocusTrap';
+import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 
 interface SidebarNavItem {
   id: string;
@@ -57,6 +59,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
   { id: 'password', label: 'Change Password', icon: Lock },
+  { id: 'privacy', label: 'Privacy & Consent', icon: Shield },
   { id: 'deactivate', label: 'Deactivate Account', icon: Trash2 },
 ];
 
@@ -1507,20 +1510,26 @@ export default function BuyerProfile() {
                       <div className="space-y-8">
                         {/* Image lightbox/preview modal */}
                         {viewImageUrl && (
-                          <div
-                            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-                            onClick={() => setViewImageUrl(null)}
-                          >
-                            <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-                              <button
-                                onClick={() => setViewImageUrl(null)}
-                                className="absolute -top-10 right-0 text-white hover:text-slate-300 font-black text-xs uppercase tracking-wider flex items-center gap-1"
-                              >
-                                <X className="h-4 w-4" /> Close
-                              </button>
-                              <img src={viewImageUrl} alt="Preview" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
+                          <FocusTrap active onEscape={() => setViewImageUrl(null)}>
+                            <div
+                              role="dialog"
+                              aria-modal="true"
+                              aria-label="Image preview"
+                              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                              onClick={() => setViewImageUrl(null)}
+                            >
+                              <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setViewImageUrl(null)}
+                                  aria-label="Close image preview"
+                                  className="absolute -top-10 right-0 text-white hover:text-slate-300 font-black text-xs uppercase tracking-wider flex items-center gap-1"
+                                >
+                                  <X className="h-4 w-4" aria-hidden="true" /> Close
+                                </button>
+                                <img src={viewImageUrl} alt="Preview" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
+                              </div>
                             </div>
-                          </div>
+                          </FocusTrap>
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1815,33 +1824,46 @@ export default function BuyerProfile() {
 
                         {/* Add/Edit Modal dialog */}
                         {isItemModalOpen && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg border overflow-hidden animate-in zoom-in-95 duration-200">
-                              <div className="bg-[#12335f] p-4 text-white flex justify-between items-center">
-                                <h4 className="text-sm font-black uppercase tracking-wider">{editingItem ? 'Edit Item' : 'Add Item Manually'}</h4>
-                                <button onClick={() => setIsItemModalOpen(false)} className="text-white hover:text-slate-200"><X className="h-5 w-5" /></button>
+                          <FocusTrap active onEscape={() => setIsItemModalOpen(false)}>
+                            <div
+                              role="dialog"
+                              aria-modal="true"
+                              aria-labelledby="item-modal-title"
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+                            >
+                              <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+                                <div className="bg-[#12335f] p-4 text-white flex justify-between items-center">
+                                  <h4 id="item-modal-title" className="text-sm font-black uppercase tracking-wider">{editingItem ? 'Edit Item' : 'Add Item Manually'}</h4>
+                                  <button
+                                    onClick={() => setIsItemModalOpen(false)}
+                                    aria-label="Close dialog"
+                                    className="text-white hover:text-slate-200 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-white/40"
+                                  >
+                                    <X className="h-5 w-5" aria-hidden="true" />
+                                  </button>
+                                </div>
+                                <form onSubmit={handleItemSubmit} className="p-6 space-y-4">
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-1"><Input label="Sl. No." id="item-serial-no" value={itemForm.serialNo} onChange={(e) => setItemForm(prev => ({ ...prev, serialNo: e.target.value }))} placeholder="e.g. 1" /></div>
+                                    <div className="col-span-2"><Input label="Category" id="item-category" value={itemForm.category} onChange={(e) => setItemForm(prev => ({ ...prev, category: e.target.value }))} placeholder="e.g. Safety" /></div>
+                                  </div>
+                                  <Input label="Item Description *" id="item-description" value={itemForm.itemDescription} onChange={(e) => setItemForm(prev => ({ ...prev, itemDescription: e.target.value }))} placeholder="Enter item description" required />
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Monthly Qty" id="item-monthly-qty" value={itemForm.estimatedMonthlyRequirement} onChange={(e) => setItemForm(prev => ({ ...prev, estimatedMonthlyRequirement: e.target.value }))} placeholder="e.g. 100" />
+                                    <Input label="Unit" id="item-unit" value={itemForm.unit} onChange={(e) => setItemForm(prev => ({ ...prev, unit: e.target.value }))} placeholder="e.g. Nos" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label htmlFor="item-remarks" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</label>
+                                    <textarea id="item-remarks" value={itemForm.remarks} onChange={(e) => setItemForm(prev => ({ ...prev, remarks: e.target.value }))} placeholder="Any additional information" rows={2} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none" />
+                                  </div>
+                                  <div className="pt-4 flex justify-end gap-2 border-t">
+                                    <Button type="button" onClick={() => setIsItemModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl">Cancel</Button>
+                                    <Button type="submit" className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl">Save Item</Button>
+                                  </div>
+                                </form>
                               </div>
-                              <form onSubmit={handleItemSubmit} className="p-6 space-y-4">
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="col-span-1"><Input label="Sl. No." value={itemForm.serialNo} onChange={(e) => setItemForm(prev => ({ ...prev, serialNo: e.target.value }))} placeholder="e.g. 1" /></div>
-                                  <div className="col-span-2"><Input label="Category" value={itemForm.category} onChange={(e) => setItemForm(prev => ({ ...prev, category: e.target.value }))} placeholder="e.g. Safety" /></div>
-                                </div>
-                                <Input label="Item Description *" value={itemForm.itemDescription} onChange={(e) => setItemForm(prev => ({ ...prev, itemDescription: e.target.value }))} placeholder="Enter item description" required />
-                                <div className="grid grid-cols-2 gap-4">
-                                  <Input label="Monthly Qty" value={itemForm.estimatedMonthlyRequirement} onChange={(e) => setItemForm(prev => ({ ...prev, estimatedMonthlyRequirement: e.target.value }))} placeholder="e.g. 100" />
-                                  <Input label="Unit" value={itemForm.unit} onChange={(e) => setItemForm(prev => ({ ...prev, unit: e.target.value }))} placeholder="e.g. Nos" />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</label>
-                                  <textarea value={itemForm.remarks} onChange={(e) => setItemForm(prev => ({ ...prev, remarks: e.target.value }))} placeholder="Any additional information" rows={2} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none" />
-                                </div>
-                                <div className="pt-4 flex justify-end gap-2 border-t">
-                                  <Button type="button" onClick={() => setIsItemModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl">Cancel</Button>
-                                  <Button type="submit" className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl">Save Item</Button>
-                                </div>
-                              </form>
                             </div>
-                          </div>
+                          </FocusTrap>
                         )}
                       </div>
                     )}
@@ -2721,7 +2743,13 @@ export default function BuyerProfile() {
               </div>
             )}
 
-            {activeSection !== 'address' && activeSection !== 'bank' && activeSection !== 'personal' && activeSection !== 'referral' && activeSection !== 'mobile' && activeSection !== 'hierarchy' && activeSection !== 'email' && activeSection !== 'deactivate' && activeSection !== 'password' && activeSection !== 'showcase_profile' && (
+            {activeSection === 'privacy' && (
+              <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
+                <ConsentManagementCard />
+              </div>
+            )}
+
+            {activeSection !== 'address' && activeSection !== 'bank' && activeSection !== 'personal' && activeSection !== 'referral' && activeSection !== 'mobile' && activeSection !== 'hierarchy' && activeSection !== 'email' && activeSection !== 'deactivate' && activeSection !== 'password' && activeSection !== 'showcase_profile' && activeSection !== 'privacy' && (
               <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="h-20 w-20 rounded-[2rem] bg-slate-50 flex items-center justify-center rotate-3 transition-transform hover:rotate-0">
                   {SIDEBAR_NAV.find(s => s.id === activeSection)?.icon && (

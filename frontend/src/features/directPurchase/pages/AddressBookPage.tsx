@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Loader2 } from '@/components/ui/loader';
 import { PageTableSkeleton } from '../../../components/ui/skeleton';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import {
     fetchDeliveryAddresses,
     createDeliveryAddress,
@@ -533,19 +534,27 @@ export default function AddressBookPage() {
 
             {/* Address Form Modal */}
             {isAddressModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                            <h2 className="text-lg font-bold text-[#12335f]">
-                                {editingAddress ? 'Edit Delivery Address' : 'Add New Delivery Address'}
-                            </h2>
-                            <button
-                                onClick={() => setIsAddressModalOpen(false)}
-                                className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                            >
-                                <Plus className="h-5 w-5 rotate-45" />
-                            </button>
-                        </div>
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="address-modal-title"
+                >
+                    <FocusTrap onEscape={() => setIsAddressModalOpen(false)} className="w-full max-w-2xl">
+                        <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                <h2 id="address-modal-title" className="text-lg font-bold text-[#12335f]">
+                                    {editingAddress ? 'Edit Delivery Address' : 'Add New Delivery Address'}
+                                </h2>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddressModalOpen(false)}
+                                    aria-label="Close address modal"
+                                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                                >
+                                    <Plus className="h-5 w-5 rotate-45" />
+                                </button>
+                            </div>
 
                         <form onSubmit={handleSaveAddress} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -830,82 +839,78 @@ export default function AddressBookPage() {
                             </div>
                         </form>
                     </div>
+                    </FocusTrap>
                 </div>
             )}
 
             {/* Address Group Modal */}
             {isGroupModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="relative w-full max-w-md rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                            <h2 className="text-lg font-bold text-[#12335f]">
-                                Create Address Group
-                            </h2>
-                            <button
-                                onClick={() => setIsGroupModalOpen(false)}
-                                className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                            >
-                                <Plus className="h-5 w-5 rotate-45" />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleCreateGroup} className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-750">
-                                    Group Name *
-                                </label>
-                                <Input
-                                    required
-                                    placeholder="e.g. Western Zone, Site Offices"
-                                    value={groupName}
-                                    onChange={e => setGroupName(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-750">
-                                    Description
-                                </label>
-                                <textarea
-                                    className="flex w-full rounded-lg border border-slate-250 bg-white px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:opacity-50"
-                                    rows={3}
-                                    placeholder="Add detail about address group..."
-                                    value={groupDescription}
-                                    onChange={e => setGroupDescription(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="isDefaultGroup"
-                                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/15"
-                                    checked={isDefaultGroup}
-                                    onChange={e => setIsDefaultGroup(e.target.checked)}
-                                />
-                                <label htmlFor="isDefaultGroup" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                                    Set as default group
-                                </label>
-                            </div>
-
-                            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-6">
-                                <Button
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="group-modal-title"
+                >
+                    <FocusTrap onEscape={() => setIsGroupModalOpen(false)} className="w-full max-w-md">
+                        <div className="relative w-full max-w-md rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                <h2 id="group-modal-title" className="text-lg font-bold text-[#12335f]">
+                                    Create Address Group
+                                </h2>
+                                <button
                                     type="button"
-                                    variant="outline"
                                     onClick={() => setIsGroupModalOpen(false)}
-                                    className="h-10 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-755"
+                                    aria-label="Close address group modal"
+                                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
                                 >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    className="h-10 text-xs font-bold bg-[#12335f] hover:bg-[#12335f]/90 text-white"
-                                >
-                                    Create Group
-                                </Button>
+                                    <Plus className="h-5 w-5 rotate-45" />
+                                </button>
                             </div>
-                        </form>
-                    </div>
+
+                            <form onSubmit={handleCreateGroup} className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-750">
+                                        Group Name *
+                                    </label>
+                                    <Input
+                                        required
+                                        placeholder="e.g. Western Zone, Site Offices"
+                                        value={groupName}
+                                        onChange={e => setGroupName(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-750">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        className="h-20 w-full rounded-lg border border-slate-250 bg-white p-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+                                        placeholder="Optional description of this address cluster..."
+                                        value={groupDescription}
+                                        onChange={e => setGroupDescription(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-6">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setIsGroupModalOpen(false)}
+                                        className="h-10 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-755"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        className="h-10 text-xs font-bold bg-[#12335f] hover:bg-[#12335f]/90 text-white"
+                                    >
+                                        Create Group
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    </FocusTrap>
                 </div>
             )}
         </div>

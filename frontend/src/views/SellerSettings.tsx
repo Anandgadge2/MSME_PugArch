@@ -13,6 +13,8 @@ import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 import { isShgUser } from '../lib/shg';
+import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
+import { FocusTrap } from '../components/ui/FocusTrap';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
@@ -995,41 +997,61 @@ export default function SellerSettings() {
                 </div>
               </div>
             )}
+
+            {/* Privacy & DPDP Consents Section */}
+            {currentSection === 'privacy' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <h2 className="text-2xl font-bold text-gray-800">Privacy & Consent Management</h2>
+                  <div className="text-[10px] flex items-center gap-2 text-gray-400 uppercase tracking-widest font-black">
+                    Statutory Data Principal Rights · Section 6(6)
+                  </div>
+                </div>
+                <ConsentManagementCard />
+              </div>
+            )}
           </div>
         </main>
       </div>
 
       {isCloseModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3 text-red-600">
-              <div className="bg-red-50 p-2 rounded-full">
-                <AlertTriangle className="h-6 w-6" />
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="close-account-title"
+        >
+          <FocusTrap onEscape={() => setIsCloseModalOpen(false)} className="w-full max-w-md">
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-3 text-red-600">
+                <div className="bg-red-50 p-2 rounded-full">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+                <h3 id="close-account-title" className="text-lg font-bold">Close Account Permanently</h3>
               </div>
-              <h3 className="text-lg font-bold">Close Account Permanently</h3>
-            </div>
-            
-            <p className="text-sm text-gray-600 leading-relaxed">
-              This action is permanent and irreversible. Your account will be <span className="font-bold text-red-600">permanently deleted</span> and you will <span className="font-bold text-red-600">not be able to retrieve this account</span> or any associated data.
-            </p>
+              
+              <p className="text-sm text-gray-600 leading-relaxed">
+                This action is permanent and irreversible. Your account will be <span className="font-bold text-red-600">permanently deleted</span> and you will <span className="font-bold text-red-600">not be able to retrieve this account</span> or any associated data.
+              </p>
 
-            <div className="flex justify-end gap-3 pt-2">
-              <Button 
-                onClick={() => setIsCloseModalOpen(false)} 
-                disabled={isLoading}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-6 h-12 uppercase tracking-widest text-xs border border-gray-200"
-              >
-                CANCEL
-              </Button>
-              <Button 
-                onClick={handleCloseAccount} 
-                disabled={isLoading}
-                className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 h-12 uppercase tracking-widest text-xs shadow-lg shadow-red-100"
-              >
-                {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'DELETE PERMANENTLY'}
-              </Button>
+              <div className="flex justify-end gap-3 pt-2">
+                <Button 
+                  onClick={() => setIsCloseModalOpen(false)} 
+                  disabled={isLoading}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-6 h-12 uppercase tracking-widest text-xs border border-gray-200"
+                >
+                  CANCEL
+                </Button>
+                <Button 
+                  onClick={handleCloseAccount} 
+                  disabled={isLoading}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 h-12 uppercase tracking-widest text-xs shadow-lg shadow-red-100"
+                >
+                  {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'DELETE PERMANENTLY'}
+                </Button>
+              </div>
             </div>
-          </div>
+          </FocusTrap>
         </div>
       )}
 

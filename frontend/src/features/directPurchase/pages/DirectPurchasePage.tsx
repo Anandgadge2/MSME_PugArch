@@ -11,6 +11,7 @@ import { Pagination } from '../../shared/Pagination';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { ListSkeleton } from '../../../components/ui/skeleton';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { formatCurrency, formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -1133,17 +1134,20 @@ function Modal({ title, onClose, wide, children }: { title: string; onClose: () 
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
             role="dialog"
             aria-modal="true"
+            aria-label={title}
             onClick={e => e.target === e.currentTarget && onClose()}
         >
-            <div className={cn('w-full overflow-hidden rounded-xl bg-white shadow-xl animate-in zoom-in-95 duration-200', wide ? 'max-w-3xl' : 'max-w-lg')}>
-                <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white">
-                    <h2 className="text-sm font-black uppercase tracking-widest text-wrap-anywhere">{title}</h2>
-                    <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10" aria-label="Close">
-                        <X className="h-4 w-4" />
-                    </button>
-                </header>
-                <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
-            </div>
+            <FocusTrap onEscape={onClose} className={cn('w-full', wide ? 'max-w-3xl' : 'max-w-lg')}>
+                <div className="w-full overflow-hidden rounded-xl bg-white shadow-xl animate-in zoom-in-95 duration-200">
+                    <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white">
+                        <h2 className="text-sm font-black uppercase tracking-widest text-wrap-anywhere">{title}</h2>
+                        <button type="button" onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10" aria-label="Close dialog">
+                            <X className="h-4 w-4" />
+                        </button>
+                    </header>
+                    <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
+                </div>
+            </FocusTrap>
         </div>
     );
 }
