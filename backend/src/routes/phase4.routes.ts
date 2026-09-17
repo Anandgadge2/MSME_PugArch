@@ -7510,6 +7510,29 @@ router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), pay
   ok(res, newPo, 201);
 }));
 
+const formatOrgWithAddress = (org: any) => {
+  if (!org) return org;
+  return {
+    ...org,
+    address: [org.addressLine1, org.addressLine2].filter(Boolean).join(', ') || [org.city, org.state, org.pincode].filter(Boolean).join(', ') || null
+  };
+};
+
+const formatPoWithOrgAddress = (po: any) => {
+  if (!po) return po;
+  return {
+    ...po,
+    buyer: po.buyer ? {
+      ...po.buyer,
+      organization: formatOrgWithAddress(po.buyer.organization)
+    } : po.buyer,
+    seller: po.seller ? {
+      ...po.seller,
+      organization: formatOrgWithAddress(po.seller.organization)
+    } : po.seller
+  };
+};
+
 router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   let where: any = {};
@@ -7566,7 +7589,8 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 organizationName: true,
                 gstin: true,
                 panNumber: true,
-                address: true,
+                addressLine1: true,
+                addressLine2: true,
                 city: true,
                 state: true,
                 pincode: true,
@@ -7592,7 +7616,8 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 organizationName: true,
                 gstin: true,
                 panNumber: true,
-                address: true,
+                addressLine1: true,
+                addressLine2: true,
                 city: true,
                 state: true,
                 pincode: true,
@@ -7612,7 +7637,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
     }),
     db.purchaseOrder.count({ where })
   ]);
-  ok(res, paged(purchaseOrders, total, query, 'purchaseOrders'));
+  ok(res, paged(purchaseOrders.map(formatPoWithOrgAddress), total, query, 'purchaseOrders'));
 }));
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
@@ -7635,7 +7660,8 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               organizationName: true,
               gstin: true,
               panNumber: true,
-              address: true,
+              addressLine1: true,
+              addressLine2: true,
               city: true,
               state: true,
               pincode: true,
@@ -7661,7 +7687,8 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               organizationName: true,
               gstin: true,
               panNumber: true,
-              address: true,
+              addressLine1: true,
+              addressLine2: true,
               city: true,
               state: true,
               pincode: true,
@@ -7702,7 +7729,7 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
   }
 
   if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-  ok(res, po);
+  ok(res, formatPoWithOrgAddress(po));
 }));
 
 for (const [path, action, roles] of [

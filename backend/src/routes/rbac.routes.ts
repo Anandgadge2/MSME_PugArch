@@ -16,6 +16,8 @@ import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 
 const router = Router();
 router.use('/rbac', authenticate);
+router.use('/auth/me/permissions', authenticate);
+router.use('/team', authenticate);
 
 const roleScopeSchema = z.enum(['PLATFORM', 'DISTRICT', 'ORGANIZATION']);
 const roleStatusSchema = z.enum(['ACTIVE', 'INACTIVE', 'ARCHIVED']);
@@ -333,12 +335,18 @@ router.patch('/rbac/users/:userId/roles/:assignmentId/status', asyncHandler(asyn
 
 router.get('/auth/me/permissions', asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  if (!user || !user.id) {
+    return apiResponse.error(res, 401, 'Unauthorized', 'UNAUTHORIZED');
+  }
   const permissions = isMasterAdmin(user) ? ['*'] : await getActivePermissionCodes(user.id, user.activeScope);
-  return apiResponse.success(res, { permissions, activeScope: user.activeScope, accountType: user.accountType, accountTypeId: user.accountTypeId });
+  return apiResponse.success(res, { permissions, activeScope: user.activeScope || null, accountType: user.accountType || null, accountTypeId: user.accountTypeId || null });
 }));
 
 router.get('/team/members', asyncHandler(async (req, res) => {
   const user = (req as any).user;
+  if (!user || !user.id) {
+    return apiResponse.error(res, 401, 'Unauthorized', 'UNAUTHORIZED');
+  }
   const where = isMasterAdmin(user)
     ? {}
     : user.organizationId
@@ -359,6 +367,9 @@ router.get('/team/members', asyncHandler(async (req, res) => {
 router.post('/team/invite', asyncHandler(async (req, res) => {
   const body = inviteSchema.parse(req.body);
   const user = (req as any).user;
+  if (!user || !user.id) {
+    return apiResponse.error(res, 401, 'Unauthorized', 'UNAUTHORIZED');
+  }
   const scope = isMasterAdmin(user)
     ? { scopeType: 'PLATFORM' as const, scopeId: null }
     : user.organizationId
