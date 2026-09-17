@@ -18,7 +18,7 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
       const isSeller = user.role === 'seller' || user.role === 'shg';
       const isBuyer = user.role === 'buyer';
       const now = new Date();
-      const openDateFilter = { OR: [{ endDate: null }, { endDate: { gt: now } }] };
+      const openDateFilter = { endDate: { gt: now } };
 
       const [
         unreadNotifications,
@@ -38,15 +38,15 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           db.procurementBid.count({
             where: {
               AND: [
-                { OR: [{ procurementType: 'RFQ' }, { bidType: 'RFQ' }] },
-                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED'] }, ...openDateFilter } : {}
+                { OR: [{ procurementType: { in: ['RFQ', 'DIRECT_RFQ', 'rfq'] } }, { bidType: { in: ['RFQ', 'DIRECT_RFQ', 'rfq', 'Product'] } }] },
+                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
               ],
               ...(isBuyer ? { buyerId: user.id } : {})
             }
           }).catch(() => 0),
           isSeller ? db.requirement.count({
             where: {
-              procurementMethod: 'RFQ' as any,
+              procurementMethod: { in: ['RFQ', 'DIRECT_RFQ'] as any },
               status: { in: ['APPROVED', 'SOURCING'] as any },
               AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }]
             }
@@ -62,8 +62,8 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           db.procurementBid.count({
             where: {
               AND: [
-                { OR: [{ procurementType: 'RFP' }, { bidType: 'RFP' }] },
-                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED'] as any }, ...openDateFilter } : {}
+                { OR: [{ procurementType: { in: ['RFP', 'rfp'] } }, { bidType: { in: ['RFP', 'rfp'] } }] },
+                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
               ],
               ...(isBuyer ? { buyerId: user.id } : {})
             }
@@ -81,21 +81,21 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           db.procurementBid.count({
             where: {
               AND: [
-                { OR: [{ procurementType: { in: ['OPEN_TENDER', 'TENDER'] } }, { bidType: { in: ['OPEN_TENDER', 'TENDER'] } }] },
-                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED'] as any }, ...openDateFilter } : {}
+                { OR: [{ procurementType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'RFP', 'rfp'] } }, { bidType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'RFP', 'rfp'] } }] },
+                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
               ],
               ...(isBuyer ? { buyerId: user.id } : {})
             }
           }).catch(() => 0),
           isSeller ? db.tender.count({
             where: {
-              status: { in: ['published', 'active', 'open'] as any },
+              status: { in: ['published', 'bid_submission'] as any },
               OR: [{ closesAt: null }, { closesAt: { gt: now } }]
             }
           }).catch(() => 0) : Promise.resolve(0),
           isSeller ? db.requirement.count({
             where: {
-              procurementMethod: 'TENDER' as any,
+              procurementMethod: { in: ['TENDER', 'OPEN_TENDER', 'LIMITED_TENDER', 'RFP'] as any },
               status: { in: ['APPROVED', 'SOURCING'] as any },
               AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }]
             }
@@ -106,7 +106,7 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           where: {
             AND: [
               { OR: [{ procurementType: 'LIMITED_TENDER' }, { bidType: 'LIMITED_TENDER' }] },
-              isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED'] as any }, ...openDateFilter } : {}
+              isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
             ],
             ...(isBuyer ? { buyerId: user.id } : {})
           }
@@ -129,7 +129,7 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
             where: {
               AND: [
                 { OR: [{ procurementType: 'RATE_CONTRACT' }, { bidType: 'RATE_CONTRACT' }] },
-                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED'] as any }, ...openDateFilter } : {}
+                isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
               ],
               ...(isBuyer ? { buyerId: user.id } : {})
             }
@@ -145,7 +145,9 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
 
         isSeller ? Promise.all([
           db.procurementBidParticipation.count({
-            where: { sellerId: user.id }
+            where: user.organizationId
+              ? { OR: [{ sellerId: user.id }, { seller: { organizationId: user.organizationId } }] }
+              : { sellerId: user.id }
           }).catch(() => 0),
           db.requirementResponse.count({
             where: user.organizationId

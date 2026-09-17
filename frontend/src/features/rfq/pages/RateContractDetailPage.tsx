@@ -608,7 +608,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || rcData.startDate) },
     { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? authenticPublishDate : null) },
     { label: 'CLARIFICATION END', value: formatDateString(schedule.clarificationDeadline) },
-    { label: 'PRE-BID MEETING', value: formatDateString(schedule.preBidDate) },
     { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true), red: true },
     { label: 'TECHNICAL OPENING', value: formatDateString(schedule.technicalOpeningDate || rcData.technicalOpeningDate) },
     { label: 'FINANCIAL OPENING', value: formatDateString(schedule.financialOpeningDate || rcData.financialOpeningDate) },

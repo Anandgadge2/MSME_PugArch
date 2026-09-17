@@ -414,12 +414,7 @@ interface EvaluationMethodDetails {
 }
 
 function getEvaluationMethodDetails(
-  methodRaw?: string | null,
-  context?: {
-    qcbsRatio?: string;
-    passingScore?: string | number;
-    requireDemo?: string;
-  }
+  methodRaw?: string | null
 ): EvaluationMethodDetails {
   const lower = (methodRaw || '').toLowerCase().trim();
 
@@ -430,18 +425,15 @@ function getEvaluationMethodDetails(
     lower.includes('weighted technical') ||
     lower.includes('weighted')
   ) {
-    const ratioStr = context?.qcbsRatio ? ` (${context.qcbsRatio} Tech:Financial ratio)` : '';
-    const scoreStr = context?.passingScore ? ` Minimum qualifying technical score is ${context.passingScore}%.` : '';
-    const demoStr = context?.requireDemo && context.requireDemo !== 'No' ? ' A technical demonstration or sample presentation is mandatory.' : '';
     return {
       title: 'Quality and Cost Based Selection (QCBS)',
       badge: 'Weighted Tech-Commercial',
       basisLabel: 'Highest Composite Score (H1)',
       shortSummary: 'Weighted evaluation combining technical evaluation scores and commercial financial price.',
-      description: `Bids are evaluated on a combined technical and commercial scoring matrix${ratioStr}.${scoreStr}${demoStr} The bidder achieving the highest composite score (H1) is recommended for contract award.`,
+      description: 'Bids are evaluated on a combined technical and commercial scoring matrix. The bidder achieving the highest composite score (H1) is recommended for contract award.',
       keyPoints: [
         'Combined Technical & Financial Scoring',
-        context?.qcbsRatio ? `Configured Ratio: ${context.qcbsRatio}` : 'Configured Tech/Financial Weightage',
+        'Configured Tech/Financial Weightage',
         'Highest Ranked Combined Bidder (H1) Award',
       ],
     };
@@ -489,13 +481,12 @@ function getEvaluationMethodDetails(
     lower.includes('technical qualification then l1') ||
     lower.includes('technical then l1')
   ) {
-    const scoreStr = context?.passingScore ? ` (Min. score: ${context.passingScore}%)` : '';
     return {
       title: 'Technical Qualification then L1',
       badge: 'Two-Stage Gated L1',
       basisLabel: 'L1 Among Qualified',
       shortSummary: 'Two-stage evaluation: mandatory technical qualification followed by price unsealing.',
-      description: `Bidders must first clear all mandatory technical specifications, eligibility checks, and qualification gates${scoreStr}. Commercial bids are unsealed only for technically compliant bidders, and award goes to the lowest landed bidder (L1).`,
+      description: 'Bidders must first clear all mandatory technical specifications, eligibility checks, and qualification gates. Commercial bids are unsealed only for technically compliant bidders, and award goes to the lowest landed bidder (L1).',
       keyPoints: [
         'Cover 1: Technical & Eligibility Scrutiny',
         'Cover 2: Price Unsealing for Qualified Only',
@@ -3660,15 +3651,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     tender.evaluationMethod
   ) || 'L1 Basis';
 
-  const requireDemo = payload.requireDemo === true || evaluation.requireDemo === true || String(payload.requireDemo).toLowerCase() === 'true'
-    ? 'Yes'
-    : firstPresent(
-        payload.requireDemo,
-        evaluation.requireDemo,
-        rules.requireDemo,
-        'No'
-      );
-
   const isQcbsMethod = Boolean(
     evaluationMethod && (
       evaluationMethod.toLowerCase().includes('qcbs') ||
@@ -3676,27 +3658,9 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
     )
   );
 
-  const qcbsRatio = isQcbsMethod ? firstPresent(
-    evaluation.qcbsRatio,
-    payload.qcbsRatio,
-    rules.qcbsRatio,
-    (evaluation.techWeight && evaluation.commWeight ? `${evaluation.techWeight}:${evaluation.commWeight}` : undefined),
-    (payload.techWeight && payload.commWeight ? `${payload.techWeight}:${payload.commWeight}` : undefined)
-  ) : undefined;
-
-  const passingScore = firstPresent(
-    evaluation.passingScore,
-    payload.passingScore,
-    rules.passingScore
-  );
-
   const evalDetails = useMemo(() => {
-    return getEvaluationMethodDetails(evaluationMethod, {
-      qcbsRatio,
-      passingScore,
-      requireDemo,
-    });
-  }, [evaluationMethod, qcbsRatio, passingScore, requireDemo]);
+    return getEvaluationMethodDetails(evaluationMethod);
+  }, [evaluationMethod]);
 
   const isTechEvalNeeded = Boolean(
     payload.isTechnicalEvaluationNeeded ||
@@ -4550,8 +4514,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                       <PropertyItem label="Bid Validity Date" value={bidValidityDateFormatted} />
                       <PropertyItem label="Validity Days" value={validityDaysDisplay} />
                       <PropertyItem label="Required By Date & Time" value={requiredByDateFormatted} />
-                      <PropertyItem label="Pre-Bid Meeting Date" value={preBidDateFormatted} />
-                      <PropertyItem label="Expected Award Date" value={awardDateFormatted} />
                     </PropertyGrid>
                   </div>
                 </div>
@@ -4643,7 +4605,7 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
           <div className="space-y-5">
             <DataCard title="Evaluation Overview & Method" icon={ClipboardCheck}>
               <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150 space-y-4">
-                <PropertyGrid columns={5}>
+                <PropertyGrid columns={2}>
                   <PropertyItem
                     label="Evaluation Method"
                     value={formatPrimitiveValue(evaluationMethod, 'evaluationMethod')}
@@ -4651,9 +4613,6 @@ export function ProcurementDetailUnifiedView(props: ProcurementDetailUnifiedView
                     subtext={evalDetails.badge}
                   />
                   <PropertyItem label="Award Basis" value={evalDetails.basisLabel} />
-                  <PropertyItem label="Require Demo" value={requireDemo && requireDemo !== 'No' ? formatPrimitiveValue(requireDemo) : undefined} />
-                  <PropertyItem label="QCBS Ratio" value={isQcbsMethod && hasDetailData(qcbsRatio) ? qcbsRatio : undefined} />
-                  <PropertyItem label="Passing Score" value={(isQcbsMethod || isTechEvalNeeded) && hasDetailData(passingScore) ? passingScore : undefined} />
                 </PropertyGrid>
 
                 {/* Short, clear, informative method explanation */}

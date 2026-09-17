@@ -54,6 +54,7 @@ import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
 import { createApprovalChain } from '../services/approval-chain.service.js';
+import { parseDateIST } from '../utils/dateUtils.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -66,11 +67,11 @@ const safeCoercedDate = z.preprocess((val) => {
     const parts = val.split('-');
     if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
       const isoStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      const d = new Date(isoStr);
-      if (!isNaN(d.getTime())) return d;
+      const d = parseDateIST(isoStr);
+      if (d && !isNaN(d.getTime())) return d;
     }
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d;
+    const d = parseDateIST(val);
+    if (d && !isNaN(d.getTime())) return d;
   }
   return val;
 }, z.any().refine(val => {
@@ -1821,10 +1822,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
   const creationTime = requirement.createdAt ? new Date(requirement.createdAt) : new Date();
   const rawPublishCandidate = schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || null;
-  const parsedStartDate = rateContractConfig.periodStartDate ? new Date(rateContractConfig.periodStartDate) : (rawPublishCandidate ? new Date(rawPublishCandidate) : null);
+  const parsedStartDate = rateContractConfig.periodStartDate ? parseDateIST(rateContractConfig.periodStartDate) : (rawPublishCandidate ? parseDateIST(rawPublishCandidate) : null);
   const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
   const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
-  const endDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const rawEndDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const effectiveEndDate = parseDateIST(rawEndDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {
@@ -1860,10 +1862,10 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     district: buyer?.organization?.district || null,
     pincode: buyer?.organization?.pincode || null,
     startDate: effectiveStartDate,
-    endDate: new Date(endDate),
-    technicalOpeningDate: tender.technicalEvaluationDate ? new Date(tender.technicalEvaluationDate) : null,
-    financialOpeningDate: tender.financialEvaluationDate ? new Date(tender.financialEvaluationDate) : null,
-    bidValidityDate: tender.bidValidityDate ? new Date(tender.bidValidityDate) : null,
+    endDate: effectiveEndDate,
+    technicalOpeningDate: tender.technicalEvaluationDate ? parseDateIST(tender.technicalEvaluationDate) : null,
+    financialOpeningDate: tender.financialEvaluationDate ? parseDateIST(tender.financialEvaluationDate) : null,
+    bidValidityDate: tender.bidValidityDate ? parseDateIST(tender.bidValidityDate) : null,
     status: 'OPEN',
     approvalStatus: 'APPROVED',
     approvedAt: creationTime,
@@ -1881,7 +1883,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
       ...payload,
       schedule: {
         ...schedule,
-        publishDate: effectiveStartDate.toISOString(),
+        publishDate: isFutureScheduled ? effectiveStartDate.toISOString() : (schedule.publishDate || effectiveStartDate.toISOString()),
       },
       sourceRequirementId: requirement.id,
       requirementId: requirement.id,

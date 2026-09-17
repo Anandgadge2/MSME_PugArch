@@ -15,6 +15,7 @@ import { logger } from '../../config/logger.js';
 import { fulfillmentWorkflow } from '../../services/workflow/fulfillment-workflow.service.js';
 import { getCache, setCache, deleteCache, getOrSetCache } from '../../services/cache.service.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants, formatRequirementNumber } from '../../utils/refIdUtils.js';
+import { parseDateIST } from '../../utils/dateUtils.js';
 
 const router = Router();
 
@@ -148,7 +149,7 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
   const actor = await optionalActor(req);
   const cacheKey = `cache:procurement-bids:${actor?.id || 'anon'}:${actor?.role || 'anon'}:${JSON.stringify(req.query)}`;
   const data = await getOrSetCache(cacheKey, () => service.listPublicBids(req.query, actor), 30);
-  if (actor?.role === 'seller' && data?.items && Array.isArray(data.items) && data.items.length > 0) {
+  if ((actor?.role === 'seller' || actor?.role === 'shg') && data?.items && Array.isArray(data.items) && data.items.length > 0) {
     await enrichBidsWithResponses(data.items, Number(actor.id));
     const currentActorId = Number(actor.id);
     const currentOrgId = actor.organizationId ? Number(actor.organizationId) : null;
@@ -169,10 +170,10 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
   return apiResponse.success(res, data, 200, 'Bids fetched successfully');
 }));
 
-router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'buyer', 'admin'), asyncRoute(async (req, res) => {
+router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'buyer', 'admin', 'shg'), asyncRoute(async (req, res) => {
   const role = String(req.user?.role || '');
   const currentUserId = Number(req.user?.id);
-  const where = role === 'seller'
+  const where = (role === 'seller' || role === 'shg')
     ? { sellerId: currentUserId }
     : role === 'buyer'
       ? { tender: { buyerId: currentUserId } }
@@ -1125,10 +1126,10 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           deliveryLocation: basics.deliveryLocation || internal.deliveryAddress || [requirement.organization?.district, requirement.organization?.state].filter(Boolean).join(', ') || '',
           state: requirement.organization?.state || '',
           district: requirement.organization?.district || '',
-          startDate: schedule.publishDate ? new Date(schedule.publishDate) : (schedule.submissionStartDate ? new Date(schedule.submissionStartDate) : requirement.createdAt),
-          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? new Date(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? new Date(requirement.requiredBy) : requirement.createdAt),
-          technicalOpeningDate: schedule.technicalOpeningDate || null,
-          financialOpeningDate: schedule.financialOpeningDate || null,
+          startDate: schedule.publishDate ? parseDateIST(schedule.publishDate) : (schedule.submissionStartDate ? parseDateIST(schedule.submissionStartDate) : requirement.createdAt),
+          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy) : requirement.createdAt),
+          technicalOpeningDate: schedule.technicalOpeningDate ? parseDateIST(schedule.technicalOpeningDate) : null,
+          financialOpeningDate: schedule.financialOpeningDate ? parseDateIST(schedule.financialOpeningDate) : null,
           status: requirement.status === 'APPROVED' ? 'OPEN' : requirement.status || 'OPEN',
           approvalStatus: requirement.status || 'APPROVED',
           lifecycleStage: 'SELLER_PARTICIPATION',

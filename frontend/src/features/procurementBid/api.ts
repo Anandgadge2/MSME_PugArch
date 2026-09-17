@@ -362,29 +362,29 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const eligArr = raw.eligibilityCriteria?.length ? raw.eligibilityCriteria : (termsPayload.eligibilityCriteria || basics.eligibilityCriteria || []);
   const reqDocs = raw.requiredDocuments?.length ? raw.requiredDocuments : (pkt?.requiredDocs || []);
 
-  // Important dates
-  const candidatePublish = raw.publishedAt || raw.approvedAt || raw.startDate || schedule.publishDate || null;
-  let authenticPublishedAt = raw.createdAt || raw.startDate || null;
-  if (candidatePublish && raw.createdAt) {
-    const tCandidate = new Date(candidatePublish).getTime();
+  // Important dates: Prioritize verbatim schedule deadline from wizard configuration
+  const scheduleDeadline = schedule.submissionDate || schedule.submissionDeadline || schedule.submissionEndDate || schedule.bidClosingDate || null;
+  const rawEndDate = scheduleDeadline || raw.endDate || null;
+
+  // Publication date: Prefer authentic createdAt / approvedAt / publishedAt, preventing timezone-shifted future phantom dates
+  let authenticPublishedAt = raw.publishedAt || raw.approvedAt || raw.createdAt || raw.startDate || null;
+  const schedulePublish = schedule.publishDate || schedule.submissionStartDate || null;
+  if (schedulePublish && raw.createdAt) {
+    const tSchedule = new Date(schedulePublish).getTime();
     const tCreated = new Date(raw.createdAt).getTime();
-    if (Number.isFinite(tCandidate) && Number.isFinite(tCreated)) {
-      if (tCandidate > tCreated + 60000) {
-        authenticPublishedAt = candidatePublish;
-      } else {
-        authenticPublishedAt = raw.approvedAt || raw.createdAt;
-      }
+    // Only treat as scheduled future publish if schedule is genuinely scheduled for the future (> 4 hours after creation)
+    if (Number.isFinite(tSchedule) && Number.isFinite(tCreated) && tSchedule > tCreated + 4 * 3600000) {
+      authenticPublishedAt = schedulePublish;
+    } else {
+      authenticPublishedAt = raw.approvedAt || raw.createdAt || raw.publishedAt || raw.startDate;
     }
-  } else if (candidatePublish) {
-    authenticPublishedAt = candidatePublish;
   }
 
   const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
-  const rawEndDate = raw.endDate || schedule.submissionDate || schedule.submissionDeadline || null;
   const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
   const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const techDate = String(raw.technicalOpeningDate || schedule.technicalOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
-  const finDate = String(raw.financialOpeningDate || schedule.financialOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
+  const techDate = String(schedule.technicalOpeningDate || raw.technicalOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
+  const finDate = String(schedule.financialOpeningDate || raw.financialOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
 
   return {
     id: raw.bidNumber || String(raw.id || ''),

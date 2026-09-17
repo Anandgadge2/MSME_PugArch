@@ -605,14 +605,15 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     : (rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.publishDate);
 
   const published = (() => {
+    if (approvedCandidate) return approvedCandidate;
     const tCreated = createdCandidate ? new Date(createdCandidate).getTime() : NaN;
     if (formPublishCandidate && Number.isFinite(tCreated)) {
       const tPub = new Date(formPublishCandidate).getTime();
-      if (Number.isFinite(tPub) && tPub > tCreated + 60000) {
+      if (Number.isFinite(tPub) && tPub > tCreated + 60000 && tPub > Date.now()) {
         return formPublishCandidate;
       }
     }
-    return approvedCandidate || createdCandidate || formPublishCandidate || rawBid?.startDate || null;
+    return createdCandidate || formPublishCandidate || rawBid?.startDate || null;
   })();
   const submissionStartDate = preferReq
     ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || published)

@@ -591,7 +591,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const closeA = existing.closingDate || '';
           const closeB = opportunity.closingDate || '';
-          const bestClosingDate = hasExplicitTime(closeB) ? closeB : (hasExplicitTime(closeA) ? closeA : (closeB || closeA));
+          const isBetterClosing = (cand: string, other: string) => {
+            if (!cand) return false;
+            if (!other) return true;
+            const candHasZ = cand.includes('Z');
+            const otherHasZ = other.includes('Z');
+            if (!candHasZ && otherHasZ) return true;
+            if (candHasZ && !otherHasZ) return false;
+            return hasExplicitTime(cand);
+          };
+          const bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
 
           deduped[existingIndex] = {
             ...existing,
@@ -689,11 +698,31 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href = sellerRoutes.detail('RFP', bid.id);
           detailsHref = sellerRoutes.detail('RFP', bid.id);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Proposal';
+        } else if (opportunityType === 'Open Tender') {
+          href = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          detailsHref = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Limited Tender') {
+          href = sellerRoutes.detail('LIMITED_TENDER', bid.id);
+          detailsHref = sellerRoutes.detail('LIMITED_TENDER', bid.id);
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Reverse Auction') {
+          href = sellerRoutes.auctionLive(bid.id);
+          detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
+          actionLabel = 'Join Auction';
         } else {
           href = bid.participated ? sellerRoutes.respond('RFQ', bid.id) : sellerRoutes.detail('RFQ', bid.id);
           detailsHref = sellerRoutes.detail('RFQ', bid.id);
           actionLabel = bid.participated ? 'View Quotation' : 'Submit Quote';
         }
+
+        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
+        const effectiveClosingDate = bidSchedule.submissionDate
+          || bidSchedule.submissionDeadline
+          || bidSchedule.submissionEndDate
+          || bidSchedule.bidClosingDate
+          || bid.rawEndDate
+          || bid.endDate;
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -702,7 +731,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: bid.buyerName,
           category: bid.category,
           location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: bid.rawEndDate || bid.endDate,
+          closingDate: effectiveClosingDate,
           estimatedValue: toNumber(bid.estimatedValue),
           discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: bid.participated ? 'Already participated' : 'Check documents',
@@ -822,6 +851,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? 'Participate'
           : 'Submit Quotation';
 
+        const reqSchedule = req.payload?.schedule || req.schedule || {};
+        const effectiveReqClosingDate = reqSchedule.submissionDate
+          || reqSchedule.submissionDeadline
+          || reqSchedule.submissionEndDate
+          || reqSchedule.bidClosingDate
+          || req.lastDate
+          || req.requiredBy;
+
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -829,7 +866,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: req.buyerOrganization?.organizationName || req.organization?.organizationName || req.buyerName || 'Verified Buyer',
           category: req.category?.name || req.category || 'General Sourcing',
           location: req.location || req.deliveryLocation || [req.district, req.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: req.lastDate || req.requiredBy,
+          closingDate: effectiveReqClosingDate,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
           discloseEstimatedCost: Boolean(req.discloseEstimatedCost ?? req.payload?.discloseEstimatedCost ?? req.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: isReqParticipated ? 'Already participated' : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers'),
@@ -891,6 +928,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         else if (isQrPrivate) opportunityType = 'Limited Tender';
 
         const documents = asTextList(qr.requiredDocuments);
+        const qrSchedule = qr.payload?.schedule || qr.schedule || {};
         const opportunity: SellerOpportunity = {
           id: `qr-${qr.id}`,
           type: opportunityType,
@@ -898,7 +936,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: qr.buyerOrganizationName || qr.buyer?.name || 'Verified Buyer',
           category: qr.category || 'Direct RFQ',
           location: qr.deliveryLocation || qr.location || [qr.district, qr.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: qr.deadlineDate || qr.endDate,
+          closingDate: qrSchedule.submissionDate || qrSchedule.submissionDeadline || qr.deadlineDate || qr.endDate,
           estimatedValue: toNumber(qr.estimatedValue),
           discloseEstimatedCost: Boolean(qr.discloseEstimatedCost ?? qr.payload?.discloseEstimatedCost ?? qr.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',

@@ -23,6 +23,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { procurementBidApi } from '../../procurementBid/api';
+import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { isShgUser } from '../../../lib/shg';
 
@@ -51,31 +52,60 @@ export function LiveOpportunityRadar() {
   const isShg = isShgUser(user) || user?.role === 'shg';
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
 
-  const { data: bidsData, isLoading } = useQuery({
-    queryKey: ['dashboard-live-bids'],
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard-live-opportunities'],
     queryFn: async () => {
-      try {
-        const res = await procurementBidApi.list({ take: 6 });
-        return res?.items || (Array.isArray(res) ? res : []);
-      } catch (err) {
-        return [];
-      }
+      const [bidsRes, auctionsRes] = await Promise.allSettled([
+        procurementBidApi.list({ take: 8 }),
+        reverseAuctionApi.list({ pageSize: 6 })
+      ]);
+
+      const bids = bidsRes.status === 'fulfilled' && bidsRes.value
+        ? (bidsRes.value?.items || (Array.isArray(bidsRes.value) ? bidsRes.value : []))
+        : [];
+
+      const auctions = auctionsRes.status === 'fulfilled' && auctionsRes.value
+        ? ((auctionsRes.value as any)?.items || (auctionsRes.value as any)?.auctions || (Array.isArray(auctionsRes.value) ? auctionsRes.value : []))
+        : [];
+
+      return { bids, auctions };
     },
     staleTime: 60_000,
     refetchOnWindowFocus: false
   });
 
   const opportunities: OpportunityItem[] = useMemo(() => {
-    if (bidsData && bidsData.length > 0) {
-      return bidsData.slice(0, 6).map((bid: any, idx: number) => {
-        const closing = bid.endDate ? new Date(bid.endDate) : null;
-        const now = new Date();
-        const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
-        const type: OpportunityItem['type'] = bid.procurementType?.includes('Auction') || bid.allowReverseAuction
-          ? 'Reverse Auction'
-          : bid.procurementType?.includes('RFQ') ? 'RFQ' : 'Tender';
+    const list: OpportunityItem[] = [];
+    const rolePrefix = isShg ? '/shg' : '/seller';
+    const now = new Date();
 
-        return {
+    // 1. Process Bids (RFQs, Tenders, etc.)
+    if (data?.bids && data.bids.length > 0) {
+      data.bids.forEach((bid: any, idx: number) => {
+        const closing = bid.endDate ? new Date(bid.endDate) : null;
+        const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
+        
+        const pType = String(bid.procurementType || bid.bidType || '').toUpperCase();
+        const isAuction = pType === 'REVERSE_AUCTION' || pType === 'AUCTION';
+        const isRfq = pType === 'RFQ' || pType.includes('RFQ') || (!pType.includes('TENDER') && !isAuction);
+        
+        const type: OpportunityItem['type'] = isAuction ? 'Reverse Auction' : isRfq ? 'RFQ' : 'Tender';
+
+        let actionHref = '';
+        let actionLabel = '';
+
+        if (type === 'Reverse Auction') {
+          actionHref = `${rolePrefix}/procurement/reverse-auction/${bid.id}/live`;
+          actionLabel = 'Join Auction';
+        } else if (type === 'RFQ') {
+          actionHref = `${rolePrefix}/procurement/rfq/${bid.id}`;
+          actionLabel = 'Quote Now';
+        } else {
+          actionHref = `${rolePrefix}/procurement/open-tender/${bid.id}`;
+          actionLabel = 'Bid Now';
+        }
+
+        list.push({
           id: String(bid.id || `bid-${idx}`),
           refId: bid.bidNumber || (bid.id ? `BID-${bid.id}` : `TND-${1000 + idx}`),
           title: bid.title || bid.name || 'Procurement Opportunity',
@@ -88,16 +118,42 @@ export function LiveOpportunityRadar() {
           daysLeft: diffDays,
           isEmdExempt: true,
           category: bid.category?.name || bid.category || 'General Procurement',
-          actionHref: type === 'Tender' 
-            ? `/bids/${bid.id}/participate?type=OPEN_TENDER`
-            : type === 'RFQ' ? `/seller/opportunities/rfqs` : `/seller/opportunities/auctions`,
-          actionLabel: type === 'Tender' ? 'Bid Now' : type === 'RFQ' ? 'Quote' : 'Join Auction',
+          actionHref,
+          actionLabel,
           urgent: diffDays <= 3
-        };
+        });
       });
     }
-    return [];
-  }, [bidsData]);
+
+    // 2. Process Real Reverse Auctions
+    if (data?.auctions && data.auctions.length > 0) {
+      data.auctions.forEach((auction: any) => {
+        if (!auction) return;
+        const closing = auction.endTime ? new Date(auction.endTime) : null;
+        const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
+
+        list.push({
+          id: `ra-${auction.id}`,
+          refId: auction.auctionCode || `RA-${auction.id}`,
+          title: auction.title || auction.itemName || 'Live Reverse Auction Opportunity',
+          type: 'Reverse Auction',
+          buyerName: auction.buyerOrgName || auction.buyerName || 'Verified Buyer',
+          department: auction.departmentName || 'Procurement Division',
+          location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'National',
+          estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || 0),
+          closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
+          daysLeft: diffDays,
+          isEmdExempt: true,
+          category: auction.category || 'Dynamic Auction',
+          actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.id}/live`,
+          actionLabel: 'Join Auction',
+          urgent: diffDays <= 3
+        });
+      });
+    }
+
+    return list;
+  }, [data, isShg]);
 
   const filtered = useMemo(() => {
     if (activeTab === 'all') return opportunities;
@@ -113,6 +169,23 @@ export function LiveOpportunityRadar() {
     rfqs: opportunities.filter(o => o.type === 'RFQ').length,
     auctions: opportunities.filter(o => o.type === 'Reverse Auction').length
   }), [opportunities]);
+
+  const rolePrefix = isShg ? '/shg' : '/seller';
+  const viewAllHref = activeTab === 'tenders'
+    ? `${rolePrefix}/opportunities/open-tenders`
+    : activeTab === 'rfqs'
+    ? `${rolePrefix}/opportunities/rfqs`
+    : activeTab === 'auctions'
+    ? `${rolePrefix}/opportunities/auctions`
+    : `${rolePrefix}/opportunities`;
+
+  const viewAllLabel = activeTab === 'tenders'
+    ? 'View All Tenders'
+    : activeTab === 'rfqs'
+    ? 'View All RFQs'
+    : activeTab === 'auctions'
+    ? 'View All Auctions'
+    : `View All (${opportunities.length})`;
 
   return (
     <section 
@@ -144,10 +217,10 @@ export function LiveOpportunityRadar() {
         </div>
 
         <Link 
-          href="/seller/opportunities/open-tenders"
+          href={viewAllHref}
           className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#12335f] hover:text-[#0b2445] transition shrink-0"
         >
-          View All ({opportunities.length})
+          {viewAllLabel}
           <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
@@ -156,6 +229,7 @@ export function LiveOpportunityRadar() {
       <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-slate-100 bg-white overflow-x-auto no-scrollbar" role="tablist" aria-label="Opportunity types">
         {(['all', 'tenders', 'rfqs', 'auctions'] as FilterTab[]).map(tab => {
           const isActive = activeTab === tab;
+          const count = countByTab[tab];
           const label = tab === 'all' ? 'All Leads' : tab === 'tenders' ? 'Public Tenders' : tab === 'rfqs' ? 'Direct RFQs' : 'Reverse Auctions';
           return (
             <button
@@ -171,6 +245,11 @@ export function LiveOpportunityRadar() {
               }`}
             >
               <span>{label}</span>
+              <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold ${
+                isActive ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+              }`}>
+                {count}
+              </span>
             </button>
           );
         })}
@@ -185,13 +264,27 @@ export function LiveOpportunityRadar() {
       ) : filtered.length === 0 ? (
         <div className="p-8 text-center bg-slate-50/50">
           <Gavel className="h-8 w-8 mx-auto text-slate-300 mb-2" />
-          <p className="text-xs font-bold text-slate-700">No active opportunities found.</p>
-          <p className="text-[11px] text-slate-500 mt-0.5">
-            New public tenders and buyer RFQs matching your business categories will appear here in real time.
+          <p className="text-xs font-bold text-slate-700">
+            {activeTab === 'auctions' 
+              ? 'No live reverse auctions right now.'
+              : activeTab === 'rfqs'
+              ? 'No direct RFQs found.'
+              : activeTab === 'tenders'
+              ? 'No public tenders found.'
+              : 'No active opportunities found.'}
           </p>
-          <Link href="/seller/opportunities/open-tenders" className="mt-3 inline-block">
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            {activeTab === 'auctions'
+              ? 'Real-time dynamic reverse auctions and bidding events will appear here when scheduled by buyers.'
+              : activeTab === 'rfqs'
+              ? 'Direct price quotation requests from buyer departments will appear here in real time.'
+              : activeTab === 'tenders'
+              ? 'Public competitive tenders matching your registered categories will appear here in real time.'
+              : 'New public tenders and buyer RFQs matching your business categories will appear here in real time.'}
+          </p>
+          <Link href={viewAllHref} className="mt-3 inline-block">
             <Button variant="outline" className="h-7 px-3 text-[10px] font-bold uppercase bg-white">
-              Browse All Public Tenders
+              {activeTab === 'auctions' ? 'Explore All Opportunities' : 'Browse All Opportunities'}
             </Button>
           </Link>
         </div>
@@ -233,9 +326,11 @@ export function LiveOpportunityRadar() {
                     )}
                   </div>
 
-                  <h3 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover:text-[#12335f] transition-colors">
-                    {item.title}
-                  </h3>
+                  <Link href={item.actionHref} className="block group/link">
+                    <h3 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover/link:text-[#12335f] group-hover/link:underline transition-colors">
+                      {item.title}
+                    </h3>
+                  </Link>
 
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
                     <span className="flex items-center gap-1 font-medium text-slate-700 truncate max-w-[200px]">
@@ -284,10 +379,10 @@ export function LiveOpportunityRadar() {
           MSME advantage: 100% EMD waived on all public tenders.
         </span>
         <Link 
-          href="/seller/opportunities/open-tenders"
+          href={`${rolePrefix}/opportunities`}
           className="font-bold uppercase tracking-wider text-[#12335f] hover:underline"
         >
-          Explore All Tenders →
+          Explore All Opportunities →
         </Link>
       </div>
     </section>

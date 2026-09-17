@@ -7211,23 +7211,6 @@ function EvaluationBasisForm({
             </Field>
           </div>
         )}
-
-        {draft.type === 'RFP' && (
-          <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none border border-slate-200 p-3 rounded-lg bg-slate-50/50">
-              <input
-                type="checkbox"
-                checked={draft.requireDemo || false}
-                onChange={e => updateDraft(c => ({ ...c, requireDemo: e.target.checked }))}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <div>
-                <span className="font-bold text-slate-800">Proposal presentation / Demo required?</span>
-                <span className="block text-[10px] text-slate-500 font-medium mt-0.5">Require shortlisted bidders to present their solution/demo.</span>
-              </div>
-            </label>
-          </div>
-        )}
       </div>
 
     </div>

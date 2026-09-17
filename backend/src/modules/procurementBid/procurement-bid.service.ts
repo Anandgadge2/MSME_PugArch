@@ -1432,7 +1432,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
   const page = Math.max(1, Number(query.page || 1));
   const pageSize = Math.min(500, Math.max(1, Number(query.pageSize || 12)));
   const takeForMergedPage = page * pageSize;
-  const actorInviteIds = actor?.role === 'seller'
+  const actorInviteIds = (actor?.role === 'seller' || actor?.role === 'shg')
     ? [Number(actor.id), Number(actor.organizationId)].filter(Number.isFinite)
     : [];
   // Fallback for rows created before the invitation table existed / not yet backfilled:
@@ -1469,7 +1469,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
             // Public bids are visible to everyone.
             publicBidPredicate,
             // Private bids the seller was invited to (relational — the reliable path).
-            ...(actor.role === 'seller' ? [{
+            ...((actor.role === 'seller' || actor.role === 'shg') ? [{
               AND: [
                 privateBidPredicate,
                 { invitations: { some: { OR: [{ sellerOrgId: { in: actorInviteIds } }, { sellerUserId: { in: actorInviteIds } }] } } }
