@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { maskPAN, maskGSTIN } from './maskPii';
+import { resolveMediaUrl } from './api';
 
 /**
  * Enterprise PDF Engine for MSME Procurement Portal
@@ -15,6 +16,8 @@ export interface DocumentParty {
   phone?: string;
   gstin?: string;
   pan?: string;
+  logoUrl?: string | null;
+  resolvedLogoDataUrl?: string | null;
   details?: string[]; // Extra details (e.g. Vendor Code, Dept, Ship Via)
 }
 
@@ -84,18 +87,20 @@ const TEXT_MUTED: [number, number, number] = [100, 116, 139];
  */
 export async function loadImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
   if (!url || typeof window === 'undefined') return null;
-  const trimmedUrl = url.trim();
-  if (!trimmedUrl) return null;
-  if (trimmedUrl.startsWith('data:image/')) return trimmedUrl;
+  const rawUrl = url.trim();
+  if (!rawUrl) return null;
+  if (rawUrl.startsWith('data:image/')) return rawUrl;
 
-  // 1. First attempt: fetch -> blob -> readAsDataURL (cleanest, handles SVG & PNG without canvas taint)
+  const targetUrl = resolveMediaUrl(rawUrl) || rawUrl;
+
+  // 1. First attempt: fetch -> blob -> readAsDataURL -> draw onto canvas to guarantee standard PNG
   try {
-    const fetchUrl = trimmedUrl.startsWith('/') ? `${window.location.origin}${trimmedUrl}` : trimmedUrl;
+    const fetchUrl = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
     const res = await fetch(fetchUrl, { mode: 'cors' });
     if (res.ok) {
       const blob = await res.blob();
       if (blob && blob.size > 0) {
-        const dataUrl = await new Promise<string | null>((resolve) => {
+        const rawDataUrl = await new Promise<string | null>((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => {
             if (typeof reader.result === 'string') resolve(reader.result);
@@ -104,14 +109,40 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
           reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
         });
-        if (dataUrl) return dataUrl;
+
+        if (rawDataUrl) {
+          // Normalize to canvas PNG to guarantee compatibility with jsPDF addImage
+          const pngDataUrl = await new Promise<string | null>((resolve) => {
+            try {
+              const img = new Image();
+              img.onload = () => {
+                try {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = img.naturalWidth || img.width || 300;
+                  canvas.height = img.naturalHeight || img.height || 100;
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) return resolve(rawDataUrl);
+                  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                  resolve(canvas.toDataURL('image/png'));
+                } catch {
+                  resolve(rawDataUrl);
+                }
+              };
+              img.onerror = () => resolve(rawDataUrl);
+              img.src = rawDataUrl;
+            } catch {
+              resolve(rawDataUrl);
+            }
+          });
+          if (pngDataUrl) return pngDataUrl;
+        }
       }
     }
-  } catch {
-    // Continue to canvas fallback
+  } catch (err) {
+    console.warn('loadImageAsDataUrl fetch failed, attempting canvas fallback:', err);
   }
 
-  // 2. Second attempt: HTML Image + Canvas fallback
+  // 2. Second attempt: HTML Image + Canvas fallback with crossOrigin
   return new Promise((resolve) => {
     try {
       const img = new Image();
@@ -134,7 +165,8 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
         }
       };
       img.onerror = () => resolve(null);
-      img.src = trimmedUrl;
+      const fallbackSrc = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
+      img.src = fallbackSrc;
     } catch {
       resolve(null);
     }
@@ -219,7 +251,8 @@ export class PdfEngine {
 
     if (logoToUse) {
       try {
-        this.doc.addImage(logoToUse, 'PNG', 14, 5, 26, 26);
+        const format = logoToUse.includes('image/jpeg') ? 'JPEG' : 'PNG';
+        this.doc.addImage(logoToUse, format, 14, 5, 26, 26);
       } catch (err) {
         console.warn('Unable to embed header logo in PDF:', err);
       }
@@ -288,7 +321,23 @@ export class PdfEngine {
       body: body,
       headStyles: { fillColor: SECONDARY_COLOR, fontStyle: 'bold', textColor: 255 },
       styles: { fontSize: 8.5, cellPadding: 3.5, valign: 'top', textColor: TEXT_DARK },
-      columnStyles: parties.reduce((acc, _, idx) => ({ ...acc, [idx]: { cellWidth: (this.pageWidth - 28) / parties.length } }), {})
+      columnStyles: parties.reduce((acc, _, idx) => ({ ...acc, [idx]: { cellWidth: (this.pageWidth - 28) / parties.length } }), {}),
+      didDrawCell: (data) => {
+        if (data.section === 'body') {
+          const party = parties[data.column.index];
+          if (party && party.resolvedLogoDataUrl) {
+            try {
+              const format = party.resolvedLogoDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+              const logoSize = 13;
+              const xPos = data.cell.x + data.cell.width - logoSize - 3;
+              const yPos = data.cell.y + 3;
+              this.doc.addImage(party.resolvedLogoDataUrl, format, xPos, yPos, logoSize, logoSize);
+            } catch (err) {
+              console.warn('Unable to render party logo in table cell:', err);
+            }
+          }
+        }
+      }
     });
     
     this.cursorY = (this.doc as any).lastAutoTable.finalY + 6;
@@ -492,14 +541,16 @@ export class PdfEngine {
     // Render Buyer Stamp & Signature if present
     if (buyerStampDataUrl) {
       try {
-        this.doc.addImage(buyerStampDataUrl, 'PNG', 20, y + 2, 22, 22);
+        const format = buyerStampDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+        this.doc.addImage(buyerStampDataUrl, format, 20, y + 2, 22, 22);
       } catch (e) {
         console.warn('Unable to render buyer stamp:', e);
       }
     }
     if (buyerSigDataUrl) {
       try {
-        this.doc.addImage(buyerSigDataUrl, 'PNG', buyerStampDataUrl ? 32 : 20, y + 6, 26, 14);
+        const format = buyerSigDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+        this.doc.addImage(buyerSigDataUrl, format, buyerStampDataUrl ? 32 : 20, y + 6, 26, 14);
       } catch (e) {
         console.warn('Unable to render buyer signature:', e);
       }
@@ -509,14 +560,16 @@ export class PdfEngine {
     const rightBoxX = this.pageWidth - 65;
     if (sellerStampDataUrl) {
       try {
-        this.doc.addImage(sellerStampDataUrl, 'PNG', rightBoxX, y + 2, 22, 22);
+        const format = sellerStampDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+        this.doc.addImage(sellerStampDataUrl, format, rightBoxX, y + 2, 22, 22);
       } catch (e) {
         console.warn('Unable to render seller stamp:', e);
       }
     }
     if (sellerSigDataUrl) {
       try {
-        this.doc.addImage(sellerSigDataUrl, 'PNG', this.pageWidth - 46, y + 6, 26, 14);
+        const format = sellerSigDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+        this.doc.addImage(sellerSigDataUrl, format, this.pageWidth - 46, y + 6, 26, 14);
       } catch (e) {
         console.warn('Unable to render seller signature:', e);
       }
@@ -554,14 +607,23 @@ export class PdfEngine {
     const buyerSigUrl = config.buyerSignatureUrl || config.signatures?.buyerSignatureUrl;
     const buyerStampUrl = config.buyerStampUrl || config.signatures?.buyerStampUrl;
 
+    const partyLogoPromises = (config.parties || []).map(p => loadImageAsDataUrl(p.logoUrl));
+
     // Pre-load all imagery asynchronously via canvas
-    const [logoDataUrl, sellerSig, sellerStamp, buyerSig, buyerStamp] = await Promise.all([
+    const [logoDataUrl, sellerSig, sellerStamp, buyerSig, buyerStamp, ...resolvedPartyLogos] = await Promise.all([
       loadImageAsDataUrl(config.issuerLogo || config.logoBase64),
       loadImageAsDataUrl(sellerSigUrl),
       loadImageAsDataUrl(sellerStampUrl),
       loadImageAsDataUrl(buyerSigUrl),
       loadImageAsDataUrl(buyerStampUrl),
+      ...partyLogoPromises,
     ]);
+
+    if (config.parties) {
+      config.parties.forEach((p, idx) => {
+        p.resolvedLogoDataUrl = resolvedPartyLogos[idx] || null;
+      });
+    }
 
     this.drawHeader(config, logoDataUrl);
     this.drawParties(config.parties);

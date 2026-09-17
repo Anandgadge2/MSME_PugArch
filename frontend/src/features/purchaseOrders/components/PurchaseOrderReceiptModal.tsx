@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
-import { api } from '../../../lib/api';
+import { api, readJsonResponse, resolveMediaUrl } from '../../../lib/api';
 import { cn } from '../../../lib/utils';
 import type { DocumentConfig } from '../../../lib/pdfEngine';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
@@ -254,26 +254,25 @@ export function PurchaseOrderReceiptModal({
     setOrder(initialOrder);
   }, [initialOrder]);
 
-  // Fetch full details if order items or details are sparse
+  // Fetch full details whenever the modal opens to guarantee all organization relations are populated
   useEffect(() => {
     if (!initialOrder?.id) return;
     let isMounted = true;
 
     const fetchFullDetails = async () => {
       try {
-        const res: any = await api.get(`/api/purchase-orders/${initialOrder.id}`);
-        const fullData = res?.data || res;
-        if (fullData && isMounted) {
+        const res = await api.get(`/api/purchase-orders/${initialOrder.id}`);
+        const body = await readJsonResponse(res);
+        const fullData = (body as any)?.data || body;
+        if (fullData && fullData.id && isMounted) {
           setOrder(prev => ({ ...(prev || initialOrder), ...fullData }));
         }
-      } catch {
-        // Fall back to initialOrder
+      } catch (err) {
+        console.warn('Failed to fetch full PO details for modal', err);
       }
     };
 
-    if (!initialOrder.items || initialOrder.items.length === 0) {
-      fetchFullDetails();
-    }
+    fetchFullDetails();
 
     return () => {
       isMounted = false;
@@ -358,6 +357,8 @@ export function PurchaseOrderReceiptModal({
     order.buyer?.buyerProfile?.companyName ||
     buyerReg.companyName ||
     buyerReg.businessName ||
+    buyerReg.legalName ||
+    buyerReg.tradeName ||
     order.buyer?.name ||
     'N/A';
 
@@ -427,6 +428,15 @@ export function PurchaseOrderReceiptModal({
 
   const buyerSignature = buyerReg.signatureUrl || null;
   const buyerStamp = buyerReg.stampUrl || null;
+
+  // Resolve media URLs to ensure local dev proxy & CORS compatibility
+  const resolvedTopLogo = resolveMediaUrl(topLogo);
+  const resolvedSellerLogo = resolveMediaUrl(sellerLogo);
+  const resolvedBuyerLogo = resolveMediaUrl(buyerLogo);
+  const resolvedSellerSignature = resolveMediaUrl(sellerSignature);
+  const resolvedSellerStamp = resolveMediaUrl(sellerStamp);
+  const resolvedBuyerSignature = resolveMediaUrl(buyerSignature);
+  const resolvedBuyerStamp = resolveMediaUrl(buyerStamp);
 
   const shipVia =
     order.deliveryType ? readableStatus(order.deliveryType) : 'Standard Ground Logistics';
@@ -516,6 +526,7 @@ export function PurchaseOrderReceiptModal({
             email: buyerEmail,
             gstin: buyerGstin,
             pan: buyerPan,
+            logoUrl: buyerLogo,
             details: [
               `Ship Via: ${shipVia}`,
               `Tracking: ${trackingNumber}`,
@@ -529,6 +540,7 @@ export function PurchaseOrderReceiptModal({
             email: sellerEmail,
             gstin: sellerGstin,
             pan: sellerPan,
+            logoUrl: sellerLogo,
             details: [
               `Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`,
             ],
@@ -857,8 +869,8 @@ export function PurchaseOrderReceiptModal({
                   {/* Header Branding & Title */}
                   <div className="flex items-center justify-between border-b pb-2 mb-2.5">
                     <div className="flex items-center gap-2.5">
-                      {topLogo && (
-                        <img src={topLogo} alt="Organization Logo" className="h-10 w-10 object-contain rounded" />
+                      {resolvedTopLogo && (
+                        <img src={resolvedTopLogo} alt="Organization Logo" className="h-10 w-10 object-contain rounded" />
                       )}
                       <div>
                         <h2 className="text-base font-black text-slate-950 uppercase tracking-tight font-sans">
@@ -880,7 +892,19 @@ export function PurchaseOrderReceiptModal({
                     <tbody>
                       <tr className="border-b border-slate-300">
                         <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Name:</td>
-                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">{sellerOrg}</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">
+                          <div className="flex items-center gap-2">
+                            {resolvedSellerLogo && (
+                              <img src={resolvedSellerLogo} alt="Seller Logo" className="h-6 w-6 object-contain rounded shrink-0 border border-slate-200 bg-white" />
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-950 truncate">{sellerOrg}</div>
+                              {order.seller?.name && order.seller.name !== sellerOrg && (
+                                <div className="text-[9px] text-slate-500 font-medium truncate">Contact: {order.seller.name}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>PO Date:</td>
                         <td className="w-2/6 font-semibold p-1.5 text-slate-900 font-mono">{poDate}</td>
                       </tr>
@@ -904,7 +928,19 @@ export function PurchaseOrderReceiptModal({
                     <tbody>
                       <tr className="border-b border-slate-300">
                         <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship To:</td>
-                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">{buyerOrg}</td>
+                        <td className="w-2/6 font-semibold p-1.5 text-slate-900 border-r border-black">
+                          <div className="flex items-center gap-2">
+                            {resolvedBuyerLogo && (
+                              <img src={resolvedBuyerLogo} alt="Buyer Logo" className="h-6 w-6 object-contain rounded shrink-0 border border-slate-200 bg-white" />
+                            )}
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-950 truncate">{buyerOrg}</div>
+                              {order.buyer?.name && order.buyer.name !== buyerOrg && (
+                                <div className="text-[9px] text-slate-500 font-medium truncate">Attn: {order.buyer.name}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
                         <td className={cn("w-1/6 font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Ship Via:</td>
                         <td className="w-2/6 font-semibold p-1.5 text-slate-900">{shipVia}</td>
                       </tr>
@@ -1015,12 +1051,12 @@ export function PurchaseOrderReceiptModal({
                 <div className="grid grid-cols-2 gap-4 mt-2 pt-2 border-t border-slate-300">
                   <div className="text-left text-xs">
                     <span className="font-bold text-slate-800">For {buyerOrg !== 'N/A' ? buyerOrg : 'Buyer'}:</span>
-                    <div className="h-10 flex items-center gap-2 mt-0.5">
-                      {buyerStamp && (
-                        <img src={buyerStamp} alt="Buyer Stamp" className="h-9 w-9 object-contain mix-blend-multiply" />
+                    <div className="h-12 flex items-center gap-2 mt-0.5 relative">
+                      {resolvedBuyerStamp && (
+                        <img src={resolvedBuyerStamp} alt="Buyer Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
                       )}
-                      {buyerSignature && (
-                        <img src={buyerSignature} alt="Buyer Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                      {resolvedBuyerSignature && (
+                        <img src={resolvedBuyerSignature} alt="Buyer Signature" className="h-9 w-auto object-contain mix-blend-multiply" />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Buyer)</span>
@@ -1028,12 +1064,12 @@ export function PurchaseOrderReceiptModal({
 
                   <div className="text-right text-xs">
                     <span className="font-bold text-slate-800">For {sellerOrg !== 'N/A' ? sellerOrg : 'Supplier'}:</span>
-                    <div className="h-10 flex items-center justify-end gap-2 mt-0.5">
-                      {sellerStamp && (
-                        <img src={sellerStamp} alt="Supplier Stamp" className="h-9 w-9 object-contain mix-blend-multiply" />
+                    <div className="h-12 flex items-center justify-end gap-2 mt-0.5 relative">
+                      {resolvedSellerStamp && (
+                        <img src={resolvedSellerStamp} alt="Supplier Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
                       )}
-                      {sellerSignature && (
-                        <img src={sellerSignature} alt="Supplier Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                      {resolvedSellerSignature && (
+                        <img src={resolvedSellerSignature} alt="Supplier Signature" className="h-9 w-auto object-contain mix-blend-multiply" />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Supplier)</span>

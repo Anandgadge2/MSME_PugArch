@@ -14,7 +14,7 @@ const moneyPdf = (val: any, currency = 'INR') => {
 };
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { api } from '../lib/api';
+import { api, readJsonResponse, resolveMediaUrl } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
@@ -568,6 +568,24 @@ export default function PurchaseOrders() {
     router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
   };
 
+  useEffect(() => {
+    if (!viewingOrder?.id) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await api.get(`/api/purchase-orders/${viewingOrder.id}`);
+        const body = await readJsonResponse(res);
+        const fullData = (body as any)?.data || body;
+        if (fullData && fullData.id && isMounted) {
+          setViewingOrder(prev => ({ ...(prev || viewingOrder), ...fullData }));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [viewingOrder?.id]);
+
   const formatTimestamp = (value?: string | Date | null) => {
     return formatDateTime(value);
   };
@@ -712,11 +730,13 @@ export default function PurchaseOrders() {
     let order = baseOrder;
     try {
       const res = await api.get(`/api/purchase-orders/${baseOrder.id}`);
-      if ((res as any).data) {
-        order = { ...baseOrder, ...(res as any).data };
+      const body = await readJsonResponse(res);
+      const fullData = (body as any)?.data || body;
+      if (fullData && fullData.id) {
+        order = { ...baseOrder, ...fullData };
       }
     } catch (err) {
-      console.warn('Failed to fetch full PO details for PDF, using list data');
+      console.warn('Failed to fetch full PO details for PDF, using list data', err);
     }
 
     const totalValue = Number(order.amount || order.totalValue || 0);
@@ -754,6 +774,9 @@ export default function PurchaseOrders() {
       buyer.buyerProfile?.organizationName ||
       buyer.buyerProfile?.companyName ||
       buyerReg.companyName ||
+      buyerReg.businessName ||
+      buyerReg.legalName ||
+      buyerReg.tradeName ||
       buyer.name ||
       'N/A';
 
@@ -852,6 +875,7 @@ export default function PurchaseOrders() {
           phone: buyer.mobile || buyerReg.mobile || 'N/A',
           gstin: buyerGstin,
           address: buyerAddress,
+          logoUrl: buyerLogo,
         },
         {
           title: 'Vendor / Seller',
@@ -860,6 +884,7 @@ export default function PurchaseOrders() {
           phone: seller.mobile || sellerReg.mobile || 'N/A',
           gstin: sellerGstin,
           address: sellerAddress,
+          logoUrl: sellerLogo,
           details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
         }
       ],
@@ -1374,32 +1399,54 @@ export default function PurchaseOrders() {
 
                   <div className="space-y-3.5">
                     {/* Buyer Info */}
-                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
-                        BY
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
-                        <p className="text-xs font-black text-slate-900 truncate">{viewingOrder.buyer?.name || 'MSME Portal Buyer'}</p>
-                        {viewingOrder.buyer?.email && (
-                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
-                        )}
-                      </div>
-                    </div>
+                    {(() => {
+                      const buyerObj = (viewingOrder.buyer as any) || {};
+                      const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || buyerObj.registrationDetails?.businessName || viewingOrder.buyer?.name || 'MSME Portal Buyer';
+                      return (
+                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
+                            BY
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {buyerOrgDisplay}
+                            </p>
+                            {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
+                              <p className="text-[10px] font-medium text-slate-500 truncate">Attn: {viewingOrder.buyer.name}</p>
+                            )}
+                            {viewingOrder.buyer?.email && (
+                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Seller Info */}
-                    <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
-                        SL
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
-                        <p className="text-xs font-black text-slate-900 truncate">{viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller'}</p>
-                        {viewingOrder.seller?.email && (
-                          <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
-                        )}
-                      </div>
-                    </div>
+                    {(() => {
+                      const sellerObj = (viewingOrder.seller as any) || {};
+                      const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sellerObj.registrationDetails?.businessName || viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller';
+                      return (
+                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
+                            SL
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {sellerOrgDisplay}
+                            </p>
+                            {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
+                              <p className="text-[10px] font-medium text-slate-500 truncate">Contact: {viewingOrder.seller.name}</p>
+                            )}
+                            {viewingOrder.seller?.email && (
+                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
