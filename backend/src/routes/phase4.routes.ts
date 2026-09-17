@@ -1715,6 +1715,19 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     procurementMethod: config.procurementMethod,
     qualifiedVendorCount: config.qualifiedVendors.length
   });
+
+  void notificationService.notifySellersAndShgsOfProcurement({
+    id: auction.id,
+    title: auction.title,
+    bidNumber: auction.auctionNumber,
+    procurementType: 'REVERSE_AUCTION',
+    canonicalMethod: 'REVERSE_AUCTION',
+    buyerOrganizationName: auction.buyerOrganization,
+    estimatedValue: auction.estimatedValue,
+    endDate: auction.endDateTime,
+    visibility: 'PUBLIC'
+  });
+
   return auction;
 };
 
@@ -1970,6 +1983,19 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     methodSlug,
     canonicalMethod
   });
+
+  void notificationService.notifySellersAndShgsOfProcurement({
+    id: bid.id,
+    title: bid.title,
+    bidNumber: bid.bidNumber,
+    procurementType: bid.procurementType,
+    canonicalMethod: bid.canonicalMethod,
+    buyerOrganizationName: bid.buyerOrganizationName,
+    estimatedValue: bid.estimatedValue,
+    endDate: bid.endDate,
+    visibility: bid.visibility
+  });
+
   return bid;
 };
 

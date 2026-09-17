@@ -1854,6 +1854,17 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
           type: 'bid.published',
           redirectUrl: `/buyer/procurement/events/${bid.id}`
         }, ['in_app', 'email']);
+        void notificationService.notifySellersAndShgsOfProcurement({
+          id: bid.id,
+          title: bid.title,
+          bidNumber: bid.bidNumber,
+          procurementType: bid.procurementType,
+          canonicalMethod: bid.canonicalMethod,
+          buyerOrganizationName: bid.buyerOrganizationName,
+          estimatedValue: bid.estimatedValue,
+          endDate: bid.endDate,
+          visibility: bid.visibility
+        });
       } catch (err) {
         logger.warn({ err }, 'Failed to send publish notification');
       }
@@ -1916,6 +1927,17 @@ export const approveBid = async (req: AuthRequest, bidId: string) => {
           }, ['in_app', 'email']);
         }
       }
+      void notificationService.notifySellersAndShgsOfProcurement({
+        id: bid.id,
+        title: bid.title,
+        bidNumber: bid.bidNumber,
+        procurementType: bid.procurementType,
+        canonicalMethod: bid.canonicalMethod,
+        buyerOrganizationName: bid.buyerOrganizationName,
+        estimatedValue: bid.estimatedValue,
+        endDate: bid.endDate,
+        visibility: bid.visibility
+      });
     }
     await notificationService.notifyUser(bid.buyerId, {
       title: openNow ? 'Bid Published' : 'Bid Approved',

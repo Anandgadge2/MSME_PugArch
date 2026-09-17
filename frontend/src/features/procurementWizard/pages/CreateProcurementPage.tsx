@@ -50,8 +50,7 @@ import {
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { OrderPlacementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../../lib/files';
@@ -311,7 +310,7 @@ type Draft = {
     packetType: 'Single' | 'Two';
     publishDate: string;
     submissionDate: string;
-    validityDays: number;
+    validityDays: number | string;
     submissionStartDate: string;
     clarificationAllowed: boolean;
     clarificationDeadline: string;
@@ -325,7 +324,7 @@ type Draft = {
     showSellerRank: boolean;
     showLowestPrice: boolean;
     autoClose: boolean;
-    minimumBidders: number;
+    minimumBidders: number | string;
     rebidsAllowed: boolean;
   };
   terms: {
@@ -709,7 +708,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     schedule: {
       ...draft.schedule,
       packetType: draft.schedule.packetType,
-      minimumBidders: Math.max(draft.schedule.minimumBidders || 0, base.minimumQualifiedBidders || 2),
+      minimumBidders: Math.max(Number(draft.schedule.minimumBidders || 0), base.minimumQualifiedBidders || 2),
     },
     auctionConfig: {
       ...base,
@@ -2935,8 +2934,8 @@ function BasicsStepForm({
         </Field>
 
         <Field label="Required by Date & Time" required>
-          <input
-            type="datetime-local"
+          <DateTimePicker
+            id="basics-required-by-datetime"
             value={
               draft.basics.requiredByDate
                 ? draft.basics.requiredByDate.includes('T')
@@ -2944,8 +2943,8 @@ function BasicsStepForm({
                   : `${draft.basics.requiredByDate}T17:00`
                 : ''
             }
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: e.target.value } }))}
-            className={inputClass}
+            onChange={val => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: val } }))}
+            placeholder="Select required date & time (12-hr AM/PM)"
           />
         </Field>
 
@@ -3865,6 +3864,11 @@ function QuickDocumentModal({
   );
 }
 
+type ItemModalFormData = Omit<ItemRow, 'quantity' | 'unitPrice'> & {
+  quantity: number | string;
+  unitPrice: number | string;
+};
+
 /** Full Add / Edit Line Item Modal Dialog (Modern Centered Horizontal 2-Column Layout) */
 function ItemDrawerOrModal({
   isOpen,
@@ -3883,12 +3887,27 @@ function ItemDrawerOrModal({
   token: string | null;
   onPreviewDocument?: (doc: any, label?: string) => void;
 }) {
-  const [formData, setFormData] = useState<ItemRow | null>(item);
+  const [formData, setFormData] = useState<ItemModalFormData | null>(() => {
+    if (!item) return null;
+    return {
+      ...item,
+      quantity: item.quantity ?? 1,
+      unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
+    };
+  });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    setFormData(item);
+    if (item) {
+      setFormData({
+        ...item,
+        quantity: item.quantity ?? 1,
+        unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
+      });
+    } else {
+      setFormData(null);
+    }
     setValidationErrors({});
   }, [item]);
 
@@ -3916,7 +3935,8 @@ function ItemDrawerOrModal({
       errs.specification = 'Description must be at most 500 characters';
     }
 
-    if (!formData.quantity || isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
+    const parsedQty = parseInt(String(formData.quantity), 10);
+    if (!formData.quantity || isNaN(parsedQty) || parsedQty <= 0) {
       errs.quantity = 'Must be a positive whole number';
     }
 
@@ -3992,14 +4012,22 @@ function ItemDrawerOrModal({
     toast.info('Document removed');
   };
 
+  const preparePayload = (): ItemRow => {
+    return {
+      ...formData,
+      quantity: Math.max(1, parseInt(String(formData.quantity), 10) || 1),
+      unitPrice: Math.max(0, parseFloat(String(formData.unitPrice)) || 0),
+    };
+  };
+
   const handleSaveClick = () => {
     if (!validate()) return;
-    onSave(formData);
+    onSave(preparePayload());
   };
 
   const handleSaveAndAddClick = () => {
     if (!validate()) return;
-    onSaveAndAddAnother(formData);
+    onSaveAndAddAnother(preparePayload());
   };
 
   return createPortal(
@@ -4206,32 +4234,52 @@ function ItemDrawerOrModal({
                   <div className="relative flex items-center">
                     <button
                       type="button"
+                      aria-label="Decrease quantity"
                       onClick={() => {
-                        const current = Number(formData.quantity || 1);
-                        if (current > 1) setFormData({ ...formData, quantity: current - 1 });
+                        const current = parseInt(String(formData.quantity), 10) || 1;
+                        if (current > 1) {
+                          setFormData({ ...formData, quantity: current - 1 });
+                          if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
+                        }
                       }}
-                      className="absolute left-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
+                      className="absolute left-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors select-none"
                     >
                       -
                     </button>
                     <input
-                      type="number"
-                      min={1}
-                      value={formData.quantity}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-label="Item quantity"
+                      value={formData.quantity ?? ''}
                       onChange={e => {
-                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        let val = e.target.value.replace(/[^0-9]/g, '');
+                        if (val.length > 1 && val.startsWith('0')) {
+                          val = val.replace(/^0+/, '');
+                        }
                         setFormData({ ...formData, quantity: val });
                         if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
+                      onBlur={() => {
+                        const current = parseInt(String(formData.quantity), 10);
+                        if (!current || current < 1) {
+                          setFormData({ ...formData, quantity: 1 });
+                        } else {
+                          setFormData({ ...formData, quantity: current });
+                        }
+                      }}
                       className={cn(inputClass, "text-center px-7 font-bold", validationErrors.quantity && "border-rose-500")}
+                      placeholder="1"
                     />
                     <button
                       type="button"
+                      aria-label="Increase quantity"
                       onClick={() => {
-                        const current = Number(formData.quantity || 1);
+                        const current = parseInt(String(formData.quantity), 10) || 0;
                         setFormData({ ...formData, quantity: current + 1 });
+                        if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
-                      className="absolute right-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
+                      className="absolute right-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors select-none"
                     >
                       +
                     </button>
@@ -4261,13 +4309,35 @@ function ItemDrawerOrModal({
 
                 <Field label="Est. Unit Rate (₹)">
                   <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">₹</span>
                     <input
-                      type="number"
-                      min={0}
-                      value={formData.unitPrice}
-                      onChange={e => setFormData({ ...formData, unitPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                      onWheel={e => (e.target as HTMLElement).blur()}
+                      type="text"
+                      inputMode="decimal"
+                      aria-label="Estimated Unit Rate in Rupees"
+                      value={formData.unitPrice ?? ''}
+                      onChange={e => {
+                        let val = e.target.value.replace(/[^0-9.]/g, '');
+                        const parts = val.split('.');
+                        if (parts.length > 2) {
+                          val = parts[0] + '.' + parts.slice(1).join('');
+                        }
+                        if (parts.length === 2 && parts[1].length > 2) {
+                          val = parts[0] + '.' + parts[1].slice(0, 2);
+                        }
+                        if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+                          val = val.replace(/^0+/, '') || '0';
+                        }
+                        setFormData({ ...formData, unitPrice: val });
+                      }}
+                      onBlur={() => {
+                        if (formData.unitPrice !== '') {
+                          let val = String(formData.unitPrice);
+                          if (val.endsWith('.')) {
+                            val = val.slice(0, -1);
+                            setFormData({ ...formData, unitPrice: val });
+                          }
+                        }
+                      }}
                       className={cn(inputClass, "pl-6 font-bold")}
                       placeholder="0"
                     />
@@ -5563,10 +5633,32 @@ function VendorsStepForm({
 
         <Field label="Minimum Sourcing bids required">
           <input
-            type="number"
-            value={draft.schedule.minimumBidders || 3}
-            onChange={e => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: Number(e.target.value || 3) } }))}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Minimum Sourcing bids required"
+            value={draft.schedule.minimumBidders ?? ''}
+            onChange={e => {
+              let val = e.target.value.replace(/[^0-9]/g, '');
+              if (val.length > 1 && val.startsWith('0')) {
+                val = val.replace(/^0+/, '');
+              }
+              updateDraft(c => ({
+                ...c,
+                schedule: {
+                  ...c.schedule,
+                  minimumBidders: val === '' ? '' : parseInt(val, 10),
+                }
+              }));
+            }}
+            onBlur={() => {
+              const current = parseInt(String(draft.schedule.minimumBidders), 10);
+              if (!current || current < 1) {
+                updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
+              }
+            }}
             className={inputClass}
+            placeholder="3"
           />
         </Field>
       </div>
@@ -6256,39 +6348,58 @@ function ScheduleStepForm({
         </Field>
 
         <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
-          <input
-            type="datetime-local"
+          <DateTimePicker
+            id="submission-start-datetime"
             value={draft.schedule.submissionStartDate || ''}
-            onChange={e => updateSchedule('submissionStartDate', e.target.value)}
-            className={controlClass(fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.'))}
+            onChange={val => updateSchedule('submissionStartDate', val)}
+            error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}
+            placeholder="Select submission start date & time"
           />
         </Field>
 
         <Field label="Submission End Date (Deadline)" required error={fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.')}>
-          <input
-            type="datetime-local"
+          <DateTimePicker
+            id="submission-end-datetime"
             value={draft.schedule.submissionDate || ''}
-            onChange={e => updateSchedule('submissionDate', e.target.value)}
-            className={controlClass(fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.'))}
+            onChange={val => updateSchedule('submissionDate', val)}
+            error={fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.')}
+            placeholder="Select submission deadline date & time"
           />
         </Field>
 
         <Field label="Bid Validity Period (Days)">
           <input
-            type="number"
-            value={draft.schedule.validityDays || 90}
-            onChange={e => updateSchedule('validityDays', Number(e.target.value || 90))}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Bid Validity Period in Days"
+            value={draft.schedule.validityDays ?? ''}
+            onChange={e => {
+              let val = e.target.value.replace(/[^0-9]/g, '');
+              if (val.length > 1 && val.startsWith('0')) {
+                val = val.replace(/^0+/, '');
+              }
+              updateSchedule('validityDays', val === '' ? '' : parseInt(val, 10));
+            }}
+            onBlur={() => {
+              const current = parseInt(String(draft.schedule.validityDays), 10);
+              if (!current || current < 1) {
+                updateSchedule('validityDays', 90);
+              }
+            }}
             className={inputClass}
+            placeholder="90"
           />
         </Field>
 
         {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (
           <Field label="Technical Opening Date" required error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}>
-            <input
-              type="datetime-local"
+            <DateTimePicker
+              id="technical-opening-datetime"
               value={draft.schedule.technicalOpeningDate || ''}
-              onChange={e => updateSchedule('technicalOpeningDate', e.target.value)}
-              className={controlClass(fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.'))}
+              onChange={val => updateSchedule('technicalOpeningDate', val)}
+              error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}
+              placeholder="Select technical opening date & time"
             />
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               Technical envelope unlocking date. Must be after submission closing.
@@ -6298,11 +6409,12 @@ function ScheduleStepForm({
 
         {isTwoPacket && (
           <Field label="Financial Opening Date" required error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}>
-            <input
-              type="datetime-local"
+            <DateTimePicker
+              id="financial-opening-datetime"
               value={draft.schedule.financialOpeningDate || ''}
-              onChange={e => updateSchedule('financialOpeningDate', e.target.value)}
-              className={controlClass(fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.'))}
+              onChange={val => updateSchedule('financialOpeningDate', val)}
+              error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}
+              placeholder="Select financial opening date & time"
             />
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               Financial envelope unlocking date for technically qualified bidders. Must be after technical opening.
@@ -6379,10 +6491,22 @@ function ScheduleStepForm({
                 {isReverseAuctionMethod(draft.type) && (
                   <>
                     <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
-                      <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
+                      <DateTimePicker
+                        id="auction-start-datetime"
+                        value={draft.auctionConfig.startDateTime}
+                        onChange={val => updateAuction('startDateTime', val)}
+                        error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}
+                        placeholder="Select auction start date & time"
+                      />
                     </Field>
                     <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
-                      <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
+                      <DateTimePicker
+                        id="auction-end-datetime"
+                        value={draft.auctionConfig.endDateTime}
+                        onChange={val => updateAuction('endDateTime', val)}
+                        error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}
+                        placeholder="Select auction end date & time"
+                      />
                     </Field>
                     <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
                       <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
@@ -6635,15 +6759,7 @@ function ScheduleStepForm({
                     <div className="flex items-center gap-1.5 shrink-0">
                       {draft.auctionConfig.termsDocumentFileId && (
                         <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => window.open(`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`, '_blank')}
-                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                          >
-                            View
-                          </Button>
+                          
                           <a
                             href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
                             download={draft.auctionConfig.termsDocumentName}
@@ -6781,11 +6897,11 @@ function ScheduleStepForm({
 
           {draft.schedule.clarificationAllowed && (
             <Field label="Clarification Deadline Date">
-              <input
-                type="datetime-local"
+              <DateTimePicker
+                id="clarification-deadline-datetime"
                 value={draft.schedule.clarificationDeadline || ''}
-                onChange={e => updateSchedule('clarificationDeadline', e.target.value)}
-                className={inputClass}
+                onChange={val => updateSchedule('clarificationDeadline', val)}
+                placeholder="Select clarification deadline date & time"
               />
             </Field>
           )}
@@ -7266,19 +7382,75 @@ function PreviewPublishForm({
       </Field>
 
       <div className="pt-2">
-        <ComplianceConsentCard
-          title="Order Placement & Procurement Facilitation Policy"
-          subtitle="Statutory compliance agreement governing RFQ publishing, bidding, delivery verification, and settlement."
-          pdfFile="Order_Placement_Procurement_Policy.pdf"
-          accepted={complianceAccepted}
-          onAcceptedChange={onComplianceAcceptedChange}
-          checkboxLabel="I certify compliance with procurement rules & accept the Order Placement & Procurement Facilitation Policy"
-          checkboxDescription="By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE."
-          readerHeightClassName="h-[120px] sm:h-[135px]"
-          showPolicyLibrary
+        <div
+          className={cn(
+            'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+            complianceAccepted
+              ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+              : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+          )}
         >
-          <OrderPlacementPolicyContent />
-        </ComplianceConsentCard>
+          <label
+            htmlFor="create-procurement-policy-consent"
+            className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+          >
+            <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+              <input
+                type="checkbox"
+                id="create-procurement-policy-consent"
+                checked={complianceAccepted}
+                onChange={(e) => onComplianceAcceptedChange(e.target.checked)}
+                aria-required="true"
+                className="peer sr-only"
+              />
+              <div
+                className={cn(
+                  'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                  complianceAccepted
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                    : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                )}
+                aria-hidden="true"
+              >
+                <Check
+                  className={cn(
+                    'h-3 w-3 stroke-[3] transition-transform duration-150',
+                    complianceAccepted ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+              <span className="font-bold">
+                I certify compliance with procurement rules &amp; accept the{' '}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const pdfUrl = '/docs/Order_Placement_Procurement_Policy.pdf';
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.download = 'Order_Placement_Procurement_Policy.pdf';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                  title="Click to download Order Placement & Procurement Facilitation Policy (PDF)"
+                >
+                  <span>Order Placement &amp; Procurement Facilitation Policy (T&amp;C)</span>
+                  <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                </button>
+                <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+              </span>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE.
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -7550,6 +7722,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const cleanSchedule = {
     ...draft.schedule,
+    validityDays: Number(draft.schedule.validityDays) || 90,
+    minimumBidders: Number(draft.schedule.minimumBidders) || 3,
     clarificationAllowed: isClarificationAllowed,
     clarificationDeadline: isClarificationAllowed ? (draft.schedule.clarificationDeadline || null) : null,
     technicalOpeningDate: isTechnicalNeeded ? (draft.schedule.technicalOpeningDate || null) : null,

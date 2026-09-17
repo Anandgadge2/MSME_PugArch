@@ -131,6 +131,107 @@ export const notificationService = {
     }
   },
 
+  /** Notify sellers & SHG users about a published public or invited procurement opportunity */
+  async notifySellersAndShgsOfProcurement(procurement: {
+    id: number | string;
+    title: string;
+    bidNumber?: string;
+    requirementNumber?: string;
+    procurementType?: string;
+    canonicalMethod?: string;
+    buyerOrganizationName?: string;
+    estimatedValue?: number | null;
+    endDate?: Date | string | null;
+    visibility?: string;
+    invitedSellerOrgIds?: number[];
+    invitedUserIds?: number[];
+  }) {
+    try {
+      const isLimited = procurement.visibility === 'LIMITED' || procurement.visibility === 'INVITED_SELLERS_ONLY';
+      let targetUsers: Array<{ id: number; email?: string | null; role?: string }> = [];
+
+      if (isLimited) {
+        const invitedOrgIds = procurement.invitedSellerOrgIds || [];
+        const invitedUserIds = procurement.invitedUserIds || [];
+        targetUsers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any },
+            OR: [
+              ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+              ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+            ]
+          },
+          select: { id: true, email: true, role: true }
+        });
+      } else {
+        // Public procurement: Notify all active Sellers and SHGs
+        targetUsers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any }
+          },
+          select: { id: true, email: true, role: true }
+        });
+      }
+
+      if (!targetUsers.length) return;
+
+      const titleStr = procurement.title || 'Procurement Opportunity';
+      const numStr = procurement.bidNumber || procurement.requirementNumber || `PRC-${procurement.id}`;
+      const methodStr = (procurement.canonicalMethod || procurement.procurementType || 'Public Sourcing').replace(/_/g, ' ');
+      const orgStr = procurement.buyerOrganizationName || 'Verified Buyer';
+
+      const notifyOpts: NotifyOpts = {
+        title: `New Procurement Opportunity: ${titleStr}`,
+        message: `${orgStr} published a new ${methodStr} requirement (${numStr}). Open portal to view details and submit your proposal.`,
+        type: 'procurement.opportunity',
+        priority: 'high',
+        redirectUrl: `/seller/opportunities`
+      };
+
+      const emailOpts: EmailOpts = {
+        subject: `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`,
+        html: `
+          <div style="margin: 0 0 20px; padding: 18px 20px; background: #0c2340; border-radius: 8px; color: #ffffff;">
+            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">NEW ${escapeHtml(methodStr)} OPPORTUNITY</p>
+            <h2 style="margin: 0; color: #ffffff; font-size: 20px; line-height: 1.3;">${escapeHtml(titleStr)}</h2>
+            <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 13px;">Ref No: <strong>${escapeHtml(numStr)}</strong> | Issued by: <strong>${escapeHtml(orgStr)}</strong></p>
+          </div>
+          <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
+            A new public procurement opportunity matching registered Seller and SHG business categories has been published on the portal.
+          </p>
+          <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569; width: 35%;">Procurement Method</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(methodStr)}</td>
+            </tr>
+            ${procurement.estimatedValue ? `
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569;">Estimated Budget</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">₹${Number(procurement.estimatedValue).toLocaleString('en-IN')}</td>
+            </tr>` : ''}
+            ${procurement.endDate ? `
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569;">Submission Deadline</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${new Date(procurement.endDate).toLocaleString()}</td>
+            </tr>` : ''}
+          </table>
+        `,
+        variables: {
+          actionUrl: '/seller/opportunities'
+        }
+      };
+
+      // Dispatch in-app and email to all targeted sellers & SHGs
+      await Promise.allSettled(
+        targetUsers.map(user => this.notifyUser(user.id, notifyOpts, ['in_app', 'email']))
+      );
+    } catch (error) {
+      logger.warn({ error, procurementId: procurement.id }, 'Failed to notify sellers and SHGs of published procurement');
+    }
+  },
+
   async sendSmsNotification(phone: string, message: string, templateId?: string, purpose: SmsPurpose = 'notification') {
     return smsService.sendNotificationSms(phone, message, templateId, purpose);
   },
