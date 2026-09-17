@@ -901,10 +901,6 @@ export default function SubmitQuotationPage() {
     if (isOwnSubmitted) {
       setSubmitted(true);
       setDeclared(true);
-      toast.info('Loaded your submitted quotation from the server.');
-    } else if (submittedStatus(ownResponse) === 'DRAFT') {
-      setSubmitted(false);
-      toast.info('Restored your draft quotation from the server.');
     } else {
       setSubmitted(false);
     }
