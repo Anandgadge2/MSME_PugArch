@@ -245,6 +245,18 @@ const OrderActionsMenu = ({
         type="button"
         onClick={() => {
           onClose();
+          exportInvoicePdf(order, 'download');
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+      >
+        <Download className="h-3.5 w-3.5 text-[#12335f]" />
+        <span>Download PO</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
           exportInvoicePdf(order, 'print');
         }}
         className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"

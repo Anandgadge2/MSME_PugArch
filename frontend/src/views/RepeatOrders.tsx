@@ -308,31 +308,40 @@ export default function RepeatOrders() {
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-16">
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white border-b border-slate-800 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-bold text-blue-200 ring-1 ring-inset ring-blue-400/30 mb-2">
-                <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Procurement Reordering</span>
+      {/* Enhanced Compact Header */}
+      <div className="bg-white border-b border-slate-200/80 shadow-2xs">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+          {/* Top Bar: Breadcrumb + Tab Switcher */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <nav className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                <span className="hover:text-slate-800">Orders</span>
+                <ChevronRight className="h-3 w-3 text-slate-400" />
+                <span className="text-[#12335f] font-bold">Repeat Orders</span>
+              </nav>
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-[#12335f] border border-blue-100 shrink-0">
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                </div>
+                <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                  Repeat Order Management
+                </h1>
+                <span className="hidden sm:inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#12335f] border border-blue-200/80">
+                  Quick Reorder
+                </span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Repeat Order Management</h1>
-              <p className="mt-1 text-xs sm:text-sm text-blue-100/80 max-w-2xl">
-                Reorder identical items directly from previous successful purchase orders under approved contract terms with new delivery scheduling.
-              </p>
             </div>
 
             {/* View Tab Switcher */}
-            <div className="flex items-center gap-1.5 p-1 bg-white/10 rounded-2xl border border-white/15 backdrop-blur-md shrink-0">
+            <div className="inline-flex items-center p-1 bg-slate-100 rounded-xl border border-slate-200/70 shrink-0">
               <button
                 type="button"
                 onClick={() => setActiveTab('wizard')}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all',
                   activeTab === 'wizard'
-                    ? 'bg-white text-[#12335f] shadow-md'
-                    : 'text-blue-100 hover:text-white hover:bg-white/5'
+                    ? 'bg-white text-[#12335f] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 )}
               >
                 <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
@@ -342,68 +351,75 @@ export default function RepeatOrders() {
                 type="button"
                 onClick={() => setActiveTab('history')}
                 className={cn(
-                  'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition-all',
                   activeTab === 'history'
-                    ? 'bg-white text-[#12335f] shadow-md'
-                    : 'text-blue-100 hover:text-white hover:bg-white/5'
+                    ? 'bg-white text-[#12335f] shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
                 )}
               >
                 <FileCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>Repeat Orders History ({repeatOrdersHistory.length})</span>
+                <span>History ({repeatOrdersHistory.length})</span>
               </button>
             </div>
           </div>
 
-          {/* Stepper Progress (Visible in Wizard mode) */}
+          {/* Compact Connected Horizontal Stepper (Only in Wizard mode) */}
           {activeTab === 'wizard' && (
-            <div className="mt-8 pt-6 border-t border-white/10">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { stepNum: 1, title: 'Step 1', desc: 'Select Previous PO' },
-                  { stepNum: 2, title: 'Step 2 & 3', desc: 'Auto-fill & New Dates' },
-                  { stepNum: 3, title: 'Review', desc: 'Review & Verify' },
-                  { stepNum: 4, title: 'Approval', desc: 'New PO Generation' },
-                ].map((s) => {
-                  const isDone = currentStep > s.stepNum;
-                  const isCurrent = currentStep === s.stepNum;
-                  return (
+            <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between sm:justify-start gap-1 sm:gap-4 overflow-x-auto py-0.5">
+              {[
+                { stepNum: 1, label: 'Select Previous PO', short: 'Select PO' },
+                { stepNum: 2, label: 'Auto-fill & New Dates', short: 'Dates' },
+                { stepNum: 3, label: 'Review & Verify', short: 'Review' },
+                { stepNum: 4, label: 'Approval & Generation', short: 'Approval' },
+              ].map((s, idx, arr) => {
+                const isDone = currentStep > s.stepNum;
+                const isCurrent = currentStep === s.stepNum;
+                return (
+                  <React.Fragment key={s.stepNum}>
                     <div
-                      key={s.stepNum}
                       className={cn(
-                        'flex items-center gap-3 p-2.5 rounded-xl transition-all border text-left',
+                        'flex items-center gap-2 shrink-0 py-1 px-2 rounded-lg transition-all',
                         isCurrent
-                          ? 'bg-white/15 border-white/30 ring-2 ring-white/20'
+                          ? 'bg-blue-50/80 text-[#12335f]'
                           : isDone
-                          ? 'bg-white/5 border-emerald-400/40 text-emerald-200'
-                          : 'bg-white/5 border-white/5 opacity-60'
+                          ? 'text-slate-700'
+                          : 'text-slate-400 opacity-70'
                       )}
                     >
                       <div
                         className={cn(
-                          'flex items-center justify-center w-7 h-7 rounded-lg text-xs font-black shrink-0',
+                          'flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-black shrink-0 transition-colors',
                           isCurrent
-                            ? 'bg-white text-[#12335f]'
+                            ? 'bg-[#12335f] text-white ring-2 ring-blue-200'
                             : isDone
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-white/10 text-white'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-200 text-slate-500'
                         )}
                       >
-                        {isDone ? <Check className="h-4 w-4" /> : s.stepNum}
+                        {isDone ? <Check className="h-3 w-3" /> : s.stepNum}
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-black uppercase tracking-wider text-blue-200/90">{s.title}</p>
-                        <p className="text-xs font-bold text-white truncate">{s.desc}</p>
-                      </div>
+                      <span className={cn('text-xs whitespace-nowrap', isCurrent ? 'font-black text-[#12335f]' : isDone ? 'font-bold text-slate-800' : 'font-medium text-slate-400')}>
+                        <span className="hidden sm:inline">{s.label}</span>
+                        <span className="sm:hidden">{s.short}</span>
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
+                    {idx < arr.length - 1 && (
+                      <div
+                        className={cn(
+                          'h-0.5 w-4 sm:w-8 rounded-full shrink-0 transition-colors',
+                          currentStep > s.stepNum ? 'bg-emerald-500' : 'bg-slate-200'
+                        )}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* VIEW TAB 2: REPEAT ORDERS HISTORY */}
         {activeTab === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-200">
