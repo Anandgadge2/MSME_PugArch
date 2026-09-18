@@ -32,7 +32,7 @@ import { clearAuthCookies, getRefreshTokenFromRequest, issueCookieAuth, revokeRe
 import { assertPasswordNotReused, rememberPreviousPassword } from '../../services/password-history.service.js';
 import { handleSecureRouteError, handleFinancialRouteError, toSafeUser } from '../../utils/routeHelpers.js';
 import { validatePersonalVerification } from '../../utils/validationHelpers.js';
-import { maskSensitive } from '../../utils/maskSensitive.js';
+import { maskSensitive, maskPAN, maskGST } from '../../utils/maskSensitive.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
@@ -700,9 +700,9 @@ export const authController = {
 
         const stateVal = firstValue(rDetails.state, gstDetails.state) || null;
         const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || null;
-        const cityVal = firstValue(gstDetails.city, rDetails.district) || null;
-        const pincodeVal = firstValue(gstDetails.pincode) || null;
-        const addressLine1Val = firstValue(rDetails.officeZoneName, gstDetails.address) || null;
+        const cityVal = firstValue(rDetails.city, gstDetails.city, rDetails.district) || null;
+        const pincodeVal = firstValue(rDetails.pincode, gstDetails.pincode) || null;
+        const addressLine1Val = firstValue(rDetails.address, rDetails.registeredAddress, rDetails.officeZoneName, gstDetails.address) || null;
 
         // Resolve default company so org & user are linked to it from the start
         const defaultCompanyId = await getDefaultCompanyId();
@@ -746,6 +746,67 @@ export const authController = {
         });
 
         user.organizationId = createdOrg.id;
+
+        if (user.role === 'buyer') {
+          const rawGst = firstValue(rDetails.gstin);
+          const resolvedGst = rawGst ? String(rawGst).trim().toUpperCase() : null;
+          const rawPan = firstValue(rDetails.orgPan, gstDetails.pan, rDetails.gstin ? String(rDetails.gstin).slice(2, 12) : '', rDetails.panNumber, rDetails.pan);
+          const resolvedPan = rawPan ? String(rawPan).trim().toUpperCase() : null;
+          const gstFingerprint = resolvedGst ? sha256(resolvedGst) : null;
+          const gstMasked = resolvedGst ? maskGST(resolvedGst) : null;
+          const panFingerprint = resolvedPan ? sha256(resolvedPan) : null;
+          const panMasked = resolvedPan ? maskPAN(resolvedPan) : null;
+
+          await prisma.buyerProfile.upsert({
+            where: { userId: user.id },
+            create: {
+              userId: user.id,
+              organizationId: createdOrg.id,
+              organizationName: orgName,
+              businessType: rDetails.businessType || 'Private Limited Company',
+              cin: firstValue(rDetails.cin) || null,
+              pan: resolvedPan,
+              panMasked,
+              panFingerprint,
+              gst: resolvedGst,
+              gstMasked,
+              gstFingerprint,
+              website: firstValue(rDetails.website) || null,
+              representativeName: user.name || null,
+              email: user.email,
+              mobile: user.mobile || normalizedMobile,
+              country: 'India',
+              state: stateVal,
+              district: districtVal,
+              city: cityVal,
+              pincode: pincodeVal,
+              registeredAddress: addressLine1Val,
+              procurementCategories: [],
+              preferredMethods: [],
+              verificationStatusEnum: 'PENDING'
+            },
+            update: {
+              organizationId: createdOrg.id,
+              organizationName: orgName,
+              businessType: rDetails.businessType || 'Private Limited Company',
+              cin: firstValue(rDetails.cin) || null,
+              pan: resolvedPan,
+              panMasked,
+              panFingerprint,
+              gst: resolvedGst,
+              gstMasked,
+              gstFingerprint,
+              website: firstValue(rDetails.website) || null,
+              state: stateVal,
+              district: districtVal,
+              city: cityVal,
+              pincode: pincodeVal,
+              registeredAddress: addressLine1Val
+            }
+          }).catch(err => {
+            console.error('[Register BuyerProfile Init Error]:', err);
+          });
+        }
       }
 
       if (kycSession) {
@@ -1501,6 +1562,15 @@ export const authController = {
           reg.businessName, user.name
         );
         try {
+          const rawGst = firstValue(org.gstin, reg.gstin);
+          const resolvedGst = rawGst ? String(rawGst).trim().toUpperCase() : null;
+          const rawPan = firstValue(org.panNumber, reg.pan);
+          const resolvedPan = rawPan ? String(rawPan).trim().toUpperCase() : null;
+          const gstFingerprint = resolvedGst ? sha256(resolvedGst) : null;
+          const gstMasked = resolvedGst ? maskGST(resolvedGst) : null;
+          const panFingerprint = resolvedPan ? sha256(resolvedPan) : null;
+          const panMasked = resolvedPan ? maskPAN(resolvedPan) : null;
+
           const created = await prisma.buyerProfile.create({
             data: {
               userId: user.id,
@@ -1510,8 +1580,12 @@ export const authController = {
               organizationType: firstValue(org.organizationType, reg.businessType) || null,
               industry: firstValue(reg.industry) || null,
               cin: firstValue(org.cinNumber, reg.cinNumber, reg.cin) || null,
-              pan: firstValue(org.panNumber, reg.pan) || null,
-              gst: firstValue(org.gstin, reg.gstin) || null,
+              pan: resolvedPan,
+              panMasked,
+              panFingerprint,
+              gst: resolvedGst,
+              gstMasked,
+              gstFingerprint,
               website: firstValue(org.website, reg.website) || null,
               state: firstValue(org.state, sellerOffice?.state, reg.state) || null,
               district: firstValue(org.district, reg.district) || null,
@@ -1534,6 +1608,42 @@ export const authController = {
             (user as any).buyerProfile = await prisma.buyerProfile.findUnique({ where: { userId: user.id } });
           } else {
             console.error('[me] Auto-create BuyerProfile failed:', autoCreateErr);
+          }
+        }
+      }
+
+      if (user.role === 'buyer' && user.buyerProfile) {
+        const bp = user.buyerProfile;
+        const org = user.organization || {} as any;
+        const reg = asObject(user.registrationDetails);
+        const rawGst = bp.gst || org.gstin || reg.gstin;
+        const resolvedGst = rawGst ? String(rawGst).trim().toUpperCase() : null;
+        const rawPan = bp.pan || org.panNumber || reg.pan;
+        const resolvedPan = rawPan ? String(rawPan).trim().toUpperCase() : null;
+
+        const updates: any = {};
+        if (!bp.gst && resolvedGst) updates.gst = resolvedGst;
+        if (!bp.gstMasked && resolvedGst) updates.gstMasked = maskGST(resolvedGst);
+        if (!bp.gstFingerprint && resolvedGst) updates.gstFingerprint = sha256(resolvedGst);
+        if (!bp.pan && resolvedPan) updates.pan = resolvedPan;
+        if (!bp.panMasked && resolvedPan) updates.panMasked = maskPAN(resolvedPan);
+        if (!bp.panFingerprint && resolvedPan) updates.panFingerprint = sha256(resolvedPan);
+        if (!bp.state && (org.state || reg.state)) updates.state = org.state || reg.state;
+        if (!bp.district && (org.district || reg.district)) updates.district = org.district || reg.district;
+        if (!bp.city && (org.city || reg.city)) updates.city = org.city || reg.city;
+        if (!bp.pincode && (org.pincode || reg.pincode)) updates.pincode = org.pincode || reg.pincode;
+        if (!bp.registeredAddress && (org.addressLine1 || reg.address)) updates.registeredAddress = org.addressLine1 || reg.address;
+        if (!bp.organizationId && (user.organizationId || org.id)) updates.organizationId = user.organizationId || org.id;
+
+        if (Object.keys(updates).length > 0) {
+          try {
+            const updated = await prisma.buyerProfile.update({
+              where: { id: bp.id },
+              data: updates
+            });
+            (user as any).buyerProfile = updated;
+          } catch (err) {
+            console.error('[me] Backfill buyerProfile failed:', err);
           }
         }
       }

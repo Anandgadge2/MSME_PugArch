@@ -665,7 +665,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
             }
 
             // Synchronize seller opportunities & fast paths with unified procurement catalog
-            let sellerOppsData = { total: 0, openTenders: 0, rfqs: 0, auctions: 0 };
+            let sellerOppsData = { total: 0, openTenders: 0, rfps: 0, rfqs: 0, auctions: 0, rateContracts: 0 };
             if (isSeller) {
                 try {
                     const actorInviteIds = [Number(userIdNum), Number(orgId)].filter(Number.isFinite);
@@ -760,7 +760,9 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
 
                     const isTenderMethod = (m?: string | null) => ['OPEN_TENDER', 'TENDER', 'open_tender', 'tender'].includes(String(m || ''));
                     const isRfqMethod = (m?: string | null) => ['RFQ', 'rfq', 'DIRECT_RFQ', 'direct_rfq', 'Product', 'product'].includes(String(m || ''));
+                    const isRfpMethod = (m?: string | null) => ['RFP', 'rfp'].includes(String(m || ''));
                     const isAuctionMethod = (m?: string | null) => ['REVERSE_AUCTION', 'reverse_auction'].includes(String(m || ''));
+                    const isRateContractMethod = (m?: string | null) => ['RATE_CONTRACT', 'rate_contract'].includes(String(m || ''));
 
                     const tenderBids = sellerBids.filter((b: any) => isTenderMethod(b.procurementType) || isTenderMethod(b.bidType)).length;
                     const tenderReqs = sellerUnlinkedReqs.filter((r: any) => isTenderMethod(r.procurementMethod)).length;
@@ -768,17 +770,28 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     const rfqBids = sellerBids.filter((b: any) => isRfqMethod(b.procurementType) || isRfqMethod(b.bidType)).length;
                     const rfqReqs = sellerUnlinkedReqs.filter((r: any) => isRfqMethod(r.procurementMethod)).length;
 
+                    const rfpBids = sellerBids.filter((b: any) => isRfpMethod(b.procurementType) || isRfpMethod(b.bidType)).length;
+                    const rfpReqs = sellerUnlinkedReqs.filter((r: any) => isRfpMethod(r.procurementMethod)).length;
+
                     const auctionBids = sellerBids.filter((b: any) => isAuctionMethod(b.procurementType) || isAuctionMethod(b.bidType)).length;
                     const auctionReqs = sellerUnlinkedReqs.filter((r: any) => isAuctionMethod(r.procurementMethod)).length;
 
+                    const rateContractBids = sellerBids.filter((b: any) => isRateContractMethod(b.procurementType) || isRateContractMethod(b.bidType)).length;
+                    const rateContractReqs = sellerUnlinkedReqs.filter((r: any) => isRateContractMethod(r.procurementMethod)).length;
+
                     const totalAuctions = liveAuctionsCount + auctionBids + auctionReqs;
                     const totalOpenTenders = tenderBids + tenderReqs + tendersCount;
+                    const totalRfps = rfpBids + rfpReqs;
+                    const totalRfqs = rfqBids + rfqReqs;
+                    const totalRateContracts = rateContractBids + rateContractReqs;
 
                     sellerOppsData = {
                         total: sellerBids.length + sellerUnlinkedReqs.length + tendersCount + liveAuctionsCount,
                         openTenders: totalOpenTenders,
-                        rfqs: rfqBids + rfqReqs,
-                        auctions: totalAuctions
+                        rfps: totalRfps,
+                        rfqs: totalRfqs,
+                        auctions: totalAuctions,
+                        rateContracts: totalRateContracts
                     };
                 } catch (err) {
                     console.error("Error computing seller opportunities for summary:", err);
@@ -821,6 +834,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 reverseAuctionsScheduled,
                 // Seller-side
                 sellerOpenTendersCount: sellerOppsData.openTenders,
+                sellerRfpsCount: sellerOppsData.rfps,
                 sellerActivePOsCount: sellerActivePOs,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
@@ -829,6 +843,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerRfqsCount: sellerOppsData.rfqs + sellerReceivedRfqs,
                 sellerReceivedRfqsCount: sellerReceivedRfqs,
                 sellerOpportunitiesCount: sellerOppsData.total,
+                sellerRateContractsCount: sellerOppsData.rateContracts,
                 reverseAuctionsLive: sellerOppsData.auctions,
                 reverseAuctionInvites: sellerOppsData.auctions,
                 invoiceFactoringCount: sellerInvoiceFactoring,

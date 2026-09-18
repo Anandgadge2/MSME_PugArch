@@ -298,7 +298,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             orgPan: finalPan || prev.orgPan,
             state: matchedState || prev.state,
             district: matchedDistrict || prev.district,
-            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName
+            city: (data.city || matchedDistrict || '').trim() || prev.city,
+            pincode: (data.pincode ? String(data.pincode).replace(/\D/g, '').slice(0, 6) : '') || prev.pincode,
+            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName,
+            address: (data.address || data.businessAddress || '').trim() || prev.address
           }));
           
           setSelectedDocs((prev) => {
@@ -1100,6 +1103,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             isEmailVerified: true,
             state: formData.state,
             district: formData.district,
+            city: formData.city || verifiedGstDetails?.city || formData.district || '',
+            pincode: formData.pincode || verifiedGstDetails?.pincode || '',
+            address: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
+            registeredAddress: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
             officeZoneName: formData.officeZoneName,
             aadhaarVerificationId: token,
             aadhaarMasked: isAadhaarVerified ? formData.aadhaarNumber : undefined,

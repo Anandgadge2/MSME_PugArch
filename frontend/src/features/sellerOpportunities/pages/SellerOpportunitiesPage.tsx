@@ -155,7 +155,19 @@ export const getClosingTimestamp = (closingDate?: string | Date | null): number 
  */
 const isClosedStatus = (status?: string) => {
   const s = String(status || '').toLowerCase();
-  return s.includes('closed') || s.includes('awarded') || s.includes('cancelled') || s.includes('expired') || s.includes('completed') || s.includes('rejected');
+  return (
+    s.includes('closed') ||
+    s.includes('awarded') ||
+    s.includes('cancelled') ||
+    s.includes('expired') ||
+    s.includes('completed') ||
+    s.includes('rejected') ||
+    s.includes('po_generated') ||
+    s.includes('ordered') ||
+    s.includes('fulfilled') ||
+    s.includes('terminated') ||
+    s.includes('disqualified')
+  );
 };
 
 /**
@@ -412,7 +424,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setPrevSubRouteType(subRouteType);
     setType(subRouteType);
   }
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('LIVE');
   const [location, setLocation] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -751,6 +763,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const reqMethod = String(req.canonicalMethod || req.procurementMethod || 'RFQ').toUpperCase();
         const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
         if (reqMethod && !allowedMethods.includes(reqMethod)) return;
+
+        // Sellers must only see approved/sourcing/active requirements, never buyer drafts
+        const reqStat = String(req.status || '').toUpperCase();
+        if (reqStat === 'DRAFT' || reqStat === 'PENDING_APPROVAL' || reqStat === 'REJECTED') return;
 
         const reqInvites = Array.isArray(req.payload?.vendors?.invitedSellers) 
           ? req.payload.vendors.invitedSellers 
@@ -1117,7 +1133,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         }
       }
 
-      if (status) {
+      if (status && status !== 'ALL') {
         if (status === 'LIVE') {
           if (!isOpenOpportunity(item, nowMs)) return false;
         } else if (status === 'CLOSING_SOON') {
@@ -1547,7 +1563,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const reset = () => {
     setQuery('');
     setType(subRouteType || '');
-    setStatus('');
+    setStatus('LIVE');
     setLocation('');
     setCategory('');
     setValueRange('');
@@ -1745,18 +1761,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         })}
       </div>
 
-      {/* ── Search + Filter + View Toggle Toolbar (Clean Responsive Flex-Wrap, No Horizontal Scroll) ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-sm">
+      {/* ── Search + Filter + View Toggle Toolbar (Single Row Desktop, No Horizontal Scroll) ── */}
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm">
         <ResponsiveFilterBar
-          singleRowDesktop={false}
-          activeFilterCount={(query ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          singleRowDesktop={true}
+          searchWrapperClassName="flex-1 min-w-[170px] max-w-sm xl:max-w-md"
+          filtersClassName="flex items-center gap-1.5 sm:gap-2 shrink-0"
+          activeFilterCount={(query ? 1 : 0) + (status !== 'LIVE' ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 value={query}
                 onChange={event => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search opportunities by title, ref, buyer, keywords..."
+                placeholder="Search opportunities by title, ref, buyer..."
                 className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-8.5 pr-8 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
               {query && (
@@ -1772,26 +1790,26 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             </div>
           }
           filters={
-            <div className="flex flex-wrap items-center gap-2 w-full">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Status Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-auto min-w-[125px] max-w-[155px]">
                 <select
                   value={status}
                   onChange={e => { setStatus(e.target.value); setPage(1); }}
                   className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by status"
                 >
-                  <option value="">All Statuses</option>
-                  <option value="LIVE">Live / Open</option>
+                  <option value="LIVE">Live & Open (Default)</option>
+                  <option value="ALL">All Statuses (incl. Closed)</option>
                   <option value="CLOSING_SOON">Closing Soon</option>
                   <option value="PARTICIPATED">Submissions</option>
                   <option value="UNDER_EVALUATION">Evaluation</option>
-                  <option value="CLOSED">Closed</option>
+                  <option value="CLOSED">Closed & Concluded</option>
                 </select>
               </div>
 
               {/* Category Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
+              <div className="w-auto min-w-[125px] max-w-[150px]">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
@@ -1804,7 +1822,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-auto min-w-[120px] max-w-[145px]">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
@@ -1817,7 +1835,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Sort Filter Dropdown */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-auto min-w-[120px] max-w-[140px]">
                 <select
                   value={sortOption}
                   onChange={e => {
@@ -1838,7 +1856,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Reset Trigger */}
-              {(query || status || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
+              {(query || status !== 'LIVE' || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1857,7 +1875,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* ── Active Filter Badges Bar ── */}
-      {(kpiFilter !== 'all' || status || type || category || location || query) && (
+      {(kpiFilter !== 'all' || (status && status !== 'LIVE') || type || category || location || query) && (
         <div className="flex flex-wrap items-center gap-2 px-1 -mt-2">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
           {kpiFilter === 'participated' && (
@@ -1892,10 +1910,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-purple-600 hover:bg-purple-200/60 transition-colors cursor-pointer" aria-label="Remove High Value filter"><X className="h-3 w-3" /></button>
             </span>
           )}
-          {status && (
+          {status && status !== 'LIVE' && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
-              <span>Status: {status === 'PARTICIPATED' ? 'Participated' : status}</span>
-              <button type="button" onClick={() => setStatus('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Status filter"><X className="h-3 w-3" /></button>
+              <span>Status: {status === 'PARTICIPATED' ? 'Participated' : status === 'ALL' ? 'All Statuses' : status === 'CLOSED' ? 'Closed' : status}</span>
+              <button type="button" onClick={() => setStatus('LIVE')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Reset Status to Live"><X className="h-3 w-3" /></button>
             </span>
           )}
           {type && (

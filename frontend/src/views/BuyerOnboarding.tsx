@@ -8,7 +8,7 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   validateField,
@@ -25,8 +25,7 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 
 const PRIMARY_USER_TYPES = [
-  'Primary User (HOD)',
-  'Primary User (Co-operative)',
+ 
   'Proprietorship',
   'Partnership Firm',
   'Company (Pvt Ltd / Ltd)',
@@ -343,11 +342,14 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
         gst: data?.profile?.gst || org.gstin || regDetails.gstin || fallback.gst,
         pan: data?.profile?.pan || org.panNumber || regDetails.pan || fallback.pan,
 
-        state: cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
-        district: cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
-        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
-        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || fallback.pincode),
-        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || fallback.registeredAddress),
+        state: findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')) || cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
+        district: findMatchedDistrict(
+          findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')),
+          String(cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district || '')
+        ) || cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
+        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || regDetails.pincode || fallback.pincode),
+        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || regDetails.address || fallback.registeredAddress),
     };
 };
 
@@ -404,10 +406,20 @@ export default function BuyerOnboarding() {
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
   const registrationDetails = user?.registrationDetails || cachedProfile?.user?.registrationDetails || {};
   const registrationVerifiedGstin = String(registrationDetails.gstin || '').trim().toUpperCase();
+  const orgGstin = String((org as any)?.gstin || (user?.organization as any)?.gstin || '').trim().toUpperCase();
   const profileVerifiedGstin = String(cachedProfile?.profile?.gst || formData.gst || '').trim().toUpperCase();
-  const hasVerifiedGst =
-    profileGstVerified ||
+
+  const isGstFromRegistration = Boolean(
+    registrationVerifiedGstin ||
+    (orgGstin && orgGstin.length === 15) ||
     Boolean(cachedProfile?.profile?.gstFingerprint) ||
+    Boolean(cachedProfile?.profile?.gstMasked) ||
+    Boolean(cachedProfile?.profile?.gst && cachedProfile?.profile?.gst.length === 15)
+  );
+
+  const hasVerifiedGst =
+    isGstFromRegistration ||
+    profileGstVerified ||
     Boolean(registrationDetails.gstVerified && registrationVerifiedGstin) ||
     Boolean(profileVerifiedGstin && cachedProfile?.profile?.gstMasked) ||
     Boolean(orgVerified && org.gstin);
@@ -510,22 +522,6 @@ export default function BuyerOnboarding() {
     setIsFetchingGst(true);
     activeGstinLookupRef.current = gstin;
     setErrors(prev => ({ ...prev, gst: '', registeredAddress: '' }));
-    
-    if (!isForcedString) {
-      setFormData((prev: any) => {
-        const cleared = { ...prev, gst: gstin };
-        cleared.country = 'India';
-        cleared.registeredAddress = '';
-        // Preserve state and district for primary user types (auto-loaded from registration)
-        if (!isPrimaryUserType(prev.businessType)) {
-          cleared.state = '';
-          cleared.district = '';
-        }
-        cleared.city = '';
-        cleared.pincode = '';
-        return cleared;
-      });
-    }
 
     try {
       const res = await api.fetch(`/api/utils/gst-verify/${gstin}`, {
@@ -547,11 +543,13 @@ export default function BuyerOnboarding() {
 
         setFormData((prev: any) => ({
           ...prev,
-          organizationName: data.legalName?.trim() || prev.organizationName,
+          gst: gstin,
+          organizationName: data.legalName?.trim() || data.tradeName?.trim() || prev.organizationName,
           registeredAddress: data.address?.trim() || prev.registeredAddress,
+          country: 'India',
           state: matchedState || prev.state,
           district: matchedDistrict || prev.district,
-          city: data.city?.trim() || prev.city,
+          city: data.city?.trim() || matchedDistrict || prev.city,
           pincode: String(data.pincode || '').replace(/\D/g, '').slice(0, 6) || prev.pincode,
           pan: resolvedPan || prev.pan,
         }));
@@ -561,7 +559,7 @@ export default function BuyerOnboarding() {
         if (data.partial) {
           toast.message(data.message || 'Partial GST details applied. Please verify manually.');
         } else {
-          toast.success(`GST verified and address auto-filled: ${data.status || 'Status available'}`);
+          toast.success(`GST verified and details auto-filled: ${data.legalName || data.status || 'Active'}`);
         }
       } else {
         const err = await res.json().catch(() => ({}));
@@ -576,35 +574,6 @@ export default function BuyerOnboarding() {
       setIsFetchingGst(false);
     }
   };
-
-  // Auto-fetch GST details on mount if GST is verified but address details are not fully filled
-  useEffect(() => {
-    if (isFetching || isProfileLocked) return;
-
-    const gstin = String(formData.gst || profileVerifiedGstin || registrationVerifiedGstin || '').trim().toUpperCase();
-    if (!gstin || !hasVerifiedGst) return;
-
-    // Check if the address fields are empty or incomplete/placeholders
-    const stateVal = String(formData.state || '').trim();
-    const districtVal = String(formData.district || '').trim();
-    const addressVal = String(formData.registeredAddress || '').trim();
-    const pincodeVal = String(formData.pincode || '').trim();
-    const cityVal = String(formData.city || '').trim();
-
-    const isAddressIncomplete = 
-      !addressVal || 
-      addressVal.toLowerCase() === 'maharashtra' ||
-      addressVal.toLowerCase() === stateVal.toLowerCase() ||
-      isPlaceholderValue(addressVal) ||
-      !stateVal ||
-      !districtVal ||
-      !pincodeVal ||
-      !cityVal;
-
-    if (isAddressIncomplete && lastFetchedGstinRef.current !== gstin && activeGstinLookupRef.current !== gstin) {
-      fetchGstDetails(gstin);
-    }
-  }, [isFetching, isProfileLocked, hasVerifiedGst, formData.gst, registrationVerifiedGstin, profileVerifiedGstin]);
 
 
   useEffect(() => {
@@ -1487,7 +1456,7 @@ export default function BuyerOnboarding() {
           <div className="w-full md:w-64 lg:w-72 shrink-0 bg-white border border-slate-200 rounded-xl shadow-xs p-3.5 space-y-3 md:sticky md:top-4">
             <div className="pb-2 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Registration Steps</h3>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Onboarding Steps</h3>
                 <p className="text-[10px] text-slate-400 font-medium">Click any step to navigate</p>
               </div>
               <span className="text-[10px] font-bold text-[#12335f] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
@@ -1593,44 +1562,67 @@ export default function BuyerOnboarding() {
                     <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" maxLength={10} required />
                     <div className="flex flex-col gap-1">
                       {hasVerifiedGst ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2">
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 transition-all">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                              GSTIN (Verified)
+                            </label>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              Verified at Registration
+                            </span>
+                          </div>
                           <Input
-                            label="GSTIN (Verified)"
                             name="gst"
-                            value={formData.gst || registrationVerifiedGstin}
+                            value={formData.gst || registrationVerifiedGstin || profileVerifiedGstin}
                             onChange={handleChange}
                             onBlur={handleBlur}
                             error=""
                             disabled
-                            className="bg-white/80"
+                            className="bg-white/90 border-slate-200 font-mono font-semibold text-slate-800 text-xs h-9 cursor-not-allowed"
                           />
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            GST details already verified. No re-verification is required.
+                          <p className="mt-1.5 text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            GST details verified with government registry. No re-verification required.
                           </p>
                         </div>
                       ) : (
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <Input
-                              label="GSTIN (Optional)"
-                              name="gst"
-                              value={formData.gst}
-                              onChange={handleChange}
-                              onBlur={handleBlur}
-                              error={getFieldError('gst')}
-                              placeholder="22ABCDE1234F1Z5"
-                              maxLength={15}
-                            />
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                            GSTIN (Optional)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <Input
+                                name="gst"
+                                value={formData.gst}
+                                onChange={handleChange}
+                                onBlur={handleBlur}
+                                error={getFieldError('gst')}
+                                placeholder="22ABCDE1234F1Z5"
+                                maxLength={15}
+                                className="h-10 text-xs font-mono uppercase"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              onClick={fetchGstDetails}
+                              disabled={isFetchingGst || !formData.gst}
+                              className="h-10 px-4 rounded-lg bg-[#12335f] hover:bg-[#0d2342] text-white font-bold text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 shrink-0 shadow-xs disabled:opacity-50"
+                            >
+                              {isFetchingGst ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Fetching...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Search className="h-3.5 w-3.5" />
+                                  <span>Fetch Details</span>
+                                </>
+                              )}
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={fetchGstDetails}
-                            disabled={isFetchingGst || !formData.gst}
-                            className="h-9 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
-                          >
-                            {isFetchingGst ? 'Wait...' : /* 'Fetch Details' */ ''}
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -1649,7 +1641,20 @@ export default function BuyerOnboarding() {
                     {isPrimaryUserType(formData.businessType) ? (
                       <Input label="STATE" name="state" value={formData.state} onChange={handleChange} onBlur={handleBlur} error={getFieldError('state')} required disabled />
                     ) : (
-                      <Select label="STATE" name="state" value={formData.state} onChange={(e) => { if (!isProfileLocked) setFormData((prev: any) => ({ ...prev, state: e.target.value, district: '' })); }} onBlur={handleBlur} error={getFieldError('state')} required>
+                      <Select
+                        label="STATE"
+                        name="state"
+                        value={findMatchedState(formData.state) || formData.state}
+                        onChange={(e) => {
+                          if (!isProfileLocked) {
+                            const nextState = e.target.value;
+                            setFormData((prev: any) => ({ ...prev, state: nextState, district: '' }));
+                          }
+                        }}
+                        onBlur={handleBlur}
+                        error={getFieldError('state')}
+                        required
+                      >
                         <option value="">Select State</option>
                         {indiaStates.map((s) => (
                           <option key={s} value={s}>{s}</option>
@@ -1659,9 +1664,25 @@ export default function BuyerOnboarding() {
                     {isPrimaryUserType(formData.businessType) ? (
                       <Input label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled />
                     ) : (
-                      <Select label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled={!formData.state}>
+                      <Select
+                        label="DISTRICT"
+                        name="district"
+                        value={
+                          findMatchedDistrict(findMatchedState(formData.state) || formData.state, formData.district) ||
+                          formData.district
+                        }
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={getFieldError('district')}
+                        required
+                        disabled={!formData.state}
+                      >
                         <option value="">Select District</option>
-                        {(formData.state ? indiaStatesDistricts[formData.state] || [] : []).map((d: string) => (
+                        {(
+                          indiaStatesDistricts[findMatchedState(formData.state) || formData.state] ||
+                          indiaStatesDistricts[formData.state] ||
+                          []
+                        ).map((d: string) => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </Select>

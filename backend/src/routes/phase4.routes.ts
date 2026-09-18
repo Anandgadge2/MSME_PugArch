@@ -12,6 +12,7 @@ import { getGCSBucket, getGCSBucketName } from '../config/gcs.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
+import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
 import { upload } from '../config/storage.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { onUserLinkedToOrganization } from '../services/org-membership.service.js';
@@ -4012,9 +4013,11 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
   const normalizedGstin = gstin.toUpperCase();
   const fingerprint = sha256(normalizedGstin);
   const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
+  const [scheme, headerToken] = authHeader.split(' ');
+  const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
+  const token = canUseHeaderToken ? headerToken : getAccessTokenFromRequest(req);
   let requesterUserId: number | null = null;
-  if (scheme === 'Bearer' && token) {
+  if (token) {
     try {
       const decoded = verifyAccessToken(token);
       requesterUserId = decoded.id ? Number(decoded.id) : null;
@@ -4022,6 +4025,19 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
       requesterUserId = null;
     }
   }
+
+  const requestingUser = requesterUserId ? await db.user.findUnique({
+    where: { id: requesterUserId },
+    select: {
+      id: true,
+      organizationId: true,
+      registrationDetails: true,
+      buyerProfile: { select: { id: true, organizationId: true, gst: true } },
+      sellerProfile: { select: { id: true } },
+      organization: { select: { id: true, gstin: true } }
+    }
+  }) : null;
+
   const [sellerOffice, buyerProfile, organization] = await Promise.all([
     db.sellerOffice.findFirst({
       where: { gstFingerprint: fingerprint },
@@ -4037,7 +4053,16 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
     })
   ]);
 
+  const userRegGstin = String((requestingUser?.registrationDetails as any)?.gstin || '').trim().toUpperCase();
+  const userOrgGstin = String(requestingUser?.organization?.gstin || '').trim().toUpperCase();
+  const userBuyerGstin = String(requestingUser?.buyerProfile?.gst || '').trim().toUpperCase();
+
+  const isOwnGstin = Boolean(normalizedGstin && (normalizedGstin === userRegGstin || normalizedGstin === userOrgGstin || normalizedGstin === userBuyerGstin));
+  const isOwnOrg = Boolean(organization && requestingUser?.organizationId && organization.id === requestingUser.organizationId);
+
   const ownedByRequester = Boolean(requesterUserId && (
+    isOwnGstin ||
+    isOwnOrg ||
     sellerOffice?.sellerProfile?.userId === requesterUserId ||
     buyerProfile?.userId === requesterUserId ||
     organization?.users?.some((user: any) => user.id === requesterUserId)
