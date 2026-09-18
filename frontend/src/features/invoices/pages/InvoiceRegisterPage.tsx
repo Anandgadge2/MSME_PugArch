@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -57,6 +58,288 @@ type InvoiceRow = {
 const statusOf = (invoice: InvoiceRow) => String(invoice.invoiceStatus || invoice.status || 'draft').toLowerCase();
 
 const statuses = ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'paid', 'cancelled'];
+
+function InvoiceRowActionCell({
+  invoice,
+  role,
+  submitting,
+  isOpen,
+  onToggle,
+  onClose,
+  onView,
+  onTrack,
+  onViewReceipt,
+  onApprove,
+  onUploadSlip,
+  onPayNow,
+}: {
+  invoice: InvoiceRow;
+  role: 'buyer' | 'seller' | 'admin';
+  submitting: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onView: () => void;
+  onTrack: () => void;
+  onViewReceipt: () => void;
+  onApprove: () => void;
+  onUploadSlip: () => void;
+  onPayNow: () => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuEstimatedHeight = 220;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
+
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          onClose();
+          return;
+        }
+      }
+      updatePosition();
+    };
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition, onClose]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      onClose();
+    }
+  };
+
+  const state = statusOf(invoice);
+  const isSubmitted = state === 'submitted';
+  const isPayable = state === 'approved' || state === 'payment_initiated';
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for invoice ${invoice.invoiceNumber || invoice.id}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            onClose();
+          } else {
+            updatePosition();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900"
+        )}
+        title="Actions"
+      >
+        <MoreVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right',
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onKeyDown={handleMenuKeyDown}
+          className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for invoice ${invoice.invoiceNumber || invoice.id}`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onView();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>View</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onTrack();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Clock className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>Track</span>
+          </button>
+
+          {(state === 'paid' || state === 'payment_initiated') && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+                onViewReceipt();
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+            >
+              <FileText className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+              <span>Receipt</span>
+            </button>
+          )}
+
+          {role === 'buyer' && isSubmitted && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={submitting}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+                onApprove();
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Approve</span>
+            </button>
+          )}
+
+          {role === 'buyer' && isPayable && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                  onUploadSlip();
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+              >
+                <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+                <span>Upload Slip</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                  onPayNow();
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left cursor-pointer"
+              >
+                <CreditCard className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                <span>Pay Now</span>
+              </button>
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
 
 export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer' | 'seller' | 'admin' }) {
   const router = useRouter();
@@ -246,12 +529,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [cardCvv, setCardCvv] = useState('');
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!openKebabId) return;
-    const handleClickOutside = () => setOpenKebabId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, [openKebabId]);
 
   // Seller invoice creation modal state
   const [createInvoiceModalOpen, setCreateInvoiceModalOpen] = useState(false);
@@ -381,118 +658,38 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       header: 'Actions',
       width: 'w-[8%]',
       align: 'right',
-      cell: (invoice, index) => {
-        const state = statusOf(invoice);
-        const isSubmitted = state === 'submitted';
-        const isPayable = state === 'approved' || state === 'payment_initiated';
-        return (
-          <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenKebabId(openKebabId === invoice.id ? null : invoice.id);
-              }}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-              title="Actions"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </button>
-
-            {openKebabId === invoice.id && (
-              <div className={cn(
-                "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
-                pagedInvoices.length > 2 && index >= pagedInvoices.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
-              )}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    setSelectedInvoice(invoice);
-                    setInvoiceModalMode('view');
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                >
-                  <Eye className="h-3.5 w-3.5 text-slate-500" />
-                  <span>View</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    setSelectedInvoice(invoice);
-                    setInvoiceModalMode('track');
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                >
-                  <Clock className="h-3.5 w-3.5 text-slate-500" />
-                  <span>Track</span>
-                </button>
-
-                {(state === 'paid' || state === 'payment_initiated') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenKebabId(null);
-                      setViewProofInvoiceId(invoice.id);
-                    }}
-                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-                  >
-                    <FileText className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Receipt</span>
-                  </button>
-                )}
-
-                {role === 'buyer' && isSubmitted && (
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => {
-                      setOpenKebabId(null);
-                      handleApproveInvoice(invoice.id);
-                    }}
-                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Approve</span>
-                  </button>
-                )}
-
-                {role === 'buyer' && isPayable && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenKebabId(null);
-                        setUploadProofInvoice(invoice);
-                      }}
-                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
-                    >
-                      <Upload className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Upload Slip</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenKebabId(null);
-                        handleOpenCheckout(invoice);
-                      }}
-                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
-                    >
-                      <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Pay Now</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      },
+      cell: (invoice) => (
+        <InvoiceRowActionCell
+          invoice={invoice}
+          role={role}
+          submitting={submitting}
+          isOpen={openKebabId === invoice.id}
+          onToggle={() => setOpenKebabId(openKebabId === invoice.id ? null : invoice.id)}
+          onClose={() => setOpenKebabId(null)}
+          onView={() => {
+            setSelectedInvoice(invoice);
+            setInvoiceModalMode('view');
+          }}
+          onTrack={() => {
+            setSelectedInvoice(invoice);
+            setInvoiceModalMode('track');
+          }}
+          onViewReceipt={() => {
+            setViewProofInvoiceId(invoice.id);
+          }}
+          onApprove={() => {
+            handleApproveInvoice(invoice.id);
+          }}
+          onUploadSlip={() => {
+            setUploadProofInvoice(invoice);
+          }}
+          onPayNow={() => {
+            handleOpenCheckout(invoice);
+          }}
+        />
+      ),
     },
-  ], [role, openKebabId, pagedInvoices, submitting]);
+  ], [role, openKebabId, submitting]);
 
   const SortHeader = ({ label, field, className = '' }: { label: string; field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'; className?: string }) => {
     const isActive = sortField === field;
