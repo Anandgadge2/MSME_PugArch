@@ -291,15 +291,6 @@ export function ConsentManagementCard() {
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => window.open(`/docs/${p.file}`, '_blank', 'noopener,noreferrer')}
-                  className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-lg transition-colors"
-                  title={`View ${p.label} PDF`}
-                  aria-label={`View ${p.label} PDF in new tab`}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
                   onClick={() => handleDownload(p.file)}
                   className="p-1.5 text-slate-500 hover:text-[#12335f] hover:bg-slate-100 rounded-lg transition-colors"
                   title={`Download ${p.label} PDF`}
