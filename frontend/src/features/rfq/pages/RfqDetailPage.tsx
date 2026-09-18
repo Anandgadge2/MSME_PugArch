@@ -784,28 +784,30 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     rawBid?.hasSubmittedProposal
   );
   const statusUpper = String(status || 'OPEN').toUpperCase();
+  const isAwarded  = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||
+    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt));
   const canCancel  = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   /* ── Line Items ── */
   const reqItemCandidates: any[][] = [
     Array.isArray(reqObj?.items) ? reqObj.items : null,
-    Array.isArray(reqObj?.payload?.boqTable) ? reqObj.payload.boqTable : null,
     Array.isArray(reqObj?.payload?.items) ? reqObj.payload.items : null,
     Array.isArray(reqObj?.payload?.lineItems) ? reqObj.payload.lineItems : null,
     Array.isArray(reqObj?.payload?.wizardData?.items) ? reqObj.payload.wizardData.items : null,
+    Array.isArray(reqObj?.payload?.basics?.items) ? reqObj.payload.basics.items : null,
+    Array.isArray(reqObj?.payload?.boqTable) ? reqObj.payload.boqTable : null,
     Array.isArray(reqObj?.payload?.wizardData?.boqTable) ? reqObj.payload.wizardData.boqTable : null,
     Array.isArray(reqObj?.payload?.boq) ? reqObj.payload.boq : null,
-    Array.isArray(reqObj?.payload?.basics?.items) ? reqObj.payload.basics.items : null,
     Array.isArray(reqObj?.boqTable) ? reqObj.boqTable : null,
   ].filter((c): c is any[] => Array.isArray(c) && c.length > 0);
 
   const bidItemCandidates: any[][] = [
     Array.isArray(rawBid?.items) ? rawBid.items : null,
     Array.isArray(rawBid?.technicalPacket?.items) ? rawBid.technicalPacket.items : null,
-    Array.isArray(rawBid?.technicalPacket?.boqTable) ? rawBid.technicalPacket.boqTable : null,
     Array.isArray(rawBid?.technicalPacket?.lineItems) ? rawBid.technicalPacket.lineItems : null,
-    Array.isArray(rawBid?.technicalPacket?.boq) ? rawBid.technicalPacket.boq : null,
     Array.isArray(rawBid?.technicalPacket?.wizardData?.items) ? rawBid.technicalPacket.wizardData.items : null,
+    Array.isArray(rawBid?.technicalPacket?.boqTable) ? rawBid.technicalPacket.boqTable : null,
+    Array.isArray(rawBid?.technicalPacket?.boq) ? rawBid.technicalPacket.boq : null,
     Array.isArray(rawBid?.technicalPacket?.wizardData?.boqTable) ? rawBid.technicalPacket.wizardData.boqTable : null,
     Array.isArray(rawBid?.boqTable) ? rawBid.boqTable : null,
   ].filter((c): c is any[] => Array.isArray(c) && c.length > 0);
@@ -1050,9 +1052,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     router.push(`/seller/procurement/rfq/${encodeURIComponent(String(id))}/respond`);
   };
 
-  const isAwarded = String(status).toUpperCase() === 'AWARDED' || 
-    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt));
-
   const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({
     queryKey: ['rfq-invoice-status', requestId],
     queryFn: async () => {
@@ -1246,7 +1245,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
       backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
-      submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
+      submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onViewQuotationClick={submitted ? handleSubmitQuotation : undefined}
       onDownloadClick={handleDownloadPdf}

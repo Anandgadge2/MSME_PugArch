@@ -5937,6 +5937,45 @@ export function ProcurementDetailUnifiedView(
     ].includes(statusUpper),
   );
 
+  const isBidAwarded = useMemo(() => {
+    return (
+      ["AWARDED", "PO_GENERATED", "COMPLETED"].includes(statusUpper) ||
+      ["AWARDED", "PO_GENERATED", "COMPLETED"].includes(lifecycleStageUpper) ||
+      Boolean((props as any).awardedSupplier) ||
+      Boolean((props as any).awardDetails) ||
+      submittedParticipations.some(
+        (p: any) =>
+          String(p.status || "").toUpperCase() === "AWARDED" ||
+          String(p.finalStatus || "").toUpperCase() === "AWARDED" ||
+          p.resultStatus === "Awarded"
+      )
+    );
+  }, [statusUpper, lifecycleStageUpper, props, submittedParticipations]);
+
+  const awardedParticipation = useMemo(() => {
+    return submittedParticipations.find(
+      (p: any) =>
+        String(p.status || "").toUpperCase() === "AWARDED" ||
+        String(p.finalStatus || "").toUpperCase() === "AWARDED" ||
+        p.resultStatus === "Awarded"
+    );
+  }, [submittedParticipations]);
+
+  const awardedVendorName = useMemo(() => {
+    return (
+      awardedParticipation?.sellerOrgName ||
+      awardedParticipation?.sellerOrganization?.organizationName ||
+      awardedParticipation?.seller?.sellerProfile?.organizationName ||
+      awardedParticipation?.seller?.organization?.organizationName ||
+      awardedParticipation?.supplier?.organizationName ||
+      awardedParticipation?.organizationName ||
+      awardedParticipation?.companyName ||
+      awardedParticipation?.sellerName ||
+      (props as any).awardedSupplierName ||
+      "Awarded Supplier"
+    );
+  }, [awardedParticipation, props]);
+
   const quotationListColumns = useMemo<ColumnDef<any>[]>(
     () => [
       {
@@ -6978,8 +7017,48 @@ export function ProcurementDetailUnifiedView(
           {/* Tab 1: Overview & Dates */}
           {activeTab === "overview" && (
             <div className="space-y-5">
+              {/* Procurement Awarded Banner for Buyer (when awarded) */}
+              {isBuyerOrAdmin && isBidAwarded && (
+                <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-4 sm:p-5 shadow-xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20">
+                        <Award className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Procurement Awarded &amp; Finalized
+                          </span>
+                        </div>
+                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                          Contract Awarded to {awardedVendorName}
+                        </h3>
+                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                          Technical evaluation and commercial stage have concluded. The procurement contract has been officially awarded and archived.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => router.push(`/bids/${targetId}/results`)}
+                        className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs rounded-xl cursor-pointer"
+                      >
+                        <Award className="h-4 w-4" />
+                        <span>View Awarded Results &amp; Ranking</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Stage 1 Technical Evaluation Quick-Action Shortcut Banner for Buyer */}
               {isBuyerOrAdmin &&
+                !isBidAwarded &&
                 (isDeadlinePassed ||
                   [
                     "CLOSED",
@@ -6987,7 +7066,7 @@ export function ProcurementDetailUnifiedView(
                     "FINANCIAL_EVALUATION",
                     "L1_GENERATED",
                     "AWARD_RECOMMENDED",
-                  ].includes(String(props.status || "").toUpperCase())) &&
+                  ].includes(statusUpper)) &&
                 submittedParticipations.length > 0 && (
                   <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-4 sm:p-5 shadow-xs transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -7838,7 +7917,8 @@ export function ProcurementDetailUnifiedView(
                           </span>
                         </Button>
                       )}
-                      {allowsReverseAuction &&
+                      {!isBidAwarded &&
+                        allowsReverseAuction &&
                         isEvaluationReady &&
                         (!linkedAuction ||
                           (linkedAuction as any).auctionPlanned === true ||
@@ -7880,25 +7960,36 @@ export function ProcurementDetailUnifiedView(
                     <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-start gap-3">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
-                            <ShieldCheck className="h-5 w-5" />
+                          <div className={cn(
+                            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white shadow-xs",
+                            isBidAwarded ? "bg-emerald-600" : "bg-indigo-600"
+                          )}>
+                            {isBidAwarded ? <Award className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
-                                Two-Packet Procurement • Stage 1
+                                {isBidAwarded ? "Two-Packet Procurement Concluded" : "Two-Packet Procurement • Stage 1"}
                               </span>
-                              {(isTechEvalCompleted || (techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0)) && (
+                              {isBidAwarded ? (
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3" /> Contract Awarded
+                                </span>
+                              ) : (isTechEvalCompleted || (techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0)) ? (
                                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
                                   Technical Evaluation Complete
                                 </span>
-                              )}
+                              ) : null}
                             </div>
                             <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
-                              Technical Packet Opening &amp; Seller Qualification
+                              {isBidAwarded
+                                ? "Technical Packet Evaluations (Archived)"
+                                : "Technical Packet Opening & Seller Qualification"}
                             </h4>
                             <p className="text-[11px] text-slate-500">
-                              Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction).
+                              {isBidAwarded
+                                ? "Technical proposal evaluations are concluded and archived. Contract has been awarded."
+                                : "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."}
                             </p>
                           </div>
                         </div>
@@ -7923,17 +8014,19 @@ export function ProcurementDetailUnifiedView(
                       {/* Action Bar for Completing Tech Eval & Opening Financial Bids */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-indigo-100/70">
                         <span className="text-[11px] font-semibold text-slate-600">
-                          {isTechEvalCompleted
-                            ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
-                            : techEvaluationStats.pending > 0
-                              ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
-                              : techEvaluationStats.qualified > 0
-                                ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
-                                : `⚠️ At least one seller must be technically qualified to proceed.`}
+                          {isBidAwarded
+                            ? `✅ Procurement Awarded. Contract finalized with ${awardedVendorName}.`
+                            : isTechEvalCompleted
+                              ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                              : techEvaluationStats.pending > 0
+                                ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
+                                : techEvaluationStats.qualified > 0
+                                  ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
+                                  : `⚠️ At least one seller must be technically qualified to proceed.`}
                         </span>
 
                         <div className="flex items-center gap-2">
-                          {!isTechEvalCompleted && techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                          {!isBidAwarded && !isTechEvalCompleted && techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
                             <Button
                               type="button"
                               size="sm"
@@ -7946,26 +8039,30 @@ export function ProcurementDetailUnifiedView(
                             </Button>
                           )}
 
-                          {isTechEvalCompleted && (
+                          {(isTechEvalCompleted || isBidAwarded) && (
                             <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                              <span>Stage 1 Evaluation Completed</span>
+                              <span>{isBidAwarded ? "Procurement Awarded" : "Stage 1 Evaluation Completed"}</span>
                             </div>
                           )}
 
                           <Button
                             type="button"
                             size="sm"
-                            variant={isTechEvalCompleted ? "primary" : "outline"}
+                            variant={isTechEvalCompleted || isBidAwarded ? "primary" : "outline"}
                             onClick={() => router.push(`/bids/${targetId}/results`)}
                             className={cn(
                               "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
-                              isTechEvalCompleted
+                              isTechEvalCompleted || isBidAwarded
                                 ? "bg-indigo-600 hover:bg-indigo-700 text-white"
                                 : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50"
                             )}
                           >
-                            <span>View Stage 2 Financial Opening &amp; Results</span>
+                            <span>
+                              {isBidAwarded
+                                ? "View Awarded Results & Ranking"
+                                : "View Stage 2 Financial Opening & Results"}
+                            </span>
                             <ArrowRight className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -8044,7 +8141,8 @@ export function ProcurementDetailUnifiedView(
                   targetId={targetId}
                   router={router}
                   isTwoPacketMode={isTwoPacketMode}
-                  isFinancialStageOpened={isTechEvalCompleted}
+                  isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
+                  isBidAwarded={isBidAwarded}
                   onOpenCompare={() => {
                     setSelectedQuotationForReview(null);
                     setSelectedCompareIds(
@@ -8067,6 +8165,7 @@ export function ProcurementDetailUnifiedView(
                   onClose={() => setSelectedForTechnicalEval(null)}
                   participation={selectedForTechnicalEval}
                   bidId={targetId}
+                  readOnly={isBidAwarded}
                   procurementTitle={props.subject || props.procurementLabel}
                   onEvaluationSuccess={() => {
                     queryClient.invalidateQueries({
@@ -8242,6 +8341,7 @@ interface SellerQuotationReviewModalProps {
   router: any;
   isTwoPacketMode?: boolean;
   isFinancialStageOpened?: boolean;
+  isBidAwarded?: boolean;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
 }
@@ -8255,6 +8355,7 @@ export function SellerQuotationReviewModal({
   router,
   isTwoPacketMode,
   isFinancialStageOpened,
+  isBidAwarded,
   onOpenCompare,
   onOpenTechnicalEvaluation,
 }: SellerQuotationReviewModalProps) {
@@ -8900,10 +9001,16 @@ export function SellerQuotationReviewModal({
                         : "bg-blue-600 text-white hover:bg-blue-700"
                   }`}
                 >
-                  <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  {isBidAwarded ? (
+                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5 mr-1.5" />
+                  )}
                   {techStatus === "PENDING"
                     ? "Evaluate Technical Packet"
-                    : "Update Technical Evaluation"}
+                    : isBidAwarded
+                      ? "View Technical Evaluation"
+                      : "Update Technical Evaluation"}
                 </Button>
               )}
             </div>

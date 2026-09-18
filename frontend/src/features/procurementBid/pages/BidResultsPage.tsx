@@ -795,14 +795,26 @@ export default function BidResultsPage() {
               {isPending && <Clock className="h-3 w-3" />}
               {row.technicalStatus || 'Pending'}
             </span>
-            <button
-              type="button"
-              onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
-              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
-            >
-              <FileText className="h-3 w-3" />
-              {isPending ? 'Evaluate Technical Bid' : 'Edit Evaluation'}
-            </button>
+            {isBidAlreadyAwarded ? (
+              <button
+                type="button"
+                onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 hover:text-slate-900 hover:underline transition cursor-pointer"
+                title="View finalized technical evaluation (read-only audit record)"
+              >
+                <Eye className="h-3 w-3 text-slate-500" />
+                View Evaluation
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
+              >
+                <FileText className="h-3 w-3" />
+                {isPending ? 'Evaluate Technical Bid' : 'Edit Evaluation'}
+              </button>
+            )}
           </div>
         );
       }
@@ -1642,14 +1654,26 @@ export default function BidResultsPage() {
                             {row.technicalStatus || 'Pending'}
                           </span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer"
-                        >
-                          <FileText className="h-3 w-3" />
-                          {row.technicalStatus === 'Pending' ? 'Evaluate Tech Bid' : 'Edit Evaluation'}
-                        </button>
+                        {isBidAlreadyAwarded ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-250 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer"
+                            title="View finalized technical evaluation (read-only audit record)"
+                          >
+                            <Eye className="h-3 w-3 text-slate-500" />
+                            View Evaluation
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3" />
+                            {row.technicalStatus === 'Pending' ? 'Evaluate Tech Bid' : 'Edit Evaluation'}
+                          </button>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100">
@@ -1903,6 +1927,7 @@ export default function BidResultsPage() {
           onClose={() => setSelectedForTechEval(null)}
           procurementId={bidId}
           participation={selectedForTechEval}
+          readOnly={isBidAlreadyAwarded}
           onSuccess={() => {
             loadBid();
           }}
