@@ -2011,14 +2011,36 @@ export default function BuyerOnboarding() {
 
                 {activeSection === 'account' && (
                   <div className="max-w-2xl space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="space-y-2">
-                      <label htmlFor="buyer-declaration" className="flex items-start gap-2.5 cursor-pointer group">
-                        <input id="buyer-declaration" type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
+                    <div className="space-y-3">
+                      <label htmlFor="buyer-declaration" className="flex items-start gap-3 cursor-pointer group select-none">
+                        <div className="relative flex items-center justify-center mt-0.5 shrink-0">
+                          <input
+                            id="buyer-declaration"
+                            type="checkbox"
+                            checked={formData.declaration}
+                            onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })}
+                            className="peer h-4.5 w-4.5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                          />
+                          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                        </div>
+                        <span className="text-xs text-slate-700 font-medium leading-relaxed group-hover:text-slate-900 transition-colors">
+                          I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span>
+                        </span>
                       </label>
-                      <label htmlFor="buyer-agree-terms" className="flex items-start gap-2.5 cursor-pointer group">
-                        <input id="buyer-agree-terms" type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
+                      <label htmlFor="buyer-agree-terms" className="flex items-start gap-3 cursor-pointer group select-none">
+                        <div className="relative flex items-center justify-center mt-0.5 shrink-0">
+                          <input
+                            id="buyer-agree-terms"
+                            type="checkbox"
+                            checked={formData.agreeTerms}
+                            onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })}
+                            className="peer h-4.5 w-4.5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                          />
+                          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                        </div>
+                        <span className="text-xs text-slate-700 font-medium leading-relaxed group-hover:text-slate-900 transition-colors">
+                          I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span>
+                        </span>
                       </label>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">

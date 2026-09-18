@@ -176,8 +176,13 @@ textarea::-moz-placeholder {
   background-color: rgba(248, 250, 252, 0.92);
 }
 
-.dashboard-main :where(input, select, textarea) {
+.dashboard-main :where(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]), select, textarea) {
   min-height: 2.5rem;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  min-height: unset;
 }
 
 .dashboard-main :where(button, a) {
