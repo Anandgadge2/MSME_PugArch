@@ -81,7 +81,7 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           db.procurementBid.count({
             where: {
               AND: [
-                { OR: [{ procurementType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'RFP', 'rfp'] } }, { bidType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'RFP', 'rfp'] } }] },
+                { OR: [{ procurementType: { in: ['OPEN_TENDER', 'TENDER'] } }, { bidType: { in: ['OPEN_TENDER', 'TENDER'] } }] },
                 isSeller ? { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter } : {}
               ],
               ...(isBuyer ? { buyerId: user.id } : {})
@@ -95,7 +95,7 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           }).catch(() => 0) : Promise.resolve(0),
           isSeller ? db.requirement.count({
             where: {
-              procurementMethod: { in: ['TENDER', 'OPEN_TENDER', 'LIMITED_TENDER', 'RFP'] as any },
+              procurementMethod: { in: ['TENDER', 'OPEN_TENDER'] as any },
               status: { in: ['APPROVED', 'SOURCING'] as any },
               AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }]
             }
@@ -112,17 +112,51 @@ router.get('/navigation/summary', authenticate, async (req: AuthRequest, res) =>
           }
         }).catch(() => 0),
 
-        ((db as any).reverseAuction ? (db as any).reverseAuction.count({
-          where: {
-            status: { in: ['ACTIVE', 'PUBLISHED', 'OPEN', 'SCHEDULED', 'LIVE', 'active', 'live', 'open', 'scheduled'] },
-            ...(isBuyer ? { buyerId: user.id } : {})
-          }
-        }) : (db as any).auction ? (db as any).auction.count({
-          where: {
-            status: { in: ['ACTIVE', 'PUBLISHED', 'OPEN', 'SCHEDULED', 'LIVE', 'active', 'live', 'open', 'scheduled'] },
-            ...(isBuyer ? { buyerId: user.id } : {})
-          }
-        }) : Promise.resolve(0)).catch(() => 0),
+        isSeller ? Promise.all([
+          (async () => {
+            const orgId = user.organizationId;
+            const participantAuctionIds = await (db as any).auctionParticipant.findMany({
+              where: {
+                OR: [
+                  ...(orgId ? [{ sellerOrgId: orgId }] : []),
+                  { sellerUserId: user.id }
+                ]
+              },
+              select: { auctionId: true }
+            }).then((rows: any[]) => rows.map(r => r.auctionId)).catch(() => []);
+
+            return participantAuctionIds.length > 0 ? (db as any).auction.count({
+              where: {
+                id: { in: participantAuctionIds },
+                status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] },
+                endTime: { gt: now }
+              }
+            }).catch(() => 0) : 0;
+          })(),
+          db.requirement.count({
+            where: {
+              procurementMethod: 'REVERSE_AUCTION' as any,
+              status: { in: ['APPROVED', 'SOURCING'] as any },
+              AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }]
+            }
+          }).catch(() => 0),
+          db.procurementBid.count({
+            where: {
+              AND: [
+                { OR: [{ procurementType: 'REVERSE_AUCTION' }, { bidType: 'REVERSE_AUCTION' }] },
+                { status: { in: ['OPEN', 'APPROVED', 'PUBLISHED', 'OPEN_FOR_BIDDING'] as any }, ...openDateFilter }
+              ]
+            }
+          }).catch(() => 0)
+        ]).then(([a, r, b]) => a + r + b).catch(() => 0) : (
+          (db as any).auction.count({
+            where: {
+              status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] },
+              endTime: { gt: now },
+              OR: [{ createdByUserId: user.id }, { buyerOrgId: user.organizationId || -1 }]
+            }
+          }).catch(() => 0)
+        ),
 
         Promise.all([
           db.procurementBid.count({
