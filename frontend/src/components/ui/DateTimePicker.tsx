@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -159,8 +160,13 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
 
     const containerRef = React.useRef<HTMLDivElement>(null);
     const triggerRef = React.useRef<HTMLButtonElement>(null);
+    const popoverRef = React.useRef<HTMLDivElement>(null);
     const [isOpen, setIsOpen] = React.useState(false);
-    const [opensUpward, setOpensUpward] = React.useState(false);
+    const [popoverStyle, setPopoverStyle] = React.useState<React.CSSProperties>({
+      position: 'fixed',
+      visibility: 'hidden',
+      zIndex: 99999,
+    });
 
     // Parsed state from value
     const parsed = React.useMemo(() => parseValueTo12Hr(value), [value]);
@@ -196,37 +202,65 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       }
     }, [parsed.date]);
 
-    // Position detection: should popover open upwards if near bottom?
-    const checkPlacement = React.useCallback(() => {
+    // Fixed portal coordinate calculation
+    const updatePosition = React.useCallback(() => {
       if (!triggerRef.current) return;
-      const rect = triggerRef.current.getBoundingClientRect();
-      const popoverHeight = 360;
-      const bottomBuffer = 80; // Account for floating/sticky bottom action bars
-      const spaceBelow = window.innerHeight - rect.bottom - bottomBuffer;
-      const spaceAbove = rect.top;
-      setOpensUpward(spaceBelow < popoverHeight && (spaceAbove > spaceBelow || spaceAbove >= popoverHeight));
+      const triggerRect = triggerRef.current.getBoundingClientRect();
+      const popoverHeight = popoverRef.current?.offsetHeight || 370;
+      const popoverWidth = Math.min(310, window.innerWidth - 16);
+      const bottomBuffer = 85; // Account for floating sticky bottom action bars
+
+      const spaceBelow = window.innerHeight - triggerRect.bottom - bottomBuffer;
+      const spaceAbove = triggerRect.top;
+      const shouldOpenUpward = spaceBelow < popoverHeight && (spaceAbove > spaceBelow || spaceAbove >= popoverHeight);
+
+      let leftPos = triggerRect.left;
+      if (leftPos + popoverWidth > window.innerWidth - 12) {
+        leftPos = window.innerWidth - popoverWidth - 12;
+      }
+      if (leftPos < 12) {
+        leftPos = 12;
+      }
+
+      let topPos = shouldOpenUpward
+        ? Math.max(8, triggerRect.top - popoverHeight - 6)
+        : Math.min(window.innerHeight - popoverHeight - 8, triggerRect.bottom + 6);
+
+      setPopoverStyle({
+        position: 'fixed',
+        top: topPos,
+        left: leftPos,
+        width: popoverWidth,
+        zIndex: 99999,
+        visibility: 'visible',
+      });
     }, []);
 
     const toggleOpen = () => {
       if (disabled) return;
-      if (!isOpen) {
-        checkPlacement();
-      }
       setIsOpen(prev => !prev);
     };
 
-    // Close on outside click & escape, and track scroll/resize for placement
+    // Close on outside click & escape, and track scroll/resize for placement across document portal
     React.useEffect(() => {
-      if (!isOpen) return;
+      if (!isOpen) {
+        setPopoverStyle({ position: 'fixed', visibility: 'hidden', zIndex: 99999 });
+        return;
+      }
 
-      checkPlacement();
+      updatePosition();
+      const timer = setTimeout(updatePosition, 10);
 
       const handleScrollOrResize = () => {
-        checkPlacement();
+        updatePosition();
       };
 
       const handlePointerDown = (e: MouseEvent | TouchEvent) => {
-        if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const target = e.target as Node;
+        if (
+          containerRef.current && !containerRef.current.contains(target) &&
+          popoverRef.current && !popoverRef.current.contains(target)
+        ) {
           setIsOpen(false);
         }
       };
@@ -241,17 +275,18 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       document.addEventListener('mousedown', handlePointerDown);
       document.addEventListener('touchstart', handlePointerDown);
       window.addEventListener('keydown', handleKeyDown);
-      window.addEventListener('scroll', handleScrollOrResize, { passive: true });
-      window.addEventListener('resize', handleScrollOrResize, { passive: true });
+      window.addEventListener('scroll', handleScrollOrResize, true);
+      window.addEventListener('resize', handleScrollOrResize);
 
       return () => {
+        clearTimeout(timer);
         document.removeEventListener('mousedown', handlePointerDown);
         document.removeEventListener('touchstart', handlePointerDown);
         window.removeEventListener('keydown', handleKeyDown);
-        window.removeEventListener('scroll', handleScrollOrResize);
+        window.removeEventListener('scroll', handleScrollOrResize, true);
         window.removeEventListener('resize', handleScrollOrResize);
       };
-    }, [isOpen, checkPlacement]);
+    }, [isOpen, updatePosition]);
 
     // Helper to emit updated date-time
     const handleUpdate = (
@@ -427,16 +462,15 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
           </p>
         )}
 
-        {/* ── Minimalist Popover Dialog ── */}
-        {isOpen && (
+        {/* ── Minimalist Popover Dialog (Rendered in Document Body Portal to avoid stacking context traps) ── */}
+        {isOpen && typeof document !== 'undefined' && createPortal(
           <div
+            ref={popoverRef}
             id={popoverId}
             role="dialog"
             aria-label="Date and 12-Hour Time Picker"
-            className={cn(
-              'absolute z-50 left-0 w-[310px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white p-3.5 shadow-2xl border border-slate-200 ring-1 ring-black/10 animate-in fade-in-50 duration-100',
-              opensUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-            )}
+            style={popoverStyle}
+            className="rounded-2xl bg-white p-3.5 shadow-2xl border border-slate-200 ring-1 ring-black/10 animate-in fade-in-50 duration-100"
           >
             {/* 1. Clean Month / Year Header */}
             <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
@@ -640,7 +674,8 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                 Done
               </button>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     );
