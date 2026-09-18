@@ -257,8 +257,12 @@ export function SupplierQuotationDetailView({
   const rank = String(result.finalRank || 'L1');
   const isAwarded =
     result.resultStatus === 'Awarded' ||
-    result.status === 'Awarded' ||
-    bid?.status === 'Awarded';
+    String(result.finalStatus || '').toUpperCase() === 'AWARDED' ||
+    String(result.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' ||
+    Boolean(bid?.awards?.some((a: any) =>
+      Number(a.participationId) === Number(result.participationId || result.id) ||
+      (a.sellerId && Number(a.sellerId) === Number(result.sellerId || result.rawParticipation?.sellerId || result.rawParticipation?.sellerUserId))
+    ));
 
   // Extract commercial parameters
   const totalEvaluatedPrice = Number(

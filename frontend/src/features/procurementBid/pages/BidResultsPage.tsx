@@ -163,6 +163,33 @@ export default function BidResultsPage() {
     ].includes(rawStatus);
   }, [bid]);
 
+  const isBidAlreadyAwarded = React.useMemo(() => {
+    if (!bid) return false;
+    const rawStatus = String((bid as any).status || '').toUpperCase();
+    const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
+    return (
+      ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStatus) ||
+      ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
+      Boolean((bid as any).awards && (bid as any).awards.length > 0) ||
+      ranking.some(r => r.resultStatus === 'Awarded' || String((r as any).finalStatus || '').toUpperCase() === 'AWARDED')
+    );
+  }, [bid, ranking]);
+
+  const checkIsRowAwarded = React.useCallback((row: BidResultRow) => {
+    if (row.resultStatus === 'Awarded') return true;
+    if (String(row.finalStatus || '').toUpperCase() === 'AWARDED') return true;
+    if (String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED') return true;
+    if (Array.isArray(bid?.awards) && bid.awards.length > 0) {
+      const partId = Number(row.participationId || row.id);
+      const sellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
+      return bid.awards.some((a: any) =>
+        (partId && Number(a.participationId) === partId) ||
+        (sellerId && Number(a.sellerId) === sellerId)
+      );
+    }
+    return false;
+  }, [bid]);
+
   const techEvaluationStats = React.useMemo(() => {
     const total = ranking.length;
     const qualified = ranking.filter(
@@ -422,6 +449,7 @@ export default function BidResultsPage() {
           return {
             id: r.id || `res-${idx}`,
             participationId: r.id || idx + 1,
+            sellerId: r.sellerId || r.sellerUserId || r.seller?.id || r.sellerUser?.id,
             sellerName: sellerOrg,
             contactPerson: contactPerson,
             sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
@@ -461,7 +489,18 @@ export default function BidResultsPage() {
             responseData: respData,
             rawParticipation: r,
             finalRank: `L${idx + 1}`,
-            resultStatus: 'Responsive',
+            finalStatus: r.finalStatus,
+            resultStatus: (() => {
+              const isItemAwarded =
+                r.finalStatus === 'AWARDED' ||
+                (Array.isArray(data?.awards) && data.awards.some((a: any) =>
+                  Number(a.participationId) === Number(r.id) ||
+                  (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.sellerUserId || r.seller?.id || r.sellerUser?.id))
+                ));
+              if (isItemAwarded) return 'Awarded';
+              if (r.finalStatus === 'NOT_SELECTED' || r.finalStatus === 'REJECTED') return 'Not Selected';
+              return 'Responsive';
+            })(),
             details: {
               organizationName: sellerOrg,
               contactPerson: contactPerson,
@@ -549,9 +588,24 @@ export default function BidResultsPage() {
         const isQualified = rawTech === 'QUALIFIED' || rawTech === 'SHORTLISTED' || rawTech === 'ACCEPTED';
         const isDisqualified = rawTech === 'DISQUALIFIED' || rawTech === 'REJECTED';
         const techStatus = isQualified ? 'Qualified' : isDisqualified ? 'Disqualified' : 'Pending';
+
+        const isItemAwarded =
+          r.resultStatus === 'Awarded' ||
+          String(r.finalStatus || '').toUpperCase() === 'AWARDED' ||
+          String(r.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' ||
+          Boolean(data?.awards?.some((a: any) =>
+            Number(a.participationId) === Number(r.participationId || r.id) ||
+            (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.rawParticipation?.sellerId || r.rawParticipation?.sellerUserId))
+          ));
+
         return {
           ...r,
           technicalStatus: r.technicalStatus === 'Qualified' || r.technicalStatus === 'Disqualified' ? r.technicalStatus : techStatus,
+          resultStatus: isItemAwarded
+            ? 'Awarded'
+            : (r.resultStatus && r.resultStatus !== 'Awarded'
+                ? r.resultStatus
+                : (isDisqualified ? 'Ineligible' : 'Responsive')),
           rawParticipation: r.rawParticipation || r,
         };
       });
@@ -777,13 +831,17 @@ export default function BidResultsPage() {
           >
             <Download className="h-3.5 w-3.5" />
           </button>
-          {row.resultStatus === 'Awarded' || bid?.status === 'Awarded' ? (
+          {checkIsRowAwarded(row) ? (
             <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
               <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
             </span>
           ) : row.technicalStatus === 'Disqualified' ? (
             <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2 text-[10px] font-semibold" title="Ineligible for award due to technical disqualification">
               Ineligible for Award
+            </span>
+          ) : isBidAlreadyAwarded ? (
+            <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2.5 text-[10px] font-semibold">
+              Not Selected
             </span>
           ) : (
             <button
@@ -802,7 +860,7 @@ export default function BidResultsPage() {
         </div>
       )
     }
-  ], [selectedForCompare, bid]);
+  ], [selectedForCompare, bid, isBidAlreadyAwarded, checkIsRowAwarded]);
 
   const handleCompareClick = () => {
     if (selectedForCompare.length >= 2) {
@@ -1347,27 +1405,29 @@ export default function BidResultsPage() {
                 </div>
 
                 {/* Reverse Auction Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isTwoPacketMode && techEvaluationStats.pending > 0) {
-                      toast.error(
-                        `Stage 1 Technical Evaluation is still pending for ${techEvaluationStats.pending} vendor(s). Please evaluate all vendors before starting Stage 2 Reverse Auction.`
-                      );
-                      return;
-                    }
-                    if (isTwoPacketMode && techEvaluationStats.qualified === 0) {
-                      toast.error(
-                        'No vendors are technically qualified. Reverse auction requires at least 1 qualified vendor.'
-                      );
-                      return;
-                    }
-                    setShowReverseAuctionModal(true);
-                  }}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white transition shadow-2xs cursor-pointer"
-                >
-                  <Gavel className="h-3 w-3" /> Start Reverse Auction
-                </button>
+                {!isBidAlreadyAwarded && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isTwoPacketMode && techEvaluationStats.pending > 0) {
+                        toast.error(
+                          `Stage 1 Technical Evaluation is still pending for ${techEvaluationStats.pending} vendor(s). Please evaluate all vendors before starting Stage 2 Reverse Auction.`
+                        );
+                        return;
+                      }
+                      if (isTwoPacketMode && techEvaluationStats.qualified === 0) {
+                        toast.error(
+                          'No vendors are technically qualified. Reverse auction requires at least 1 qualified vendor.'
+                        );
+                        return;
+                      }
+                      setShowReverseAuctionModal(true);
+                    }}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white transition shadow-2xs cursor-pointer"
+                  >
+                    <Gavel className="h-3 w-3" /> Start Reverse Auction
+                  </button>
+                )}
 
                 <StatusBadge label={bid.status} />
               </div>
@@ -1607,13 +1667,17 @@ export default function BidResultsPage() {
                         >
                           <Download className="h-3 w-3 text-slate-500" /> PDF
                         </button>
-                        {row.resultStatus === 'Awarded' || bid.status === 'Awarded' ? (
+                        {checkIsRowAwarded(row) ? (
                           <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-[11px] font-black uppercase tracking-wide">
                             <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
                           </span>
                         ) : row.technicalStatus === 'Disqualified' ? (
                           <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-semibold">
                             Ineligible
+                          </span>
+                        ) : isBidAlreadyAwarded ? (
+                          <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-semibold">
+                            Not Selected
                           </span>
                         ) : (
                           <button

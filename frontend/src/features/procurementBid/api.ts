@@ -254,7 +254,19 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       })(),
       details,
       finalRank: toUiRank(p.rank),
-      resultStatus: p.finalStatus === 'AWARDED' ? 'Awarded' : p.finalStatus === 'REJECTED' ? 'Rejected' : p.rank ? 'Responsive' : 'Under Review',
+      resultStatus: (() => {
+        const isParticipationAwarded =
+          p.finalStatus === 'AWARDED' ||
+          (Array.isArray(raw.awards) && raw.awards.some((a: any) =>
+            Number(a.participationId) === Number(p.id) ||
+            (a.sellerId && Number(a.sellerId) === Number(p.sellerId))
+          ));
+        if (isParticipationAwarded) return 'Awarded';
+        if (p.finalStatus === 'NOT_SELECTED' || p.finalStatus === 'REJECTED') return 'Not Selected';
+        return p.rank ? 'Responsive' : 'Under Review';
+      })(),
+      finalStatus: p.finalStatus,
+      sellerId: p.sellerId,
     };
   }) : [];
 

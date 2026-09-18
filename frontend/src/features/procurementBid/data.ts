@@ -32,6 +32,8 @@ export interface ClarificationRecord {
 
 export interface BidResultRow {
   participationId?: number;
+  id?: string | number;
+  sellerId?: number;
   sellerName: string;
   sellerType: string;
   offeredItem: string;
@@ -39,9 +41,10 @@ export interface BidResultRow {
   model: string;
   technicalStatus: 'Qualified' | 'Disqualified' | 'Pending' | 'Under Review' | 'Clarification Required';
   financialStatus: 'Opened' | 'Pending' | 'Rejected';
+  finalStatus?: string;
   totalPrice: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
-  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected';
+  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected' | 'Not Selected' | 'Ineligible';
   contactPerson?: string;
   details?: Record<string, any>;
   documents?: any[];
@@ -49,6 +52,7 @@ export interface BidResultRow {
   sellerEmail?: string;
   sellerMobile?: string;
   seller?: Record<string, any>;
+  rawParticipation?: Record<string, any>;
 }
 
 export interface ProcurementBid {
