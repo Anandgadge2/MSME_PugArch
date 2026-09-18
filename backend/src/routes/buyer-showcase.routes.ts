@@ -88,24 +88,29 @@ const bulkDeleteSchema = z.object({
 router.get('/profile', authenticate, authorize('buyer'), (async (req: AuthRequest, res: Response, next) => {
   try {
     const profile = await db.buyerProfile.findUnique({
-      where: { userId: userId(req) }
+      where: { userId: userId(req) },
+      include: {
+        organization: true
+      }
     });
     if (!profile) throw new ApiError(404, 'Buyer profile not found');
 
     // Auto-fetch/fill from registration/onboarding details if showcase fields are empty
     const enriched = {
       ...profile,
+      organizationName: profile.organization?.organizationName || profile.organizationName,
+      organizationType: profile.organization?.organizationType || profile.organizationType,
       departmentName: profile.departmentName || profile.department || null,
-      registrationNumber: profile.registrationNumber || profile.cin || null,
-      gstNumber: profile.gstNumber || profile.gst || null,
-      panNumber: profile.panNumber || profile.pan || null,
-      address: profile.address || profile.registeredAddress || profile.corporateAddress || null,
-      city: profile.city || null,
-      state: profile.state || null,
-      pincode: profile.pincode || null,
+      registrationNumber: profile.organization?.cinNumber || profile.registrationNumber || profile.cin || null,
+      gstNumber: profile.organization?.gstin || profile.gstNumber || profile.gst || null,
+      panNumber: profile.organization?.panNumber || profile.panNumber || profile.pan || null,
+      address: profile.organization?.addressLine1 || profile.address || profile.registeredAddress || profile.corporateAddress || null,
+      city: profile.organization?.city || profile.city || null,
+      state: profile.organization?.state || profile.state || null,
+      pincode: profile.organization?.pincode || profile.pincode || null,
       officialEmail: profile.officialEmail || profile.email || null,
       officialPhone: profile.officialPhone || profile.mobile || null,
-      website: profile.website || null,
+      website: profile.organization?.website || profile.website || null,
       contactPersonName: profile.contactPersonName || profile.representativeName || null,
       contactPersonDesignation: profile.contactPersonDesignation || profile.designation || null,
       contactPersonMobile: profile.contactPersonMobile || profile.mobile || null,
@@ -217,10 +222,13 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
           create: { organizationId: orgId, ...profileUpdate }
         });
       }
-      if (body.organizationName) {
+      const orgDataUpdate: any = {};
+      if (body.organizationName) orgDataUpdate.organizationName = body.organizationName;
+      if (body.organizationType) orgDataUpdate.organizationType = body.organizationType;
+      if (Object.keys(orgDataUpdate).length > 0) {
         await db.organization.update({
           where: { id: orgId },
-          data: { organizationName: body.organizationName }
+          data: orgDataUpdate
         });
       }
 
@@ -661,6 +669,8 @@ router.get('/public/organizations', (async (req, res, next) => {
         updatedAt: true,
         organization: {
           select: {
+            organizationName: true,
+            organizationType: true,
             profile: {
               select: {
                 logoUrl: true,
@@ -676,9 +686,9 @@ router.get('/public/organizations', (async (req, res, next) => {
     const mappedOrgs = organizations.map(org => ({
       id: org.id,
       userId: org.userId,
-      organizationName: org.organizationName,
+      organizationName: org.organization?.organizationName || org.organizationName,
       departmentName: org.departmentName,
-      organizationType: org.organizationType,
+      organizationType: org.organization?.organizationType || org.organizationType,
       state: org.state,
       city: org.city,
       logoUrl: org.logoUrl || org.organization?.profile?.logoUrl || '',
@@ -752,6 +762,7 @@ router.get('/public/organizations/:id', (async (req, res, next) => {
             state: true,
             pincode: true,
             website: true,
+            verificationStatus: true,
             profile: {
               select: {
                 logoUrl: true,
@@ -817,6 +828,7 @@ router.get('/public/organizations/:id', (async (req, res, next) => {
               state: true,
               pincode: true,
               website: true,
+              verificationStatus: true,
               profile: {
                 select: {
                   logoUrl: true,
@@ -834,22 +846,22 @@ router.get('/public/organizations/:id', (async (req, res, next) => {
     const mappedProfile = {
       id: profile.id,
       userId: profile.userId,
-      organizationName: profile.organizationName || profile.organization?.organizationName || 'N/A',
+      organizationName: profile.organization?.organizationName || profile.organizationName || 'N/A',
       departmentName: profile.departmentName || profile.department || 'N/A',
-      organizationType: profile.organizationType || profile.organization?.organizationType || profile.businessType || 'N/A',
-      registrationNumber: profile.registrationNumber || profile.cin || profile.organization?.cinNumber || 'N/A',
-      gstNumber: profile.gstNumber || profile.gst || profile.organization?.gstin || 'N/A',
-      panNumber: profile.panNumber || profile.pan || profile.organization?.panNumber || 'N/A',
-      address: profile.address || profile.registeredAddress || profile.organization?.addressLine1 || 'N/A',
-      city: profile.city || profile.organization?.city || 'N/A',
-      state: profile.state || profile.organization?.state || 'N/A',
-      pincode: profile.pincode || profile.organization?.pincode || 'N/A',
+      organizationType: profile.organization?.organizationType || profile.organizationType || profile.businessType || 'N/A',
+      registrationNumber: profile.organization?.cinNumber || profile.registrationNumber || profile.cin || 'N/A',
+      gstNumber: profile.organization?.gstin || profile.gstNumber || profile.gst || 'N/A',
+      panNumber: profile.organization?.panNumber || profile.panNumber || profile.pan || 'N/A',
+      address: profile.organization?.addressLine1 || profile.address || profile.registeredAddress || 'N/A',
+      city: profile.organization?.city || profile.city || 'N/A',
+      state: profile.organization?.state || profile.state || 'N/A',
+      pincode: profile.organization?.pincode || profile.pincode || 'N/A',
       officialEmail: profile.officialEmail || profile.email || 'N/A',
       officialPhone: profile.officialPhone || profile.mobile || 'N/A',
-      website: profile.website || profile.organization?.website || '',
+      website: profile.organization?.website || profile.website || '',
       logoUrl: profile.logoUrl || profile.organization?.profile?.logoUrl || '',
       bannerUrl: profile.bannerUrl || profile.organization?.profile?.bannerUrl || '',
-      verificationStatus: profile.verificationStatus,
+      verificationStatus: profile.organization?.verificationStatus || profile.verificationStatus,
       isActive: profile.isActive,
       updatedAt: profile.updatedAt
     };

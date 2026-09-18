@@ -75,14 +75,14 @@ export default function VendorStorefrontPage({ id }: Props) {
                         <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
                             {/* Ambient backdrop so any aspect ratio fills wide screens */}
                             <img
-                                src={resolveMediaUrl(v.bannerUrl) || ''}
+                                src={resolveMediaUrl(v.bannerUrl) || undefined}
                                 alt=""
                                 aria-hidden="true"
                                 className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60 brightness-75 select-none pointer-events-none"
                             />
                             {/* Main banner: fully visible, sharp, uncropped */}
                             <img
-                                src={resolveMediaUrl(v.bannerUrl) || ''}
+                                src={resolveMediaUrl(v.bannerUrl) || undefined}
                                 alt="Seller Banner"
                                 className="relative z-1 max-h-full max-w-full object-contain object-center drop-shadow-md"
                             />
@@ -98,7 +98,7 @@ export default function VendorStorefrontPage({ id }: Props) {
                     {/* Logo Box */}
                     <div className="absolute -top-16 left-6 md:left-8 w-28 h-28 rounded-2xl bg-white border border-slate-200/80 shadow-lg flex items-center justify-center p-2.5 z-20 bg-white transition-transform duration-300 hover:scale-105">
                         {v.logoUrl ? (
-                            <img src={resolveMediaUrl(v.logoUrl) || ''} alt="Seller Logo" className="w-full h-full object-contain rounded-xl bg-white" />
+                            <img src={resolveMediaUrl(v.logoUrl) || undefined} alt="Seller Logo" className="w-full h-full object-contain rounded-xl bg-white" />
                         ) : (
                             <div className="w-full h-full rounded-xl flex items-center justify-center text-3xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-indigo-150">
                                 {(v.name || profile.businessName || '?').charAt(0).toUpperCase()}

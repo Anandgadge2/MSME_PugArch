@@ -213,7 +213,6 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
 
   const defaultCompanyId = await getDefaultCompanyId();
   const dualOrgType: OrganizationType = (() => {
-    if (targetRole === 'buyer') return 'GOVERNMENT';
     const typeStr = String(registration.businessType || registration.organisationType || user.sellerProfile?.organizationType || '').trim().toUpperCase();
     if (typeStr.includes('PROPRIETORSHIP')) return 'PROPRIETORSHIP';
     if (typeStr.includes('PARTNERSHIP')) return 'PARTNERSHIP';
@@ -228,6 +227,9 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
     if (typeStr.includes('NGO')) return 'NGO';
     if (typeStr.includes('TRUST')) return 'TRUST';
     if (typeStr.includes('SOCIETY')) return 'SOCIETY';
+    if (typeStr.includes('GOVERNMENT') || typeStr.includes('GOVT')) return 'GOVERNMENT';
+    if (typeStr.includes('PSU')) return 'PSU';
+    if (targetRole === 'buyer') return 'GOVERNMENT';
     return 'MSME';
   })();
 
@@ -664,38 +666,36 @@ export const authController = {
         );
 
         let orgType: OrganizationType = 'MSME';
-        if (user.role === 'buyer') {
+        const typeStr = String(rDetails.businessType || rDetails.organisationType || '').trim().toUpperCase();
+        if (typeStr.includes('PROPRIETORSHIP')) {
+          orgType = 'PROPRIETORSHIP';
+        } else if (typeStr.includes('PARTNERSHIP')) {
+          orgType = 'PARTNERSHIP';
+        } else if (typeStr.includes('LLP')) {
+          orgType = 'LLP';
+        } else if (typeStr.includes('STARTUP')) {
+          orgType = 'STARTUP';
+        } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+          orgType = 'PUBLIC_LIMITED';
+        } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+          const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+          orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
+        } else if (typeStr.includes('SHG')) {
+          orgType = 'SHG';
+        } else if (typeStr.includes('NGO')) {
+          orgType = 'NGO';
+        } else if (typeStr.includes('TRUST')) {
+          orgType = 'TRUST';
+        } else if (typeStr.includes('SOCIETY')) {
+          orgType = 'SOCIETY';
+        } else if (typeStr.includes('GOVERNMENT') || typeStr.includes('GOVT')) {
+          orgType = 'GOVERNMENT';
+        } else if (typeStr.includes('PSU')) {
+          orgType = 'PSU';
+        } else if (user.role === 'buyer') {
           orgType = 'GOVERNMENT';
         } else {
-          const typeStr = String(rDetails.businessType || rDetails.organisationType || '').trim().toUpperCase();
-          if (typeStr.includes('PROPRIETORSHIP')) {
-            orgType = 'PROPRIETORSHIP';
-          } else if (typeStr.includes('PARTNERSHIP')) {
-            orgType = 'PARTNERSHIP';
-          } else if (typeStr.includes('LLP')) {
-            orgType = 'LLP';
-          } else if (typeStr.includes('STARTUP')) {
-            orgType = 'STARTUP';
-          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
-            orgType = 'PUBLIC_LIMITED';
-          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
-            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
-          } else if (typeStr.includes('SHG')) {
-            orgType = 'SHG';
-          } else if (typeStr.includes('NGO')) {
-            orgType = 'NGO';
-          } else if (typeStr.includes('TRUST')) {
-            orgType = 'TRUST';
-          } else if (typeStr.includes('SOCIETY')) {
-            orgType = 'SOCIETY';
-          } else if (typeStr.includes('GOVERNMENT')) {
-            orgType = 'GOVERNMENT';
-          } else if (typeStr.includes('PSU')) {
-            orgType = 'PSU';
-          } else {
-            orgType = 'MSME';
-          }
+          orgType = 'MSME';
         }
 
         const stateVal = firstValue(rDetails.state, gstDetails.state) || null;

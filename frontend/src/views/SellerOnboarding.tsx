@@ -1575,6 +1575,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         />
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
+          {user?.adminFeedback && (
+            <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-amber-900">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">
+                  Registration Scrutiny Desk Remark / Feedback
+                </h4>
+              </div>
+              <p className="mt-1.5 text-xs font-medium text-slate-800 leading-relaxed pl-6">
+                {user.adminFeedback}
+              </p>
+            </div>
+          )}
+
           <Card className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
               <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">

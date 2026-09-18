@@ -111,8 +111,8 @@ export function SearchableSelect({
   const listboxId = `${generatedId}-listbox`;
 
   return (
-    <div ref={containerRef} className={cn("relative w-full space-y-1.5", className)}>
-      <div className="relative">
+    <div ref={containerRef} className={cn("relative w-full min-w-0 space-y-1.5", className)}>
+      <div className="relative w-full min-w-0">
         <button
           type="button"
           role="combobox"
@@ -121,15 +121,16 @@ export function SearchableSelect({
           aria-controls={listboxId}
           disabled={disabled}
           onClick={() => setIsOpen(!isOpen)}
+          title={typeof displayLabel === 'string' ? displayLabel : undefined}
           className={cn(
-            "flex h-[40px] sm:h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-[11px] sm:text-sm font-semibold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400",
+            "flex h-[40px] sm:h-11 w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-[11px] sm:text-sm font-semibold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400",
             isOpen && "border-[#12335f] ring-2 ring-[#12335f]/15"
           )}
         >
-          <span className={cn("truncate", !selectedOption && !isCustomSelected && "text-slate-400")}>
+          <span className={cn("truncate min-w-0 flex-1 text-left", !selectedOption && !isCustomSelected && "text-slate-400")}>
             {displayLabel}
           </span>
-          <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+          <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} aria-hidden="true" />
         </button>
       </div>
 
@@ -138,15 +139,15 @@ export function SearchableSelect({
           id={listboxId}
           role="listbox"
           aria-label={placeholder}
-          className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-lg animate-in fade-in duration-100"
+          className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto overflow-x-hidden rounded-lg border border-slate-200 bg-white p-1 shadow-lg animate-in fade-in duration-100"
         >
-          <div className="relative border-b border-slate-100 p-1.5 flex items-center gap-1.5">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <div className="relative border-b border-slate-100 p-1.5 flex items-center gap-1.5 min-w-0">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 shrink-0" aria-hidden="true" />
             <input
               ref={inputRef}
               type="text"
               aria-label="Search options"
-              className="h-8 w-full rounded-md border border-slate-100 pl-8 pr-3 text-[11px] sm:text-xs outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
+              className="h-8 w-full rounded-md border border-slate-100 pl-8 pr-7 text-[11px] sm:text-xs outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 min-w-0"
               placeholder="Search..."
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -159,7 +160,7 @@ export function SearchableSelect({
                 onClick={() => setSearch('')}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-650"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               </button>
             )}
           </div>
@@ -181,12 +182,13 @@ export function SearchableSelect({
                     role="option"
                     aria-selected={isSelected}
                     onClick={() => handleSelect(opt.value)}
+                    title={opt.label}
                     className={cn(
-                      "flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-slate-50 focus:bg-slate-100 focus:outline-none",
+                      "flex w-full min-w-0 items-center justify-between rounded-md px-3 py-2 text-left text-xs font-semibold transition-colors hover:bg-slate-50 focus:bg-slate-100 focus:outline-none",
                       isSelected ? "bg-[#12335f]/5 text-[#12335f]" : "text-slate-700"
                     )}
                   >
-                    <span>{opt.label}</span>
+                    <span className="truncate min-w-0 flex-1">{opt.label}</span>
                   </button>
                 );
               })

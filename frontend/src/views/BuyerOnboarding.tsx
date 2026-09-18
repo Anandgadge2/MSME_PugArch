@@ -8,7 +8,7 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   validateField,
@@ -1451,6 +1451,20 @@ export default function BuyerOnboarding() {
             />
           </div>
         </div>
+
+        {user?.adminFeedback && (
+          <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-amber-900">
+              <MessageSquare className="h-4 w-4 shrink-0 text-amber-700" />
+              <h4 className="text-xs font-bold uppercase tracking-wider">
+                Registration Scrutiny Desk Remark / Feedback
+              </h4>
+            </div>
+            <p className="mt-1.5 text-xs font-medium text-slate-800 leading-relaxed pl-6">
+              {user.adminFeedback}
+            </p>
+          </div>
+        )}
 
         {/* Main Content Layout with Left Vertical Sidebar */}
         <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-6 mb-3">

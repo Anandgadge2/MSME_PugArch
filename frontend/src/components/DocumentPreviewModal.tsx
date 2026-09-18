@@ -29,26 +29,38 @@ export function DocumentPreviewModal({
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [resolvedImageSrc, setResolvedImageSrc] = useState(previewDocument?.url || '');
-  const [isImageLoading, setIsImageLoading] = useState(true);
-  const [imageLoadError, setImageLoadError] = useState(false);
+  const [resolvedImageSrc, setResolvedImageSrc] = useState<string | null>(previewDocument?.url?.trim() || null);
+  const [isImageLoading, setIsImageLoading] = useState(Boolean(previewDocument?.url?.trim()));
+  const [imageLoadError, setImageLoadError] = useState(!previewDocument?.url?.trim());
   const recoveryAttemptedRef = useRef(false);
+  const createdBlobUrlsRef = useRef<string[]>([]);
+
+  // Cleanup created blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      createdBlobUrlsRef.current.forEach(url => {
+        try { URL.revokeObjectURL(url); } catch {}
+      });
+      createdBlobUrlsRef.current = [];
+    };
+  }, []);
 
   // Derived state: reset controls if the previewed document URL changes
   useEffect(() => {
     if (previewDocument) {
-      setResolvedImageSrc(previewDocument.url);
+      const url = previewDocument.url?.trim() || null;
+      setResolvedImageSrc(url);
       setScale(1);
       setRotation(0);
-      setIsImageLoading(true);
-      setImageLoadError(false);
+      setIsImageLoading(Boolean(url));
+      setImageLoadError(!url);
       recoveryAttemptedRef.current = false;
     }
   }, [previewDocument?.url]);
 
   // Attempt resilient recovery if image fails to load directly
   const handleImageError = useCallback(async () => {
-    if (recoveryAttemptedRef.current || !previewDocument?.url) {
+    if (recoveryAttemptedRef.current || !previewDocument?.url || !previewDocument.url.trim()) {
       setImageLoadError(true);
       setIsImageLoading(false);
       return;
@@ -63,6 +75,7 @@ export function DocumentPreviewModal({
         const blob = await res.blob();
         if (blob.size > 0) {
           const blobUrl = URL.createObjectURL(blob);
+          createdBlobUrlsRef.current.push(blobUrl);
           setResolvedImageSrc(blobUrl);
           setImageLoadError(false);
           setIsImageLoading(false);
@@ -105,7 +118,7 @@ export function DocumentPreviewModal({
     }
   };
 
-  const activeDownloadUrl = resolvedImageSrc || previewDocument.url;
+  const activeDownloadUrl = resolvedImageSrc || previewDocument.url?.trim() || '';
 
   return createPortal(
     <div
@@ -125,23 +138,27 @@ export function DocumentPreviewModal({
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-              <a
-                href={activeDownloadUrl}
-                download={previewDocument.label || 'document'}
-                className="inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 sm:px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Download Document</span>
-                <span className="sm:hidden">Download</span>
-              </a>
-              <a
-                href={activeDownloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-[10px] font-black uppercase text-slate-600 transition-all hover:bg-slate-50 sm:inline-flex"
-              >
-                Open Original
-              </a>
+              {activeDownloadUrl ? (
+                <>
+                  <a
+                    href={activeDownloadUrl}
+                    download={previewDocument.label || 'document'}
+                    className="inline-flex h-9 sm:h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 sm:px-4 text-[10px] font-black uppercase text-white shadow-sm transition-all hover:bg-blue-700 active:scale-95"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Download Document</span>
+                    <span className="sm:hidden">Download</span>
+                  </a>
+                  <a
+                    href={activeDownloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden h-10 items-center justify-center rounded-xl border border-slate-200 px-4 text-[10px] font-black uppercase text-slate-600 transition-all hover:bg-slate-50 sm:inline-flex"
+                  >
+                    Open Original
+                  </a>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={onClose}
@@ -164,41 +181,45 @@ export function DocumentPreviewModal({
                     </div>
                   )}
 
-                  {imageLoadError ? (
+                  {imageLoadError || !resolvedImageSrc ? (
                     <div className="m-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3">
                         <AlertCircle className="h-6 w-6" />
                       </div>
                       <h4 className="text-sm font-bold text-slate-900 mb-1">Direct Image Preview Unavailable</h4>
                       <p className="text-xs text-slate-500 mb-4">
-                        This file cannot be rendered inside the inline preview frame. You can open or download the original file directly.
+                        {previewDocument.url
+                          ? 'This file cannot be rendered inside the inline preview frame. You can open or download the original file directly.'
+                          : 'No valid document source is available for this file.'}
                       </p>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={previewDocument.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          <span>Open Original</span>
-                        </a>
-                        <a
-                          href={previewDocument.url}
-                          download={previewDocument.label || 'document'}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-2xs hover:bg-blue-700"
-                        >
-                          <Download className="h-3.5 w-3.5" />
-                          <span>Download</span>
-                        </a>
-                      </div>
+                      {previewDocument.url ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={previewDocument.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>Open Original</span>
+                          </a>
+                          <a
+                            href={previewDocument.url}
+                            download={previewDocument.label || 'document'}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-2xs hover:bg-blue-700"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Download</span>
+                          </a>
+                        </div>
+                      ) : null}
                     </div>
                   ) : (
                     <div className={`flex min-h-full w-full ${isImageLoading ? 'hidden' : ''}`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={resolvedImageSrc}
-                        alt={previewDocument.label}
+                        alt={previewDocument.label || 'Document preview'}
                         onLoad={() => setIsImageLoading(false)}
                         onError={handleImageError}
                         style={{
@@ -216,7 +237,7 @@ export function DocumentPreviewModal({
                 </div>
 
                 {/* Floating controls toolbar */}
-                {!imageLoadError && !isImageLoading && (
+                {!imageLoadError && !isImageLoading && Boolean(resolvedImageSrc) && (
                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-xl backdrop-blur-md">
                     <button
                       type="button"
@@ -265,25 +286,43 @@ export function DocumentPreviewModal({
               </>
             )}
             {previewDocument.mode === 'pdf' && (
-              <iframe
-                src={previewDocument.url}
-                title={previewDocument.label}
-                className="h-full w-full"
-              />
+              previewDocument.url ? (
+                <iframe
+                  src={previewDocument.url}
+                  title={previewDocument.label || 'PDF Preview'}
+                  className="h-full w-full"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center p-8 text-center text-slate-500">
+                  <p className="text-xs font-bold uppercase">No document URL provided</p>
+                </div>
+              )
             )}
             {previewDocument.mode === 'office' && (
-              <iframe
-                src={getOfficePreviewUrl(previewDocument.url)}
-                title={previewDocument.label}
-                className="h-full w-full"
-              />
+              previewDocument.url ? (
+                <iframe
+                  src={getOfficePreviewUrl(previewDocument.url)}
+                  title={previewDocument.label || 'Office Document Preview'}
+                  className="h-full w-full"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center p-8 text-center text-slate-500">
+                  <p className="text-xs font-bold uppercase">No document URL provided</p>
+                </div>
+              )
             )}
             {previewDocument.mode === 'google' && (
-              <iframe
-                src={getDocumentPreviewUrl(previewDocument.url)}
-                title={previewDocument.label}
-                className="h-full w-full"
-              />
+              previewDocument.url ? (
+                <iframe
+                  src={getDocumentPreviewUrl(previewDocument.url)}
+                  title={previewDocument.label || 'Document Preview'}
+                  className="h-full w-full"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center p-8 text-center text-slate-500">
+                  <p className="text-xs font-bold uppercase">No document URL provided</p>
+                </div>
+              )
             )}
           </div>
         </div>

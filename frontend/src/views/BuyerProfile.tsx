@@ -1755,7 +1755,7 @@ export default function BuyerProfile() {
                                 <div className="flex justify-center">
                                   <div className="relative group">
                                     <img
-                                      src={resolveMediaUrl(showcaseProfile.logoUrl) || ''}
+                                      src={resolveMediaUrl(showcaseProfile.logoUrl) || undefined}
                                       alt="Org Logo"
                                       className="h-32 w-32 object-contain rounded-xl border bg-white p-2 shadow-md"
                                     />
@@ -1822,7 +1822,7 @@ export default function BuyerProfile() {
                                 <div className="relative group rounded-xl overflow-hidden border shadow-md bg-slate-100">
                                   {!bannerLoadError ? (
                                     <img
-                                      src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
+                                      src={resolveMediaUrl(showcaseProfile.bannerUrl) || undefined}
                                       alt="Org Banner"
                                       className="w-full h-28 object-cover"
                                       onError={() => setBannerLoadError(true)}

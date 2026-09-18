@@ -273,24 +273,24 @@ export function SectionCard({
   className
 }: SectionCardProps) {
   return (
-    <div className={cn("group space-y-2.5 sm:space-y-4 rounded-[20px] sm:rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-3 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
-      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-        <div className="flex items-center gap-2.5 sm:gap-3">
+    <div className={cn("group w-full min-w-0 max-w-full space-y-2.5 sm:space-y-4 rounded-[20px] sm:rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-3 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
+      <div className="flex items-start justify-between gap-2.5 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           {Icon && (
-            <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f]/10 to-[#12335f]/5 text-[#12335f] ring-1 ring-[#12335f]/15 group-hover:scale-110 group-hover:bg-[#12335f] group-hover:text-white transition-all duration-300 shadow-sm">
+            <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f]/10 to-[#12335f]/5 text-[#12335f] ring-1 ring-[#12335f]/15 group-hover:scale-110 group-hover:bg-[#12335f] group-hover:text-white transition-all duration-300 shadow-sm">
               <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
             </span>
           )}
-          <div>
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-wide leading-none">{title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-wide leading-none truncate">{title}</h3>
             {description && (
-              <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1 leading-normal">{description}</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1 leading-normal truncate">{description}</p>
             )}
           </div>
         </div>
         {rightAction && <div className="shrink-0">{rightAction}</div>}
       </div>
-      <div>{children}</div>
+      <div className="w-full min-w-0">{children}</div>
     </div>
   );
 }

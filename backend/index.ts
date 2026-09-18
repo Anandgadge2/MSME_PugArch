@@ -80,7 +80,8 @@ import { calculateBidPricing, quotedBidTotal } from './src/utils/bidPricing.js';
 import { STRICT_VERIFICATION } from './src/config/verification.js';
 import { maskAadhaar, maskBankAccount, maskGST, maskPAN, maskSensitive, maskValue } from './src/utils/maskSensitive.js';
 import { redisKeys } from './src/constants/redis-keys.js';
-import { invalidateByPattern } from './src/services/cache.service.js';
+import { deleteCache, invalidateByPattern } from './src/services/cache.service.js';
+import { invalidateUserAuthCache } from './src/services/rbac.service.js';
 
 import { startWorkers } from './src/jobs/workers.js';
 import { prewarmMarketplaceHomeCache } from './src/routes/marketplace.routes.js';
@@ -5596,17 +5597,31 @@ app.post('/api/admin/feedback', authenticate, authorizeAdmin, async (req, res) =
   try {
     const { userId, feedback } = req.body;
     const numericId = Number(userId);
+    if (!numericId || !Number.isInteger(numericId) || numericId <= 0) {
+      return res.status(400).json({ success: false, message: 'A valid numeric user ID is required.' });
+    }
+
+    const rawFeedback = typeof feedback === 'string' ? feedback : '';
+    const cleanFeedback = sanitizePortalText(rawFeedback, 2000).trim();
+    if (!cleanFeedback || cleanFeedback.length < 3) {
+      return res.status(400).json({ success: false, message: 'Feedback message must be at least 3 characters long.' });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: numericId },
       include: { sellerProfile: true, buyerProfile: true }
     });
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    const normalizedFeedback = normalizeSpaces(feedback);
+    const normalizedFeedback = normalizeSpaces(cleanFeedback);
     await prisma.user.update({
       where: { id: numericId },
-      data: { adminFeedback: feedback }
+      data: { adminFeedback: cleanFeedback }
     });
+
+    // Invalidate user cache so GET /api/auth/me returns latest feedback immediately
+    await invalidateUserAuthCache(numericId).catch(() => undefined);
+    await deleteCache('/api/auth/me').catch(() => undefined);
 
     if (normalizedFeedback && normalizeSpaces(user.adminFeedback) !== normalizedFeedback) {
       await notificationService.notifyWithEmail(numericId, {
@@ -5618,7 +5633,7 @@ app.post('/api/admin/feedback', authenticate, authorizeAdmin, async (req, res) =
       });
     }
 
-    res.json({ success: true });
+    res.json({ success: true, adminFeedback: cleanFeedback });
   } catch (err: any) {
     handleSecureRouteError(res, err);
   }

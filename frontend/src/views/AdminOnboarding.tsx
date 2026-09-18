@@ -271,6 +271,8 @@ export default function AdminOnboarding() {
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const handleClosePreview = useCallback(() => setPreviewDocument(null), []);
   const [feedback, setFeedback] = useState("");
+  const [isSendingFeedback, setIsSendingFeedback] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
@@ -488,6 +490,8 @@ export default function AdminOnboarding() {
   const openItemForReview = async (item: any) => {
     const key = String(item._id || item.id);
     setFeedback(item.adminFeedback || "");
+    setFeedbackError(null);
+    setIsSendingFeedback(false);
 
     // If detail is already cached, render the complete record immediately.
     const cached = detailCacheRef.current.get(key);
@@ -873,11 +877,34 @@ export default function AdminOnboarding() {
   };
 
   const handleSendFeedback = async () => {
-    if (!selectedItem || !feedback.trim()) return;
+    if (!selectedItem) {
+      toast.error("Please select an application record first.");
+      return;
+    }
+    const trimmed = feedback.trim();
+    if (!trimmed) {
+      setFeedbackError("Please enter feedback before sending.");
+      toast.error("Please enter a feedback message before sending.");
+      return;
+    }
+    if (trimmed.length < 3) {
+      setFeedbackError("Feedback must be at least 3 characters long.");
+      toast.error("Feedback must be at least 3 characters long.");
+      return;
+    }
+    if (trimmed.length > 1000) {
+      setFeedbackError("Feedback cannot exceed 1000 characters.");
+      toast.error("Feedback cannot exceed 1000 characters.");
+      return;
+    }
+
+    setFeedbackError(null);
+    setIsSendingFeedback(true);
     try {
+      const numericId = Number(selectedItem._id) || Number(selectedItem.id);
       const res = await api.post(
         "/api/admin/feedback",
-        { userId: selectedItem._id, feedback },
+        { userId: numericId, feedback: trimmed },
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -885,13 +912,42 @@ export default function AdminOnboarding() {
         },
       );
       if (res.ok) {
-        toast.success("Feedback sent to stakeholder");
-        setSelectedItem({ ...selectedItem, adminFeedback: feedback });
+        toast.success("Feedback & notification sent to stakeholder successfully.");
+        setSelectedItem((prev: any) => (prev ? { ...prev, adminFeedback: trimmed } : prev));
+
+        // Keep detail cache in sync
+        const cacheKey = String(selectedItem._id || selectedItem.id);
+        const cachedDetail = detailCacheRef.current.get(cacheKey);
+        if (cachedDetail) {
+          detailCacheRef.current.set(cacheKey, {
+            ...cachedDetail,
+            adminFeedback: trimmed,
+          });
+        }
+
+        const updateListItem = (prevList: any[]) =>
+          prevList.map((item) =>
+            item._id === selectedItem._id || item.id === numericId
+              ? { ...item, adminFeedback: trimmed }
+              : item,
+          );
+
+        if (selectedItem.role === "buyer") {
+          setBuyers(updateListItem);
+        } else {
+          setSellers(updateListItem);
+        }
+        queryClient.invalidateQueries({ queryKey: ["adminOnboardingList"] });
       } else {
-        toast.error("Failed to send feedback");
+        const errBody = await res.json().catch(() => ({}));
+        const msg = errBody?.message || "Failed to send feedback";
+        setFeedbackError(msg);
+        toast.error(msg);
       }
     } catch (err) {
-      toast.error("Network error");
+      toast.error("Network error while sending feedback");
+    } finally {
+      setIsSendingFeedback(false);
     }
   };
 
@@ -2236,21 +2292,77 @@ export default function AdminOnboarding() {
 
                   {/* Admin Feedback Section */}
                   <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Admin Feedback / Query
-                    </h3>
-                    <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
+                        Admin Feedback / Query
+                      </h3>
+                      {selectedItem.adminFeedback && (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700 border border-blue-200">
+                          Active Remark
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedItem.adminFeedback && (
+                      <div className="rounded-md border border-blue-100 bg-blue-50/60 p-2.5 text-xs text-slate-700">
+                        <span className="font-bold text-[#12335f] text-[10px] uppercase block mb-0.5">Currently on file:</span>
+                        <p className="italic text-slate-700 break-words">{selectedItem.adminFeedback}</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label htmlFor="admin-feedback-textarea" className="sr-only">
+                        Admin feedback or query message
+                      </label>
                       <textarea
+                        id="admin-feedback-textarea"
                         value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
+                        onChange={(e) => {
+                          setFeedback(e.target.value);
+                          if (feedbackError) setFeedbackError(null);
+                        }}
+                        disabled={isSendingFeedback}
+                        placeholder="Type feedback or clarification query to stakeholder..."
+                        maxLength={1000}
+                        aria-invalid={!!feedbackError}
+                        aria-describedby={feedbackError ? "feedback-error-msg" : "feedback-char-count"}
+                        className={cn(
+                          "h-24 w-full resize-none rounded-md border bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2",
+                          feedbackError
+                            ? "border-red-400 focus:ring-red-400"
+                            : "border-slate-300 focus:ring-[#12335f]",
+                          isSendingFeedback && "opacity-60 cursor-not-allowed"
+                        )}
                       />
+                      <div className="flex items-center justify-between text-[10px]">
+                        {feedbackError ? (
+                          <span id="feedback-error-msg" className="font-bold text-red-600">
+                            {feedbackError}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">Min 3 characters</span>
+                        )}
+                        <span
+                          id="feedback-char-count"
+                          className={cn("font-medium", feedback.length > 900 ? "text-amber-600 font-bold" : "text-slate-400")}
+                        >
+                          {feedback.length}/1000
+                        </span>
+                      </div>
                       <Button
                         onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                        disabled={isSendingFeedback || !feedback.trim()}
+                        aria-busy={isSendingFeedback}
+                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                       >
-                        Send Message
+                        {isSendingFeedback ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending Message...
+                          </>
+                        ) : (
+                          "Send Message"
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -2819,7 +2931,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Logo</span>
                             {selectedItem.profile?.logoUrl ? (
                               <div className="border rounded-xl p-3 bg-white flex items-center justify-center h-24 w-24">
-                                <img src={resolveMediaUrl(selectedItem.profile.logoUrl) || ''} alt="Logo" className="max-h-full max-w-full object-contain" />
+                                <img src={resolveMediaUrl(selectedItem.profile.logoUrl) || undefined} alt="Logo" className="max-h-full max-w-full object-contain" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No logo uploaded</p>
@@ -2829,7 +2941,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Banner</span>
                             {selectedItem.profile?.bannerUrl ? (
                               <div className="border rounded-xl bg-slate-50 overflow-hidden h-24 w-full">
-                                <img src={resolveMediaUrl(selectedItem.profile.bannerUrl) || ''} alt="Banner" className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(selectedItem.profile.bannerUrl) || undefined} alt="Banner" className="w-full h-full object-cover" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No banner uploaded</p>

@@ -62,7 +62,7 @@ import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
-import { getResolvedOrgName } from '../../../utils/organizationUtils';
+import { getResolvedOrgName, getResolvedBuyerAddress, getResolvedBuyerAddressInfo, type ResolvedAddressInfo } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
@@ -1096,6 +1096,8 @@ export default function CreateProcurementPage() {
   const { user, token } = useAuth();
   const { orgStatus } = useOrgRole();
   const resolvedOrgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
+  const resolvedAddress = useMemo(() => getResolvedBuyerAddress(user, orgStatus), [user, orgStatus]);
+  const resolvedAddressInfo = useMemo(() => getResolvedBuyerAddressInfo(user, orgStatus), [user, orgStatus]);
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
@@ -1118,11 +1120,14 @@ export default function CreateProcurementPage() {
 
   const [draft, setDraft] = useState<Draft>(() => {
     let cachedOrg = '';
+    let cachedAddress = '';
     if (typeof window !== 'undefined') {
       try {
         const rawUser = localStorage.getItem('msme_user_cache');
         if (rawUser) {
-          cachedOrg = getResolvedOrgName(JSON.parse(rawUser));
+          const parsedUser = JSON.parse(rawUser);
+          cachedOrg = getResolvedOrgName(parsedUser);
+          cachedAddress = getResolvedBuyerAddress(parsedUser);
         }
       } catch {
         // ignore
@@ -1137,6 +1142,9 @@ export default function CreateProcurementPage() {
             }
             if (saved.internal && !saved.internal.orgName && cachedOrg) {
               saved.internal.orgName = cachedOrg;
+            }
+            if (saved.basics && !saved.basics.deliveryLocation && cachedAddress) {
+              saved.basics.deliveryLocation = cachedAddress;
             }
             if (saved.schedule) {
               saved.schedule = {
@@ -1166,6 +1174,9 @@ export default function CreateProcurementPage() {
     const def = defaultDraft(initialMethod, initialBuyerType);
     if (cachedOrg) {
       def.internal.orgName = cachedOrg;
+    }
+    if (cachedAddress) {
+      def.basics.deliveryLocation = cachedAddress;
     }
     return def;
   });
@@ -1280,7 +1291,7 @@ export default function CreateProcurementPage() {
     };
   }, [showItemDrawer]);
 
-  // Auto-fill and reactively keep buyer details & organization in sync from authenticated profile
+  // Auto-fill and reactively keep buyer details, organization, and delivery address in sync from authenticated profile
   useEffect(() => {
     if (!user && !orgStatus) return;
     const u = user as any;
@@ -1289,11 +1300,17 @@ export default function CreateProcurementPage() {
     const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
     const email = u?.buyerProfile?.email || u?.email || '';
     const mobile = u?.buyerProfile?.mobile || u?.mobile || '';
+    const addr = resolvedAddress;
 
     setDraft(current => {
       let changed = false;
       const nextInternal = { ...current.internal };
+      const nextBasics = { ...current.basics };
 
+      if (!nextBasics.deliveryLocation?.trim() && addr) {
+        nextBasics.deliveryLocation = addr;
+        changed = true;
+      }
       if (!nextInternal.orgName?.trim() && org) {
         nextInternal.orgName = org;
         changed = true;
@@ -1317,7 +1334,7 @@ export default function CreateProcurementPage() {
 
       if (!changed) return current;
 
-      const nextDraft = { ...current, internal: nextInternal };
+      const nextDraft = { ...current, basics: nextBasics, internal: nextInternal };
       if (!draftIdParam && typeof window !== 'undefined') {
         try {
           localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
@@ -1328,7 +1345,7 @@ export default function CreateProcurementPage() {
       return nextDraft;
     });
     setHasAutofilled(true);
-  }, [user, orgStatus, resolvedOrgName, draftIdParam]);
+  }, [user, orgStatus, resolvedOrgName, resolvedAddress, draftIdParam]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
@@ -1389,7 +1406,7 @@ export default function CreateProcurementPage() {
             ...(payload.basics || {}),
             estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
             discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
-            deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || ''
+            deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || resolvedAddress || ''
           },
           internal: {
             ...base.internal,
@@ -1607,13 +1624,7 @@ export default function CreateProcurementPage() {
         severity: 'warning'
       });
     }
-    if (!d.terms.penaltyClause || d.terms.penaltyClause.trim().length < 5) {
-      list.push({
-        label: 'Late Delivery Penalty Clause is recommended for contract compliance',
-        ok: false,
-        severity: 'warning'
-      });
-    }
+   
     if (d.basics.priority === 'Emergency') {
       const hasEmergencyDoc = d.requiredDocs.some(doc => doc.name.toLowerCase().includes('emergency') || doc.name.toLowerCase().includes('justification'));
       list.push({
@@ -2331,6 +2342,8 @@ export default function CreateProcurementPage() {
                 <BasicsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  resolvedAddress={resolvedAddress}
+                  resolvedAddressInfo={resolvedAddressInfo}
                 />
               </SectionCard>
             )}
@@ -2497,10 +2510,14 @@ function SelectionsStepForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function BasicsStepForm({
   draft,
-  updateDraft
+  updateDraft,
+  resolvedAddress,
+  resolvedAddressInfo
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  resolvedAddress?: string;
+  resolvedAddressInfo?: ResolvedAddressInfo;
 }) {
   // Delivery address dropdown and modal states
   const [deliveryAddressesList, setDeliveryAddressesList] = useState<DeliveryAddressDto[]>([]);
@@ -2579,10 +2596,36 @@ function BasicsStepForm({
     });
     fetchDeliveryAddresses()
       .then(res => {
-        if (active) setDeliveryAddressesList(res || []);
+        if (active) {
+          const list = res || [];
+          setDeliveryAddressesList(list);
+
+          // If draft delivery location is still empty, auto-select default saved address or resolved profile/GST address
+          if (!draft.basics.deliveryLocation?.trim()) {
+            const def = list.find(a => a.isDefault) || list[0];
+            if (def) {
+              const fullAddr = formatDeliveryAddressString(def);
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, deliveryLocation: fullAddr }
+              }));
+            } else if (resolvedAddress) {
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, deliveryLocation: resolvedAddress }
+              }));
+            }
+          }
+        }
       })
       .catch(err => {
         console.warn('Failed to load saved addresses:', err);
+        if (active && !draft.basics.deliveryLocation?.trim() && resolvedAddress) {
+          updateDraft(c => ({
+            ...c,
+            basics: { ...c.basics, deliveryLocation: resolvedAddress }
+          }));
+        }
       })
       .finally(() => {
         if (active) setLoadingAddresses(false);
@@ -2678,9 +2721,36 @@ function BasicsStepForm({
     }
   };
 
+  const openNewAddressModal = () => {
+    if (resolvedAddressInfo && resolvedAddressInfo.source !== 'none') {
+      setAddressLabel(prev => prev || 'Office Delivery Address');
+      setOrganizationName(prev => prev || draft.internal.orgName || '');
+      setContactPersonName(prev => prev || draft.internal.contactPerson || '');
+      setMobileNumber(prev => prev || draft.internal.mobile || '');
+      setEmail(prev => prev || draft.internal.email || '');
+      setAddressLine1(prev => prev || resolvedAddressInfo.street || '');
+      setCity(prev => prev || resolvedAddressInfo.city || '');
+      setDistrict(prev => prev || resolvedAddressInfo.district || '');
+      setState(prev => prev || resolvedAddressInfo.state || '');
+      setPincode(prev => prev || resolvedAddressInfo.pincode || '');
+    }
+    setIsAddressModalOpen(true);
+  };
+
+  const selectedAddressId = useMemo(() => {
+    if (!draft.basics.deliveryLocation?.trim()) return '';
+    const currentLoc = draft.basics.deliveryLocation.trim().toLowerCase();
+    const match = deliveryAddressesList.find(a => {
+      const formatted = formatDeliveryAddressString(a).toLowerCase();
+      return formatted === currentLoc ||
+        Boolean(a.addressLine1 && currentLoc.includes(a.addressLine1.trim().toLowerCase()));
+    });
+    return match ? String(match.id) : '';
+  }, [deliveryAddressesList, draft.basics.deliveryLocation]);
+
   return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+    <div className="space-y-4 sm:space-y-6 w-full min-w-0">
+      <div className="grid gap-4 sm:grid-cols-2 min-w-0">
 
         {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REVERSE_AUCTION'].includes(draft.type) && (
           <Field
@@ -2962,22 +3032,33 @@ function BasicsStepForm({
           />
         </Field>
 
-        <div className="sm:col-span-2 space-y-4">
-          <div>
+        <div className="sm:col-span-2 space-y-4 w-full min-w-0">
+          <div className="w-full min-w-0">
             {deliveryAddressesList.length > 0 ? (
-              <div className="mb-2">
+              <div className="mb-2 w-full min-w-0">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 block">
                   Select From Saved Addresses
                 </label>
-                <div className="flex gap-2 items-center">
-                  <div className="flex-1">
+                <div className="flex gap-2 items-center w-full min-w-0">
+                  <div className="flex-1 min-w-0">
                     <SearchableSelect
                       placeholder={loadingAddresses ? "Loading addresses..." : "Search and select a saved address..."}
-                      options={deliveryAddressesList.map(addr => ({
-                        value: String(addr.id),
-                        label: `${addr.addressLabel}: ${addr.addressLine1}, ${addr.city} (${addr.contactPersonName})`
-                      }))}
-                      value=""
+                      options={deliveryAddressesList.map(addr => {
+                        const labelParts = [addr.addressLabel || 'Address'];
+                        if (addr.city || addr.district) {
+                          labelParts.push(addr.city || addr.district);
+                        }
+                        const line = addr.addressLine1
+                          ? (addr.addressLine1.length > 45 ? `${addr.addressLine1.slice(0, 42)}...` : addr.addressLine1)
+                          : '';
+                        if (line) labelParts.push(line);
+                        const contact = addr.contactPersonName ? `(${addr.contactPersonName})` : '';
+                        return {
+                          value: String(addr.id),
+                          label: `${labelParts.join(' — ')}${contact ? ` ${contact}` : ''}`
+                        };
+                      })}
+                      value={selectedAddressId}
                       onChange={(val) => {
                         if (!val) return;
                         const selected = deliveryAddressesList.find(a => String(a.id) === String(val));
@@ -2994,8 +3075,8 @@ function BasicsStepForm({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsAddressModalOpen(true)}
-                    className="h-10 text-xs font-bold shrink-0 border-slate-300 hover:bg-slate-50 text-slate-700"
+                    onClick={openNewAddressModal}
+                    className="h-10 text-xs font-bold shrink-0 whitespace-nowrap border-slate-300 hover:bg-slate-50 text-slate-700"
                   >
                     + Add Address
                   </Button>
@@ -3003,11 +3084,13 @@ function BasicsStepForm({
               </div>
             ) : (
               <div className="mb-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-semibold">No saved addresses found.</span>
+                <span className="text-xs text-slate-500 font-semibold">
+                  {loadingAddresses ? "Checking saved addresses..." : "No saved addresses found."}
+                </span>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsAddressModalOpen(true)}
+                  onClick={openNewAddressModal}
                   className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-700"
                 >
                   + Add Address
@@ -3016,15 +3099,44 @@ function BasicsStepForm({
             )}
           </div>
 
-          <Field label="Delivery location" required>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label htmlFor="basics-delivery-location" className="text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider text-slate-500">
+                Delivery location <span className="text-rose-600">*</span>
+              </label>
+              {resolvedAddress && draft.basics.deliveryLocation?.trim().toLowerCase() !== resolvedAddress.trim().toLowerCase() && (
+                <button
+                  type="button"
+                  onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, deliveryLocation: resolvedAddress } }))}
+                  className="text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition inline-flex items-center gap-1"
+                  title="Auto-fill with authentic address from verified onboarding / GST"
+                >
+                  Auto-fill from profile / GST
+                </button>
+              )}
+            </div>
             <textarea
+              id="basics-delivery-location"
               value={draft.basics.deliveryLocation}
               onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, deliveryLocation: e.target.value } }))}
               rows={2}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
               placeholder="Warehouse yard, Central office..."
+              aria-required="true"
             />
-          </Field>
+            {Boolean(
+              draft.basics.deliveryLocation?.trim() &&
+              (
+                (resolvedAddress && draft.basics.deliveryLocation.trim().toLowerCase() === resolvedAddress.trim().toLowerCase()) ||
+                deliveryAddressesList.some(a => formatDeliveryAddressString(a).toLowerCase() === draft.basics.deliveryLocation.trim().toLowerCase())
+              )
+            ) && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                Auto-fetched from {resolvedAddressInfo?.source === 'gst' ? 'verified GST registration' : 'verified onboarding profile'}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -3034,9 +3146,31 @@ function BasicsStepForm({
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200" onWheel={e => e.stopPropagation()}>
           <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-              <h2 className="text-lg font-bold text-[#12335f]">
-                Add New Delivery Address
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold text-[#12335f]">
+                  Add New Delivery Address
+                </h2>
+                {resolvedAddressInfo && resolvedAddressInfo.source !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddressLabel('Registered Head Office');
+                      setOrganizationName(draft.internal.orgName || '');
+                      setContactPersonName(draft.internal.contactPerson || '');
+                      setMobileNumber(draft.internal.mobile || '');
+                      setEmail(draft.internal.email || '');
+                      setAddressLine1(resolvedAddressInfo.street || '');
+                      setCity(resolvedAddressInfo.city || '');
+                      setDistrict(resolvedAddressInfo.district || '');
+                      setState(resolvedAddressInfo.state || '');
+                      setPincode(resolvedAddressInfo.pincode || '');
+                    }}
+                    className="text-xs text-[#12335f] hover:underline font-bold mt-1 inline-flex items-center gap-1"
+                  >
+                    Auto-fill from verified onboarding / GST details
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
@@ -7329,20 +7463,9 @@ function CommercialTermsForm({
               <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Contract Penalty Clause</h3>
             </div>
 
-            {/* Document cost fee commented out completely as requested */}
-            {/*
-            <Field label="Document cost fee (INR)">
-              <input
-                type="number"
-                value={draft.terms.documentFee || ''}
-                onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-                className={inputClass}
-                placeholder="0"
-              />
-            </Field>
-            */}
+          
 
-            <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
+            <Field label="Late Delivery (LD) Penalty Clause (min 5 char)" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
               <input
                 value={draft.terms.penaltyClause}
                 onChange={e => updateTerms('penaltyClause', e.target.value)}
@@ -7610,14 +7733,7 @@ function PreviewPublishForm({
         )}
       </div>
 
-      {/* Approval Sourcing Flow Path commented out as requested */}
-      {/* <div className="space-y-3">
-        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Approval Sourcing Flow Path</h4>
-        <ApprovalTimeline
-          stages={approvalHandoff}
-          currentIdx={0}
-        />
-      </div> */}
+   
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Approval Workflow">

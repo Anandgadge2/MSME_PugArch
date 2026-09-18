@@ -298,7 +298,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
         {profile.bannerUrl ? (
           <div className="w-full relative min-h-[220px] sm:min-h-[280px] md:min-h-[340px] lg:min-h-[400px] flex items-center justify-center bg-slate-900">
             <img
-              src={resolveMediaUrl(profile.bannerUrl) || ''}
+              src={resolveMediaUrl(profile.bannerUrl) || undefined}
               alt={`${profile.organizationName} Banner`}
               className="w-full h-full object-cover sm:object-contain md:object-cover max-h-[440px] transition-transform duration-700"
             />
@@ -377,7 +377,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                 <div className="w-full flex items-center justify-center py-4 mb-3">
                   {profile.logoUrl ? (
                     <img
-                      src={resolveMediaUrl(profile.logoUrl) || ''}
+                      src={resolveMediaUrl(profile.logoUrl) || undefined}
                       alt={`${profile.organizationName} Logo`}
                       className="max-h-36 sm:max-h-40 w-auto max-w-[260px] object-contain transition-transform duration-300 hover:scale-105"
                     />
@@ -420,26 +420,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
                     </div>
                   )}
 
-                  {profile.registrationNumber && profile.registrationNumber !== 'N/A' && (
-                    <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100/90 flex items-start justify-between gap-2">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-purple-100/80 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
-                          <Hash className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Registration (CIN)</span>
-                          <span className="font-extrabold text-slate-900 font-mono text-xs break-all">{profile.registrationNumber}</span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => copyToClipboard(profile.registrationNumber, 'CIN')}
-                        className="text-slate-400 hover:text-purple-700 p-1 rounded-lg hover:bg-purple-50 transition-colors"
-                        title="Copy CIN"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
+                  
 
                   {profile.address && profile.address !== 'N/A' && (
                     <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100/90 flex items-start gap-3">

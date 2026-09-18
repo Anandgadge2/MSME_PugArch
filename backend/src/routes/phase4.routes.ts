@@ -9465,10 +9465,9 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           select: {
             id: true,
             role: true,
-            businessType: true,
-            organizationType: true,
             registrationDetails: true,
-            profile: true,
+            sellerProfile: { select: { organizationType: true } },
+            shgProfile: { select: { id: true } },
             organization: {
               select: {
                 organizationType: true
@@ -9542,6 +9541,30 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
               });
               topBuyerName = buyerUser?.organization?.organizationName || buyerUser?.name || 'Unknown';
             }
+            if (!topBuyerName || topBuyerName === 'N/A') {
+              // Fallback to most active buyer with requirements or approved buyer
+              const topReqBuyer = await db.buyerRequirement.groupBy({
+                by: ['buyerId'],
+                _count: { id: true },
+                orderBy: { _count: { id: 'desc' } },
+                take: 1
+              }).catch(() => []);
+              if (topReqBuyer.length > 0 && topReqBuyer[0].buyerId) {
+                const bUser = await db.user.findUnique({
+                  where: { id: topReqBuyer[0].buyerId },
+                  include: { organization: true }
+                });
+                topBuyerName = bUser?.organization?.organizationName || bUser?.name || 'N/A';
+              } else {
+                const firstBuyer = await db.user.findFirst({
+                  where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' },
+                  include: { organization: true }
+                });
+                if (firstBuyer) {
+                  topBuyerName = firstBuyer.organization?.organizationName || firstBuyer.name || 'N/A';
+                }
+              }
+            }
           } catch (e) {
             console.error('Failed to fetch top buyer', e);
           }
@@ -9564,7 +9587,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           return isShgBusinessType(user?.registrationDetails?.businessType)
             || isShgBusinessType(user?.registrationDetails?.stakeholderCategory)
             || isShgBusinessType(user?.registrationDetails?.shgType)
-            || isShgBusinessType(user?.profile?.organizationType)
+            || isShgBusinessType(user?.sellerProfile?.organizationType)
             || isShgBusinessType(user?.organization?.organizationType)
             || isShgBusinessType(user?.organizationType)
             || isShgBusinessType(user?.businessType);
@@ -11240,38 +11263,36 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
         const orgName = regDetails.businessName || regDetails.organisation || gstDetails.legalName || gstDetails.tradeName || user.name || 'Default Organisation';
         
         let orgType = 'MSME';
-        if (user.role === 'buyer') {
+        const typeStr = String(regDetails.businessType || regDetails.organisationType || '').trim().toUpperCase();
+        if (typeStr.includes('PROPRIETORSHIP')) {
+          orgType = 'PROPRIETORSHIP';
+        } else if (typeStr.includes('PARTNERSHIP')) {
+          orgType = 'PARTNERSHIP';
+        } else if (typeStr.includes('LLP')) {
+          orgType = 'LLP';
+        } else if (typeStr.includes('STARTUP')) {
+          orgType = 'STARTUP';
+        } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+          orgType = 'PUBLIC_LIMITED';
+        } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+          const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+          orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
+        } else if (typeStr.includes('SHG')) {
+          orgType = 'SHG';
+        } else if (typeStr.includes('NGO')) {
+          orgType = 'NGO';
+        } else if (typeStr.includes('TRUST')) {
+          orgType = 'TRUST';
+        } else if (typeStr.includes('SOCIETY')) {
+          orgType = 'SOCIETY';
+        } else if (typeStr.includes('GOVERNMENT') || typeStr.includes('GOVT')) {
+          orgType = 'GOVERNMENT';
+        } else if (typeStr.includes('PSU')) {
+          orgType = 'PSU';
+        } else if (user.role === 'buyer') {
           orgType = 'GOVERNMENT';
         } else {
-          const typeStr = String(regDetails.businessType || regDetails.organisationType || '').trim().toUpperCase();
-          if (typeStr.includes('PROPRIETORSHIP')) {
-            orgType = 'PROPRIETORSHIP';
-          } else if (typeStr.includes('PARTNERSHIP')) {
-            orgType = 'PARTNERSHIP';
-          } else if (typeStr.includes('LLP')) {
-            orgType = 'LLP';
-          } else if (typeStr.includes('STARTUP')) {
-            orgType = 'STARTUP';
-          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
-            orgType = 'PUBLIC_LIMITED';
-          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
-            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
-          } else if (typeStr.includes('SHG')) {
-            orgType = 'SHG';
-          } else if (typeStr.includes('NGO')) {
-            orgType = 'NGO';
-          } else if (typeStr.includes('TRUST')) {
-            orgType = 'TRUST';
-          } else if (typeStr.includes('SOCIETY')) {
-            orgType = 'SOCIETY';
-          } else if (typeStr.includes('GOVERNMENT')) {
-            orgType = 'GOVERNMENT';
-          } else if (typeStr.includes('PSU')) {
-            orgType = 'PSU';
-          } else {
-            orgType = 'MSME';
-          }
+          orgType = 'MSME';
         }
 
         const defaultCompanyId = await getDefaultCompanyId();
