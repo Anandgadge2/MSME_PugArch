@@ -184,9 +184,15 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     retry: 1,
   });
 
-  const hasData = Boolean(bidData || reqData || contractData || initialData);
-  const isLoading = !hasData && (bidLoading || reqLoading || contractLoading);
-  const error = !hasData && (bidError || reqError || contractError) ? (bidError || reqError || contractError) : null;
+  const hasValidInitialData = Boolean(
+    initialData &&
+    typeof initialData === 'object' &&
+    (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title)
+  );
+  const isQueryInProgress = bidLoading || reqLoading || contractLoading;
+  const hasData = Boolean(bidData || reqData || contractData || hasValidInitialData);
+  const isLoading = !hasData && isQueryInProgress;
+  const error = !hasData && !isQueryInProgress && (bidError || reqError || contractError) ? (bidError || reqError || contractError) : null;
 
   const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
 

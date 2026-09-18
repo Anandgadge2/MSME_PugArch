@@ -1978,16 +1978,42 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
       const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
       const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
 
+      const isAwarded = Boolean(
+        (auction.winnerSellerId && (p.sellerUserId === auction.winnerSellerId || p.sellerOrgId === auction.winnerSellerId)) ||
+        p.status === 'ACCEPTED' ||
+        p.status === 'AWARDED'
+      );
+
       return {
         ...p,
         sellerOrgName: displayName,
-        isCurrentViewer: Boolean(isMe)
+        isCurrentViewer: Boolean(isMe),
+        isAwarded
       };
+    });
+
+    // Also fetch associated Purchase Order if generated
+    const purchaseOrder = await db.purchaseOrder.findFirst({
+      where: {
+        sourceType: 'auction',
+        sourceId: id
+      },
+      select: {
+        id: true,
+        poNumber: true,
+        status: true,
+        totalValue: true,
+        currency: true,
+        createdAt: true,
+        metadata: true
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
     return apiResponse.success(res, {
       auction: maskSensitive(auction),
       ranking: maskSensitive(ranking),
+      purchaseOrder: purchaseOrder ? maskSensitive(purchaseOrder) : null,
       canRecommendAward: isManager,
       isManager,
       myParticipant: maskSensitive(myParticipant)
@@ -2008,16 +2034,48 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
     const winner = payload.participantId
       ? await db.auctionParticipant.findFirst({ where: { id: payload.participantId, auctionId: id } })
       : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
+    
+    if (!winner) {
+      throw new ApiError(400, 'No qualifying participant found for award recommendation', 'NO_WINNER_FOUND');
+    }
+
+    let sellerUserId = winner.sellerUserId;
+    if (!sellerUserId && winner.sellerOrgId) {
+      const sellerUser = await db.user.findFirst({
+        where: { organizationId: winner.sellerOrgId }
+      });
+      if (sellerUser) sellerUserId = sellerUser.id;
+    }
+    if (!sellerUserId) {
+      sellerUserId = winner.sellerOrgId || 1;
+    }
+
+    const isNonL1 = (winner.currentRank || 1) !== 1;
     const updated = await db.auction.update({
       where: { id },
       data: {
         status: 'AWARD_RECOMMENDED',
         statusEnum: 'AWARD_RECOMMENDED',
-        winnerSellerId: winner?.sellerUserId || null,
+        winnerSellerId: sellerUserId,
+        overrideReason: isNonL1 ? (payload.remarks || 'Discretionary award recommendation') : null,
         remarks: payload.remarks || auction.remarks
       }
     });
-    await writeAuctionEvent(req, id, 'award_recommended', 'Award recommendation generated', { participantId: winner?.id, sellerOrgId: winner?.sellerOrgId });
+
+    await db.auctionParticipant.update({
+      where: { id: winner.id },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
+    }).catch(() => null);
+
+    await writeAuctionEvent(req, id, 'award_recommended', `Award recommendation generated for participant #${winner.id} (Rank L${winner.currentRank || 1})`, {
+      participantId: winner.id,
+      sellerOrgId: winner.sellerOrgId,
+      isNonL1,
+      overrideReason: isNonL1 ? payload.remarks : null
+    });
     return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award recommendation generated');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to recommend award', error.code || 'REVERSE_AUCTION_AWARD_ERROR');
@@ -2044,7 +2102,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
 
     if (!winner) {
-      throw new ApiError(400, 'No qualifying L1 winner found for this auction', 'NO_WINNER_FOUND');
+      throw new ApiError(400, 'No qualifying participant found for this auction', 'NO_WINNER_FOUND');
     }
 
     const winningAmount = winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice;
@@ -2065,6 +2123,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     if (!buyerId) throw new ApiError(400, 'Buyer identity not found', 'BUYER_NOT_FOUND');
 
     const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const isNonL1 = (winner.currentRank || 1) !== 1;
 
     // Create PurchaseOrder record
     const po = await db.purchaseOrder.create({
@@ -2085,7 +2144,10 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
           winningBid: Number(winningAmount),
           winnerParticipantId: winner.id,
           winnerSellerOrgId: winner.sellerOrgId,
-          remarks: payload.remarks || 'Accepted L1 quote from Reverse Auction and generated Purchase Order.'
+          isNonL1Award: isNonL1,
+          rankAtAward: winner.currentRank || 1,
+          overrideReason: isNonL1 ? payload.remarks : null,
+          remarks: payload.remarks || (isNonL1 ? 'Accepted discretionary quote from Reverse Auction and generated Purchase Order.' : 'Accepted L1 quote from Reverse Auction and generated Purchase Order.')
         },
         items: {
           create: [
@@ -2115,13 +2177,23 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       where: { id },
       data: {
         status: 'COMPLETED',
-        statusEnum: 'AWARD_RECOMMENDED',
+        statusEnum: 'AWARDED',
         finalizedAt: new Date(),
         actualClosedAt: auction.actualClosedAt || new Date(),
         winnerSellerId: sellerUserId,
+        overrideReason: isNonL1 ? (payload.remarks || 'Discretionary award per procurement policy') : null,
         remarks: payload.remarks || `Purchase Order ${po.poNumber} generated.`
       }
     });
+
+    // Mark winning participant as ACCEPTED
+    await db.auctionParticipant.update({
+      where: { id: winner.id },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
+    }).catch(() => null);
 
     // If linked to a procurementBid, mark it as awarded
     if (auction.linkedBidId) {
@@ -2135,11 +2207,13 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     }
 
     // Write audit event
-    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller`, {
+    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller (Rank L${winner.currentRank || 1})`, {
       poNumber: po.poNumber,
       poId: po.id,
       winningAmount: Number(winningAmount),
-      winnerSellerId: sellerUserId
+      winnerSellerId: sellerUserId,
+      isNonL1,
+      overrideReason: isNonL1 ? payload.remarks : null
     });
 
     return apiResponse.created(res, {

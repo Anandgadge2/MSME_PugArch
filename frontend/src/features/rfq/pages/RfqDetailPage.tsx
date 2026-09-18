@@ -206,7 +206,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       }
     }
   } else if (initialData) {
-    if (initialData.sourceModel === 'REQUIREMENT' || (!initialData.bidNumber && initialData.requirementId)) {
+    if ((initialData.sourceModel === 'REQUIREMENT' && !initialData.bidNumber) || (!initialData.bidNumber && initialData.requirementId)) {
       requirementId = String(initialData.requirementId || initialData.id || '');
     } else {
       requestId = String(initialData.bidNumber || initialData.id || '');
@@ -339,8 +339,14 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 0, gcTime: 0,
   });
 
-  const hasData = Boolean(bidData || reqData || initialData);
-  const isLoading = !hasData && ((!!requestId && bidLoading) || (!!requirementId && reqLoading));
+  const hasValidInitialData = Boolean(
+    initialData &&
+    typeof initialData === 'object' &&
+    (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title)
+  );
+  const isQueryInProgress = (Boolean(requestId) && bidLoading) || (Boolean(requirementId) && reqLoading);
+  const hasData = Boolean(bidData || reqData || (hasValidInitialData && (rawBid || reqObj)));
+  const isLoading = (!hasData && isQueryInProgress) || (!rawBid && !reqObj && isQueryInProgress);
 
   /* ── Buyer Seller Responses Query ── */
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
@@ -1125,7 +1131,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   /* ══════════════════════════════════════════════════════════════════════════
      LOADING SKELETON
      ══════════════════════════════════════════════════════════════════════════ */
-  if (isLoading) {
+  if (isLoading || (isQueryInProgress && !rawBid && !reqObj)) {
     return <ProcurementDetailSkeleton procurementTypeLabel={derivedProcurementLabel} />;
   }
 
@@ -1142,8 +1148,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         <p className="text-xs text-slate-500 leading-relaxed">
           The requested RFQ opportunity could not be loaded or may no longer be available.
         </p>
-        <Button onClick={() => router.push('/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
-          Return to Opportunities
+        <Button onClick={() => router.push(user?.role === 'buyer' ? '/procurements' : '/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
+          {user?.role === 'buyer' ? 'Return to Procurements' : 'Return to Opportunities'}
         </Button>
       </div>
     </div>

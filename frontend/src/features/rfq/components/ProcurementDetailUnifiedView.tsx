@@ -6513,34 +6513,6 @@ export function ProcurementDetailUnifiedView(
       schedule.preBidMeetingDate !== "N/A"),
   );
 
-  const msmePrefRaw =
-    vendors.msmePreference !== undefined
-      ? vendors.msmePreference
-      : payload.msmePreference;
-  const msmePrefVal =
-    msmePrefRaw !== undefined
-      ? msmePrefRaw === false ||
-        msmePrefRaw === "No" ||
-        msmePrefRaw === "false" ||
-        msmePrefRaw === 0
-        ? "No"
-        : "Yes"
-      : "Yes";
-
-  const localPrefRaw =
-    vendors.localVendorPreference !== undefined
-      ? vendors.localVendorPreference
-      : payload.localVendorPreference;
-  const localPrefVal =
-    localPrefRaw !== undefined
-      ? localPrefRaw === true ||
-        localPrefRaw === "Yes" ||
-        localPrefRaw === "true" ||
-        localPrefRaw === 1
-        ? "Yes"
-        : "No"
-      : "No";
-
   const rawFreightVal = firstPresent(
     props.freightIncluded,
     terms.freightIncluded,
@@ -6554,278 +6526,6 @@ export function ProcurementDetailUnifiedView(
     rawFreightVal === "Yes" ||
     rawFreightVal === 1 ||
     rawFreightVal === "1";
-
-  const resolveRuleBool = (val: any, fallback = "Yes") => {
-    if (
-      val === true ||
-      val === "true" ||
-      val === "Yes" ||
-      val === "yes" ||
-      val === 1
-    )
-      return "Yes";
-    if (
-      val === false ||
-      val === "false" ||
-      val === "No" ||
-      val === "no" ||
-      val === 0
-    )
-      return "No";
-    if (val !== undefined && val !== null && String(val).trim().length > 0)
-      return String(val).trim();
-    return fallback;
-  };
-
-  const biddingRules = useMemo(() => {
-    // 1. Reverse Auction Rules (Authentic dynamic parameters from auction or payload)
-    if (isReverseAuctionType || props.linkedAuction) {
-      const minDec = props.linkedAuction?.minDecrementAmount
-        ? formatMoney(props.linkedAuction.minDecrementAmount)
-        : props.linkedAuction?.minDecrementPercent
-        ? `${props.linkedAuction.minDecrementPercent}%`
-        : payload.minDecrementAmount
-        ? formatMoney(payload.minDecrementAmount)
-        : payload.minDecrementPercent
-        ? `${payload.minDecrementPercent}%`
-        : "₹500";
-
-      const visibilityMode = String(
-        props.linkedAuction?.rankVisibility ||
-          payload.rankVisibility ||
-          "SHOW_RANK_ONLY",
-      ).toUpperCase();
-
-      let visibilityLabel = "Seller Rank Only (L1 Price Hidden)";
-      if (
-        visibilityMode.includes("PRICE_AND_RANK") ||
-        visibilityMode.includes("BOTH")
-      ) {
-        visibilityLabel = "L1 Price & Seller Rank Visible";
-      } else if (visibilityMode.includes("LOWEST_PRICE")) {
-        visibilityLabel = "Lowest Price Visible";
-      } else if (
-        visibilityMode.includes("HIDDEN") ||
-        visibilityMode.includes("ANONYMOUS")
-      ) {
-        visibilityLabel = "Anonymous / Blind Bidding";
-      }
-
-      const autoExt =
-        props.linkedAuction?.autoExtensionMinutes ||
-        props.linkedAuction?.bufferMinutes ||
-        payload.autoExtensionMinutes;
-      const autoExtLabel = autoExt
-        ? `+${autoExt} Mins on late bid`
-        : "Fixed Window (No Extension)";
-
-      const minBiddersVal =
-        props.linkedAuction?.minimumQualifiedBidders ||
-        payload.minimumQualifiedBidders ||
-        rules.minimumBidders ||
-        schedule.minimumBidders;
-
-      return [
-        {
-          label: "Bidding Mechanism",
-          value: "Dynamic English Reverse Auction",
-          subtext: "Real-time downward price discovery",
-        },
-        {
-          label: "Minimum Bid Decrement",
-          value: minDec,
-          subtext:
-            "Each subsequent bid must reduce current lowest by this step",
-        },
-        {
-          label: "Rank & Price Visibility",
-          value: visibilityLabel,
-          subtext: "Visible on dynamic console during bidding",
-        },
-        {
-          label: "Auto-Extension (Sniping Protection)",
-          value: autoExtLabel,
-          subtext: autoExt
-            ? "Window automatically extends if bid placed near deadline"
-            : "Window closes strictly at scheduled time",
-        },
-        {
-          label: "Bidding Policy",
-          value: "Real-time Bids Irrevocable",
-          subtext: "All live decrement bids are legally binding",
-        },
-        {
-          label: "Clarification Allowed",
-          value: isClarificationAllowed ? "Yes" : "No",
-        },
-        {
-          label: "Freight Included",
-          value: isFreightIncluded ? "Yes" : "No",
-          icon: Truck,
-          subtext: isFreightIncluded
-            ? "Door delivery in quote"
-            : "Freight charged extra",
-        },
-        ...(isBuyerSide && minBiddersVal
-          ? [
-              {
-                label: "Minimum Qualified Bidders",
-                value: String(minBiddersVal),
-                subtext: "Required participants to proceed with auction",
-              },
-            ]
-          : []),
-        { label: "MSME Preference", value: msmePrefVal },
-      ];
-    }
-
-    // 2. Standard Procurement Bidding Rules
-    if (isBuyerSide) {
-      return [
-        {
-          label: "Auto Close",
-          value: resolveRuleBool(
-            firstPresent(rules.autoClose, schedule.autoClose),
-            "No",
-          ),
-        },
-        {
-          label: "Allow Revision",
-          value: resolveRuleBool(
-            firstPresent(rules.allowRevision, schedule.allowRevision),
-            "No",
-          ),
-        },
-        {
-          label: "Show Seller Rank",
-          value: resolveRuleBool(
-            firstPresent(rules.showSellerRank, schedule.showSellerRank),
-            "No",
-          ),
-        },
-        {
-          label: "Allow Withdrawal",
-          value: resolveRuleBool(
-            firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal),
-            "No",
-          ),
-        },
-        {
-          label: "Show Lowest Price",
-          value: resolveRuleBool(
-            firstPresent(rules.showLowestPrice, schedule.showLowestPrice),
-            "No",
-          ),
-        },
-        {
-          label: "Clarification Allowed",
-          value: isClarificationAllowed ? "Yes" : "No",
-        },
-        {
-          label: "Freight Included",
-          value: isFreightIncluded ? "Yes" : "No",
-          icon: Truck,
-          subtext: isFreightIncluded
-            ? "Door delivery in quote"
-            : "Freight charged extra",
-        },
-        {
-          label: "Minimum Bidders",
-          value: String(
-            firstPresent(rules.minimumBidders, schedule.minimumBidders, "3"),
-          ),
-        },
-        { label: "Pre-Bid Meeting", value: isPreBidConfigured ? "Yes" : "No" },
-        { label: "MSME Preference", value: msmePrefVal },
-        { label: "Exclude Blacklisted", value: "Yes" },
-        { label: "Local Vendor Preference", value: localPrefVal },
-      ];
-    }
-
-    // Non-buyer side (Sellers, Public, SHGs, Bidders):
-    // Exclude internal buyer controls: Exclude Blacklisted, Minimum Bidders, Auto Close, and unconfigured Pre-Bid Meeting
-    const list: Array<{
-      label: string;
-      value: string;
-      icon?: IconComponent;
-      subtext?: string;
-    }> = [
-      {
-        label: "Allow Revision",
-        value: resolveRuleBool(
-          firstPresent(rules.allowRevision, schedule.allowRevision),
-          "No",
-        ),
-      },
-      {
-        label: "Allow Withdrawal",
-        value: resolveRuleBool(
-          firstPresent(rules.allowWithdrawal, schedule.allowWithdrawal),
-          "No",
-        ),
-      },
-      {
-        label: "Clarification Allowed",
-        value: isClarificationAllowed ? "Yes" : "No",
-      },
-      {
-        label: "Freight Included",
-        value: isFreightIncluded ? "Yes" : "No",
-        icon: Truck,
-        subtext: isFreightIncluded
-          ? "Door delivery in quote"
-          : "Freight charged extra",
-      },
-      { label: "MSME Preference", value: msmePrefVal },
-    ];
-
-    const showRankVal = resolveRuleBool(
-      firstPresent(rules.showSellerRank, schedule.showSellerRank),
-      "No",
-    );
-    const showLowestVal = resolveRuleBool(
-      firstPresent(rules.showLowestPrice, schedule.showLowestPrice),
-      "No",
-    );
-
-    if (allowsReverseAuction) {
-      list.push({
-        label: "Stage 2 Reverse Auction",
-        value: "Enabled after Technical Evaluation",
-      });
-    }
-
-    if (showRankVal === "Yes") {
-      list.push({ label: "Show Seller Rank", value: showRankVal });
-    }
-    if (showLowestVal === "Yes") {
-      list.push({ label: "Show Lowest Price", value: showLowestVal });
-    }
-
-    if (isPreBidConfigured) {
-      list.push({ label: "Pre-Bid Meeting", value: "Scheduled" });
-    }
-
-    if (localPrefVal === "Yes") {
-      list.push({ label: "Local Vendor Preference", value: "Yes" });
-    }
-
-    return list;
-  }, [
-    isBuyerSide,
-    isReverseAuctionType,
-    props.linkedAuction,
-    payload,
-    rules,
-    schedule,
-    isClarificationAllowed,
-    isFreightIncluded,
-    isPreBidConfigured,
-    msmePrefVal,
-    localPrefVal,
-    allowsReverseAuction,
-    isRateContractType,
-  ]);
 
   return (
     <BuyerSideContext.Provider
@@ -7624,7 +7324,7 @@ export function ProcurementDetailUnifiedView(
           {activeTab === "terms_schedule" && (
             <div className="space-y-5">
               <DataCard
-                title={`${procurementTypeLabel} Schedule & Rules`}
+                title={`${procurementTypeLabel} Milestones & Schedule`}
                 icon={CalendarDays}
               >
                 <div className="space-y-5">
@@ -7644,34 +7344,28 @@ export function ProcurementDetailUnifiedView(
                           value={submissionStartDateFormatted}
                         />
                         <PropertyItem
-                          label="Clarification Deadline"
-                          value={
-                            isClarificationAllowed
-                              ? clarificationDeadlineFormatted
-                              : undefined
-                          }
-                        />
-                        <PropertyItem
                           label="Submission Deadline"
                           value={closingDateFormatted}
                           highlight
                         />
-                        <PropertyItem
-                          label="Technical Opening Date"
-                          value={
-                            hasTechnicalOpening
-                              ? technicalDateFormatted
-                              : undefined
-                          }
-                        />
-                        <PropertyItem
-                          label="Financial Opening Date"
-                          value={
-                            hasFinancialOpening
-                              ? financialDateFormatted
-                              : undefined
-                          }
-                        />
+                        {isClarificationAllowed && clarificationDeadlineFormatted && (
+                          <PropertyItem
+                            label="Clarification Deadline"
+                            value={clarificationDeadlineFormatted}
+                          />
+                        )}
+                        {hasTechnicalOpening && technicalDateFormatted && (
+                          <PropertyItem
+                            label="Technical Opening Date"
+                            value={technicalDateFormatted}
+                          />
+                        )}
+                        {hasFinancialOpening && financialDateFormatted && (
+                          <PropertyItem
+                            label="Financial Opening Date"
+                            value={financialDateFormatted}
+                          />
+                        )}
                         <PropertyItem
                           label="Bid Validity Date"
                           value={bidValidityDateFormatted}
@@ -7684,28 +7378,19 @@ export function ProcurementDetailUnifiedView(
                           label="Required By Date & Time"
                           value={requiredByDateFormatted}
                         />
+                        <PropertyItem
+                          label="Envelope Configuration"
+                          value={
+                            isTwoPacket
+                              ? "Two Packet Envelope (Technical + Commercial Separated)"
+                              : "Single Packet Envelope (Commercial Only)"
+                          }
+                        />
                       </PropertyGrid>
                     </div>
                   </div>
 
-                  <div className="space-y-2.5 pt-2">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                      Bidding Rules &amp; Policy Matrix
-                    </h3>
-                    <PolicyRulesMatrix rules={biddingRules} />
-                    {isBuyerSide &&
-                      (payload.limitedTenderJustification ||
-                        rules.limitedTenderJustification) && (
-                        <div className="rounded-xl border-l-4 border-amber-500 bg-amber-50/60 p-3.5 border border-amber-200/80 text-xs font-semibold text-amber-900">
-                          <span className="font-black uppercase tracking-wider block text-[10px] text-amber-700 mb-0.5">
-                            Tender Justification:
-                          </span>
-                          {payload.limitedTenderJustification ||
-                            rules.limitedTenderJustification}
-                        </div>
-                      )}
-                  </div>
+
                 </div>
               </DataCard>
 
@@ -8023,7 +7708,7 @@ export function ProcurementDetailUnifiedView(
                                   payload.msmePreference)
                                   ? "Yes"
                                   : "No"
-                                : "Yes",
+                                : "No",
                           },
                           {
                             label: "Exclude Blacklisted",
@@ -8035,7 +7720,7 @@ export function ProcurementDetailUnifiedView(
                                   payload.excludeBlacklisted)
                                   ? "Yes"
                                   : "No"
-                                : "Yes",
+                                : "No",
                           },
                           {
                             label: "Local Vendor Preference",
@@ -8047,7 +7732,7 @@ export function ProcurementDetailUnifiedView(
                                   payload.localVendorPreference)
                                   ? "Yes"
                                   : "No"
-                                : "Yes",
+                                : "No",
                           },
                         ]}
                       />

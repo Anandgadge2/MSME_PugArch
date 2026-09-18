@@ -86,6 +86,7 @@ export default function BidDetailsPage() {
   }
 
   const bidObj: any = bidData || {};
+  const validInitialData = bidData && (bidData.id || bidData.bidNumber || bidData.requirementNumber || bidData.title) ? bidData : undefined;
   const queryType = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
   const rawMethod = String(
     bidObj.procurementMethod ||
@@ -109,15 +110,15 @@ export default function BidDetailsPage() {
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
   if (rawMethod.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
-    return <OpenTenderDetailPage initialData={bidObj} />;
+    return <OpenTenderDetailPage initialData={validInitialData} />;
   }
 
   if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
-    return <LimitedTenderDetailPage initialData={bidObj} />;
+    return <LimitedTenderDetailPage initialData={validInitialData} />;
   }
 
   if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
-    return <RateContractDetailPage initialData={bidObj} />;
+    return <RateContractDetailPage initialData={validInitialData} />;
   }
 
   const isRfq =
@@ -131,7 +132,7 @@ export default function BidDetailsPage() {
     reqNum.startsWith('RFQ-');
 
   if (isRfq) {
-    return <RfqDetailPage initialData={bidObj} />;
+    return <RfqDetailPage initialData={validInitialData} />;
   }
 
   const isExplicitRfp =
@@ -145,9 +146,9 @@ export default function BidDetailsPage() {
     !rawMethod.includes('RFQ');
 
   if (isExplicitRfp) {
-    return <RfpDetailPage initialData={bidObj} />;
+    return <RfpDetailPage initialData={validInitialData} />;
   }
 
   // Default for standard procurement requirement/bid is Request for Quotation
-  return <RfqDetailPage initialData={bidObj} />;
+  return <RfqDetailPage initialData={validInitialData} />;
 }

@@ -87,9 +87,15 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
-  const bid: any = bidData || {};
-  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
+  const isAnyLoading = isBidLoading || isReqLoading;
+  const hasValidInitialData = Boolean(
+    initialData &&
+    typeof initialData === 'object' &&
+    (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title)
+  );
+  const isLoading = (!bidData && !reqData && !hasValidInitialData && isAnyLoading);
+  const bid: any = bidData || (hasValidInitialData && (initialData.bidNumber || initialData.sourceModel === 'BID') ? initialData : {});
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || (hasValidInitialData && (initialData.requirementNumber || initialData.sourceModel === 'REQUIREMENT') ? (initialData.requirement || initialData) : {});
   const payload =
     bid.technicalPacket ||
     bid.payload ||
@@ -104,12 +110,11 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const evaluation = payload.evaluation || {};
   const serviceDetails = payload.serviceDetails || {};
 
-  if (isLoading) {
+  if (isLoading || (isAnyLoading && !bidData && !reqObj.id && !hasValidInitialData)) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Request for Proposal" />;
   }
 
-
-  const hasFatalError = !bidData && !reqData;
+  const hasFatalError = !isAnyLoading && !bidData && !reqData && !hasValidInitialData;
   if (hasFatalError) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
