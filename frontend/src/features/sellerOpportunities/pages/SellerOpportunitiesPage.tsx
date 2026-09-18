@@ -1505,9 +1505,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <span>Confidential</span>
                 <Lock className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
               </span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                Competitive Bidding
-              </span>
+
             </div>
           );
         }

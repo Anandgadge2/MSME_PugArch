@@ -5934,7 +5934,7 @@ export function ProcurementDetailUnifiedView(
           ),
           icon: Lock,
           tone: "slate" as Tone,
-          subtext: "Competitive bidding (sealed)",
+          subtext: "(sealed)",
         },
     {
       label: "Buyer Contact",
