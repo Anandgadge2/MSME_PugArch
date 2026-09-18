@@ -24,6 +24,10 @@ interface ClarificationPanelProps {
   procurementLabel?: string;
   /** Clarification deadline date/time for informative display */
   clarificationDeadline?: string | Date | null;
+  /** Submission start date/time — clarifications open from this point */
+  submissionStartDate?: string | Date | null;
+  /** Explicit flag if current time is before submission start */
+  notStarted?: boolean;
 }
 
 export default function ClarificationPanel({
@@ -32,7 +36,9 @@ export default function ClarificationPanel({
   role,
   deadlinePassed,
   procurementLabel,
-  clarificationDeadline
+  clarificationDeadline,
+  submissionStartDate,
+  notStarted,
 }: ClarificationPanelProps) {
   const entityId = React.useMemo<number | string | undefined>(() => {
     if (quoteRequestId === null || quoteRequestId === undefined) return undefined;
@@ -63,6 +69,18 @@ export default function ClarificationPanel({
     if (!clarificationDeadline) return null;
     return formatDateTime(clarificationDeadline);
   }, [clarificationDeadline]);
+
+  const formattedSubmissionStart = React.useMemo(() => {
+    if (!submissionStartDate) return null;
+    return formatDateTime(submissionStartDate);
+  }, [submissionStartDate]);
+
+  const isNotStarted = React.useMemo(() => {
+    if (typeof notStarted === 'boolean') return notStarted;
+    if (!submissionStartDate) return false;
+    const d = new Date(submissionStartDate);
+    return !isNaN(d.getTime()) && d.getTime() > Date.now();
+  }, [notStarted, submissionStartDate]);
 
   // Filter clarifications: Private messages must NOT be shown to the public or other sellers.
   // They must be visible to the asking seller and the buyer/admin only.
@@ -164,8 +182,49 @@ export default function ClarificationPanel({
         </span>
       </div>
 
+      {/* Not Started Banner — Shown to Sellers */}
+      {isNotStarted && role === 'seller' && (
+        <div
+          className="rounded-2xl border border-sky-200 bg-sky-50/70 p-4 space-y-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-sky-950">
+            <Lock className="h-4 w-4 text-sky-700 shrink-0" aria-hidden="true" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-sky-950">
+              Clarifications Not Yet Open
+            </h3>
+          </div>
+          <p className="text-xs font-semibold text-sky-900 leading-relaxed">
+            The clarification window for this {procurementLabel || 'procurement'} will open when bid submission starts{formattedSubmissionStart ? ` on ${formattedSubmissionStart}` : ''}. You will be able to submit questions and request technical clarifications once the submission window begins.
+            {visibleClarifications.length > 0
+              ? ' Any earlier clarification questions and official buyer responses remain recorded below for reference.'
+              : ''}
+          </p>
+        </div>
+      )}
+
+      {/* Not Started Banner — Shown to Buyers */}
+      {isNotStarted && role === 'buyer' && (
+        <div
+          className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 space-y-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-[#12335f]">
+            <Lock className="h-4 w-4 text-[#12335f] shrink-0" aria-hidden="true" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-[#12335f]">
+              Clarification Window Pending Submission Start
+            </h3>
+          </div>
+          <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+            The clarification window for bidders will become active once bid submission starts{formattedSubmissionStart ? ` on ${formattedSubmissionStart}` : ''}. Bidders cannot submit queries until the submission window opens.
+          </p>
+        </div>
+      )}
+
       {/* Deadline Passed Banner — Shown to Sellers */}
-      {deadlinePassed && role === 'seller' && (
+      {deadlinePassed && !isNotStarted && role === 'seller' && (
         <div
           className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-1.5"
           role="status"
@@ -187,7 +246,7 @@ export default function ClarificationPanel({
       )}
 
       {/* Deadline Passed Banner — Shown to Buyers */}
-      {deadlinePassed && role === 'buyer' && (
+      {deadlinePassed && !isNotStarted && role === 'buyer' && (
         <div
           className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4 space-y-1.5"
           role="status"
@@ -210,8 +269,8 @@ export default function ClarificationPanel({
         </div>
       )}
 
-      {/* Active Ask box — sellers only, only when deadline has NOT passed */}
-      {role === 'seller' && !deadlinePassed && (
+      {/* Active Ask box — sellers only, only when deadline has NOT passed and submission HAS started */}
+      {role === 'seller' && !deadlinePassed && !isNotStarted && (
         <div className="rounded-2xl border border-slate-100 bg-slate-50/40 p-4 space-y-3">
           <label htmlFor="clarification-question-input" className="block">
             <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Ask the buyer a question</span>

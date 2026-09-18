@@ -615,9 +615,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     }
     return createdCandidate || formPublishCandidate || rawBid?.startDate || null;
   })();
-  const submissionStartDate = preferReq
-    ? (reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || published)
-    : (rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || published);
+  const explicitSubmissionStartDate = preferReq
+    ? (reqObj?.submissionStartDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || reqObj?.payload?.tender?.bidStartDate || rawBid?.submissionStartDate || rawBid?.technicalPacket?.schedule?.submissionStartDate)
+    : (rawBid?.submissionStartDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.submissionStartDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || reqObj?.payload?.tender?.bidStartDate);
+  const submissionStartDate = explicitSubmissionStartDate || published;
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
   const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
@@ -652,10 +653,16 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const evalMethod = specificEvalMethod || evalCandidates.find(
     c => typeof c === 'string' && c.trim().length > 0 && c.trim() !== 'null' && c.trim() !== 'undefined'
   ) || 'L1 Basis';
-  const packetType = preferReq ? (reqObj?.payload?.rules?.packetType || rawBid?.packetType || 'Single Packet') : (rawBid?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.rules?.packetType || 'Single Packet');
   const clarDeadline = preferReq ? (reqObj?.payload?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationDeadline) : (rawBid?.technicalPacket?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationEndDate || reqObj?.payload?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationEndDate);
-  const techOpen   = preferReq ? (reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || rawBid?.technicalOpeningDate) : (rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate);
-  const finOpen    = preferReq ? (reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate || rawBid?.financialOpeningDate) : (rawBid?.financialOpeningDate || rawBid?.technicalPacket?.schedule?.financialOpeningDate || reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate);
+  const techOpen   = preferReq
+    ? (reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate || rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate)
+    : (rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate);
+  const finOpen    = preferReq
+    ? (reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate || reqObj?.payload?.tender?.financialEvaluationDate || reqObj?.payload?.schedule?.finalEvaluationDate || reqObj?.payload?.financialOpeningDate || rawBid?.financialOpeningDate || rawBid?.technicalPacket?.schedule?.financialOpeningDate)
+    : (rawBid?.financialOpeningDate || rawBid?.technicalPacket?.schedule?.financialOpeningDate || reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate || reqObj?.payload?.tender?.financialEvaluationDate || reqObj?.payload?.schedule?.finalEvaluationDate || reqObj?.payload?.financialOpeningDate);
+  const packetType = preferReq
+    ? (reqObj?.packetType || reqObj?.payload?.schedule?.packetType || reqObj?.payload?.rules?.packetType || reqObj?.payload?.packetType || (finOpen ? 'Two Packet' : rawBid?.packetType) || 'Single Packet')
+    : (rawBid?.packetType || rawBid?.technicalPacket?.schedule?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.schedule?.packetType || (finOpen ? 'Two Packet' : 'Single Packet'));
   const bidValDate = preferReq ? (reqObj?.payload?.schedule?.bidValidityDate) : (rawBid?.technicalPacket?.schedule?.bidValidityDate || reqObj?.payload?.schedule?.bidValidityDate);
   const reqByDate  = preferReq ? (reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate || rawBid?.technicalPacket?.basics?.requiredByDate) : (rawBid?.technicalPacket?.basics?.requiredByDate || reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate);
   const status     = preferReq ? (reqObj?.status || rawBid?.status || 'OPEN') : (rawBid?.status || reqObj?.status || 'OPEN');
@@ -1105,11 +1112,12 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
-      submissionStartDate={submissionStartDate ? fmtDate(submissionStartDate, true) : undefined}
+      submissionStartDate={explicitSubmissionStartDate ? fmtDate(explicitSubmissionStartDate, true) : undefined}
       closingDate={deadline ? fmtDate(deadline, true) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
       financialDate={finOpen ? fmtDate(finOpen, true) : undefined}
+      packetType={packetType}
       bidValidityDate={bidValDate ? fmtDate(bidValDate) : undefined}
       requiredByDate={reqByDate ? fmtDate(reqByDate, true) : undefined}
       category={category}

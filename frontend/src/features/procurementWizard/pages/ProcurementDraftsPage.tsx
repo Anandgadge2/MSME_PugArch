@@ -1579,10 +1579,12 @@ function DraftDetailView({
       deadlineDate={schedule.submissionDate || basics.requiredByDate || d.requiredDeliveryDate || null}
       createdAt={d.updatedAt}
       publishedDate={schedule.publishDate}
+      submissionStartDate={schedule.submissionStartDate || schedule.startDate}
       closingDate={schedule.submissionDate}
       clarificationDate={schedule.clarificationDeadline}
       technicalDate={schedule.technicalOpeningDate}
       financialDate={schedule.financialOpeningDate}
+      packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}
       category={categoryName}
       procurementMethod={procurementLabel}
       buyingType={basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'}

@@ -64,3 +64,52 @@ test('4. SubmitQuotationPage displays transparent technical evaluation feedback 
     'Qualified sellers must see their qualification badge and confirmation for Stage 2'
   );
 });
+
+test('5. ProcurementDetailUnifiedView resolves and renders Technical Evaluation and Financial Evaluation dates in Two-Packet mode', () => {
+  const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
+  const code = fs.readFileSync(unifiedViewPath, 'utf8');
+
+  assert.ok(
+    code.includes('candidateTechDate') &&
+    code.includes('candidateFinDate'),
+    'ProcurementDetailUnifiedView must resolve candidateTechDate and candidateFinDate from all candidate fields'
+  );
+  assert.ok(
+    code.includes('Boolean(candidateFinDate)'),
+    'Two-packet mode must automatically infer true when financial opening date candidate is present'
+  );
+  assert.ok(
+    code.includes('technicalDateValue = candidateTechDate') &&
+    code.includes('financialDateValue = candidateFinDate'),
+    'Technical and financial opening dates must directly reflect candidate dates'
+  );
+});
+
+test('6. ClarificationPanel and DeadlineCountdown gate smoothly on submissionStartDate prior to bidding start', () => {
+  const clarPanelPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ClarificationPanel.tsx');
+  const clarCode = fs.readFileSync(clarPanelPath, 'utf8');
+
+  assert.ok(
+    clarCode.includes('Clarifications Not Yet Open') &&
+    clarCode.includes('Clarification Window Pending Submission Start'),
+    'ClarificationPanel must render proper informative banners when current time is before submissionStartDate'
+  );
+  assert.ok(
+    clarCode.includes('!isNotStarted'),
+    'Question submission input box must be gated when isNotStarted is true'
+  );
+
+  const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
+  const unifiedCode = fs.readFileSync(unifiedViewPath, 'utf8');
+
+  assert.ok(
+    unifiedCode.includes('Submission Opens') &&
+    unifiedCode.includes('isBeforeSubmissionStart'),
+    'ProcurementDetailUnifiedView must gate seller submission and show opening notice before submission start'
+  );
+  assert.ok(
+    unifiedCode.includes('startDate={rawSubmissionStartDate}') &&
+    unifiedCode.includes('startLabel="Submission Opens in: "'),
+    'DeadlineCountdown must accept submission start date and countdown to start before quote due'
+  );
+});

@@ -1136,8 +1136,9 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           district: requirement.organization?.district || '',
           startDate: schedule.publishDate ? parseDateIST(schedule.publishDate) : (schedule.submissionStartDate ? parseDateIST(schedule.submissionStartDate) : requirement.createdAt),
           endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy) : requirement.createdAt),
-          technicalOpeningDate: schedule.technicalOpeningDate ? parseDateIST(schedule.technicalOpeningDate) : null,
-          financialOpeningDate: schedule.financialOpeningDate ? parseDateIST(schedule.financialOpeningDate) : null,
+          submissionStartDate: (schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) ? parseDateIST(schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) : null,
+          technicalOpeningDate: (schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) ? parseDateIST(schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) : null,
+          financialOpeningDate: (schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) ? parseDateIST(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) : null,
           status: requirement.status === 'APPROVED' ? 'OPEN' : requirement.status || 'OPEN',
           approvalStatus: requirement.status || 'APPROVED',
           lifecycleStage: 'SELLER_PARTICIPATION',
@@ -1147,7 +1148,11 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           documentFee: null,
           allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
           allowReverseAuction: false,
-          packetType: 'SINGLE_PACKET',
+          packetType: (
+            String(schedule.packetType || payload.packetType || payload.rules?.packetType || '').toUpperCase().includes('TWO') ||
+            String(schedule.packetType || payload.packetType || payload.rules?.packetType || '') === '2' ||
+            Boolean(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate)
+          ) ? 'TWO_PACKET' : 'SINGLE_PACKET',
           technicalPacket: payload,
           termsAndConditions: terms.termsAndConditions || [],
           eligibilityCriteria: terms.eligibilityCriteria || basics.eligibilityCriteria || [],

@@ -175,7 +175,34 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       deadlineDate={bid.endDate}
       createdAt={(bid as any).createdAt || bid.startDate}
       publishedDate={(bid as any).publishedAt || (bid as any).createdAt ? String((bid as any).publishedAt || (bid as any).createdAt) : (bid.startDate ? String(bid.startDate) : undefined)}
+      submissionStartDate={
+        (bid.technicalPacket as any)?.schedule?.submissionStartDate ||
+        (bid as any).submissionStartDate ||
+        (bid.technicalPacket as any)?.tender?.bidStartDate
+          ? String((bid.technicalPacket as any)?.schedule?.submissionStartDate || (bid as any).submissionStartDate || (bid.technicalPacket as any)?.tender?.bidStartDate)
+          : undefined
+      }
       closingDate={bid.endDate ? String(bid.endDate) : undefined}
+      technicalDate={
+        (bid as any).technicalOpeningDate ||
+        (bid.technicalPacket as any)?.schedule?.technicalOpeningDate ||
+        (bid.technicalPacket as any)?.tender?.technicalEvaluationDate
+          ? String((bid as any).technicalOpeningDate || (bid.technicalPacket as any)?.schedule?.technicalOpeningDate || (bid.technicalPacket as any)?.tender?.technicalEvaluationDate)
+          : undefined
+      }
+      financialDate={
+        (bid as any).financialOpeningDate ||
+        (bid.technicalPacket as any)?.schedule?.financialOpeningDate ||
+        (bid.technicalPacket as any)?.tender?.financialEvaluationDate
+          ? String((bid as any).financialOpeningDate || (bid.technicalPacket as any)?.schedule?.financialOpeningDate || (bid.technicalPacket as any)?.tender?.financialEvaluationDate)
+          : undefined
+      }
+      packetType={
+        bid.packetType ||
+        (bid.technicalPacket as any)?.schedule?.packetType ||
+        (bid.technicalPacket as any)?.rules?.packetType ||
+        (((bid as any).financialOpeningDate || (bid.technicalPacket as any)?.schedule?.financialOpeningDate || (bid.technicalPacket as any)?.tender?.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')
+      }
       category={bid.category}
       procurementMethod={bid.procurementType}
       deliveryLocation={bid.deliveryLocation}

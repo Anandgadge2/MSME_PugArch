@@ -639,7 +639,7 @@ function getEvaluationMethodDetails(
   };
 }
 
-function parseDateValue(dateVal?: string | Date | null): Date | null {
+function parseDateValue(dateVal?: string | Date | null, isStart = false): Date | null {
   if (!dateVal) return null;
   const d = new Date(dateVal);
   if (isNaN(d.getTime())) return null;
@@ -648,47 +648,85 @@ function parseDateValue(dateVal?: string | Date | null): Date | null {
   const isMidnightUtc =
     d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
   if (isMidnightUtc || isDateOnlyStr) {
-    const endOfDay = new Date(d.getTime());
-    endOfDay.setHours(23, 59, 59, 999);
-    return endOfDay;
+    const adjusted = new Date(d.getTime());
+    if (isStart) {
+      adjusted.setHours(0, 0, 0, 0);
+    } else {
+      adjusted.setHours(23, 59, 59, 999);
+    }
+    return adjusted;
   }
   return d;
 }
 
 function DeadlineCountdown({
   targetDate,
+  startDate,
   label = "Quote Due: ",
+  startLabel = "Starts in: ",
 }: {
   targetDate: Date | string;
+  startDate?: Date | string | null;
   label?: string;
+  startLabel?: string;
 }) {
-  const dateObj = useMemo(() => parseDateValue(targetDate), [targetDate]);
-  const [timeLeft, setTimeLeft] = useState<{
+  const startObj = useMemo(() => parseDateValue(startDate, true), [startDate]);
+  const endObj = useMemo(() => parseDateValue(targetDate, false), [targetDate]);
+  const [timerState, setTimerState] = useState<{
     days: number;
     hours: number;
     minutes: number;
     seconds: number;
     isPassed: boolean;
+    isBeforeStart: boolean;
   }>({
     days: 0,
     hours: 0,
     minutes: 0,
     seconds: 0,
     isPassed: false,
+    isBeforeStart: false,
   });
 
   React.useEffect(() => {
-    if (!dateObj) return;
-
     const calc = () => {
-      const ms = dateObj.getTime() - Date.now();
+      const now = Date.now();
+      if (startObj && startObj.getTime() > now) {
+        const ms = startObj.getTime() - now;
+        const days = Math.floor(ms / 86_400_000);
+        const hours = Math.floor((ms % 86_400_000) / 3_600_000);
+        const minutes = Math.floor((ms % 3_600_000) / 60_000);
+        const seconds = Math.floor((ms % 60_000) / 1000);
+        setTimerState({
+          days,
+          hours,
+          minutes,
+          seconds,
+          isPassed: false,
+          isBeforeStart: true,
+        });
+        return;
+      }
+      if (!endObj) {
+        setTimerState({
+          days: 0,
+          hours: 0,
+          minutes: 0,
+          seconds: 0,
+          isPassed: false,
+          isBeforeStart: false,
+        });
+        return;
+      }
+      const ms = endObj.getTime() - now;
       if (ms <= 0) {
-        setTimeLeft({
+        setTimerState({
           days: 0,
           hours: 0,
           minutes: 0,
           seconds: 0,
           isPassed: true,
+          isBeforeStart: false,
         });
         return;
       }
@@ -696,17 +734,43 @@ function DeadlineCountdown({
       const hours = Math.floor((ms % 86_400_000) / 3_600_000);
       const minutes = Math.floor((ms % 3_600_000) / 60_000);
       const seconds = Math.floor((ms % 60_000) / 1000);
-      setTimeLeft({ days, hours, minutes, seconds, isPassed: false });
+      setTimerState({
+        days,
+        hours,
+        minutes,
+        seconds,
+        isPassed: false,
+        isBeforeStart: false,
+      });
     };
 
     calc();
     const interval = setInterval(calc, 1000);
     return () => clearInterval(interval);
-  }, [dateObj]);
+  }, [startObj, endObj]);
 
-  if (!dateObj) return null;
+  if (!endObj && !startObj) return null;
 
-  if (timeLeft.isPassed) {
+  if (timerState.isBeforeStart) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 shadow-2xs"
+        role="timer"
+        aria-live="polite"
+      >
+        <Clock className="h-3 w-3 text-sky-600 animate-pulse" aria-hidden="true" />
+        <span className="font-mono">
+          <span className="text-sky-900/80 font-bold">{startLabel}</span>
+          {timerState.days > 0 ? `${timerState.days}d ` : ""}
+          {String(timerState.hours).padStart(2, "0")}h{" "}
+          {String(timerState.minutes).padStart(2, "0")}m{" "}
+          {String(timerState.seconds).padStart(2, "0")}s
+        </span>
+      </span>
+    );
+  }
+
+  if (timerState.isPassed) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
         <Clock className="h-3 w-3 text-rose-600" />
@@ -716,14 +780,18 @@ function DeadlineCountdown({
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
-      <Clock className="h-3 w-3 text-amber-600 animate-pulse" />
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs"
+      role="timer"
+      aria-live="polite"
+    >
+      <Clock className="h-3 w-3 text-amber-600 animate-pulse" aria-hidden="true" />
       <span className="font-mono">
         <span className="text-amber-900/80 font-bold">{label}</span>
-        {timeLeft.days > 0 ? `${timeLeft.days}d ` : ""}
-        {String(timeLeft.hours).padStart(2, "0")}h{" "}
-        {String(timeLeft.minutes).padStart(2, "0")}m{" "}
-        {String(timeLeft.seconds).padStart(2, "0")}s left
+        {timerState.days > 0 ? `${timerState.days}d ` : ""}
+        {String(timerState.hours).padStart(2, "0")}h{" "}
+        {String(timerState.minutes).padStart(2, "0")}m{" "}
+        {String(timerState.seconds).padStart(2, "0")}s left
       </span>
     </span>
   );
@@ -4763,26 +4831,51 @@ export function ProcurementDetailUnifiedView(
     return !isRfqType;
   })();
 
-  // Packet & Opening Evaluation checks
+  // Packet & Opening Evaluation checks: Resolve candidates from all paths
+  const candidateTechDate = firstPresent(
+    props.technicalDate,
+    props.technicalOpeningDate,
+    schedule.technicalOpeningDate,
+    tender.technicalEvaluationDate,
+    payload.technicalOpeningDate,
+    payload.technicalEvaluationDate,
+  );
+
+  const candidateFinDate = firstPresent(
+    props.financialDate,
+    props.financialOpeningDate,
+    schedule.financialOpeningDate,
+    tender.financialEvaluationDate,
+    schedule.finalEvaluationDate,
+    payload.financialOpeningDate,
+    payload.financialEvaluationDate,
+  );
+
   const rawPacketType = String(
     firstPresent(
       props.packetType,
       schedule.packetType,
       payload.packetType,
       tender.packetType,
-      "Single",
+      rules.packetType,
+      candidateFinDate ? "Two" : "Single",
     ),
   ).toUpperCase();
 
-  const isTwoPacket = rawPacketType.includes("TWO") || rawPacketType === "2";
+  const isTwoPacket =
+    rawPacketType.includes("TWO") ||
+    rawPacketType === "2" ||
+    Boolean(candidateFinDate);
+
   const isTechnicalEvaluationNeeded = Boolean(
     basics.isTechnicalEvaluationNeeded ||
     payload.isTechnicalEvaluationNeeded ||
     tender.isTechnicalEvaluationNeeded ||
-    isTwoPacket,
+    isTwoPacket ||
+    candidateTechDate,
   );
-  const hasTechnicalOpening = isTechnicalEvaluationNeeded;
-  const hasFinancialOpening = isTwoPacket;
+  const hasTechnicalOpening = isTechnicalEvaluationNeeded || Boolean(candidateTechDate);
+  const hasFinancialOpening = isTwoPacket || Boolean(candidateFinDate);
 
   const clarificationDateValue = isClarificationAllowed
     ? firstPresent(
@@ -4797,14 +4890,7 @@ export function ProcurementDetailUnifiedView(
       )
     : undefined;
 
-  const technicalDateValue = hasTechnicalOpening
-    ? firstPresent(
-        tender.technicalEvaluationDate,
-        schedule.technicalOpeningDate,
-        props.technicalDate,
-        props.technicalOpeningDate,
-      )
-    : undefined;
+  const technicalDateValue = candidateTechDate;
 
   const presentationDateValue = firstPresent(
     schedule.presentationDate,
@@ -4812,15 +4898,7 @@ export function ProcurementDetailUnifiedView(
     props.presentationDate,
   );
 
-  const financialDateValue = hasFinancialOpening
-    ? firstPresent(
-        tender.financialEvaluationDate,
-        schedule.financialOpeningDate,
-        schedule.finalEvaluationDate,
-        props.financialDate,
-        props.financialOpeningDate,
-      )
-    : undefined;
+  const financialDateValue = candidateFinDate;
 
   const awardDateValue = firstPresent(
     tender.awardDate,
@@ -4830,13 +4908,25 @@ export function ProcurementDetailUnifiedView(
     props.awardDate,
   );
 
-  const submissionStartDateValue = firstPresent(
+  const rawSubmissionStartDate = firstPresent(
     props.submissionStartDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
+    payload.submissionStartDate,
+  );
+
+  const submissionStartDateValue = firstPresent(
+    rawSubmissionStartDate,
     props.createdAt,
     publishedDateValue,
+  );
+
+  const subStartDateObj = rawSubmissionStartDate
+    ? parseDateValue(rawSubmissionStartDate, true)
+    : null;
+  const isBeforeSubmissionStart = Boolean(
+    subStartDateObj && !isNaN(subStartDateObj.getTime()) && subStartDateObj.getTime() > nowMs,
   );
 
   const clarificationDeadlineValue = isClarificationAllowed
@@ -6620,9 +6710,11 @@ export function ProcurementDetailUnifiedView(
                       {formatPrimitiveValue(buyerOrgName, "organization")}
                     </span>
                   )}
-                  {props.deadlineDate && (
+                  {(props.deadlineDate || closingDateValue) && (
                     <DeadlineCountdown
-                      targetDate={props.deadlineDate}
+                      targetDate={props.deadlineDate || closingDateValue || ""}
+                      startDate={rawSubmissionStartDate}
+                      startLabel="Submission Opens in: "
                       label={
                         allowsReverseAuction
                           ? "Stage 1 Quote Due: "
@@ -6800,6 +6892,19 @@ export function ProcurementDetailUnifiedView(
                     Bidding Concluded
                   </span>
                 )}
+                {!isBuyerOrAdmin && !props.hasSubmittedProposal && !isBiddingClosed && isBeforeSubmissionStart && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
+                    className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Submission Opens {submissionStartDateFormatted ? `on ${submissionStartDateFormatted}` : "Soon"}</span>
+                  </Button>
+                )}
                 {isBuyerOrAdmin && !isEvaluationReady && (
                   <Button
                     type="button"
@@ -6816,7 +6921,7 @@ export function ProcurementDetailUnifiedView(
                 {props.onSubmitClick &&
                   ((isBuyerOrAdmin
                     ? isEvaluationReady
-                    : (!props.hasSubmittedProposal && !isBiddingClosed))) && (
+                    : (!props.hasSubmittedProposal && !isBiddingClosed && !isBeforeSubmissionStart))) && (
                     <Button
                       type="button"
                       size="sm"
@@ -7060,6 +7165,16 @@ export function ProcurementDetailUnifiedView(
                     icon: Calendar,
                     tone: "emerald",
                   },
+                  ...(rawSubmissionStartDate && submissionStartDateFormatted && submissionStartDateFormatted !== publishedDateFormatted
+                    ? [
+                        {
+                          label: "Submission Starts",
+                          value: submissionStartDateFormatted,
+                          icon: Calendar,
+                          tone: "sky" as Tone,
+                        },
+                      ]
+                    : []),
                   ...(isClarificationAllowed &&
                   clarificationDateFormatted !== "N/A"
                     ? [
@@ -8154,6 +8269,8 @@ export function ProcurementDetailUnifiedView(
                       kind={clarKind}
                       role={isBuyerOrAdmin || isBuyerSide ? "buyer" : "seller"}
                       deadlinePassed={isClarDeadlinePassed}
+                      submissionStartDate={rawSubmissionStartDate}
+                      notStarted={isBeforeSubmissionStart}
                       clarificationDeadline={clarificationDeadlineValue}
                       procurementLabel={
                         props.procurementLabel || procurementTypeLabel

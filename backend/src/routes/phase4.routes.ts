@@ -1897,9 +1897,9 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     pincode: buyer?.organization?.pincode || null,
     startDate: effectiveStartDate,
     endDate: effectiveEndDate,
-    technicalOpeningDate: tender.technicalEvaluationDate ? parseDateIST(tender.technicalEvaluationDate) : null,
-    financialOpeningDate: tender.financialEvaluationDate ? parseDateIST(tender.financialEvaluationDate) : null,
-    bidValidityDate: tender.bidValidityDate ? parseDateIST(tender.bidValidityDate) : null,
+    technicalOpeningDate: (tender.technicalEvaluationDate || schedule.technicalOpeningDate || payload.technicalOpeningDate) ? parseDateIST(tender.technicalEvaluationDate || schedule.technicalOpeningDate || payload.technicalOpeningDate) : null,
+    financialOpeningDate: (tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate) ? parseDateIST(tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate) : null,
+    bidValidityDate: (tender.bidValidityDate || schedule.bidValidityDate) ? parseDateIST(tender.bidValidityDate || schedule.bidValidityDate) : null,
     status: 'OPEN',
     approvalStatus: 'APPROVED',
     approvedAt: creationTime,
@@ -1911,7 +1911,12 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
     allowReverseAuction: ['bid-with-reverse-auction', 'reverse-auction'].includes(methodSlug) || payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false),
     allowBoq: methodSlug === 'boq-based-bid',
-    packetType: String(schedule.packetType || '').toLowerCase().includes('two') || methodSlug === 'two-packet-bid' ? 'TWO_PACKET' : 'SINGLE_PACKET',
+    packetType: (
+      String(schedule.packetType || payload.packetType || payload.rules?.packetType || '').toLowerCase().includes('two') ||
+      String(schedule.packetType || payload.packetType || payload.rules?.packetType || '') === '2' ||
+      methodSlug === 'two-packet-bid' ||
+      Boolean(tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate)
+    ) ? 'TWO_PACKET' : 'SINGLE_PACKET',
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
     technicalPacket: {
       ...payload,
@@ -6953,6 +6958,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
@@ -6968,6 +6974,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerOrganizationId: null,
         sellerId: null,
         deadlineDate: null,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacyReq.payload as any)?.tender?.bidStartDate || legacyReq.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
@@ -6990,6 +6997,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
@@ -7020,6 +7028,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       buyerOrganizationId: bidMatch.buyerOrganizationId || null,
       sellerId: null,
       deadlineDate: bidMatch.endDate,
+      submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bidMatch.technicalPacket as any)?.tender?.bidStartDate || bidMatch.startDate || null,
       clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
     };
   }
@@ -7032,6 +7041,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       buyerId: reqMatch.createdById,
       sellerId: null,
       deadlineDate: null,
+      submissionStartDate: sched?.submissionStartDate || sched?.startDate || (reqMatch.payload as any)?.tender?.bidStartDate || reqMatch.startDate || null,
       clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
     };
   }
@@ -7046,6 +7056,17 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
   const body = parse(clarificationAskBody, req.body);
   if (req.user?.role !== 'seller' && userId(req) !== quote.buyerId && userId(req) !== quote.sellerId) {
     throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
+  }
+
+  const rawSubmissionStart = (quote as any).submissionStartDate;
+  if (rawSubmissionStart) {
+    let startD = new Date(rawSubmissionStart);
+    if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+      startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+    }
+    if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+      throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+    }
   }
 
   const rawClarDeadline = (quote as any).clarificationDeadline;

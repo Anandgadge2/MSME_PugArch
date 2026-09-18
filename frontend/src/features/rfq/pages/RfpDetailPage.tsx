@@ -347,10 +347,12 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           }
           return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
         })()}
+        submissionStartDate={schedule.submissionStartDate || schedule.startDate || tender.bidStartDate || reqObj.startDate ? formatDateString(schedule.submissionStartDate || schedule.startDate || tender.bidStartDate || reqObj.startDate, true) : undefined}
         closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
         clarificationDate={schedule.clarificationDeadline || schedule.clarificationDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationDate, true) : undefined}
-        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
-        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
+        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate || tender.technicalEvaluationDate, true)}
+        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate || tender.financialEvaluationDate, true)}
+        packetType={schedule.packetType || bid.packetType || payload.packetType || ((bid.financialOpeningDate || schedule.financialOpeningDate || tender.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
         awardDate={formatDateString(tender.awardDate || schedule.awardDate || schedule.awardingDate, true)}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
         projectDuration={terms.projectDuration || terms.contractPeriod}

@@ -297,10 +297,12 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
           }
           return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
         })()}
+        submissionStartDate={schedule.submissionStartDate || schedule.startDate || (resolvedTender as any)?.bidStartDate || reqObj.startDate ? formatDateString(schedule.submissionStartDate || schedule.startDate || (resolvedTender as any)?.bidStartDate || reqObj.startDate, true) : undefined}
         closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
         clarificationDate={schedule.clarificationDeadline || schedule.clarificationEndDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationEndDate, true) : undefined}
-        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
-        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
+        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate || (resolvedTender as any)?.technicalEvaluationDate, true)}
+        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate || (resolvedTender as any)?.financialEvaluationDate, true)}
+        packetType={schedule.packetType || bid.packetType || payload.packetType || ((bid.financialOpeningDate || schedule.financialOpeningDate || (resolvedTender as any)?.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
         procurementMethod="Open Tender"
         buyingType={basics.buyingType || 'Goods / Products'}

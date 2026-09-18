@@ -390,6 +390,10 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
         procurementMethod: requirement.procurementMethod,
         canonicalMethod: requirement.canonicalMethod || requirement.procurementMethod,
         procurementMethodLabel: procurementMethod || null,
+        submissionStartDate: (requirement.payload as any)?.schedule?.submissionStartDate || (requirement.payload as any)?.schedule?.startDate || (requirement.payload as any)?.tender?.bidStartDate || null,
+        technicalOpeningDate: (requirement.payload as any)?.schedule?.technicalOpeningDate || (requirement.payload as any)?.tender?.technicalEvaluationDate || (requirement.payload as any)?.technicalOpeningDate || null,
+        financialOpeningDate: (requirement.payload as any)?.schedule?.financialOpeningDate || (requirement.payload as any)?.tender?.financialEvaluationDate || (requirement.payload as any)?.financialOpeningDate || null,
+        packetType: (requirement.payload as any)?.schedule?.packetType || (requirement.payload as any)?.rules?.packetType || (requirement.payload as any)?.packetType || ((requirement.payload as any)?.schedule?.financialOpeningDate ? 'TWO_PACKET' : 'SINGLE_PACKET'),
         payload: requirement.payload,
         estimatedValue: requirement.estimatedValue || directPurchase?.totalAmount || null,
         currency: requirement.currency || 'INR',
@@ -3706,6 +3710,17 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
         const body = requirementClarificationAskBody.parse(req.body);
 
         const sched = (requirement.payload as any)?.schedule;
+        const rawSubmissionStart = sched?.submissionStartDate || sched?.startDate || (requirement.payload as any)?.tender?.bidStartDate || requirement.startDate;
+        if (rawSubmissionStart) {
+            let startD = new Date(rawSubmissionStart);
+            if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+                startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+            }
+            if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+                return apiResponse.error(res, 400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+            }
+        }
+
         const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
         const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || requirement.lastDate || requirement.endDate;
 

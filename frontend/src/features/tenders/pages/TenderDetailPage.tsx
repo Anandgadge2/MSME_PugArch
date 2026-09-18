@@ -401,10 +401,12 @@ export default function TenderDetailPage() {
       deadlineDate={tender.closesAt}
       createdAt={tender.publishedAt || tender.createdAt}
       publishedDate={publishedDateFormatted}
+      submissionStartDate={schedule.submissionStartDate ? formatDateString(schedule.submissionStartDate, true) : ((tender as any).bidStartDate ? formatDateString((tender as any).bidStartDate, true) : undefined)}
       closingDate={closesAtFormatted}
       clarificationDate={schedule.clarificationDeadline ? formatDateString(schedule.clarificationDeadline, true) : undefined}
-      technicalDate={schedule.technicalOpeningDate ? formatDateString(schedule.technicalOpeningDate, true) : undefined}
-      financialDate={schedule.financialOpeningDate ? formatDateString(schedule.financialOpeningDate, true) : undefined}
+      technicalDate={(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate) ? formatDateString(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate, true) : undefined}
+      financialDate={(schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? formatDateString(schedule.financialOpeningDate || (tender as any).financialEvaluationDate, true) : undefined}
+      packetType={schedule.packetType || draft.packetType || tender.packetType || ((schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
       bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
       requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate, true) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate, true) : undefined)}
       category={tender.category}
