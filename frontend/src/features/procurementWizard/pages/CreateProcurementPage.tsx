@@ -45,8 +45,13 @@ import {
   Tag,
   HelpCircle,
   CheckCircle2,
-  ArrowUpRight,
   Truck,
+  Lock,
+  Scale,
+  TrendingDown,
+  Activity,
+  Repeat,
+  Clock,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -729,7 +734,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
 };
 
 const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: `RC-${Math.floor(10000 + Math.random() * 90000)}`,
+  rateContractNumber: `RC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',
@@ -2677,17 +2682,29 @@ function BasicsStepForm({
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
 
-        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER'].includes(draft.type) && (
-          <Field label={`${draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`}>
+        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REVERSE_AUCTION'].includes(draft.type) && (
+          <Field
+            label={
+              draft.type === 'RATE_CONTRACT'
+                ? 'Rate Contract Number'
+                : draft.type === 'REVERSE_AUCTION'
+                ? 'Reverse Auction Reference'
+                : `${draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`
+            }
+          >
             <input
               type="text"
               value={
-                (draft as any).requirementNumber
+                draft.type === 'RATE_CONTRACT'
+                  ? (draft.rateContractConfig?.rateContractNumber || (draft as any).requirementNumber || 'Auto-generated upon creation')
+                  : draft.type === 'REVERSE_AUCTION'
+                  ? ((draft.auctionConfig as any)?.auctionCode || (draft as any).requirementNumber || (draft.id ? formatRefId('REVERSE_AUCTION', draft.id, null, 'REVERSE_AUCTION') : 'Auto-generated upon creation'))
+                  : (draft as any).requirementNumber
                   ? formatRefId(draft.type, draft.id, (draft as any).requirementNumber, draft.type)
                   : (draft.id ? formatRefId(draft.type, draft.id, null, draft.type) : 'Auto-generated upon creation')
               }
               disabled
-              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none cursor-not-allowed"
+              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none cursor-not-allowed font-mono"
             />
           </Field>
         )}
@@ -6074,228 +6091,415 @@ function ScheduleStepForm({
 
 
       {isRateContract && (
-        <div className="border border-teal-200 rounded-xl p-4 bg-teal-50/40 space-y-4">
-          <div>
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Rate Contract Configuration</h3>
-            <p className="text-[11px] text-slate-600 font-semibold mt-1">
-              Define recurring purchase rates, validity, selected suppliers, and call-off order controls.
-            </p>
+        <div className="border border-slate-200/90 rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-xs space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs font-bold text-sm">
+                <Repeat className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Rate Contract Framework
+                  </h3>
+                  <span className="rounded-full bg-blue-50 border border-blue-200/70 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                    Period Sourcing
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Establish standardized pre-negotiated unit rates, delivery SLAs, and call-off order parameters.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100/70 px-3 py-1 text-xs font-mono font-bold text-slate-700">
+                <Lock className="h-3 w-3 text-slate-400" />
+                {draft.rateContractConfig.rateContractNumber}
+              </span>
+            </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Rate Contract Number">
-              <input value={draft.rateContractConfig.rateContractNumber} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Contract Title" required>
-              <input value={draft.rateContractConfig.contractTitle} onChange={e => updateRateContract('contractTitle', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Description">
-              <textarea value={draft.rateContractConfig.contractDescription} onChange={e => updateRateContract('contractDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
-            </Field>
-            <Field label="Contract Category">
-              <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Subcategory (Optional)">
-              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} placeholder="Enter contract subcategory (Optional)" />
-            </Field>
-            <Field label="Contract Start Date" required>
-              <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract End Date" required>
-              <input type="date" value={draft.rateContractConfig.periodEndDate} onChange={e => updateRateContract('periodEndDate', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Rate Validity Period" required>
-              <input value={draft.rateContractConfig.rateValidityPeriod} onChange={e => updateRateContract('rateValidityPeriod', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Supplier Selection Strategy" required>
-              <select value={draft.rateContractConfig.supplierSelectionStrategy} onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])} className={inputClass}>
-                <option value="SINGLE_SUPPLIER">Single Supplier</option>
-                <option value="MULTI_SUPPLIER">Multiple Suppliers</option>
-                <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option>
-              </select>
-            </Field>
-            <Field label="Selected Supplier(s)" required>
-              <input
-                value={`${draft.rateContractConfig.selectedSuppliers.length || draft.vendors.invitedSellers.length} supplier(s) selected from Supplier step`}
-                readOnly
-                className={cn(inputClass, 'bg-slate-100 text-slate-500')}
-              />
-            </Field>
+          {/* Subsection 1: Master Parameters & Validity */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+              <FileText className="h-3.5 w-3.5 text-[#0b2447]" />
+              <span>Contract Master &amp; Validity Parameters</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Contract Title" required>
+                <input
+                  value={draft.rateContractConfig.contractTitle}
+                  onChange={e => updateRateContract('contractTitle', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Annual Rate Contract for Industrial PPE & Safety Equipment"
+                />
+              </Field>
+              <Field label="Contract Category">
+                <input
+                  value={draft.rateContractConfig.contractCategory}
+                  onChange={e => updateRateContract('contractCategory', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Safety Gear & Supplies"
+                />
+              </Field>
+              <Field label="Contract Subcategory (Optional)">
+                <input
+                  value={draft.rateContractConfig.contractSubCategory}
+                  onChange={e => updateRateContract('contractSubCategory', e.target.value)}
+                  className={inputClass}
+                  placeholder="Enter contract subcategory (Optional)"
+                />
+              </Field>
+              <Field label="Contract Start Date" required>
+                <input
+                  type="date"
+                  value={draft.rateContractConfig.periodStartDate}
+                  onChange={e => updateRateContract('periodStartDate', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Contract End Date" required>
+                <input
+                  type="date"
+                  value={draft.rateContractConfig.periodEndDate}
+                  onChange={e => updateRateContract('periodEndDate', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Rate Validity Period" required>
+                <input
+                  value={draft.rateContractConfig.rateValidityPeriod}
+                  onChange={e => updateRateContract('rateValidityPeriod', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Fixed for full contract period"
+                />
+              </Field>
+              <Field label="Supplier Selection Strategy" required>
+                <select
+                  value={draft.rateContractConfig.supplierSelectionStrategy}
+                  onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])}
+                  className={inputClass}
+                >
+                  <option value="SINGLE_SUPPLIER">Single Supplier (L1 Award)</option>
+                  <option value="MULTI_SUPPLIER">Multiple Suppliers (Parallel Contracts)</option>
+                  <option value="PANEL_RATE_CONTRACT">Panel Rate Contract (Pre-qualified Empaneled)</option>
+                </select>
+              </Field>
+              <Field label="Allocated Supplier(s)" required className="sm:col-span-2">
+                <div className="relative">
+                  <input
+                    value={`${draft.rateContractConfig.selectedSuppliers.length || draft.vendors.invitedSellers.length} supplier(s) allocated from Supplier step`}
+                    readOnly
+                    className={cn(inputClass, 'bg-slate-50 text-slate-600 font-semibold cursor-default')}
+                  />
+                  <Users className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </Field>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <Field label="Contract Scope & Purpose Description">
+                  <textarea
+                    value={draft.rateContractConfig.contractDescription}
+                    onChange={e => updateRateContract('contractDescription', e.target.value)}
+                    className={cn(inputClass, 'min-h-[72px] resize-y')}
+                    placeholder="Provide scope, authorized drawing/grade standards, and delivery terms overview..."
+                  />
+                </Field>
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Item / Rate Schedule</h4>
-              <Button type="button" variant="outline" size="sm" onClick={addRateItem} className="h-8 text-[10px] font-black">
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
+          {/* Subsection 2: Item & Rate Schedule (BOQ) */}
+          <div className="rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-[#0b2447]" />
+                  <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
+                    Item &amp; Unit Rate Schedule (BOQ)
+                  </h4>
+                  <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                    {draft.rateContractConfig.itemRateSchedule.length} Item(s)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Define item specifications, estimated annual quantities, ceiling unit base rates, and applicable GST/discount.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addRateItem}
+                className="h-8.5 px-3 rounded-lg border-blue-200 bg-blue-50 text-[#0b2447] hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 shadow-2xs shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                <span>Add Contract Item</span>
               </Button>
             </div>
-            <div className="space-y-3">
-              {draft.rateContractConfig.itemRateSchedule.map(item => (
-                <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                  <div className="grid gap-2.5 sm:gap-3 md:grid-cols-4">
-                    <Field label="Item Name" required>
-                      <input value={item.itemName} onChange={e => updateRateItem(item.id, 'itemName', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Specification">
-                      <input value={item.specification} onChange={e => updateRateItem(item.id, 'specification', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="UOM" required>
-                      <input value={item.uom} onChange={e => updateRateItem(item.id, 'uom', e.target.value)} maxLength={20} placeholder="Nos, Kg, Sets..." className={inputClass} />
-                    </Field>
-                    <Field label="Estimated Annual Quantity" required>
-                      <input type="number" min={0} value={item.estimatedAnnualQuantity || ''} onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="Base Rate" required>
-                      <input type="number" min={0} value={item.baseRate || ''} onChange={e => updateRateItem(item.id, 'baseRate', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="GST %">
-                      <input type="number" min={0} max={100} value={item.gst} onChange={e => updateRateItem(item.id, 'gst', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="Discount %">
-                      <input type="number" min={0} max={100} value={item.discount} onChange={e => updateRateItem(item.id, 'discount', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <div className="flex items-end justify-between gap-2">
-                      <label className="flex items-center gap-2 pb-2 text-xs font-semibold cursor-pointer select-none">
-                        <input type="checkbox" checked={item.slabPricingEnabled} onChange={e => updateRateItem(item.id, 'slabPricingEnabled', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                        <span>Slab pricing optional</span>
-                      </label>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => removeRateItem(item.id)} className="h-8 px-2 text-rose-700">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+
+            <div className="space-y-3.5">
+              {draft.rateContractConfig.itemRateSchedule.map((item, idx) => {
+                const base = Number(item.baseRate || 0);
+                const gst = Number(item.gst || 0);
+                const disc = Number(item.discount || 0);
+                const afterDisc = base * (1 - disc / 100);
+                const landedUnit = afterDisc * (1 + gst / 100);
+
+                return (
+                  <div key={item.id} className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 transition-all hover:border-slate-300 hover:shadow-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#0b2447] text-white text-[10px] font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-black text-slate-900 truncate">
+                          {item.itemName || 'Untitled Item'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {landedUnit > 0 && (
+                          <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            Est. Landed: ₹{landedUnit.toFixed(2)} / {item.uom || 'Unit'}
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeRateItem(item.id)}
+                          className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                      <Field label="Item Name" required>
+                        <input
+                          value={item.itemName}
+                          onChange={e => updateRateItem(item.id, 'itemName', e.target.value)}
+                          className={inputClass}
+                          placeholder="e.g. Safety Helmets Type II"
+                        />
+                      </Field>
+                      <Field label="Specification / Grade">
+                        <input
+                          value={item.specification}
+                          onChange={e => updateRateItem(item.id, 'specification', e.target.value)}
+                          className={inputClass}
+                          placeholder="IS:2925 standard or custom specs"
+                        />
+                      </Field>
+                      <Field label="UOM" required>
+                        <input
+                          value={item.uom}
+                          onChange={e => updateRateItem(item.id, 'uom', e.target.value)}
+                          maxLength={20}
+                          placeholder="Nos, Sets, Meters..."
+                          className={inputClass}
+                        />
+                      </Field>
+                      <Field label="Est. Annual Quantity" required>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.estimatedAnnualQuantity || ''}
+                          onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="Annual projected volume"
+                        />
+                      </Field>
+                      <Field label="Base Rate (₹ / UOM)" required>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.baseRate || ''}
+                          onChange={e => updateRateItem(item.id, 'baseRate', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0.00"
+                        />
+                      </Field>
+                      <Field label="GST (%)">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.gst}
+                          onChange={e => updateRateItem(item.id, 'gst', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="18"
+                        />
+                      </Field>
+                      <Field label="Discount (%)">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.discount}
+                          onChange={e => updateRateItem(item.id, 'discount', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0"
+                        />
+                      </Field>
+                      <div className="flex items-end justify-between gap-2 pb-1">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={item.slabPricingEnabled}
+                            onChange={e => updateRateItem(item.id, 'slabPricingEnabled', e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
+                          />
+                          <span>Slab Pricing Tier</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {draft.rateContractConfig.itemRateSchedule.length === 0 && (
-                <p className="rounded-lg border border-dashed border-slate-300 p-4 text-xs font-semibold text-slate-500">
-                  Add at least one item and rate for this contract.
-                </p>
+                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-2">
+                  <Package className="h-8 w-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-700">No Rate Schedule Items Configured</p>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    Add at least one item with unit base rates to establish this rate contract.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addRateItem}
+                    className="h-8 px-3 rounded-lg border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs mt-1"
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add First Item
+                  </Button>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Delivery SLA" required>
-              <input value={draft.rateContractConfig.deliverySla} onChange={e => updateRateContract('deliverySla', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Penalty Clause" required>
-              <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
-            </Field>
-
-            <div className="sm:col-span-2 space-y-3">
-              <label className="inline-flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-                <input type="checkbox" checked={draft.rateContractConfig.callOffOrderAllowed} onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                <span>Call-off Order Allowed?</span>
-              </label>
-              {draft.rateContractConfig.callOffOrderAllowed && (
-                <div className="grid gap-4 sm:grid-cols-2 pt-1">
-                  <Field label="Maximum Order Quantity Per Call-off">
-                    <input type="number" min={0} value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''} onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))} className={inputClass} />
-                  </Field>
-                  <Field label="Minimum Order Quantity">
-                    <input type="number" min={0} value={draft.rateContractConfig.minimumOrderQuantity || ''} onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))} className={inputClass} />
-                  </Field>
-                </div>
-              )}
+          {/* Subsection 3: Fulfillment SLA & Call-Off Controls */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+              <Truck className="h-3.5 w-3.5 text-[#0b2447]" />
+              <span>Fulfillment SLA &amp; Call-Off Order Controls</span>
             </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Delivery SLA" required>
+                <input
+                  value={draft.rateContractConfig.deliverySla}
+                  onChange={e => updateRateContract('deliverySla', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Door delivery within 7 working days from call-off issue"
+                />
+              </Field>
+              <Field label="Penalty Clause" required>
+                <input
+                  value={draft.rateContractConfig.penaltyClause}
+                  onChange={e => updateRateContract('penaltyClause', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
+                />
+              </Field>
 
-            <div className="sm:col-span-2">
-              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                Contract Document Upload
-              </label>
-              {draft.rateContractConfig.contractDocument?.fileName ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#12335f] border border-blue-100">
-                      <FileText className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-900 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
-                        {draft.rateContractConfig.contractDocument.fileName}
-                      </p>
-                      <p className="text-[10px] font-semibold text-slate-500">
-                        Rate Contract Reference Document
-                      </p>
-                    </div>
+              <div className="sm:col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={draft.rateContractConfig.callOffOrderAllowed}
+                    onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900">Enable Periodic Call-off Purchase Orders</span>
+                    <span className="block text-[11px] text-slate-500 font-medium">
+                      Allow buyer departments to trigger staggered release orders against locked contract rates over the validity duration.
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {draft.rateContractConfig.contractDocument.fileAssetId && (
-                      <>
+                </label>
+
+                {draft.rateContractConfig.callOffOrderAllowed && (
+                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+                    <Field label="Maximum Order Quantity Per Call-off">
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
+                        onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
+                        className={inputClass}
+                        placeholder="0 = No ceiling"
+                      />
+                    </Field>
+                    <Field label="Minimum Order Quantity Per Call-off">
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.rateContractConfig.minimumOrderQuantity || ''}
+                        onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
+                        className={inputClass}
+                        placeholder="0 = No minimum"
+                      />
+                    </Field>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Subsection 4: Rate Contract Master Document */}
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+              Contract Agreement &amp; Reference Document Upload
+            </label>
+            {draft.rateContractConfig.contractDocument?.fileName ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#0b2447] border border-blue-100">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
+                      {draft.rateContractConfig.contractDocument.fileName}
+                    </p>
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      Rate Contract Reference Document
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {draft.rateContractConfig.contractDocument.fileAssetId && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank')}
+                        className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                        View
+                      </Button>
+                      <a
+                        href={`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
+                        download={draft.rateContractConfig.contractDocument.fileName}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank')}
                           className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
                         >
-                          <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                          View
+                          <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                          Download
                         </Button>
-                        <a
-                          href={`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
-                          download={draft.rateContractConfig.contractDocument.fileName}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                          >
-                            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
-                            Download
-                          </Button>
-                        </a>
-                      </>
-                    )}
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleRateContractDocUpload(file);
-                        }}
-                        disabled={uploadingRateContractDoc}
-                      />
-                      <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
-                        {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                        Replace
-                      </span>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRemoveRateContractDoc}
-                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 mr-1" />
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative">
-                  <label
-                    onDragOver={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleRateContractDocUpload(file);
-                    }}
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
-                      uploadingRateContractDoc && "opacity-50 pointer-events-none"
-                    )}
-                  >
+                      </a>
+                    </>
+                  )}
+                  <label className="cursor-pointer">
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
@@ -6306,25 +6510,69 @@ function ScheduleStepForm({
                       }}
                       disabled={uploadingRateContractDoc}
                     />
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
-                      {uploadingRateContractDoc ? (
-                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
-                      ) : (
-                        <Upload className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">
-                        {uploadingRateContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
-                      </p>
-                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
-                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
-                      </p>
-                    </div>
+                    <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
+                      {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Replace
+                    </span>
                   </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveRateContractDoc}
+                    className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Remove
+                  </Button>
                 </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <label
+                  onDragOver={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleRateContractDocUpload(file);
+                  }}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#0b2447] hover:bg-blue-50/20 group",
+                    uploadingRateContractDoc && "opacity-50 pointer-events-none"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleRateContractDocUpload(file);
+                    }}
+                    disabled={uploadingRateContractDoc}
+                  />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30 transition-all duration-200">
+                    {uploadingRateContractDoc ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-[#0b2447]" />
+                    ) : (
+                      <Upload className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {uploadingRateContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
+                    </p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                      Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -6420,27 +6668,27 @@ function ScheduleStepForm({
         )}
       </div>
 
-{/* ── Live Reverse Auction (e-RA) Configuration ── */}
+      {/* ── Live Reverse Auction (e-RA) Configuration ── */}
       {!isRateContract && (
-        <div className="border border-indigo-200/90 rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-indigo-50/70 via-slate-50 to-white shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100/80 pb-4">
+        <div className="border border-slate-200/90 rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm ring-2 ring-indigo-100">
-                <Gavel className="h-5 w-5" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs">
+                <TrendingDown className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
-                    Live Reverse Auction (e-RA) Stage
-                  </h4>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Live Reverse Auction (e-RA) Sourcing Engine
+                  </h3>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/70">
                     Dynamic Price Discovery
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-600 font-semibold mt-1">
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
                   {isReverseAuctionMethod(draft.type)
-                    ? 'Configure reverse auction parameters for live downward bidding among qualified sellers.'
-                    : 'Conduct an interactive downward bidding auction among technically qualified sellers after initial bids are evaluated.'}
+                    ? 'Configure real-time downward bidding rules, decrement steps, anti-sniping clocks, and participant console parameters.'
+                    : 'Conduct an interactive downward bidding auction among technically qualified sellers after Stage 1 sealed bids are evaluated.'}
                 </p>
               </div>
             </div>
@@ -6473,7 +6721,7 @@ function ScheduleStepForm({
                   }}
                   className="sr-only peer"
                 />
-                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#12335f]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#12335f]" />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#0b2447]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0b2447]" />
                 <span className="ml-2.5 text-xs font-bold text-slate-800">
                   {draft.basics.isReverseAuctionNeeded ? 'Enabled' : 'Disabled'}
                 </span>
@@ -6482,11 +6730,15 @@ function ScheduleStepForm({
           </div>
 
           {isAuction && (
-            <div className="space-y-4 pt-1">
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Standalone REVERSE_AUCTION: show start/end datetime and duration */}
-                {isReverseAuctionMethod(draft.type) && (
-                  <>
+            <div className="space-y-6 pt-1">
+              {/* Standalone REVERSE_AUCTION: Timing & Window */}
+              {isReverseAuctionMethod(draft.type) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                    <Clock className="h-3.5 w-3.5 text-[#0b2447]" />
+                    <span>Auction Window &amp; Countdown Clock</span>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
                     <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
                       <DateTimePicker
                         id="auction-start-datetime"
@@ -6506,134 +6758,183 @@ function ScheduleStepForm({
                       />
                     </Field>
                     <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
-                      <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
+                      <input
+                        type="number"
+                        min={1}
+                        value={draft.auctionConfig.durationMinutes || ''}
+                        onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))}
+                        className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))}
+                        placeholder="e.g. 60"
+                      />
                     </Field>
-                  </>
-                )}
+                  </div>
+                </div>
+              )}
 
-              
-
-                <Field label="Auction Trigger Eligibility" required>
-                  <select
-                    id="auction-trigger-eligibility"
-                    value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
-                    onChange={e => {
-                      const isTopN = e.target.value === 'TOP_N_BIDDERS';
-                      updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
-                      updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
-                    }}
-                    className={inputClass}
-                  >
-                    <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
-                    <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
-                  </select>
-                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                    Determines which shortlisted vendors qualify into the live reverse auction room.
-                  </p>
-                </Field>
-
-                {draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders && (
-                  <Field label="Number of Top Bidders (N)" required>
-                    <input
-                      type="number"
-                      id="auction-top-n-bidders"
-                      min={2}
-                      max={10}
-                      value={draft.auctionConfig.triggerConfiguration.auctionAmongTopNBidders || 3}
-                      onChange={e => updateTrigger('auctionAmongTopNBidders', Math.max(2, Number(e.target.value || 3)))}
+              {/* Subsection: Qualification & Sourcing Rules */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Users className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Seller Qualification &amp; Room Entry Criteria</span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Auction Trigger Eligibility" required>
+                    <select
+                      id="auction-trigger-eligibility"
+                      value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
+                      onChange={e => {
+                        const isTopN = e.target.value === 'TOP_N_BIDDERS';
+                        updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
+                        updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
+                      }}
                       className={inputClass}
-                    />
+                    >
+                      <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
+                      <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
+                    </select>
                     <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                      Only the top N lowest sealed price bidders will enter the live auction console.
+                      Determines which shortlisted vendors qualify into the live reverse auction room.
                     </p>
                   </Field>
-                )}
 
-                <Field label="Minimum Bid Decrement (₹)" required>
-                  <input
-                    type="number"
-                    id="auction-min-bid-decrement"
-                    min={1}
-                    value={draft.auctionConfig.minimumBidDecrement || ''}
-                    onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
-                    className={inputClass}
-                    placeholder="e.g. 5000"
-                  />
-                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="text-[10px] font-bold text-slate-500">Quick Step:</span>
-                    {[
-                      { label: '0.5%', val: Math.max(500, Math.round((draft.basics.estimatedValue || 100000) * 0.005)) },
-                      { label: '1%', val: Math.max(1000, Math.round((draft.basics.estimatedValue || 100000) * 0.01)) },
-                      { label: '₹5,000', val: 5000 },
-                      { label: '₹10,000', val: 10000 },
-                      { label: '₹25,000', val: 25000 },
-                    ].map(preset => (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => updateAuction('minimumBidDecrement', preset.val)}
-                        className={cn(
-                          "text-[10px] font-bold px-2 py-0.5 rounded-md border transition",
-                          draft.auctionConfig.minimumBidDecrement === preset.val
-                            ? "border-[#12335f] bg-[#12335f] text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                        )}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
+                  {draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? (
+                    <Field label="Number of Top Bidders (N)" required>
+                      <input
+                        type="number"
+                        id="auction-top-n-bidders"
+                        min={2}
+                        max={10}
+                        value={draft.auctionConfig.triggerConfiguration.auctionAmongTopNBidders || 3}
+                        onChange={e => updateTrigger('auctionAmongTopNBidders', Math.max(2, Number(e.target.value || 3)))}
+                        className={inputClass}
+                      />
+                      <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                        Only the top N lowest sealed price bidders will enter the live auction console.
+                      </p>
+                    </Field>
+                  ) : (
+                    <Field label="Minimum Qualified Bidders" required>
+                      <input
+                        type="number"
+                        id="auction-min-qualified-bidders"
+                        min={2}
+                        value={draft.auctionConfig.minimumQualifiedBidders || ''}
+                        onChange={e => {
+                          const value = Number(e.target.value || 0);
+                          updateAuction('minimumQualifiedBidders', value);
+                          updateSchedule('minimumBidders', value);
+                        }}
+                        className={inputClass}
+                        placeholder="Minimum 2 qualified bidders"
+                      />
+                      <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                        Ensures dynamic market competition before live auction commencement.
+                      </p>
+                    </Field>
+                  )}
+                </div>
+              </div>
 
-                <Field label="Starting Opening Price (₹ Ceiling)">
-                  <select
-                    id="auction-starting-price-mode"
-                    value={draft.auctionConfig.startingBidPrice === -1 ? 'L1_LOWEST' : 'MANUAL'}
-                    onChange={e => {
-                      if (e.target.value === 'L1_LOWEST') {
-                        updateAuction('startingBidPrice', -1);
-                      } else {
-                        updateAuction('startingBidPrice', draft.basics.estimatedValue || 0);
-                      }
-                    }}
-                    className={inputClass}
-                  >
-                    <option value="MANUAL">Manual Entry (Custom Amount)</option>
-                    <option value="L1_LOWEST">Lowest Price of the Participants (L1)</option>
-                  </select>
-                  {draft.auctionConfig.startingBidPrice !== -1 && (
+              {/* Subsection: Pricing Ceiling, Floor & Decrement */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Scale className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Pricing Ceiling, Floor &amp; Decrement Steps</span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Starting Opening Price (₹ Ceiling)">
+                    <select
+                      id="auction-starting-price-mode"
+                      value={draft.auctionConfig.startingBidPrice === -1 ? 'L1_LOWEST' : 'MANUAL'}
+                      onChange={e => {
+                        if (e.target.value === 'L1_LOWEST') {
+                          updateAuction('startingBidPrice', -1);
+                        } else {
+                          updateAuction('startingBidPrice', draft.basics.estimatedValue || 0);
+                        }
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="MANUAL">Manual Entry (Custom Opening Amount)</option>
+                      <option value="L1_LOWEST">Lowest Initial Bid of Participants (L1)</option>
+                    </select>
+                    {draft.auctionConfig.startingBidPrice !== -1 && (
+                      <input
+                        type="number"
+                        id="auction-starting-bid-price"
+                        min={0}
+                        value={draft.auctionConfig.startingBidPrice || ''}
+                        onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
+                        className={cn(inputClass, 'mt-2')}
+                        placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
+                      />
+                    )}
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                      {draft.auctionConfig.startingBidPrice === -1
+                        ? 'The opening price will automatically lock to the lowest qualified sealed bid (L1) at auction launch.'
+                        : 'Opening ceiling price for the downward reverse auction.'}
+                    </p>
+                  </Field>
+
+                  <Field label="Internal Reserve Price (Optional ₹)">
                     <input
                       type="number"
-                      id="auction-starting-bid-price"
+                      id="auction-reserve-price"
                       min={0}
-                      value={draft.auctionConfig.startingBidPrice || ''}
-                      onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
-                      className={cn(inputClass, 'mt-2')}
-                      placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
+                      value={draft.auctionConfig.reservePrice ?? ''}
+                      onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)}
+                      className={inputClass}
+                      placeholder="Leave blank if no confidential reserve threshold"
                     />
-                  )}
-                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                    {draft.auctionConfig.startingBidPrice === -1
-                      ? 'The starting price will automatically lock to the lowest qualified sealed bid (L1) at auction launch.'
-                      : 'Opening ceiling. Manually specify the starting bid price for the reverse auction.'}
-                  </p>
-                </Field>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                      Confidential threshold. Bids must meet or beat this price for award recommendation. Strictly hidden from sellers.
+                    </p>
+                  </Field>
 
-                <Field label="Internal Reserve Price (Optional ₹)">
-                  <input
-                    type="number"
-                    id="auction-reserve-price"
-                    min={0}
-                    value={draft.auctionConfig.reservePrice ?? ''}
-                    onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)}
-                    className={inputClass}
-                    placeholder="Leave blank if no reserve threshold"
-                  />
-                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                    Confidential threshold. Bids must meet or beat this price to win. Strictly hidden from sellers.
-                  </p>
-                </Field>
+                  <Field label="Minimum Bid Decrement (₹)" required className="sm:col-span-2">
+                    <input
+                      type="number"
+                      id="auction-min-bid-decrement"
+                      min={1}
+                      value={draft.auctionConfig.minimumBidDecrement || ''}
+                      onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
+                      className={inputClass}
+                      placeholder="e.g. 5000"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <span className="text-[10px] font-bold text-slate-500">Quick Step:</span>
+                      {[
+                        { label: '0.5%', val: Math.max(500, Math.round((draft.basics.estimatedValue || 100000) * 0.005)) },
+                        { label: '1%', val: Math.max(1000, Math.round((draft.basics.estimatedValue || 100000) * 0.01)) },
+                        { label: '₹5,000', val: 5000 },
+                        { label: '₹10,000', val: 10000 },
+                        { label: '₹25,000', val: 25000 },
+                      ].map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => updateAuction('minimumBidDecrement', preset.val)}
+                          className={cn(
+                            "text-[10px] font-bold px-2.5 py-1 rounded-md border transition-all shadow-2xs",
+                            draft.auctionConfig.minimumBidDecrement === preset.val
+                              ? "border-[#0b2447] bg-[#0b2447] text-white"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+              </div>
 
+              {/* Subsection: Participant Console Display & Privacy */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Eye className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Participant Console Display &amp; Privacy</span>
+                </div>
                 <Field label="Supplier Rank & Competitor Visibility" required>
                   <select
                     id="auction-rank-visibility"
@@ -6649,45 +6950,32 @@ function ScheduleStepForm({
                     Protects bidder privacy and prevents collusion or price-fixing cartels during live bidding.
                   </p>
                 </Field>
-
-                <Field label="Minimum Qualified Bidders" required>
-                  <input
-                    type="number"
-                    id="auction-min-qualified-bidders"
-                    min={2}
-                    value={draft.auctionConfig.minimumQualifiedBidders || ''}
-                    onChange={e => {
-                      const value = Number(e.target.value || 0);
-                      updateAuction('minimumQualifiedBidders', value);
-                      updateSchedule('minimumBidders', value);
-                    }}
-                    className={inputClass}
-                  />
-                </Field>
               </div>
 
-              {/* Anti-sniping auto-extension settings */}
-              <div className="rounded-xl border border-indigo-100 bg-white p-3.5 space-y-3">
+              {/* Subsection: Anti-sniping auto-extension */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
                 <label className="flex items-center gap-2.5 cursor-pointer select-none" htmlFor="auction-auto-extension">
                   <input
                     type="checkbox"
                     id="auction-auto-extension"
                     checked={Boolean(draft.auctionConfig.autoExtensionEnabled)}
                     onChange={e => updateAuction('autoExtensionEnabled', e.target.checked)}
-                    className="h-4 w-4 rounded accent-[#12335f]"
+                    className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
                   />
                   <div>
-                    <span className="text-xs font-bold text-slate-900">Anti-Sniping Auto-Extension</span>
-                    <span className="block text-[10px] text-slate-500 font-medium mt-0.5">
-                      Prevents last-second bids by extending the auction clock when a competitive bid arrives near closing time.
+                    <span className="text-xs font-bold text-slate-900">Anti-Sniping Dynamic Auto-Extension</span>
+                    <span className="block text-[11px] text-slate-500 font-medium mt-0.5">
+                      Prevents unfair last-second bid sniping by automatically extending the auction countdown when a competitive decrement arrives near close.
                     </span>
                   </div>
                 </label>
 
                 {draft.auctionConfig.autoExtensionEnabled && (
-                  <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
                     <div>
-                      <label htmlFor="auction-ext-trigger" className="text-[10px] font-bold text-slate-600 block mb-1">Trigger Window</label>
+                      <label htmlFor="auction-ext-trigger" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Trigger Window
+                      </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number"
@@ -6696,13 +6984,15 @@ function ScheduleStepForm({
                           max={30}
                           value={draft.auctionConfig.extensionTriggerMinutes || 5}
                           onChange={e => updateAuction('extensionTriggerMinutes', Number(e.target.value || 5))}
-                          className={cn(inputClass, 'h-8 text-xs text-center')}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
                         />
-                        <span className="text-[10px] text-slate-500 font-bold">min</span>
+                        <span className="text-xs text-slate-500 font-bold">min</span>
                       </div>
                     </div>
                     <div>
-                      <label htmlFor="auction-ext-duration" className="text-[10px] font-bold text-slate-600 block mb-1">Extension Duration</label>
+                      <label htmlFor="auction-ext-duration" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Extension Duration
+                      </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number"
@@ -6711,13 +7001,15 @@ function ScheduleStepForm({
                           max={60}
                           value={draft.auctionConfig.extensionDurationMinutes || 5}
                           onChange={e => updateAuction('extensionDurationMinutes', Number(e.target.value || 5))}
-                          className={cn(inputClass, 'h-8 text-xs text-center')}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
                         />
-                        <span className="text-[10px] text-slate-500 font-bold">min</span>
+                        <span className="text-xs text-slate-500 font-bold">min</span>
                       </div>
                     </div>
                     <div>
-                      <label htmlFor="auction-ext-max" className="text-[10px] font-bold text-slate-600 block mb-1">Max Extensions</label>
+                      <label htmlFor="auction-ext-max" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Max Extensions Allowed
+                      </label>
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number"
@@ -6726,9 +7018,9 @@ function ScheduleStepForm({
                           max={20}
                           value={draft.auctionConfig.maximumExtensions || 3}
                           onChange={e => updateAuction('maximumExtensions', Number(e.target.value || 3))}
-                          className={cn(inputClass, 'h-8 text-xs text-center')}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
                         />
-                        <span className="text-[10px] text-slate-500 font-bold">times</span>
+                        <span className="text-xs text-slate-500 font-bold">times</span>
                       </div>
                     </div>
                   </div>
@@ -6736,11 +7028,14 @@ function ScheduleStepForm({
               </div>
 
               {/* Auction Terms Document */}
-              <Field label="Auction Terms Document (Optional)" className="sm:col-span-2">
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  Auction Terms &amp; Rules Document (Optional)
+                </label>
                 {draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? (
-                  <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#0b2447] border border-blue-100">
                         <FileText className="h-4.5 w-4.5" aria-hidden="true" />
                       </div>
                       <div className="min-w-0">
@@ -6749,30 +7044,28 @@ function ScheduleStepForm({
                         </p>
                         <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
                           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
-                          Uploaded &amp; Attached
+                          Attached Auction Document
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       {draft.auctionConfig.termsDocumentFileId && (
-                        <>
-                          
-                          <a
-                            href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
-                            download={draft.auctionConfig.termsDocumentName}
-                            target="_blank"
-                            rel="noreferrer"
+                        <a
+                          href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
+                          download={draft.auctionConfig.termsDocumentName}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
                           >
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                            >
-                              Download
-                            </Button>
-                          </a>
-                        </>
+                            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                            Download
+                          </Button>
+                        </a>
                       )}
                       <label className="cursor-pointer">
                         <input
@@ -6797,6 +7090,7 @@ function ScheduleStepForm({
                         onClick={handleRemoveAuctionTermsFile}
                         className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
                       >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
                         Remove
                       </Button>
                     </div>
@@ -6815,7 +7109,7 @@ function ScheduleStepForm({
                         if (file) handleAuctionTermsFileUpload(file);
                       }}
                       className={cn(
-                        "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
+                        "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#0b2447] hover:bg-blue-50/20 group",
                         uploadingAuctionDoc && "opacity-50 pointer-events-none"
                       )}
                     >
@@ -6829,9 +7123,9 @@ function ScheduleStepForm({
                         }}
                         disabled={uploadingAuctionDoc}
                       />
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30 transition-all duration-200">
                         {uploadingAuctionDoc ? (
-                          <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" aria-hidden="true" />
+                          <Loader2 className="h-5 w-5 animate-spin text-[#0b2447]" aria-hidden="true" />
                         ) : (
                           <Upload className="h-5 w-5" aria-hidden="true" />
                         )}
@@ -6847,30 +7141,30 @@ function ScheduleStepForm({
                     </label>
                   </div>
                 )}
-              </Field>
+              </div>
 
-              {/* Buyer Monitor Settings */}
-              <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3 border-t border-indigo-100 pt-4">
+              {/* Buyer Monitor Privileges */}
+              <div className="grid gap-3 sm:grid-cols-3 border-t border-slate-100 pt-4">
                 <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-show-live-rank">
-                  <input type="checkbox" id="auction-show-live-rank" checked={draft.auctionConfig.buyerMonitorSettings.showLiveRank} onChange={e => updateMonitor('showLiveRank', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                  <span>Show Live Rank</span>
+                  <input type="checkbox" id="auction-show-live-rank" checked={draft.auctionConfig.buyerMonitorSettings.showLiveRank} onChange={e => updateMonitor('showLiveRank', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Show Live Bid Rank</span>
                 </label>
                 <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-alert-reserve-breach">
-                  <input type="checkbox" id="auction-alert-reserve-breach" checked={draft.auctionConfig.buyerMonitorSettings.alertOnReserveBreach} onChange={e => updateMonitor('alertOnReserveBreach', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                  <span>Alert On Reserve Breach</span>
+                  <input type="checkbox" id="auction-alert-reserve-breach" checked={draft.auctionConfig.buyerMonitorSettings.alertOnReserveBreach} onChange={e => updateMonitor('alertOnReserveBreach', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Alert On Reserve Breach</span>
                 </label>
                 <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-allow-manual-ext">
-                  <input type="checkbox" id="auction-allow-manual-ext" checked={draft.auctionConfig.buyerMonitorSettings.allowManualExtension} onChange={e => updateMonitor('allowManualExtension', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                  <span>Allow Manual Extension</span>
+                  <input type="checkbox" id="auction-allow-manual-ext" checked={draft.auctionConfig.buyerMonitorSettings.allowManualExtension} onChange={e => updateMonitor('allowManualExtension', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Allow Manual Extension</span>
                 </label>
               </div>
 
               {/* How it works info banner */}
               {!isReverseAuctionMethod(draft.type) && (
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-semibold">
-                  <Info className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden="true" />
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-100 text-xs text-blue-950 font-medium">
+                  <Info className="h-4.5 w-4.5 shrink-0 text-blue-700" aria-hidden="true" />
                   <span>
-                    <strong>How it works:</strong> The reverse auction will be launched as a follow-on event after you evaluate Stage 1 sealed proposals. The rules you configure here (decrement step, rank visibility, anti-sniping) will be used as defaults. You can adjust the start time, duration, and vendor selection when launching from the Proposals tab.
+                    <strong>Two-Stage Workflow:</strong> The reverse auction will be launched as Stage 2 after evaluating initial technical/commercial bids. The parameters configured here (decrement step, rank visibility, anti-sniping) serve as defaults and can be fine-tuned prior to room activation.
                   </span>
                 </div>
               )}

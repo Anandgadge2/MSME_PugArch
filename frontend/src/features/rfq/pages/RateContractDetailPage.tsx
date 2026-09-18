@@ -51,6 +51,7 @@ import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
+import { fetchRateContractDetail } from '../../rateContract/api';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
@@ -173,9 +174,19 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     staleTime: 60_000,
   });
 
-  const hasData = Boolean(bidData || reqData || initialData);
-  const isLoading = !hasData && (bidLoading || reqLoading);
-  const error = !hasData && (bidError || reqError) ? (bidError || reqError) : null;
+  // Fetch Contract table data when navigated via contract id (e.g. from /seller/opportunities or /procurement/rate-contracts)
+  const contractId = !isNaN(Number(rawIdParam)) ? Number(rawIdParam) : (rawIdParam.startsWith('rc-') ? Number(rawIdParam.replace('rc-', '')) : null);
+  const { data: contractData, isLoading: contractLoading, error: contractError } = useQuery({
+    queryKey: ['rate-contract-detail', contractId],
+    queryFn: () => fetchRateContractDetail(contractId!),
+    enabled: !!contractId,
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const hasData = Boolean(bidData || reqData || contractData || initialData);
+  const isLoading = !hasData && (bidLoading || reqLoading || contractLoading);
+  const error = !hasData && (bidError || reqError || contractError) ? (bidError || reqError || contractError) : null;
 
   const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
 
@@ -200,9 +211,91 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     responseData: ownParticipation.responseData,
   } : null);
 
-  // ── Normalize rcData from either bidData or reqData ──
+  // ── Normalize rcData from either contractData, reqData, or verified bidData ──
   const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
-  const preferReq = Boolean((explicitReqId || !bid) && reqObj);
+  const isBidActualRc = Boolean(
+    bid && (
+      String(bid.bidType || '').toUpperCase().includes('RATE_CONTRACT') ||
+      String(bid.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
+      String(bid.bidNumber || '').toUpperCase().startsWith('RC-') ||
+      String(bid.title || '').toUpperCase().includes('RATE CONTRACT') ||
+      bid.technicalPacket?.rateContractConfig ||
+      bid.technicalPacket?.rateContract
+    )
+  );
+
+  const cMeta: any = contractData?.metadata || {};
+  const contractAsRcData = contractData ? {
+    id: contractData.id,
+    subject: cMeta.contractTitle || contractData.title || 'Rate Contract Opportunity',
+    title: cMeta.contractTitle || contractData.title,
+    contractNumber: contractData.contractNumber || cMeta.requirementNumber || `RC-${contractData.id}`,
+    buyer: {
+      name: (contractData as any).buyerOrganization?.organizationName || (contractData as any).buyer?.name || cMeta.buyerOrganizationName || 'Verified Buyer',
+      email: (contractData as any).buyerEmail || (contractData as any).buyer?.email || null,
+      mobile: (contractData as any).buyerMobile || (contractData as any).buyer?.mobile || null,
+      buyerProfile: (contractData as any).buyerOrganization || (contractData as any).buyer?.buyerProfile,
+    },
+    estimatedValue: contractData.value || cMeta.estimatedValue,
+    deadlineDate: contractData.endDate || cMeta.periodEndDate,
+    createdAt: contractData.startDate || contractData.createdAt || cMeta.periodStartDate,
+    status: contractData.status || cMeta.activeState || 'ACTIVE',
+    items: (cMeta.itemRateSchedule || []).map((it: any) => ({
+      itemName: it.itemName,
+      name: it.itemName,
+      quantity: it.estimatedAnnualQuantity,
+      unit: it.unitOfMeasure,
+      specification: it.specification || '',
+      baseRate: it.baseRate,
+      discount: it.discount,
+      gst: it.gst
+    })),
+    location: cMeta.deliveryLocation || cMeta.deliverySla || [cMeta.district, cMeta.state].filter(Boolean).join(', ') || 'Location as agreed in call-off orders',
+    requirementNumber: contractData.contractNumber || cMeta.requirementNumber,
+    paymentTerms: cMeta.paymentTerms || 'Standard Payment Terms',
+    deliveryTerms: cMeta.deliverySla || 'Standard Delivery SLA',
+    payload: {
+      basics: {
+        title: cMeta.contractTitle || contractData.title,
+        category: cMeta.contractCategory,
+        estimatedValue: contractData.value,
+      },
+      rateContractConfig: cMeta,
+      rateContract: cMeta,
+      schedule: {
+        publishDate: contractData.startDate || cMeta.periodStartDate,
+        submissionDeadline: contractData.endDate || cMeta.periodEndDate,
+      },
+      terms: {
+        deliveryTerms: cMeta.deliverySla,
+        paymentTerms: cMeta.paymentTerms,
+        penaltyClause: cMeta.penaltyClause,
+        rateValidityPeriod: cMeta.rateValidityPeriod,
+      },
+      items: (cMeta.itemRateSchedule || []).map((it: any) => ({
+        itemName: it.itemName,
+        quantity: it.estimatedAnnualQuantity,
+        unit: it.unitOfMeasure,
+        specification: it.specification,
+        baseRate: it.baseRate,
+      })),
+      vendors: {
+        invitedSellers: cMeta.selectedSuppliers || []
+      }
+    },
+    description: cMeta.contractDescription || contractData.title,
+    documents: cMeta.contractDocument ? [{ fileName: cMeta.contractDocument.fileName }] : [],
+    procurementMethod: 'RATE_CONTRACT',
+    categoryName: cMeta.contractCategory || 'Facility Management & Canteen Services',
+    quantity: (cMeta.itemRateSchedule || []).reduce((sum: number, it: any) => sum + (Number(it.estimatedAnnualQuantity) || 0), 0) || undefined,
+    unit: cMeta.itemRateSchedule?.[0]?.unitOfMeasure || 'Units',
+    buyerOrganization: (contractData as any).buyerOrganization || { organizationName: cMeta.buyerOrganizationName || 'Verified Buyer' },
+    isEmdRequired: false,
+    emdAmount: 0,
+    allowReverseAuction: false,
+  } : null;
+
+  const preferReq = Boolean((explicitReqId || (!bid && !contractData)) && reqObj && (reqObj.title || reqObj.id));
 
   const rcData: any = preferReq ? {
     id: reqObj.id,
@@ -235,7 +328,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     buyerOrganization: reqObj.buyerOrganization || bid?.buyerOrganization,
     isEmdRequired: reqObj.isEmdRequired ?? reqObj.payload?.isEmdRequired ?? bid?.isEmdRequired,
     emdAmount: reqObj.emdAmount ?? reqObj.payload?.emdAmount ?? bid?.emdAmount,
-  } : bid ? {
+  } : contractAsRcData ? contractAsRcData : isBidActualRc && bid ? {
     id: bid.id || bid.sourceId,
     subject: bid.title,
     buyer: bid.buyer || { name: bid.buyerName },
@@ -257,7 +350,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     unit: bid.unit,
     buyerOrganization: bid.buyerOrganization || { organizationName: bid.buyerOrganizationName },
     visibility: bid.visibility,
-    allowReverseAuction: bid.allowReverseAuction,
+    allowReverseAuction: false,
     isEmdRequired: bid.isEmdRequired,
     emdAmount: bid.emdAmount,
     evaluationMethod: [
@@ -272,7 +365,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     endDate: bid.endDate,
     technicalOpeningDate: bid.technicalOpeningDate,
     financialOpeningDate: bid.financialOpeningDate,
-  } : reqObj ? {
+  } : reqObj && (reqObj.title || reqObj.id) ? {
     id: reqObj.id,
     subject: reqObj.title || reqObj.description,
     buyer: {
@@ -303,8 +396,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     buyerOrganization: reqObj.buyerOrganization,
   } : null;
 
-  const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rcData?.status);
+  const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED', 'COMPLETED', 'EXPIRED'].includes(String(rcData?.status || '').toUpperCase());
   const isDeadlinePassedStatus = !!rcData?.deadlineDate && new Date(rcData.deadlineDate).getTime() < Date.now();
+  const isProcurementEnded = isClosedStatus || isDeadlinePassedStatus;
   const isRateQuotationSubmitted = Boolean(
     ownResponse &&
     String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase() === 'SUBMITTED'
@@ -758,6 +852,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         }
         participations={bid?.participations || []}
         participantsCount={bid?.participations?.length || 0}
+        isSubmitDisabled={isProcurementEnded}
         hasSubmittedProposal={isRateQuotationSubmitted}
         ownParticipation={ownParticipation}
         ownResponse={ownResponse}
@@ -765,8 +860,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         isEmdRequired={rcData.isEmdRequired}
         backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
         backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
-        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'Rate Quotation Submitted' : 'Submit Rate Quote')}
-        onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation}
+        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'Rate Quotation Submitted' : (isProcurementEnded ? undefined : 'Submit Rate Quote'))}
+        onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : (isProcurementEnded ? undefined : handleSubmitQuotation)}
         onViewQuotationClick={isRateQuotationSubmitted ? handleSubmitQuotation : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Rate Contract' : 'Cancel Rate Contract'}

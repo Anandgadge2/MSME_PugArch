@@ -43,6 +43,7 @@ import {
 import { idempotencyKeyFromRequest, withIdempotency } from '../services/idempotency.service.js';
 import { catalogueWorkflow } from '../services/workflow/catalogue-workflow.service.js';
 import { procurementWorkflow } from '../services/workflow/procurement-workflow.service.js';
+import { numberSeries } from '../services/workflow/workflow-common.js';
 import { tenderWorkflow } from '../services/workflow/tender-workflow.service.js';
 import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.service.js';
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
@@ -1622,8 +1623,8 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
   return (saved as any)?.items ? saved : db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
-const nextProcurementAuctionCode = () => `RA-${Math.floor(10000 + Math.random() * 90000)}`;
-const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 90000)}`;
+const nextProcurementAuctionCode = () => numberSeries('RA');
+const nextRateContractCode = () => numberSeries('RC');
 
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);
@@ -5543,7 +5544,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
   ok(res, po, 201);
 }, 'Unable to create rate contract call-off order'));
 
-router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const contract = await db.contract.findUnique({
     where: { id },
@@ -5559,7 +5560,21 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
     throw new ApiError(404, 'Rate contract not found', 'RATE_CONTRACT_NOT_FOUND');
   }
   const isOwner = isAdmin(req) || req.user?.role === 'master_admin' || Number((contract.metadata as any)?.buyerId || 0) === userId(req);
-  if (!isOwner) throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+  if (!isOwner) {
+    if (req.user?.role === 'seller') {
+      const meta = (contract.metadata || {}) as any;
+      const selectedSuppliers = Array.isArray(meta.selectedSuppliers) ? meta.selectedSuppliers : [];
+      const isSelectedSeller = selectedSuppliers.some((s: any) =>
+        Number(s.supplierUserId) === userId(req) || (req.user?.organizationId && Number(s.supplierOrgId) === req.user.organizationId)
+      );
+      const isPublicOrActive = contract.status === 'ACTIVE' || contract.status === 'PUBLISHED' || contract.status === 'OPEN' || !contract.endDate || contract.endDate >= new Date();
+      if (!isSelectedSeller && !isPublicOrActive) {
+        throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+      }
+    } else {
+      throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+    }
+  }
   ok(res, contract);
 }, 'Unable to load rate contract details'));
 

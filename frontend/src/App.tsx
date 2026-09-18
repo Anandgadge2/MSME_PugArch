@@ -904,8 +904,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="draft" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="awarded" /></PermissionRouteGuard>;
     
-    // Seller & Buyer repeat orders
-    if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
+    // Repeat orders route redirect
+    if (pathname === '/orders/repeat') {
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/repeat-orders" />;
+      return <Redirect to="/orders" />;
+    }
     
     if (pathname === '/buyer/onboarding' && roleOk(user.role, ['buyer'])) return <BuyerOnboarding />;
     if (pathname === '/buyer/profile' && roleOk(user.role, ['buyer'])) return <BuyerProfile />;

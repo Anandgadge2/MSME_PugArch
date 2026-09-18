@@ -294,6 +294,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const canCancel =
     isBuyerOrAdmin && !['CANCELLED', 'CLOSED', 'AWARDED', 'COMPLETED'].includes(status);
 
+  const isAuctionClosed =
+    ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'].includes(status) ||
+    (auctionData.endTime ? new Date(auctionData.endTime).getTime() < Date.now() : false);
+
   // Requirement data fallback (typed safely)
   const reqData: any = auctionData.linkedRequirement || {};
   const linkedBidData: any = linkedBid.data || {};
@@ -468,8 +472,34 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 4. Closed / Concluded Auction Notice */}
-      {['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status) && (
+      {/* 4. Active Joined Seller Ready Alert */}
+      {hasJoined && !isAuctionClosed && myStatus !== 'DISQUALIFIED' && !evalPending && (
+        <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Activity className="h-5 w-5 animate-pulse" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                Participation Active — Live Console Ready
+              </h4>
+              <p className="text-xs font-semibold text-emerald-800/90 mt-0.5">
+                You are registered for this reverse auction. Access the dynamic bidding console to submit competitive decrements.
+              </p>
+            </div>
+          </div>
+          <Link
+            href={`/seller/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/live`}
+            className="rounded-xl bg-[#0b2447] hover:bg-[#123668] text-white px-5 py-2.5 text-xs font-black uppercase tracking-wider shrink-0 transition-all shadow-md flex items-center gap-2"
+          >
+            <Activity className="h-4 w-4" />
+            Open Live Console
+          </Link>
+        </div>
+      )}
+
+      {/* 5. Closed / Concluded Auction Notice */}
+      {isAuctionClosed && (
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0 shadow-sm">
@@ -494,8 +524,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 5. Not Joined Public Auction Notice */}
-      {!hasJoined && isPublicAuction && !['CLOSED', 'COMPLETED', 'CANCELLED'].includes(status) && (
+      {/* 6. Not Joined Public Auction Notice (Only when auction is active and open) */}
+      {!hasJoined && isPublicAuction && !isAuctionClosed && (
         <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -527,27 +557,42 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   // Buyer Action Buttons
   const buyerAuctionActions = isBuyerOrAdmin ? (
     <div className="flex flex-wrap items-center gap-2">
-      <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/live`}>
+      {!isAuctionClosed ? (
+        <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/live`}>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold shadow-sm flex items-center gap-1.5"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            <span>Live Console</span>
+          </Button>
+        </Link>
+      ) : (
+        <Link href={`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`}>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white font-extrabold shadow-sm flex items-center gap-1.5"
+          >
+            <Trophy className="h-3.5 w-3.5 text-amber-400" />
+            <span>Auction Results</span>
+          </Button>
+        </Link>
+      )}
+      {!isAuctionClosed && (
         <Button
+          ref={inviteButtonRef}
           type="button"
+          variant="outline"
           size="sm"
-          className="h-9 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold shadow-sm flex items-center gap-1.5"
+          onClick={() => setIsInviteModalOpen(true)}
+          className="h-9 rounded-xl border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5"
         >
-          <Activity className="h-3.5 w-3.5" />
-          <span>Live Console</span>
+          <UserPlus className="h-3.5 w-3.5 text-blue-600" />
+          <span>Invite Sellers</span>
         </Button>
-      </Link>
-      <Button
-        ref={inviteButtonRef}
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => setIsInviteModalOpen(true)}
-        className="h-9 rounded-xl border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5"
-      >
-        <UserPlus className="h-3.5 w-3.5 text-blue-600" />
-        <span>Invite Sellers</span>
-      </Button>
+      )}
       {status === 'DRAFT' && (
         <Button
           type="button"
@@ -671,26 +716,39 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             closed={['CLOSED', 'COMPLETED', 'CANCELLED'].includes(status)}
           />
         }
+        isSubmitDisabled={isAuctionClosed && !hasJoined}
         submitButtonLabel={
           isSeller
-            ? hasJoined
+            ? isAuctionClosed
+              ? hasJoined
+                ? 'View Auction Results'
+                : undefined
+              : hasJoined
               ? 'Live Bid Console'
               : isPublicAuction
               ? 'Join to Bid'
               : undefined
             : isBuyerOrAdmin
-            ? 'Open Live Console'
+            ? isAuctionClosed
+              ? 'View Auction Results'
+              : 'Open Live Console'
             : undefined
         }
         onSubmitClick={
           isSeller
-            ? hasJoined
+            ? isAuctionClosed
+              ? hasJoined
+                ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
+                : undefined
+              : hasJoined
               ? () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
               : isPublicAuction
               ? () => joinAuction.mutate()
               : undefined
             : isBuyerOrAdmin
-            ? () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
+            ? isAuctionClosed
+              ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
+              : () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
             : undefined
         }
         onDownloadClick={handleDownloadPdf}

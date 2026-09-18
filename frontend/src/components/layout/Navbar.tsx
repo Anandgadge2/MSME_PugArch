@@ -560,7 +560,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'], permission: 'purchase_order.view' },
       { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'], permission: 'grn.view' },
-      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'], permission: 'purchase_order.view' },
       { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'], permission: 'delivery.view' }
     ] },
     // Seller Marketplace

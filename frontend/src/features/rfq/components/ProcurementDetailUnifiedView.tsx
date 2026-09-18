@@ -4428,22 +4428,47 @@ export function ProcurementDetailUnifiedView(
     isPostBiddingStage,
   );
 
-  const isReverseAuctionType =
-    props.procurementType === "REVERSE_AUCTION" ||
-    props.procurementType === "reverse-auction" ||
+  const isRateContractType =
+    props.procurementType === "RATE_CONTRACT" ||
+    props.procurementType === "rate-contract" ||
     String(props.procurementType || "")
       .toUpperCase()
-      .includes("REVERSE_AUCTION") ||
+      .includes("RATE_CONTRACT") ||
+    String(props.procurementType || "")
+      .toUpperCase()
+      .includes("RATE CONTRACT") ||
     String(props.procurementLabel || "")
       .toUpperCase()
-      .includes("REVERSE AUCTION") ||
+      .includes("RATE CONTRACT") ||
     String(props.procurementMethod || "")
       .toUpperCase()
-      .includes("REVERSE AUCTION") ||
-    pathname.includes("/reverse-auction");
+      .includes("RATE CONTRACT") ||
+    pathname.includes("/rate-contract");
+
+  const isBiddingClosed =
+    isPostBiddingStage ||
+    Boolean(props.isSubmitDisabled) ||
+    Boolean(props.deadlineDate && new Date(props.deadlineDate).getTime() < Date.now());
+
+  const isReverseAuctionType =
+    !isRateContractType && (
+      props.procurementType === "REVERSE_AUCTION" ||
+      props.procurementType === "reverse-auction" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("REVERSE_AUCTION") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("REVERSE AUCTION") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("REVERSE AUCTION") ||
+      pathname.includes("/reverse-auction")
+    );
 
   const allowsReverseAuction = Boolean(
-    isReverseAuctionType ||
+    !isRateContractType && (
+      isReverseAuctionType ||
       Boolean((props as any)?.allowReverseAuction) ||
       Boolean(payload?.allowReverseAuction) ||
       Boolean(rules?.allowReverseAuction) ||
@@ -4453,19 +4478,24 @@ export function ProcurementDetailUnifiedView(
         String(
           props.procurementMethod || props.procurementType || "",
         ).toUpperCase(),
-      ),
+      )
+    )
   );
 
   const isTwoStageReverseAuction = Boolean(
-    props.linkedAuction?.preBidStage ||
+    !isRateContractType && (
+      props.linkedAuction?.preBidStage ||
       props.linkedAuction?.linkedBidId ||
       (props.linkedAuction?.linkedRequirementId &&
         props.procurementMethod === "BID_WITH_REVERSE_AUCTION") ||
-      (allowsReverseAuction && !isReverseAuctionType),
+      (allowsReverseAuction && !isReverseAuctionType)
+    )
   );
 
   const isDirectReverseAuction = Boolean(
-    (isReverseAuctionType || props.linkedAuction) && !isTwoStageReverseAuction,
+    !isRateContractType &&
+    (isReverseAuctionType || props.linkedAuction) &&
+    !isTwoStageReverseAuction
   );
 
   const documents = props.documents || [];
@@ -4702,22 +4732,6 @@ export function ProcurementDetailUnifiedView(
     pathname.includes("/limited-tender") ||
     pathname.includes("/limited");
   const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
-
-  const isRateContractType =
-    props.procurementType === "RATE_CONTRACT" ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("RATE_CONTRACT") ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("RATE CONTRACT") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("RATE CONTRACT") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("RATE CONTRACT") ||
-    pathname.includes("/rate-contract");
 
   const cleanBuyerTerms = (val: any): any => {
     if (!val) return val;
@@ -6507,6 +6521,7 @@ export function ProcurementDetailUnifiedView(
 
           {/* Planned (Not Yet Created) Reverse Auction Info Banner for Sellers */}
           {!isBuyerSide &&
+            !isRateContractType &&
             allowsReverseAuction &&
             (!linkedAuction ||
               (linkedAuction as any).auctionPlanned === true) && (
@@ -6674,56 +6689,65 @@ export function ProcurementDetailUnifiedView(
                     {props.cancelButtonLabel || "Cancel Procurement"}
                   </Button>
                 )}
-                {!isBuyerOrAdmin &&
-                  (props.hasSubmittedProposal || props.isSubmitDisabled) && (
-                    <>
-                      {(props.onViewQuotationClick || props.onSubmitClick) && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={
-                            props.onViewQuotationClick || props.onSubmitClick
-                          }
-                          className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
-                        >
-                          <Eye className="h-3.5 w-3.5 text-slate-600" />
-                          <span>
-                            {isRfqType
-                              ? "View Quotation"
-                              : props.procurementType === "RATE_CONTRACT"
-                                ? "View Rate Proposal"
-                                : "View Proposal"}
-                          </span>
-                        </Button>
-                      )}
+                {!isBuyerOrAdmin && props.hasSubmittedProposal && (
+                  <>
+                    {(props.onViewQuotationClick || props.onSubmitClick) && (
                       <Button
                         type="button"
+                        variant="outline"
                         size="sm"
-                        disabled
-                        aria-disabled="true"
-                        className="h-8 px-3.5 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                        onClick={
+                          props.onViewQuotationClick || props.onSubmitClick
+                        }
+                        className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
                       >
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        <Eye className="h-3.5 w-3.5 text-slate-600" />
                         <span>
-                          {props.submitButtonLabel &&
-                          props.submitButtonLabel
-                            .toLowerCase()
-                            .includes("submitted")
-                            ? props.submitButtonLabel
-                            : isRfqType
-                              ? "Quotation Submitted"
-                              : props.procurementType === "RATE_CONTRACT"
-                                ? "Rate Quotation Submitted"
-                                : "Proposal Submitted"}
+                          {isRfqType
+                            ? "View Quotation"
+                            : isRateContractType
+                              ? "View Rate Proposal"
+                              : isReverseAuctionType
+                                ? (isBiddingClosed ? "View Auction Results" : "Live Bid Console")
+                                : "View Proposal"}
                         </span>
                       </Button>
-                    </>
-                  )}
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled
+                      aria-disabled="true"
+                      className="h-8 px-3.5 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>
+                        {props.submitButtonLabel &&
+                        props.submitButtonLabel
+                          .toLowerCase()
+                          .includes("submitted")
+                          ? props.submitButtonLabel
+                          : isRfqType
+                            ? "Quotation Submitted"
+                            : isRateContractType
+                              ? "Rate Quotation Submitted"
+                              : isReverseAuctionType
+                                ? (isBiddingClosed ? "Auction Concluded" : "Joined & Qualified")
+                                : "Proposal Submitted"}
+                      </span>
+                    </Button>
+                  </>
+                )}
+                {!isBuyerOrAdmin && !props.hasSubmittedProposal && isBiddingClosed && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200 shadow-2xs">
+                    <Clock className="h-3.5 w-3.5 text-slate-500" />
+                    Bidding Concluded
+                  </span>
+                )}
                 {props.onSubmitClick &&
                   (isBuyerOrAdmin ||
                     (!props.hasSubmittedProposal &&
-                      !props.isSubmitDisabled)) && (
+                      !isBiddingClosed)) && (
                     <Button
                       type="button"
                       size="sm"
@@ -6746,7 +6770,7 @@ export function ProcurementDetailUnifiedView(
           </header>
 
           {/* Reverse Auction Workflow Stepper (Two-Stage Tender vs Direct Reverse Auction) */}
-          {(isTwoStageReverseAuction || isDirectReverseAuction || linkedAuction) && (
+          {!isRateContractType && (isTwoStageReverseAuction || isDirectReverseAuction || linkedAuction) && (
             <AuctionWorkflowStepper
               isTwoStage={isTwoStageReverseAuction}
               auctionStatus={String(

@@ -124,6 +124,13 @@ export default function RepeatOrders() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // Role guard: Only buyers can create repeat purchase orders
+  useEffect(() => {
+    if (user && user.role !== 'buyer' && user.role !== 'admin' && user.role !== 'master_admin') {
+      router.replace('/orders');
+    }
+  }, [user, router]);
+
   const [activeTab, setActiveTab] = useState<ViewTab>('wizard');
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
 

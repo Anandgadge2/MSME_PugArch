@@ -14,6 +14,7 @@ import { logger } from '../config/logger.js';
 import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
+import { numberSeries } from '../services/workflow/workflow-common.js';
 
 const router = Router();
 const db = prisma as any;
@@ -27,7 +28,7 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const nextAuctionCode = () => `RA-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const nextAuctionCode = () => numberSeries('RA');
 
 const actor = (req: AuthRequest) => ({
   actorUserId: req.user?.id,
@@ -471,7 +472,6 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     let auction = await db.auction.findFirst({
       where: {
         OR: [
-          ...(Number.isFinite(numId) && numId > 0 ? [{ id: numId }] : []),
           { referenceNo: rawId },
           { referenceNo: `RFQ-${rawId}` },
           { referenceNo: `REQ-${rawId}` },
