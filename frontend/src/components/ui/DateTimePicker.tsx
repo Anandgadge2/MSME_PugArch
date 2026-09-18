@@ -200,9 +200,11 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const checkPlacement = React.useCallback(() => {
       if (!triggerRef.current) return;
       const rect = triggerRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
+      const popoverHeight = 360;
+      const bottomBuffer = 80; // Account for floating/sticky bottom action bars
+      const spaceBelow = window.innerHeight - rect.bottom - bottomBuffer;
       const spaceAbove = rect.top;
-      setOpensUpward(spaceBelow < 380 && spaceAbove > spaceBelow);
+      setOpensUpward(spaceBelow < popoverHeight && (spaceAbove > spaceBelow || spaceAbove >= popoverHeight));
     }, []);
 
     const toggleOpen = () => {
@@ -213,9 +215,15 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       setIsOpen(prev => !prev);
     };
 
-    // Close on outside click & escape
+    // Close on outside click & escape, and track scroll/resize for placement
     React.useEffect(() => {
       if (!isOpen) return;
+
+      checkPlacement();
+
+      const handleScrollOrResize = () => {
+        checkPlacement();
+      };
 
       const handlePointerDown = (e: MouseEvent | TouchEvent) => {
         if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -233,13 +241,17 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       document.addEventListener('mousedown', handlePointerDown);
       document.addEventListener('touchstart', handlePointerDown);
       window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('scroll', handleScrollOrResize, { passive: true });
+      window.addEventListener('resize', handleScrollOrResize, { passive: true });
 
       return () => {
         document.removeEventListener('mousedown', handlePointerDown);
         document.removeEventListener('touchstart', handlePointerDown);
         window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('scroll', handleScrollOrResize);
+        window.removeEventListener('resize', handleScrollOrResize);
       };
-    }, [isOpen]);
+    }, [isOpen, checkPlacement]);
 
     // Helper to emit updated date-time
     const handleUpdate = (
@@ -422,7 +434,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
             role="dialog"
             aria-label="Date and 12-Hour Time Picker"
             className={cn(
-              'absolute z-50 left-0 w-[310px] rounded-2xl bg-white p-3.5 shadow-xl border border-slate-200 ring-1 ring-black/5 animate-in fade-in-50 duration-100',
+              'absolute z-50 left-0 w-[310px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white p-3.5 shadow-2xl border border-slate-200 ring-1 ring-black/10 animate-in fade-in-50 duration-100',
               opensUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
             )}
           >

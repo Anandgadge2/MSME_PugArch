@@ -330,7 +330,7 @@ export function StickyActionBar({
   showSubmit = false
 }: StickyActionBarProps) {
   return (
-    <div className="sticky bottom-2 sm:bottom-4 z-50 flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 rounded-[18px] sm:rounded-[22px] border border-slate-200/80 bg-white/95 p-1.5 px-2.5 sm:p-4 shadow-lg sm:shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
+    <div className="sticky bottom-2 sm:bottom-4 z-20 flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 rounded-[18px] sm:rounded-[22px] border border-slate-200/80 bg-white/95 p-1.5 px-2.5 sm:p-4 shadow-lg sm:shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
       <Button
         variant="outline"
         onClick={onBack}
