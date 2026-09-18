@@ -162,11 +162,16 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const triggerRef = React.useRef<HTMLButtonElement>(null);
     const popoverRef = React.useRef<HTMLDivElement>(null);
     const [isOpen, setIsOpen] = React.useState(false);
+    const [isMounted, setIsMounted] = React.useState(false);
     const [popoverStyle, setPopoverStyle] = React.useState<React.CSSProperties>({
       position: 'fixed',
       visibility: 'hidden',
       zIndex: 99999,
     });
+
+    React.useEffect(() => {
+      setIsMounted(true);
+    }, []);
 
     // Parsed state from value
     const parsed = React.useMemo(() => parseValueTo12Hr(value), [value]);
@@ -463,7 +468,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
         )}
 
         {/* ── Minimalist Popover Dialog (Rendered in Document Body Portal to avoid stacking context traps) ── */}
-        {isOpen && typeof document !== 'undefined' && createPortal(
+        {isOpen && isMounted && typeof document !== 'undefined' && createPortal(
           <div
             ref={popoverRef}
             id={popoverId}
