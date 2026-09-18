@@ -464,7 +464,7 @@ export default function StartReverseAuctionModal({
                   <input
                     type="number"
                     min="1"
-                    step="100"
+                    step="1"
                     value={minDecrement}
                     onChange={e => setMinDecrement(Number(e.target.value))}
                     className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"

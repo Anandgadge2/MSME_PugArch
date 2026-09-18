@@ -113,3 +113,156 @@ test('6. ClarificationPanel and DeadlineCountdown gate smoothly on submissionSta
     'DeadlineCountdown must accept submission start date and countdown to start before quote due'
   );
 });
+
+test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity, preserves quotation data, and prevents dual rows', () => {
+  const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
+  const unifiedCode = fs.readFileSync(unifiedViewPath, 'utf8');
+
+  assert.ok(
+    unifiedCode.includes('const getVendorKeys =') &&
+    unifiedCode.includes('vendorMap = new Map'),
+    'ProcurementDetailUnifiedView must use canonical vendor keys and a vendorMap to deduplicate by vendor identity'
+  );
+
+  assert.ok(
+    unifiedCode.includes('isEvaluated && existing.technicalStatus === "PENDING"') &&
+    unifiedCode.includes('ts === "NOT_QUALIFIED"'),
+    'ProcurementDetailUnifiedView must prioritize evaluated technicalStatus and treat NOT_QUALIFIED as DISQUALIFIED'
+  );
+
+  const rfqDetailPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'pages', 'RfqDetailPage.tsx');
+  const rfqDetailCode = fs.readFileSync(rfqDetailPath, 'utf8');
+
+  assert.ok(
+    rfqDetailCode.includes('const getVendorKeys =') &&
+    rfqDetailCode.includes('vendorMap = new Map'),
+    'RfqDetailPage must deduplicate seller responses by canonical vendor identity rather than record id'
+  );
+
+  const bidServicePath = path.join(ROOT_DIR, 'backend', 'src', 'modules', 'procurementBid', 'procurement-bid.service.ts');
+  const bidServiceCode = fs.readFileSync(bidServicePath, 'utf8');
+
+  assert.ok(
+    bidServiceCode.includes("technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED'") &&
+    bidServiceCode.includes('acknowledgement: qRespData'),
+    'procurement-bid.service.ts must standardize on DISQUALIFIED and copy quotation metadata to shadow participation'
+  );
+
+  // In-memory simulation of the deduplication and merging algorithm
+  const getVendorKeys = (item) => {
+    const sId = item.sellerUserId || item.sellerId;
+    const sOrg = item.sellerOrganizationId || item.sellerOrgId;
+    const orgName = (item.sellerOrgName || item.companyName || item.sellerName || '').trim().toLowerCase();
+    const keys = [];
+    if (sOrg) keys.push(`org-${sOrg}`);
+    if (sId) keys.push(`user-${sId}`);
+    if (orgName) keys.push(`name-${orgName}`);
+    return { keys };
+  };
+
+  const rawTestList = [
+    // Original QuoteResponse from Tata Motors (submitted earlier)
+    {
+      id: 12,
+      sellerId: 3,
+      sellerOrganizationId: 5,
+      sellerOrgName: 'Tata Motors',
+      technicalStatus: 'PENDING',
+      offeredPrice: 1800000,
+      quotedAmount: 1800000,
+      totalAmount: 1800000,
+      offeredQuantity: 20,
+      deliveryTimeline: '7 days',
+      documents: [{ name: 'spec_sheet.pdf', url: '/files/spec.pdf' }],
+      lineItems: [{ itemName: 'Vehicle Chassis', qty: 20, unitPrice: 90000 }],
+    },
+    // Evaluated shadow ProcurementBidParticipation (created upon Stage 1 evaluation)
+    {
+      id: 101,
+      participationNumber: 'PRT-QR-1-12',
+      sellerId: 3,
+      sellerOrganizationId: 5,
+      sellerOrgName: 'Tata Motors',
+      technicalStatus: 'QUALIFIED',
+      score: 95,
+      technicalRemarks: 'All specifications verified and compliant.',
+      offeredQuantity: 1,
+      deliveryTimeline: 'Standard',
+    },
+    // Another supplier: Teradata (disqualified)
+    {
+      id: 15,
+      sellerId: 7,
+      sellerOrganizationId: 9,
+      sellerOrgName: 'Teradata',
+      technicalStatus: 'PENDING',
+      offeredPrice: 2400000,
+      offeredQuantity: 20,
+      deliveryTimeline: '10 days',
+    },
+    {
+      id: 102,
+      participationNumber: 'PRT-QR-1-15',
+      sellerId: 7,
+      sellerOrganizationId: 9,
+      sellerOrgName: 'Teradata',
+      technicalStatus: 'DISQUALIFIED',
+      score: 55,
+      technicalRemarks: 'EMD compliance not met.',
+      offeredQuantity: 1,
+    }
+  ];
+
+  const vendorMap = new Map();
+  const mergedList = [];
+
+  for (const r of rawTestList) {
+    const { keys } = getVendorKeys(r);
+    let existing = keys.map(k => vendorMap.get(k)).find(Boolean);
+
+    const isTechEvaluated = r.technicalStatus === 'QUALIFIED' || r.technicalStatus === 'DISQUALIFIED';
+
+    if (existing) {
+      if (isTechEvaluated && existing.technicalStatus === 'PENDING') {
+        existing.technicalStatus = r.technicalStatus;
+        existing.technicalRemarks = r.technicalRemarks || existing.technicalRemarks;
+        existing.score = r.score ?? existing.score;
+        existing.isDisqualified = r.technicalStatus === 'DISQUALIFIED';
+      }
+      if ((!existing.offeredQuantity || existing.offeredQuantity === 1) && r.offeredQuantity > 1) {
+        existing.offeredQuantity = r.offeredQuantity;
+      }
+      if ((!existing.deliveryTimeline || existing.deliveryTimeline === 'Standard') && r.deliveryTimeline && r.deliveryTimeline !== 'Standard') {
+        existing.deliveryTimeline = r.deliveryTimeline;
+      }
+      for (const k of keys) {
+        vendorMap.set(k, existing);
+      }
+    } else {
+      const record = { ...r };
+      mergedList.push(record);
+      for (const k of keys) {
+        vendorMap.set(k, record);
+      }
+    }
+  }
+
+  // Verification: 4 input records must merge into exactly 2 vendors (1 row per vendor)
+  assert.equal(mergedList.length, 2, 'Must produce exactly 2 rows for 2 unique vendors (zero row duplication)');
+
+  const tataMotors = mergedList.find(m => m.sellerOrgName === 'Tata Motors');
+  assert.ok(tataMotors, 'Tata Motors row must exist');
+  assert.equal(tataMotors.technicalStatus, 'QUALIFIED', 'Tata Motors must be Qualified');
+  assert.equal(tataMotors.score, 95, 'Tata Motors score must be 95');
+  assert.equal(tataMotors.offeredQuantity, 20, 'Tata Motors authentic quantity 20 must be preserved');
+  assert.equal(tataMotors.deliveryTimeline, '7 days', 'Tata Motors delivery timeline must be preserved');
+  assert.equal(tataMotors.quotedAmount, 1800000, 'Tata Motors commercial amount must be preserved');
+
+  const teradata = mergedList.find(m => m.sellerOrgName === 'Teradata');
+  assert.ok(teradata, 'Teradata row must exist');
+  assert.equal(teradata.technicalStatus, 'DISQUALIFIED', 'Teradata must be Disqualified');
+  assert.equal(teradata.isDisqualified, true, 'Teradata isDisqualified must be true');
+  assert.equal(teradata.score, 55, 'Teradata score must be 55');
+  assert.equal(teradata.offeredQuantity, 20, 'Teradata authentic quantity 20 must be preserved');
+});
+

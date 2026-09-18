@@ -1594,21 +1594,34 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
           const sellerId = qr.sellerId;
           if (sellerId && !existingSellerIds.has(sellerId)) {
             existingSellerIds.add(sellerId);
+            const qrTech = String(qr.technicalStatus || '').toUpperCase();
+            const normalizedTechStatus = qrTech === 'DISQUALIFIED' || qrTech === 'NOT_QUALIFIED'
+              ? 'DISQUALIFIED'
+              : (qrTech === 'QUALIFIED' ? 'QUALIFIED' : 'PENDING');
+            const respData = typeof (qr as any).responseData === 'string'
+              ? (() => { try { return JSON.parse((qr as any).responseData); } catch { return {}; } })()
+              : ((qr as any).responseData || {});
+
             bid.participations.push({
               id: qr.id,
               bidId: bid.id,
               sellerId: sellerId,
               seller: qr.seller,
               participationNumber: `PRT-QR-${qr.id}`,
-              technicalStatus: 'QUALIFIED',
-              financialStatus: 'OPENED',
-              financialSealed: false,
+              technicalStatus: normalizedTechStatus,
+              technicalRemarks: qr.technicalRemarks || null,
+              financialStatus: normalizedTechStatus === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+              financialSealed: normalizedTechStatus !== 'QUALIFIED',
               finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
               submissionStatus: 'SUBMITTED',
               quotedAmount: Number(qr.totalAmount || 0),
               totalAmount: Number(qr.totalAmount || 0),
-              offeredItemDescription: qr.notes || '',
-              documents: [],
+              offeredQuantity: (qr as any).offeredQuantity || respData.offeredQuantity || 1,
+              deliveryTimeline: (qr as any).deliveryTimeline || respData.deliveryTimeline || 'Standard',
+              offeredItemDescription: qr.notes || respData.message || '',
+              documents: Array.isArray((qr as any).documents) ? (qr as any).documents : (Array.isArray(respData.documents) ? respData.documents : []),
+              lineItems: Array.isArray((qr as any).lineItems) ? (qr as any).lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : []),
+              responseData: respData,
               createdAt: qr.createdAt,
               submittedAt: qr.createdAt,
             });

@@ -402,7 +402,34 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         };
       });
       
-      const merged = [...normalizedBids, ...normalizedMarketplace];
+      // Deduplicate: when the same procurement exists in both sources, keep the
+      // procurementBidParticipation entry (richer data: technicalStatus, evaluations, etc.)
+      const bidKeys = new Set<string>();
+      for (const b of normalizedBids) {
+        const bidNum = String(b.bid?.bidNumber || '').trim().toUpperCase();
+        const bidId = String(b.bid?.id || '').trim();
+        const reqId = String(b.requirementId || b.bid?.sourceId || '').trim();
+        const title = String(b.bid?.title || '').trim().toLowerCase();
+        if (bidNum) bidKeys.add(bidNum);
+        if (bidId) bidKeys.add(bidId);
+        if (reqId && reqId !== '0') bidKeys.add(reqId);
+        if (title && title.length > 3) bidKeys.add(title);
+      }
+
+      const dedupedMarketplace = normalizedMarketplace.filter((mr: any) => {
+        const mrBidNum = String(mr.matchedBidNumber || mr.bid?.bidNumber || '').trim().toUpperCase();
+        const mrBidId = String(mr.canonicalIdentifier || mr.bid?.id || '').trim();
+        const mrReqId = String(mr.requirementId || '').trim();
+        const mrTitle = String(mr.bid?.title || '').trim().toLowerCase();
+        return !(
+          (mrBidNum && bidKeys.has(mrBidNum)) ||
+          (mrBidId && bidKeys.has(mrBidId)) ||
+          (mrReqId && mrReqId !== '0' && bidKeys.has(mrReqId)) ||
+          (mrTitle && mrTitle.length > 3 && bidKeys.has(mrTitle))
+        );
+      });
+
+      const merged = [...normalizedBids, ...dedupedMarketplace];
       cachedSellerParticipations = merged;
       lastSellerFetchTime = Date.now();
       setParticipations(merged);
@@ -763,7 +790,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const handleAction = (item: any) => {
     const pType = getParticipationType(item);
     const isReverse = pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE');
-    const targetId = item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier || item.bid?.id || item.bidId || item.requirementId;
+    const targetId = item.bid?.id || item.bidId || item.requirementId || item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier;
 
     if (isReverse) {
       router.push(`/seller/procurement/reverse-auction/${targetId}/live`);
@@ -792,7 +819,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const handleViewDetails = (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
-    const targetId = item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier || item.bid?.id || item.bidId || item.requirementId;
+    const targetId = item.bid?.id || item.bidId || item.requirementId || item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier;
     const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || getParticipationType(item) || '').toLowerCase();
     let slug = 'rfq';
     if (typeStr.includes('reverse') || typeStr.includes('auction')) slug = 'reverse-auction';
@@ -941,12 +968,28 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       header: 'Bid Stage',
       sortable: true,
       sortKey: 'stage',
-      width: 'w-32',
-      cell: (item: any) => (
-        <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(item.bid?.status || 'OPEN'))}>
-          {String(item.bid?.status || 'OPEN').replace(/_/g, ' ')}
-        </span>
-      )
+      width: 'w-44',
+      cell: (item: any) => {
+        const techStatus = String(item.technicalStatus || '').toUpperCase();
+        const bidStatus = String(item.bid?.status || 'OPEN');
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(bidStatus))}>
+              {bidStatus.replace(/_/g, ' ')}
+            </span>
+            {techStatus === 'QUALIFIED' && (
+              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                <CheckCircle2 className="h-2.5 w-2.5" /> Qualified
+              </span>
+            )}
+            {techStatus === 'DISQUALIFIED' && (
+              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                <XCircle className="h-2.5 w-2.5" /> Disqualified
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'actions',
@@ -1624,6 +1667,16 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                         <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', bidStatusColor(bid.status || 'OPEN'))}>
                           Bid: {String(bid.status || 'OPEN').replace(/_/g, ' ')}
                         </span>
+                        {String(item.technicalStatus || '').toUpperCase() === 'QUALIFIED' && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> Qualified
+                          </span>
+                        )}
+                        {String(item.technicalStatus || '').toUpperCase() === 'DISQUALIFIED' && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                            <XCircle className="h-2.5 w-2.5" /> Disqualified
+                          </span>
+                        )}
 
                         <div className="flex items-center gap-2">
                           {isAwarded(item) && (

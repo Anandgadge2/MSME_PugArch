@@ -420,22 +420,45 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
     ];
 
-    const seen = new Set<string>();
+    const vendorMap = new Map<string, any>();
     const list: any[] = [];
+
+    const getVendorKeys = (item: any) => {
+      const sId = item.sellerUserId || item.sellerId || item.seller?.id || item.sellerUser?.id;
+      const sOrg = item.sellerOrganizationId || item.sellerOrgId || item.seller?.organizationId || item.sellerUser?.organizationId || item.seller?.organization?.id;
+      const sOrgName = (
+        item.sellerOrgName ||
+        item.sellerOrganization?.organizationName ||
+        item.seller?.organization?.organizationName ||
+        item.seller?.sellerProfile?.organizationName ||
+        item.sellerProfile?.organizationName ||
+        item.companyName ||
+        item.sellerName ||
+        ''
+      ).trim().toLowerCase();
+
+      const keys: string[] = [];
+      if (sOrg && String(sOrg) !== '0' && String(sOrg) !== 'undefined') keys.push(`org-${sOrg}`);
+      if (sId && String(sId) !== '0' && String(sId) !== 'undefined') keys.push(`user-${sId}`);
+      if (sOrgName && !sOrgName.startsWith('supplier #') && !sOrgName.startsWith('verified supplier') && !sOrgName.startsWith('seller partner')) {
+        keys.push(`name-${sOrgName}`);
+      }
+      return { sId, sOrg, sOrgName, keys };
+    };
 
     for (const r of rawList) {
       if (!r) continue;
       const statusStr = String(r.status || r.submissionStatus || '').toUpperCase();
       if (statusStr === 'DRAFT') continue;
 
-      const sId = r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id;
-      const sOrg = r.sellerOrganizationId || r.seller?.organizationId || r.sellerUser?.organizationId;
-      const key = r.id ? `id-${r.id}` : `s-${sId}-${sOrg}`;
+      const { sId, sOrg, sOrgName, keys } = getVendorKeys(r);
 
-      if (seen.has(key)) continue;
-      seen.add(key);
+      // Check if this vendor has already been seen under any canonical key
+      let existing = keys.map(k => vendorMap.get(k)).find(Boolean);
 
-      const respData = typeof r.responseData === 'string' ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })() : (r.responseData || {});
+      const respData = typeof r.responseData === 'string'
+        ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })()
+        : (r.responseData || {});
       const offeredPrice = r.offeredPrice ?? r.quotedAmount ?? r.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
       const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || r.contactPerson || 'Seller Partner';
       const sellerOrgName = r.sellerOrgName
@@ -450,34 +473,102 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         || r.seller?.name
         || (sId ? `Supplier #${sId}` : 'Verified Supplier');
 
-      list.push({
-        id: r.id || key,
-        sellerId: sId,
-        sellerUserId: sId,
-        sellerOrganizationId: sOrg,
-        sellerName,
-        sellerOrgName,
-        companyName: sellerOrgName,
-        sellerOrganization: r.sellerOrganization || { organizationName: sellerOrgName },
-        sellerUser: r.sellerUser || r.seller || { name: sellerName },
-        seller: r.seller || { name: sellerName, organization: { organizationName: sellerOrgName } },
-        sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
-        sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
-        status: statusStr || 'SUBMITTED',
-        submissionStatus: statusStr || 'SUBMITTED',
-        offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
-        quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
-        totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
-        offeredQuantity: r.offeredQuantity ?? respData.offeredQuantity,
-        deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
-        message: r.message || r.coverNote || respData.message || respData.coverNote,
-        terms: r.terms || respData.terms,
-        attachmentUrl: r.attachmentUrl || respData.attachmentUrl,
-        documents: Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []),
-        lineItems: Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : [])),
-        submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
-        responseData: respData,
-      });
+      const rawTechStatus = String(r.technicalStatus || respData.technicalStatus || '').toUpperCase();
+      const isTechEvaluated = rawTechStatus === 'QUALIFIED' || rawTechStatus === 'DISQUALIFIED' || rawTechStatus === 'NOT_QUALIFIED';
+      const normalizedTechStatus = rawTechStatus === 'QUALIFIED'
+        ? 'QUALIFIED'
+        : (rawTechStatus === 'DISQUALIFIED' || rawTechStatus === 'NOT_QUALIFIED' || statusStr === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING');
+
+      const itemOfferedQty = Number(r.offeredQuantity ?? respData.offeredQuantity ?? 0);
+      const itemTimeline = r.deliveryTimeline || respData.deliveryTimeline;
+      const itemDocs = Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []);
+      const itemLines = Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : []));
+
+      if (existing) {
+        // Merge records for the single authentic vendor entity
+        // 1. Technical Evaluation Priority: If this record has evaluation decisions, apply them
+        if (isTechEvaluated && existing.technicalStatus === 'PENDING') {
+          existing.technicalStatus = normalizedTechStatus;
+          existing.technicalRemarks = r.technicalRemarks || r.rejectionReason || respData.technicalRemarks || existing.technicalRemarks;
+          existing.score = r.score ?? respData.score ?? existing.score;
+          existing.isDisqualified = normalizedTechStatus === 'DISQUALIFIED' || Boolean(r.isDisqualified) || existing.isDisqualified;
+        }
+
+        // 2. Quotation details: preserve authentic offered quantity, timeline, line items, documents
+        if ((!existing.offeredQuantity || existing.offeredQuantity === 1) && itemOfferedQty > 1) {
+          existing.offeredQuantity = itemOfferedQty;
+        }
+        if ((!existing.deliveryTimeline || existing.deliveryTimeline === 'Standard') && itemTimeline && itemTimeline !== 'Standard') {
+          existing.deliveryTimeline = itemTimeline;
+        }
+        if ((!existing.offeredPrice || existing.offeredPrice === 0) && offeredPrice != null && Number(offeredPrice) > 0) {
+          existing.offeredPrice = Number(offeredPrice);
+          existing.quotedAmount = Number(offeredPrice);
+          existing.totalAmount = Number(offeredPrice);
+        }
+        if ((!existing.lineItems || existing.lineItems.length === 0) && itemLines.length > 0) {
+          existing.lineItems = itemLines;
+        }
+        if ((!existing.documents || existing.documents.length === 0) && itemDocs.length > 0) {
+          existing.documents = itemDocs;
+        }
+        if (r.id && !existing.participationId && String(r.participationNumber || '').startsWith('PRT-')) {
+          existing.participationId = r.id;
+          existing.id = r.id;
+        }
+        if (r.message || r.coverNote || respData.message) {
+          existing.message = existing.message || r.message || r.coverNote || respData.message;
+        }
+
+        // Register any new keys pointing to this merged vendor
+        for (const k of keys) {
+          vendorMap.set(k, existing);
+        }
+      } else {
+        const newRecord: any = {
+          id: r.id || (keys[0] ? `v-${keys[0]}` : `item-${list.length}`),
+          participationId: r.participationNumber ? r.id : undefined,
+          quoteResponseId: !r.participationNumber ? r.id : undefined,
+          sellerId: sId,
+          sellerUserId: sId,
+          sellerOrganizationId: sOrg,
+          sellerName,
+          sellerOrgName,
+          companyName: sellerOrgName,
+          sellerOrganization: r.sellerOrganization || { organizationName: sellerOrgName },
+          sellerUser: r.sellerUser || r.seller || { name: sellerName },
+          seller: r.seller || { name: sellerName, organization: { organizationName: sellerOrgName } },
+          sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
+          sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
+          status: statusStr || 'SUBMITTED',
+          submissionStatus: statusStr || 'SUBMITTED',
+          offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
+          quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
+          totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
+          offeredQuantity: itemOfferedQty || 1,
+          deliveryTimeline: itemTimeline || 'Standard',
+          message: r.message || r.coverNote || respData.message || respData.coverNote,
+          terms: r.terms || respData.terms,
+          attachmentUrl: r.attachmentUrl || respData.attachmentUrl,
+          documents: itemDocs,
+          lineItems: itemLines,
+          submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
+          responseData: respData,
+          technicalStatus: normalizedTechStatus,
+          technicalRemarks: r.technicalRemarks || r.rejectionReason || respData.technicalRemarks || '',
+          score: r.score ?? respData.score ?? null,
+          isDisqualified: normalizedTechStatus === 'DISQUALIFIED' || Boolean(r.isDisqualified),
+        };
+
+        list.push(newRecord);
+        if (keys.length > 0) {
+          for (const k of keys) {
+            vendorMap.set(k, newRecord);
+          }
+        } else {
+          vendorMap.set(`id-${newRecord.id}`, newRecord);
+        }
+      }
     }
 
     return list;

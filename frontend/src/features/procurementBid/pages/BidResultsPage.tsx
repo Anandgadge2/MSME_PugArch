@@ -106,10 +106,14 @@ export default function BidResultsPage() {
   // Technical Evaluation state
   const [selectedForTechEval, setSelectedForTechEval] = useState<any | null>(null);
   const [isCompletingTechEval, setIsCompletingTechEval] = useState(false);
+  const [isOpeningFinancialEval, setIsOpeningFinancialEval] = useState(false);
 
   const isTwoPacketMode = React.useMemo(() => {
     if (!bid) return false;
     const b: any = bid;
+    if (b.packetType === 'SINGLE_PACKET' || b.technicalPacket?.schedule?.packetType === 'Single') {
+      return false;
+    }
     return (
       b.packetType === 'TWO_PACKET' ||
       b.evaluationType === 'TWO_PACKET' ||
@@ -117,8 +121,46 @@ export default function BidResultsPage() {
       b.packetCount === 2 ||
       b.stageType === 'TWO_STAGE' ||
       b.bidType?.includes('TWO') ||
-      b.technicalPacket != null
+      b.technicalPacket?.packetType === 'TWO_PACKET' ||
+      b.technicalPacket?.schedule?.packetType === 'Two' ||
+      b.technicalPacket?.schedule?.packetType === 'Two-Packet'
     );
+  }, [bid]);
+
+  const isTechEvalCompleted = React.useMemo(() => {
+    if (!bid) return false;
+    const rawStatus = String((bid as any).status || '').toUpperCase();
+    const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
+    return (
+      rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' ||
+      rawStage === 'TECHNICAL_EVALUATION_COMPLETED' ||
+      [
+        'FINANCIAL_EVALUATION',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARDED',
+        'PO_GENERATED',
+      ].includes(rawStatus)
+    );
+  }, [bid]);
+
+  const isFinancialEvalReady = React.useMemo(() => {
+    if (!bid) return false;
+    const rawStatus = String((bid as any).status || '').toUpperCase();
+    const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
+    return rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' || rawStage === 'TECHNICAL_EVALUATION_COMPLETED';
+  }, [bid]);
+
+  const isFinancialEvalOpened = React.useMemo(() => {
+    if (!bid) return false;
+    const rawStatus = String((bid as any).status || '').toUpperCase();
+    return [
+      'FINANCIAL_EVALUATION',
+      'L1_GENERATED',
+      'AWARD_RECOMMENDED',
+      'AWARDED',
+      'PO_GENERATED',
+    ].includes(rawStatus);
   }, [bid]);
 
   const techEvaluationStats = React.useMemo(() => {
@@ -142,6 +184,10 @@ export default function BidResultsPage() {
   }, [ranking]);
 
   const handleCompleteTechnicalEvaluation = async () => {
+    if (isTechEvalCompleted) {
+      toast.info('Technical evaluation is already finalized.');
+      return;
+    }
     if (techEvaluationStats.pending > 0) {
       toast.error(
         `Cannot complete technical evaluation: ${techEvaluationStats.pending} vendor(s) are still pending evaluation.`,
@@ -161,9 +207,9 @@ export default function BidResultsPage() {
         {},
       );
       toast.success(
-        'Stage 1 Technical Evaluation completed successfully! Stage 2 Financial Opening is now active.',
+        'Stage 1 Technical Evaluation completed successfully! You can now open Stage 2 financial ranking.',
       );
-      loadBid();
+      await loadBid();
     } catch (err: any) {
       console.error(err);
       toast.error(
@@ -172,6 +218,28 @@ export default function BidResultsPage() {
       );
     } finally {
       setIsCompletingTechEval(false);
+    }
+  };
+
+  const handleOpenFinancialEvaluation = async () => {
+    setIsOpeningFinancialEval(true);
+    try {
+      await postApi(
+        `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`,
+        {},
+      );
+      toast.success(
+        'Stage 2 Financial Evaluation opened successfully! L1/L2/L3 commercial ranking generated.',
+      );
+      await loadBid();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(
+        err?.message ||
+          'Failed to open financial evaluation. Please check server logs.',
+      );
+    } finally {
+      setIsOpeningFinancialEval(false);
     }
   };
 
@@ -190,7 +258,6 @@ export default function BidResultsPage() {
   const handleDownloadQuotationPdf = async (result: any) => {
     if (!result) return;
     try {
-      toast.info(`Generating Quotation PDF for ${result.sellerName || 'Supplier'}…`);
       const engine = new PdfEngine('p');
       const quotedAmt = Number(result.quotedAmount || result.totalAmount || result.totalPrice || result.details?.quotedAmount || 0);
       const gst = Number(result.gstPercentage || result.details?.gstPercentage || 0);
@@ -715,8 +782,8 @@ export default function BidResultsPage() {
               <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
             </span>
           ) : row.technicalStatus === 'Disqualified' ? (
-            <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 px-2 text-[10px] font-bold" title="Disqualified at Stage 1 Technical Evaluation">
-              <X className="h-3 w-3" /> Disqualified
+            <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2 text-[10px] font-semibold" title="Ineligible for award due to technical disqualification">
+              Ineligible for Award
             </span>
           ) : (
             <button
@@ -1050,19 +1117,36 @@ export default function BidResultsPage() {
 
   return (
     <PageShell>
-      <main className="mx-auto w-full max-w-7xl space-y-5 px-4 py-5">
-        <ProcurementHero
-          title="Bid Result and Financial Ranking"
-          subtitle={`${bid.id} • ${bid.title}`}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
+      <main className="mx-auto w-full max-w-7xl space-y-3 px-4 py-3 md:py-4">
+        {/* Compact Header Card */}
+        <section className="relative overflow-hidden rounded-xl border border-slate-200/90 bg-white px-4 py-3 md:px-5 md:py-3 shadow-2xs">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-0.5">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 select-none">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                MSME Procurement Control
+              </span>
+              <h1 className="text-base md:text-lg font-black tracking-tight text-slate-900 truncate">
+                Bid Result and Financial Ranking
+              </h1>
+              <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                {bid.id}
+              </span>
+              <span className="text-slate-300 hidden sm:inline">•</span>
+              <span className="text-xs md:text-sm font-semibold text-slate-700 truncate max-w-xs md:max-w-md" title={bid.title}>
+                {bid.title}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               {ranking.length >= 2 && (
                 <button
                   type="button"
                   onClick={handleCompareClick}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 px-4 text-xs font-black text-white shadow-xs transition cursor-pointer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
                 >
-                  <Scale className="h-4 w-4" /> Compare Quotations {selectedForCompare.length > 0 && `(${selectedForCompare.length})`}
+                  <Scale className="h-3.5 w-3.5" /> Compare Quotations {selectedForCompare.length > 0 && `(${selectedForCompare.length})`}
                 </button>
               )}
               {ranking.length > 0 && (
@@ -1079,116 +1163,116 @@ export default function BidResultsPage() {
                     }));
                     downloadCsv(`${bid.id}-result.csv`, rows);
                   }}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer"
                 >
-                  <Download className="h-4 w-4 text-slate-500" /> Export CSV
+                  <Download className="h-3.5 w-3.5 text-slate-500" /> Export CSV
                 </button>
               )}
               <Link
                 href={`/bids/${bid.id}`}
-                className="inline-flex h-9 items-center rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+                className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
               >
                 Back to bid
               </Link>
             </div>
-          }
-        />
+          </div>
+        </section>
 
-        {/* 4-KPI Metric Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Quotations</span>
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <Users className="h-4 w-4" />
-              </div>
+        {/* 4-KPI Metric Strip (High Density) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Quotations</span>
+              <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight">{ranking.length}</div>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                {ranking.length === 0 ? 'No responses yet' : `${ranking.length} seller quotation${ranking.length === 1 ? '' : 's'}`}
+              </p>
             </div>
-            <div className="mt-2 text-xl font-black text-slate-900">{ranking.length}</div>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
-              {ranking.length === 0 ? 'No seller responses yet' : `${ranking.length} seller quotation${ranking.length === 1 ? '' : 's'}`}
-            </p>
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+              <Users className="h-4 w-4" />
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Technical Scrutiny</span>
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <ShieldCheck className="h-4 w-4" />
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Technical Scrutiny</span>
+              <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight">
+                {ranking.length > 0 ? `${techEvaluationStats.qualified} Qualified` : '0 Qualified'}
               </div>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                {ranking.length === 0
+                  ? 'Awaiting vendor proposals'
+                  : techEvaluationStats.pending > 0
+                    ? `${techEvaluationStats.pending} pending review`
+                    : `${techEvaluationStats.disqualified} disqualified • Completed`}
+              </p>
             </div>
-            <div className="mt-2 text-xl font-black text-slate-900">
-              {ranking.length > 0 ? `${techEvaluationStats.qualified} Qualified` : '0 Qualified'}
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <ShieldCheck className="h-4 w-4" />
             </div>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
-              {ranking.length === 0
-                ? 'Awaiting vendor proposals'
-                : techEvaluationStats.pending > 0
-                  ? `${techEvaluationStats.pending} pending scrutiny`
-                  : 'Scrutiny completed'}
-            </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Lowest Quote (L1)</span>
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <Trophy className="h-4 w-4" />
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Lowest Quote (L1)</span>
+              <div className="mt-0.5 text-base sm:text-lg font-black text-emerald-700 leading-tight truncate">
+                {ranking.length > 0 && ranking[0]?.totalPrice ? money(ranking[0].totalPrice) : '—'}
               </div>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                {ranking.length > 0 ? (ranking[0]?.sellerName || 'Leading quote') : 'Awaiting quotes'}
+              </p>
             </div>
-            <div className="mt-2 text-xl font-black text-slate-900 truncate">
-              {ranking.length > 0 && ranking[0]?.totalPrice ? money(ranking[0].totalPrice) : '—'}
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+              <Trophy className="h-4 w-4" />
             </div>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500 truncate">
-              {ranking.length > 0 ? (ranking[0]?.sellerName || 'Leading quote') : 'Awaiting quotes'}
-            </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Procurement Budget</span>
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                <Tag className="h-4 w-4" />
+          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Procurement Budget</span>
+              <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight truncate">
+                {bid.estimatedValue ? money(bid.estimatedValue) : 'Confidential'}
               </div>
+              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                {(isTwoPacketMode ? 'Two-Packet' : 'Single-Packet')} • {bid.evaluationMethod || 'L1 Basis'}
+              </p>
             </div>
-            <div className="mt-2 text-xl font-black text-slate-900 truncate">
-              {bid.estimatedValue ? money(bid.estimatedValue) : 'Confidential'}
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              <Tag className="h-4 w-4" />
             </div>
-            <p className="mt-0.5 text-[11px] font-medium text-slate-500 truncate">
-              {bid.packetType || (isTwoPacketMode ? 'Two-Packet' : 'Single-Packet')} • {bid.evaluationMethod || 'L1 Basis'}
-            </p>
           </div>
         </div>
 
         {/* Empty State: Zero quotations submitted */}
         {ranking.length === 0 ? (
-          <section className="rounded-2xl border border-slate-200 bg-white p-8 sm:p-12 text-center shadow-xs">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 border border-slate-200/80 text-slate-400 mb-4 shadow-2xs">
-              <FileText className="h-8 w-8 text-slate-400" />
+          <section className="rounded-xl border border-slate-200/90 bg-white p-6 sm:p-10 text-center shadow-2xs">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-slate-50 border border-slate-200/80 text-slate-400 mb-3 shadow-2xs">
+              <FileText className="h-7 w-7 text-slate-400" />
             </div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-bold text-amber-800 mb-3">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-0.5 text-xs font-bold text-amber-800 mb-2.5">
               <Clock className="h-3.5 w-3.5" /> Awaiting Seller Quotations
             </div>
-            <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">No Seller Quotations Submitted Yet</h2>
-            <p className="mt-2 max-w-lg mx-auto text-xs sm:text-sm text-slate-500 font-medium leading-relaxed">
+            <h2 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">No Seller Quotations Submitted Yet</h2>
+            <p className="mt-1.5 max-w-lg mx-auto text-xs text-slate-500 font-medium leading-relaxed">
               No suppliers have submitted quotations or technical proposals for this bid yet. Once sellers participate, their technical compliance documents, itemized pricing, and automated L1-L4 financial rankings will be displayed here for evaluation.
             </p>
 
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-xl mx-auto text-left">
-              <div className="rounded-xl border border-slate-150 bg-slate-50/70 p-3">
+            <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-xl mx-auto text-left">
+              <div className="rounded-lg border border-slate-150 bg-slate-50/70 p-2.5">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Submission Closing</span>
                 <span className="text-xs font-black text-slate-800 mt-0.5 flex items-center gap-1.5">
                   <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                   <span className="truncate">{bid.endDate ? formatDateTime(bid.endDate) : 'Open'}</span>
                 </span>
               </div>
-              <div className="rounded-xl border border-slate-150 bg-slate-50/70 p-3">
+              <div className="rounded-lg border border-slate-150 bg-slate-50/70 p-2.5">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Evaluation Mode</span>
                 <span className="text-xs font-black text-slate-800 mt-0.5 flex items-center gap-1.5">
                   <ShieldCheck className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                   <span className="truncate">{isTwoPacketMode ? '2-Packet Scrutiny' : 'Single-Packet'}</span>
                 </span>
               </div>
-              <div className="rounded-xl border border-slate-150 bg-slate-50/70 p-3">
+              <div className="rounded-lg border border-slate-150 bg-slate-50/70 p-2.5">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Estimated Budget</span>
                 <span className="text-xs font-black text-slate-800 mt-0.5 flex items-center gap-1.5">
                   <Tag className="h-3.5 w-3.5 text-slate-500 shrink-0" />
@@ -1197,16 +1281,16 @@ export default function BidResultsPage() {
               </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
               <Link
                 href={`/bids/${bid.id}`}
-                className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 hover:bg-slate-800 px-4 text-xs font-bold text-white shadow-xs transition"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 px-3.5 text-xs font-bold text-white shadow-xs transition"
               >
                 <Eye className="h-3.5 w-3.5" /> View Bid Overview & Scope
               </Link>
               <Link
                 href="/bids"
-                className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4 text-xs font-bold text-slate-700 transition"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3.5 text-xs font-bold text-slate-700 transition"
               >
                 Back to Bids
               </Link>
@@ -1214,18 +1298,18 @@ export default function BidResultsPage() {
           </section>
         ) : (
           /* Active Quotations Section */
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+          <section className="rounded-xl border border-slate-200/90 bg-white p-3.5 md:p-4 shadow-2xs space-y-3">
             {/* Header Controls Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-650 shadow-2xs">
-                  <Users className="h-4.5 w-4.5" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-650 shadow-2xs">
+                  <Users className="h-3.5 w-3.5" />
                 </div>
                 <div>
-                  <h2 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
+                  <h2 className="text-xs sm:text-sm font-black text-slate-900 tracking-tight">
                     SELLER QUOTATIONS & EVALUATION ({ranking.length})
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium">
+                  <p className="text-[11px] text-slate-500 font-medium">
                     Review submitted seller quotations, technical packet compliance, and financial ranking.
                   </p>
                 </div>
@@ -1233,32 +1317,32 @@ export default function BidResultsPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 {/* View Mode Toggle */}
-                <div className="flex items-center rounded-xl bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
+                <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
                   <button
                     type="button"
                     onClick={() => setViewMode('grid')}
                     title="Grid view"
                     aria-label="Grid view"
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
+                    className={`flex h-6 w-6 items-center justify-center rounded-md transition-all ${
                       viewMode === 'grid' 
                         ? 'bg-white text-blue-700 shadow-2xs font-black' 
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <LayoutGrid className="h-3 w-3" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setViewMode('list')}
                     title="List view"
                     aria-label="List view"
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg transition-all ${
+                    className={`flex h-6 w-6 items-center justify-center rounded-md transition-all ${
                       viewMode === 'list' 
                         ? 'bg-white text-blue-700 shadow-2xs font-black' 
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    <List className="h-3.5 w-3.5" />
+                    <List className="h-3 w-3" />
                   </button>
                 </div>
 
@@ -1280,50 +1364,42 @@ export default function BidResultsPage() {
                     }
                     setShowReverseAuctionModal(true);
                   }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 px-3 text-xs font-bold text-white transition shadow-2xs cursor-pointer"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white transition shadow-2xs cursor-pointer"
                 >
-                  <Gavel className="h-3.5 w-3.5" /> Start Reverse Auction
+                  <Gavel className="h-3 w-3" /> Start Reverse Auction
                 </button>
 
                 <StatusBadge label={bid.status} />
               </div>
             </div>
 
-            {/* Two-Packet Stage 1 Technical Evaluation Progress Banner */}
-            {isTwoPacketMode && (
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-3.5 shadow-2xs space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs shrink-0">
-                      <ShieldCheck className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
-                          Stage 1: Technical Scrutiny & Evaluation
-                        </span>
-                        <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2 py-0.5 text-[9px] font-black text-indigo-800 uppercase">
-                          2-Packet Mode
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600">
-                        Technically qualified vendors advance to Stage 2 financial ranking, commercial comparison, and reverse auction.
-                      </p>
-                    </div>
+            {/* Two-Packet Stage 1 Banner OR Single-Packet Finalization Strip */}
+            {isTwoPacketMode ? (
+              <div className="rounded-lg border border-indigo-200/90 bg-indigo-50/60 px-3.5 py-2 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs shrink-0">
+                    <ShieldCheck className="h-3.5 w-3.5" />
                   </div>
-
-                  {/* Live Evaluation Status Badges */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-black text-indigo-950 uppercase tracking-wide">
+                      Stage 1: Technical Scrutiny
+                    </span>
+                    <span className="rounded-full bg-indigo-100 border border-indigo-200 px-1.5 py-0.2 text-[9px] font-black text-indigo-800 uppercase">
+                      2-Packet Mode
+                    </span>
+                    <span className="text-slate-300 hidden sm:inline">•</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100/80 border border-emerald-200 px-2 py-0.5 text-[11px] font-bold text-emerald-800">
                       <CheckCircle2 className="h-3 w-3" />
                       {techEvaluationStats.qualified} Qualified
                     </span>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 border border-rose-200 px-2.5 py-0.5 text-[11px] font-bold text-rose-800">
-                      <X className="h-3 w-3" />
-                      {techEvaluationStats.disqualified} Disqualified
-                    </span>
+                    {techEvaluationStats.disqualified > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-rose-100/80 border border-rose-200 px-2 py-0.5 text-[11px] font-bold text-rose-800">
+                        <X className="h-3 w-3" />
+                        {techEvaluationStats.disqualified} Disqualified
+                      </span>
+                    )}
                     {techEvaluationStats.pending > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100/80 border border-amber-200 px-2 py-0.5 text-[11px] font-bold text-amber-800">
                         <Clock className="h-3 w-3" />
                         {techEvaluationStats.pending} Pending Review
                       </span>
@@ -1332,29 +1408,68 @@ export default function BidResultsPage() {
                 </div>
 
                 {/* Progress & Action Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-indigo-100 text-xs">
-                  <span className="font-semibold text-slate-600 text-[11px]">
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="font-semibold text-slate-600 text-[11px] hidden lg:inline">
                     {techEvaluationStats.pending > 0
-                      ? `⚠️ ${techEvaluationStats.pending} vendor(s) need technical packet review before final stage 2 progression.`
-                      : techEvaluationStats.qualified > 0
-                        ? `✅ All vendors evaluated. ${techEvaluationStats.qualified} qualified vendor(s) are eligible for Stage 2.`
-                        : '⚠️ At least one vendor must be technically qualified to proceed to Stage 2.'}
+                      ? `${techEvaluationStats.pending} vendor(s) need review`
+                      : isFinancialEvalReady
+                        ? `Stage 1 complete • Ready for Stage 2`
+                        : isFinancialEvalOpened
+                          ? `Financial ranking active`
+                          : `${techEvaluationStats.qualified} eligible for Stage 2`}
                   </span>
 
-                  {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                  {!isTechEvalCompleted && techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
                     <button
                       type="button"
                       disabled={isCompletingTechEval}
                       onClick={handleCompleteTechnicalEvaluation}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
                     >
                       <ShieldCheck className="h-3.5 w-3.5" />
                       <span>{isCompletingTechEval ? 'Finalizing...' : 'Complete Technical Evaluation'}</span>
                     </button>
                   )}
+
+                  {isFinancialEvalReady && (
+                    <button
+                      type="button"
+                      disabled={isOpeningFinancialEval}
+                      onClick={handleOpenFinancialEvaluation}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
+                    >
+                      <Trophy className="h-3.5 w-3.5" />
+                      <span>{isOpeningFinancialEval ? 'Opening Ranking...' : 'Open Financial Ranking (Stage 2)'}</span>
+                    </button>
+                  )}
+
+                  {isFinancialEvalOpened && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 text-[11px] font-black text-emerald-800">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                      Stage 2 Financial Ranking Active
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
+            ) : isFinancialEvalReady ? (
+              <div className="rounded-lg border border-blue-200/90 bg-blue-50/60 px-3.5 py-2 shadow-2xs flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-700 shrink-0" />
+                  <span className="text-xs font-bold text-slate-800">
+                    Technical evaluation complete ({techEvaluationStats.qualified} qualified). Ready to finalize commercial ranking.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  disabled={isOpeningFinancialEval}
+                  onClick={handleOpenFinancialEvaluation}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Trophy className="h-3.5 w-3.5" />
+                  <span>{isOpeningFinancialEval ? 'Finalizing...' : 'Finalize Financial Ranking'}</span>
+                </button>
+              </div>
+            ) : null}
 
             {/* View Mode Rendering */}
             {viewMode === 'grid' ? (
@@ -1497,8 +1612,8 @@ export default function BidResultsPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
                           </span>
                         ) : row.technicalStatus === 'Disqualified' ? (
-                          <span className="inline-flex h-8 items-center justify-center rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold">
-                            Disqualified
+                          <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-semibold">
+                            Ineligible
                           </span>
                         ) : (
                           <button

@@ -5585,38 +5585,122 @@ export function ProcurementDetailUnifiedView(
       ...asArray(props.participations),
       ...asArray(fetchedParticipants),
     ];
-    const seen = new Set();
+
+    const vendorMap = new Map<string, any>();
     const result: any[] = [];
+
+    const getVendorKeys = (p: any) => {
+      const sId = p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id;
+      const sOrg = p.sellerOrganizationId || p.sellerOrgId || p.seller?.organizationId || p.sellerUser?.organizationId || p.sellerOrganization?.id || p.seller?.organization?.id;
+      const orgName = (
+        p.sellerOrgName ||
+        p.sellerOrganization?.organizationName ||
+        p.seller?.organization?.organizationName ||
+        p.seller?.sellerProfile?.organizationName ||
+        p.sellerProfile?.organizationName ||
+        p.companyName ||
+        p.sellerName ||
+        ''
+      ).trim().toLowerCase();
+
+      const keys: string[] = [];
+      if (sOrg && String(sOrg) !== '0' && String(sOrg) !== 'undefined') keys.push(`org-${sOrg}`);
+      if (sId && String(sId) !== '0' && String(sId) !== 'undefined') keys.push(`user-${sId}`);
+      if (orgName && !orgName.startsWith('supplier #') && !orgName.startsWith('verified supplier') && !orgName.startsWith('seller partner')) {
+        keys.push(`name-${orgName}`);
+      }
+      return { sId, sOrg, orgName, keys };
+    };
+
     for (let idx = 0; idx < combined.length; idx++) {
       const p = combined[idx];
       if (!p) continue;
-      const key = String(
-        p.id || p.sellerId || p.sellerUserId || p.seller?.id || `item-${idx}`,
-      );
-      if (!seen.has(key)) {
-        seen.add(key);
-        const respData =
-          typeof p.responseData === "string"
-            ? (() => {
-                try {
-                  return JSON.parse(p.responseData);
-                } catch {
-                  return {};
-                }
-              })()
-            : p.responseData || {};
-        const s = String(p.status || p.submissionStatus || "").toUpperCase();
-        const ts = String(
-          p.technicalStatus ||
-            respData.technicalStatus ||
-            (s === "SHORTLISTED" || s === "ACCEPTED"
-              ? "QUALIFIED"
-              : s === "REJECTED"
-                ? "DISQUALIFIED"
-                : "PENDING"),
-        ).toUpperCase();
-        result.push({
+
+      const { sId, sOrg, orgName, keys } = getVendorKeys(p);
+      let existing = keys.map(k => vendorMap.get(k)).find(Boolean);
+
+      const respData =
+        typeof p.responseData === "string"
+          ? (() => {
+              try {
+                return JSON.parse(p.responseData);
+              } catch {
+                return {};
+              }
+            })()
+          : p.responseData || {};
+
+      const s = String(p.status || p.submissionStatus || "").toUpperCase();
+      const rawTs = String(
+        p.technicalStatus ||
+          respData.technicalStatus ||
+          (s === "SHORTLISTED" || s === "ACCEPTED"
+            ? "QUALIFIED"
+            : s === "REJECTED"
+              ? "DISQUALIFIED"
+              : "PENDING"),
+      ).toUpperCase();
+
+      const isEvaluated = rawTs === "QUALIFIED" || rawTs === "DISQUALIFIED" || rawTs === "NOT_QUALIFIED" || s === "REJECTED";
+      const ts =
+        rawTs === "QUALIFIED"
+          ? "QUALIFIED"
+          : rawTs === "DISQUALIFIED" || rawTs === "NOT_QUALIFIED" || s === "REJECTED"
+            ? "DISQUALIFIED"
+            : "PENDING";
+
+      const itemOfferedQty = Number(p.offeredQuantity ?? respData.offeredQuantity ?? 0);
+      const itemTimeline = p.deliveryTimeline || respData.deliveryTimeline;
+      const itemDocs = Array.isArray(p.documents) ? p.documents : (Array.isArray(respData.documents) ? respData.documents : []);
+      const itemLines = Array.isArray(p.lineItems) ? p.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : []));
+      const offeredPrice = p.offeredPrice ?? p.quotedAmount ?? p.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
+
+      if (existing) {
+        // Merge into existing vendor record
+        // 1. Technical Evaluation Priority: If this record has evaluation decisions, apply them
+        if (isEvaluated && existing.technicalStatus === "PENDING") {
+          existing.technicalStatus = ts;
+          existing.technicalRemarks = p.technicalRemarks || p.rejectionReason || respData.technicalRemarks || existing.technicalRemarks;
+          existing.score = p.score ?? respData.score ?? existing.score;
+          existing.isDisqualified = ts === "DISQUALIFIED" || Boolean(p.isDisqualified) || existing.isDisqualified;
+        }
+
+        // 2. Commercial / Quotation details priority: preserve authentic offered quantity, timeline, line items, documents
+        if ((!existing.offeredQuantity || existing.offeredQuantity === 1) && itemOfferedQty > 1) {
+          existing.offeredQuantity = itemOfferedQty;
+        }
+        if ((!existing.deliveryTimeline || existing.deliveryTimeline === "Standard") && itemTimeline && itemTimeline !== "Standard") {
+          existing.deliveryTimeline = itemTimeline;
+        }
+        if ((!existing.offeredPrice || existing.offeredPrice === 0) && offeredPrice != null && Number(offeredPrice) > 0) {
+          existing.offeredPrice = Number(offeredPrice);
+          existing.quotedAmount = Number(offeredPrice);
+          existing.totalAmount = Number(offeredPrice);
+        }
+        if ((!existing.lineItems || existing.lineItems.length === 0) && itemLines.length > 0) {
+          existing.lineItems = itemLines;
+        }
+        if ((!existing.documents || existing.documents.length === 0) && itemDocs.length > 0) {
+          existing.documents = itemDocs;
+        }
+        if (p.id && !existing.participationId && String(p.participationNumber || "").startsWith("PRT-")) {
+          existing.participationId = p.id;
+          existing.id = p.id;
+        }
+        if (p.message || p.coverNote || respData.message) {
+          existing.message = existing.message || p.message || p.coverNote || respData.message;
+        }
+
+        for (const k of keys) {
+          vendorMap.set(k, existing);
+        }
+      } else {
+        const newRecord: any = {
           ...p,
+          id: p.id || (keys[0] ? `p-${keys[0]}` : `item-${idx}`),
+          sellerId: sId,
+          sellerUserId: sId,
+          sellerOrganizationId: sOrg,
           technicalStatus: ts,
           technicalRemarks:
             p.technicalRemarks ||
@@ -5628,7 +5712,22 @@ export function ProcurementDetailUnifiedView(
             ts === "DISQUALIFIED" ||
             s === "REJECTED" ||
             Boolean(p.isDisqualified),
-        });
+          offeredQuantity: itemOfferedQty || p.offeredQuantity || 1,
+          deliveryTimeline: itemTimeline || p.deliveryTimeline || "Standard",
+          documents: itemDocs.length ? itemDocs : (p.documents || []),
+          lineItems: itemLines.length ? itemLines : (p.lineItems || []),
+          quotedAmount: offeredPrice != null ? Number(offeredPrice) : (p.quotedAmount ?? 0),
+          totalAmount: offeredPrice != null ? Number(offeredPrice) : (p.totalAmount ?? 0),
+        };
+
+        result.push(newRecord);
+        if (keys.length > 0) {
+          for (const k of keys) {
+            vendorMap.set(k, newRecord);
+          }
+        } else {
+          vendorMap.set(`id-${newRecord.id}`, newRecord);
+        }
       }
     }
     return result;
@@ -5675,7 +5774,7 @@ export function ProcurementDetailUnifiedView(
       const ts = String(p.technicalStatus || "").toUpperCase();
       if (ts === "QUALIFIED") {
         qualified++;
-      } else if (ts === "DISQUALIFIED" || p.isDisqualified) {
+      } else if (ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || p.isDisqualified) {
         disqualified++;
       } else {
         pending++;
@@ -5853,7 +5952,7 @@ export function ProcurementDetailUnifiedView(
           }
           const ts = String(participation.technicalStatus || "").toUpperCase();
           const isQual = ts === "QUALIFIED";
-          const isDisq = ts === "DISQUALIFIED" || participation.isDisqualified;
+          const isDisq = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || participation.isDisqualified;
           return (
             <div>
               {isQual ? (
@@ -5984,6 +6083,8 @@ export function ProcurementDetailUnifiedView(
       const s = String(p.status || p.submissionStatus || "").toUpperCase();
       return (
         ts === "QUALIFIED" ||
+        ts === "DISQUALIFIED" ||
+        ts === "NOT_QUALIFIED" ||
         ts === "UNDER_EVALUATION" ||
         fs === "OPENED" ||
         s === "UNDER_REVIEW" ||
@@ -8591,7 +8692,6 @@ export function SellerQuotationReviewModal({
 
   const handleDownloadQuotationPdf = async () => {
     try {
-      toast.info(`Generating Quotation PDF for ${sellerOrg}…`);
       const supplierReg =
         (participation.supplier?.registrationDetails as Record<string, any>) ||
         {};

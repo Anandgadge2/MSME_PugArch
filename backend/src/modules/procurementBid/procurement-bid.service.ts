@@ -2395,6 +2395,9 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
           participation = await tx.procurementBidParticipation.findFirst({
             where: { bidId: bid.id, sellerId: reqResp.sellerUserId }
           });
+          const reqRespData = typeof reqResp.responseData === 'string'
+            ? (() => { try { return JSON.parse(reqResp.responseData); } catch { return {}; } })()
+            : (reqResp.responseData || {});
           if (!participation) {
             participation = await tx.procurementBidParticipation.create({
               data: {
@@ -2406,6 +2409,10 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
                 financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
                 quotedAmount: reqResp.offeredPrice || 0,
                 totalAmount: reqResp.offeredPrice || 0,
+                makeBrand: (reqResp as any).makeBrand || reqRespData.makeBrand || null,
+                model: (reqResp as any).model || reqRespData.model || null,
+                offeredItemDescription: reqResp.message || reqRespData.message || null,
+                acknowledgement: reqRespData,
                 submittedAt: reqResp.createdAt
               }
             });
@@ -2427,6 +2434,9 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
           participation = await tx.procurementBidParticipation.findFirst({
             where: { bidId: bid.id, sellerId: qResp.sellerId }
           });
+          const qRespData = typeof (qResp as any).responseData === 'string'
+            ? (() => { try { return JSON.parse((qResp as any).responseData); } catch { return {}; } })()
+            : ((qResp as any).responseData || {});
           if (!participation) {
             participation = await tx.procurementBidParticipation.create({
               data: {
@@ -2438,6 +2448,10 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
                 financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
                 quotedAmount: qResp.totalAmount || 0,
                 totalAmount: qResp.totalAmount || 0,
+                makeBrand: (qResp as any).makeBrand || qRespData.makeBrand || null,
+                model: (qResp as any).model || qRespData.model || null,
+                offeredItemDescription: (qResp as any).notes || qRespData.message || null,
+                acknowledgement: qRespData,
                 submittedAt: qResp.createdAt
               }
             });
@@ -2445,7 +2459,7 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
           await tx.quoteResponse.update({
             where: { id: qResp.id },
             data: {
-              technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'NOT_QUALIFIED',
+              technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
               technicalRemarks: item.remarks || null
             }
           }).catch(() => {});
@@ -2487,6 +2501,12 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
 export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: string) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
+  if (
+    bid.status === 'TECHNICAL_EVALUATION_COMPLETED' ||
+    ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(bid.status)
+  ) {
+    return bid;
+  }
   if (!['TECHNICAL_EVALUATION', 'CLOSED', 'EXPIRED'].includes(bid.status)) {
     throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
   }
@@ -2506,6 +2526,12 @@ export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: strin
 export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) => {
   const bid = await resolveBid(bidId, { participations: true });
   assertBuyerOwner(req.user!, bid);
+  if (
+    bid.status === 'FINANCIAL_EVALUATION' ||
+    ['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(bid.status)
+  ) {
+    return bid;
+  }
   if (!financialEvaluationReadyStatuses.includes(bid.status)) {
     throw new ApiError(400, 'Technical evaluation must be completed before opening financial bids.', 'TECHNICAL_EVALUATION_PENDING');
   }
