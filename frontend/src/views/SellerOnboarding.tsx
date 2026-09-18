@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { api } from '../lib/api';
+import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
@@ -13,7 +13,7 @@ import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
-import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
+import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { isShgBusinessType, isShgUser } from '../lib/shg';
@@ -281,6 +281,35 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const [additionalErrors, setAdditionalErrors] = useState<Record<string, string>>({});
   const [panErrors, setPanErrors] = useState<Record<string, string>>({});
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({});
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const valid = cats
+            .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+            .filter(c => Boolean(c.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCategoriesList(valid);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const addCustomCategory = async () => {
@@ -1845,10 +1874,10 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           }}
                           className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
-                          <option value="">Select Categories</option>
-                          {PRODUCT_CATEGORIES
-                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat))
-                            .map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          <option value="">{loadingCategories ? 'Loading categories...' : 'Select Categories'}</option>
+                          {categoriesList
+                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat.name))
+                            .map(cat => <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>)}
                           <option value={PRODUCT_CATEGORY_OTHER}>Other (type your own)</option>
                         </select>
 

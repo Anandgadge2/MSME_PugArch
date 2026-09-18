@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { api, unwrapApiData } from '../lib/api';
+import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
@@ -57,39 +57,7 @@ const DESIGNATION_OPTIONS = [
   'Executive',
   'Others'
 ];
-const PROCUREMENT_CATEGORY_OPTIONS = [
-  'Cement Industry',
-  'Steel & Metal Industry',
-  'Mining & Coal Industry',
-  'Oil & Gas Industry',
-  'Power & Energy Sector',
-  'Construction & Infrastructure',
-  'Manufacturing Industry',
-  'Industrial Equipment & Machinery',
-  'Automobile & Transport',
-  'Electrical & Electronics',
-  'Chemicals & Refractories',
-  'IT & Technology Services',
-  'Medical & Healthcare Supplies',
-  'Agriculture & Agro Products',
-  'Trading & Distribution',
-  'Industrial Consumables',
-  'Hydraulics & Engineering Services',
-  'Safety Equipment & Industrial Safety',
-  'Building Materials & Hardware',
-  'Fuel & Lubricants',
-  'Fabrication & Mechanical Works',
-  'Logistics & Supply Chain',
-  'Packaging & Printing',
-  'Polymer & Plastic Industry',
-  'Tyres & Rubber Products',
-  'Tools & Industrial Hardware',
-  'Nursery & Environmental Services',
-  'Office Equipment & Stationery',
-  'Telecom & Automation',
-  'General Industrial Supplier',
-  'Others'
-];
+
 const ANNUAL_BUDGET_OPTIONS = ['< ₹10 Lakh', '₹10 Lakh – ₹1 Crore', '₹1 Crore – ₹10 Crore', '₹10 Crore+'];
 const PROCUREMENT_METHOD_OPTIONS = ['Direct Purchase', 'Quotation Based', 'Tender / Bidding', 'Reverse Auction', 'Others'];
 const BUYER_ONBOARDING_DRAFT_KEY = 'buyer-onboarding-draft';
@@ -295,8 +263,13 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
   const hasDraftPresetDesignation = DESIGNATION_OPTIONS.includes(draftDesignation) && draftDesignation !== 'Others';
 
   const profileProcurementCategories = Array.isArray(data?.profile?.procurementCategories) ? data.profile.procurementCategories : [];
-  const savedPresetProcurementCategories = profileProcurementCategories.filter((category: string) => PROCUREMENT_CATEGORY_OPTIONS.includes(category) && category !== 'Others');
-  const savedCustomProcurementCategories = profileProcurementCategories.filter((category: string) => !PROCUREMENT_CATEGORY_OPTIONS.includes(category));
+  const rawCustomCats = Array.isArray(data?.profile?.otherCategoryDetails)
+    ? data.profile.otherCategoryDetails
+    : (typeof data?.profile?.otherCategoryDetails === 'string' && data.profile.otherCategoryDetails.trim()
+      ? data.profile.otherCategoryDetails.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : []);
+  const savedCustomProcurementCategories = rawCustomCats;
+  const savedPresetProcurementCategories = profileProcurementCategories.filter((category: string) => category !== 'Others' && !savedCustomProcurementCategories.includes(category));
   const normalizedProcurementCategories = savedCustomProcurementCategories.length > 0
     ? [...savedPresetProcurementCategories, 'Others']
     : savedPresetProcurementCategories;
@@ -379,6 +352,35 @@ export default function BuyerOnboarding() {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [formData, setFormData] = useState<any>(initialFormData);
+
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const valid = cats
+            .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+            .filter(c => Boolean(c.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCategoriesList(valid);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [isUploading, setIsUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1393,7 +1395,7 @@ export default function BuyerOnboarding() {
     }
   };
 
-  if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">Loading JsgSmile Portal - Jharsuguda Synergy for MSME and Industry Linkage Ecosystem form...</div>;
+  if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">Loading JsgSmile Portal...</div>;
 
   if (showSuccessOverlay) {
     return (
@@ -1779,12 +1781,17 @@ export default function BuyerOnboarding() {
                           onChange={handleProcurementCategorySelect}
                           error={submitAttempted ? errors.procurementCategories : ''}
                         >
-                          <option value="" disabled>Select a category</option>
-                          {PROCUREMENT_CATEGORY_OPTIONS.map((cat) => (
-                            <option key={cat} value={cat} disabled={formData.procurementCategories.includes(cat)}>
-                              {cat}
+                          <option value="" disabled>
+                            {loadingCategories ? 'Loading categories...' : 'Select a category'}
+                          </option>
+                          {categoriesList.map((cat) => (
+                            <option key={cat.id || cat.name} value={cat.name} disabled={formData.procurementCategories.includes(cat.name)}>
+                              {cat.name}
                             </option>
                           ))}
+                          <option value="Others" disabled={formData.procurementCategories.includes('Others')}>
+                            Others
+                          </option>
                         </Select>
 
                         <div className="flex flex-wrap gap-1">

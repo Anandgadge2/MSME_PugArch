@@ -172,15 +172,30 @@ export default function BuyerProcurementHub() {
     return listResponse?.procurements || [];
   }, [listResponse]);
 
-  // Dynamic available categories & departments extracted from data
+  // Fetch dynamic categories from database
+  const { data: dbCategories } = useQuery({
+    queryKey: ['portal-db-categories'],
+    queryFn: async () => {
+      const res = await api.get('/api/categories');
+      const json = await res.json();
+      return unwrapApiData<any[]>(json);
+    },
+    staleTime: 10 * 60 * 1000
+  });
+
+  // Dynamic available categories & departments extracted from data & DB
   const availableCategories = useMemo(() => {
     const set = new Set<string>();
     allProcurements.forEach(p => {
       if (p.category && p.category.trim()) set.add(p.category.trim());
     });
-    ['Office Supplies & Stationery', 'IT Hardware & Software', 'Raw Materials', 'Consultancy & AMC Services', 'Industrial Machinery', 'Electrical & Electronics'].forEach(c => set.add(c));
+    if (Array.isArray(dbCategories)) {
+      dbCategories.forEach(c => {
+        if (c.name && c.name.trim()) set.add(c.name.trim());
+      });
+    }
     return Array.from(set).sort();
-  }, [allProcurements]);
+  }, [allProcurements, dbCategories]);
 
   const availableDepartments = useMemo(() => {
     const set = new Set<string>();
