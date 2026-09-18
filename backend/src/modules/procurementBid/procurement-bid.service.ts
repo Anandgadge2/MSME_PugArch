@@ -1148,9 +1148,17 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
     deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
     rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
-    responseData: (options.ownView || canSeeFin) ? { ...ackData, ...respData, ...descData } : {},
-    acknowledgement: (options.ownView || canSeeFin) ? p.acknowledgement : undefined,
-    lineItems: (options.ownView || canSeeFin) ? lineItemsArr : [],
+    responseData: { ...ackData, ...respData, ...descData },
+    acknowledgement: p.acknowledgement,
+    lineItems: lineItemsArr.map((item: any) => ({
+      ...item,
+      unitPrice: canSeeFin ? item.unitPrice : null,
+      lineTotal: canSeeFin ? item.lineTotal : null,
+      unitRate: canSeeFin ? item.unitRate : null,
+      totalAmount: canSeeFin ? item.totalAmount : null,
+      gstPercent: canSeeFin ? item.gstPercent : null,
+      gstPercentage: canSeeFin ? item.gstPercentage : null,
+    })),
     terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
     offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
     status: p.submissionStatus || 'DRAFT',
@@ -1162,20 +1170,32 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     updatedAt: p.updatedAt,
     isWithdrawn: p.isWithdrawn,
     rejectionReason: p.rejectionReason,
-    documents: (options.ownView || canSeeFin) ? (p.documents || [])
-      .map((doc: any) => ({
-        id: doc.id,
-        documentCategory: doc.documentCategory,
-        documentName: doc.documentName,
-        fileName: doc.fileName,
-        fileUrl: doc.fileUrl || doc.url || null,
-        fileKey: doc.fileKey || null,
-        mimeType: doc.mimeType,
-        fileSize: doc.fileSize,
-        documentStatus: doc.documentStatus,
-        uploadedAt: doc.uploadedAt,
-        fileAssetId: doc.fileAssetId
-      })) : [],
+    documents: (
+      (Array.isArray(p.documents) && p.documents.length > 0)
+        ? p.documents
+        : (Array.isArray(respData.documents) && respData.documents.length > 0)
+          ? respData.documents
+          : (Array.isArray(ackData.documents) && ackData.documents.length > 0)
+            ? ackData.documents
+            : []
+    ).filter((doc: any) => {
+      if (!canSeeFin && (doc.documentCategory === 'FINANCIAL_QUOTE' || String(doc.documentName || '').toLowerCase().includes('price breakup'))) {
+        return false;
+      }
+      return true;
+    }).map((doc: any) => ({
+      id: doc.id,
+      documentCategory: doc.documentCategory || 'TECHNICAL_PROPOSAL',
+      documentName: doc.documentName || doc.name || doc.fileName || 'Attachment',
+      fileName: doc.fileName || doc.name || 'document',
+      fileUrl: doc.fileUrl || doc.url || null,
+      fileKey: doc.fileKey || null,
+      mimeType: doc.mimeType || 'application/octet-stream',
+      fileSize: doc.fileSize || 0,
+      documentStatus: doc.documentStatus || 'UPLOADED',
+      uploadedAt: doc.uploadedAt || p.submittedAt || p.createdAt,
+      fileAssetId: doc.fileAssetId || null
+    })),
     hasSealedFinancialQuote: !canSeeFin,
     clarifications: p.clarifications,
     evaluations: p.evaluations,

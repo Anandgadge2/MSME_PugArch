@@ -638,13 +638,25 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       return apiResponse.error(res, 404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
-    // Filter competitor bids if needed
-    if (req.user?.role === 'seller' && !auction.allowCompetitorNames) {
-      auction.bids = (auction.bids || []).filter((bid: any) => bid.sellerId === req.user?.id || bid.sellerOrgId === req.user?.organizationId);
-    } else if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'master_admin' && auction.createdByUserId !== req.user.id && auction.buyerOrgId !== req.user.organizationId)) {
-      if (!auction.allowCompetitorNames) {
-        auction.bids = [];
-      }
+    // Anonymize competitor bids if competitor names are hidden
+    const isManagerUser = canManageAuction(req, auction);
+    if ((req.user?.role === 'seller' || !isManagerUser) && !auction.allowCompetitorNames) {
+      auction.bids = (auction.bids || []).map((bid: any, idx: number) => {
+        const isMe = (req.user?.organizationId && bid.sellerOrgId === req.user.organizationId) ||
+                     (req.user?.id && bid.sellerId === req.user.id);
+        if (isMe) return { ...bid, isMyBid: true };
+        return {
+          ...bid,
+          sellerOrgName: `Bidder ${bid.rankAtSubmission || idx + 1}`,
+          sellerOrgId: null,
+          sellerId: null,
+          ipAddress: null,
+          deviceHash: null,
+          userAgent: null,
+          userAgentHash: null,
+          isMyBid: false
+        };
+      });
     }
 
     let buyerOrganizationName = 'Verified Buyer';
@@ -743,6 +755,34 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       return apiResponse.error(res, 404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
+    const [activeParticipantsCount, totalParticipantsCount, totalBidsCount, myBestBidRecord] = await Promise.all([
+      db.auctionParticipant.count({
+        where: {
+          auctionId: id,
+          status: { in: ['ACCEPTED', 'TECHNICALLY_QUALIFIED', 'BID_SUBMITTED'] }
+        }
+      }),
+      db.auctionParticipant.count({
+        where: { auctionId: id }
+      }),
+      db.auctionBid.count({
+        where: { auctionId: id, isValid: true }
+      }),
+      req.user?.role === 'seller' && (req.user.organizationId || req.user.id)
+        ? db.auctionBid.findFirst({
+            where: {
+              auctionId: id,
+              isValid: true,
+              OR: [
+                ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+                ...(req.user.id ? [{ sellerId: req.user.id }] : [])
+              ]
+            },
+            orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }]
+          })
+        : Promise.resolve(null)
+    ]);
+
     const canBid = Boolean(
       participant &&
       ['TECHNICALLY_QUALIFIED', 'ACCEPTED'].includes(participant.status) &&
@@ -763,6 +803,11 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
         canBid,
         disqualificationReason
       } : null),
+      activeParticipantsCount,
+      totalParticipantsCount,
+      totalBidsCount,
+      myBestBid: myBestBidRecord ? toNumber(myBestBidRecord.amount ?? myBestBidRecord.bidAmount) : null,
+      myRank: participant?.currentRank || null,
       minimumNextBid: toNumber(auction.currentLowestAmount ?? auction.currentLowestBid ?? auction.currentBid ?? auction.startPrice) - toNumber(auction.minDecrementAmount ?? auction.minDecrement, 0)
     });
   } catch (error: any) {
@@ -1241,20 +1286,50 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    const where: any = { auctionId: id };
-    if (req.user?.role === 'seller') where.sellerOrgId = req.user.organizationId || -1;
-    else assertAuctionManager(req, auction);
-    const participants = await db.auctionParticipant.findMany({ where, orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }] });
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+    const isPublic = await isAuctionPublic(auction);
+    if (!isManager && !myParticipant && !isPublic && !isAdmin(req)) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const participants = await db.auctionParticipant.findMany({
+      where: { auctionId: id },
+      orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }]
+    });
     const orgIds = Array.from(new Set(participants.map((p: any) => p.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({
-      where: { id: { in: orgIds } },
+      where: { id: { in: orgIds as number[] } },
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const mappedParticipants = participants.map((p: any) => ({
-      ...p,
-      sellerOrgName: orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`
-    }));
+
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const mappedParticipants = participants.map((p: any, index: number) => {
+      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
+                   (req.user?.id && p.sellerUserId === req.user.id);
+      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+
+      return {
+        ...p,
+        sellerOrgName: displayName,
+        sellerOrgId: (showAllNames || isMe) ? p.sellerOrgId : null,
+        sellerUserId: (showAllNames || isMe) ? p.sellerUserId : null,
+        isCurrentViewer: Boolean(isMe)
+      };
+    });
     return apiResponse.success(res, { participants: maskSensitive(mappedParticipants) });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load participants', error.code || 'REVERSE_AUCTION_PARTICIPANTS_ERROR');
@@ -1775,22 +1850,78 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    const where: any = { auctionId: id };
-    if (req.user?.role === 'seller') where.OR = [{ sellerId: req.user.id }, { sellerOrgId: req.user.organizationId || -1 }];
-    else assertAuctionManager(req, auction);
-    const bids = await db.auctionBid.findMany({ where, orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }] });
-    
+
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+    const isPublic = await isAuctionPublic(auction);
+    if (!isManager && !myParticipant && !isPublic && !isAdmin(req)) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const [bids, participants] = await Promise.all([
+      db.auctionBid.findMany({
+        where: { auctionId: id, isValid: true },
+        orderBy: [{ submittedAt: 'desc' }]
+      }),
+      db.auctionParticipant.findMany({
+        where: { auctionId: id }
+      })
+    ]);
+
+    const participantByOrg = new Map<number, any>(participants.map((p: any) => [Number(p.sellerOrgId), p]));
     const orgIds = Array.from(new Set(bids.map((b: any) => b.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({
       where: { id: { in: orgIds as number[] } },
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const mappedBids = bids.map((b: any) => ({
-      ...b,
-      sellerOrgName: orgMap.get(b.sellerOrgId) || `Organization #${b.sellerOrgId}`
-    }));
-    
+
+    // Anonymized competitor label mapping
+    const competitorLabelMap = new Map<number, string>();
+    let competitorIndex = 1;
+    for (const p of participants) {
+      const pOrgId = Number(p.sellerOrgId);
+      if (pOrgId && !competitorLabelMap.has(pOrgId)) {
+        competitorLabelMap.set(pOrgId, `Bidder ${p.currentRank || competitorIndex++}`);
+      }
+    }
+
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const mappedBids = bids.map((b: any) => {
+      const bOrgId = Number(b.sellerOrgId || 0);
+      const isMe = (req.user?.organizationId && bOrgId === Number(req.user.organizationId)) ||
+                   (req.user?.id && b.sellerId === Number(req.user.id));
+      const realOrgName = orgMap.get(bOrgId) || `Organization #${bOrgId}`;
+      const fallbackLabel = competitorLabelMap.get(bOrgId) || `Bidder #${bOrgId || '?'}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : fallbackLabel;
+      const part = bOrgId ? participantByOrg.get(bOrgId) : null;
+      const bidderRank = part?.currentRank || b.rankAtSubmission || null;
+
+      return {
+        ...b,
+        sellerOrgName: displayName,
+        sellerOrgId: (showAllNames || isMe) ? b.sellerOrgId : null,
+        sellerId: (showAllNames || isMe) ? b.sellerId : null,
+        ipAddress: (showAllNames || isMe) ? b.ipAddress : null,
+        deviceHash: null,
+        userAgent: null,
+        userAgentHash: null,
+        isMyBid: Boolean(isMe),
+        bidderRank
+      };
+    });
+
     return apiResponse.success(res, { bids: maskSensitive(mappedBids) });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load bids', error.code || 'REVERSE_AUCTION_BIDS_ERROR');

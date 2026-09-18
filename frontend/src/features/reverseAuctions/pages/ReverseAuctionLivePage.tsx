@@ -1,4 +1,6 @@
-import { FormEvent, useState, useEffect, useMemo } from 'react';
+'use client';
+
+import { FormEvent, useState, useEffect, useMemo, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
@@ -6,6 +8,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowLeft,
+  Award,
   Ban,
   Clock3,
   EyeOff,
@@ -20,20 +23,27 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  Sparkles,
+  TrendingDown,
   Trophy,
   Users,
   X,
   Gauge,
   Percent,
+  CheckCircle2,
+  ChevronRight,
+  UserCheck,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
-  LineChart,
+  AreaChart,
+  Area,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip as RechartsTooltip
+  Tooltip as RechartsTooltip,
+  ReferenceLine,
 } from 'recharts';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -87,6 +97,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [activeLogTab, setActiveLogTab] = useState<'stream' | 'leaderboard'>('stream');
 
   const summary = useQuery({
     queryKey: ['reverse-auction-live', id],
@@ -109,7 +120,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
   const canonicalCode = summary.data?.auction?.auctionCode || String(id);
 
-  // Sync URL to human-readable canonical code (e.g. /seller/procurement/reverse-auction/RA-2026-69UXUD/live)
+  // Sync URL to human-readable canonical code
   useEffect(() => {
     if (summary.data?.auction?.auctionCode && typeof window !== 'undefined') {
       const code = summary.data.auction.auctionCode;
@@ -128,7 +139,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   const participants = useQuery({
     queryKey: ['reverse-auction-participants', id],
     queryFn: () => reverseAuctionApi.participants(id),
-    staleTime: 5_000,
+    staleTime: 3_000,
     refetchInterval: liveAwareRefetch,
     refetchOnWindowFocus: false,
     enabled: !summary.isError,
@@ -181,12 +192,14 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
   // Countdown timer logic
   const [timeLeft, setTimeLeft] = useState('00:00:00');
+  const [isNearEnding, setIsNearEnding] = useState(false);
   const live = auction ? isAuctionLive(auction, summary.data?.serverTime || liveSummaryCache.get(id)?.serverTime) : false;
   const status = auction ? getStatus(auction) : 'DRAFT';
 
   useEffect(() => {
     if (!live || !auction?.endTime) {
       setTimeLeft('00:00:00');
+      setIsNearEnding(false);
       return;
     }
     const updateTimer = () => {
@@ -195,7 +208,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       const diff = end - now;
       if (diff <= 0) {
         setTimeLeft('00:00:00');
+        setIsNearEnding(false);
       } else {
+        // Highlight in urgent red if less than 5 minutes remain
+        setIsNearEnding(diff <= 300_000);
         const days = Math.floor(diff / 86400000);
         const hrs = String(Math.floor((diff % 86400000) / 3600000)).padStart(2, '0');
         const mins = String(Math.floor((diff % 3600000) / 60000)).padStart(2, '0');
@@ -212,99 +228,256 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     return () => clearInterval(interval);
   }, [live, auction?.endTime]);
 
+  const participant = (summary.data?.participant || liveSummaryCache.get(id)?.participant) as ReverseAuctionParticipant | null | undefined;
+  const participantRows = participants.data?.participants || [];
+  
+  // All bids in descending order by submission time
+  const bidRows: ReverseAuctionBid[] = (bids.data?.bids || []).slice().sort(
+    (a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime()
+  );
+  const latestBid = bidRows[0];
+
+  const currentLowest = getCurrentLowest(auction);
+  const startPrice = numberValue(auction?.startPrice, 0);
+  const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
+  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
+  const minNextBid = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, currentLowest);
+  const decrement = numberValue(auction?.minDecrementAmount ?? auction?.minDecrement, 0);
+
+  // Compute seller's own best bid
+  const myBestBid = useMemo(() => {
+    if (summary.data?.myBestBid != null) return Number(summary.data.myBestBid);
+    const myBids = bidRows.filter(b => b.isMyBid);
+    if (myBids.length === 0) return 0;
+    return myBids.reduce((best, b) => {
+      const amt = getBidAmount(b);
+      return amt > 0 && (!best || amt < best) ? amt : best;
+    }, 0);
+  }, [summary.data?.myBestBid, bidRows]);
+
+  // Compute seller's own rank
+  const myRank = useMemo(() => {
+    if (summary.data?.myRank != null) return summary.data.myRank;
+    if (participant?.currentRank != null) return participant.currentRank;
+    const myP = participantRows.find(p => p.isCurrentViewer);
+    return myP?.currentRank || null;
+  }, [summary.data?.myRank, participant?.currentRank, participantRows]);
+
+  // Active participants count
+  const activeParticipantsCount = useMemo(() => {
+    if (summary.data?.activeParticipantsCount != null) {
+      return Number(summary.data.activeParticipantsCount);
+    }
+    const active = participantRows.filter((p: any) => 
+      ['ACCEPTED', 'TECHNICALLY_QUALIFIED', 'BID_SUBMITTED'].includes(p.status) || p.lastBidAmount
+    );
+    return active.length || participantRows.length;
+  }, [summary.data?.activeParticipantsCount, participantRows]);
+
+  const extensionCount = numberValue(auction?.extensionCount, 0);
+  const maxExtensions = auction?.maxAutoExtensions ?? 0;
+
+  // Live bidding stream columns
   const liveBidColumns = useMemo<ColumnDef<ReverseAuctionBid>[]>(() => [
     {
       key: 'rank',
       header: 'Rank',
-      width: 'w-[15%]',
-      cell: (row) => (
-        <span className={cn(
-          "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-extrabold",
-          row.rankAtSubmission === 1 ? "bg-emerald-50 text-emerald-700 border border-emerald-200/50" : "bg-zinc-100 text-zinc-600"
-        )}>
-          L{row.rankAtSubmission || '-'}
-        </span>
-      )
+      width: 'w-[14%]',
+      cell: (row) => {
+        const rankNum = row.bidderRank || row.rankAtSubmission;
+        const isL1 = rankNum === 1;
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-extrabold shadow-xs tracking-tight",
+            isL1
+              ? "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300"
+              : rankNum === 2
+              ? "bg-slate-100 text-slate-800 border border-slate-300 dark:bg-slate-800 dark:text-slate-200"
+              : rankNum === 3
+              ? "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400"
+              : "bg-zinc-100 text-zinc-600 border border-zinc-200"
+          )}>
+            {isL1 ? '🥇 L1' : rankNum === 2 ? '🥈 L2' : rankNum === 3 ? '🥉 L3' : `L${rankNum || '-'}`}
+          </span>
+        );
+      }
     },
-    ...(isBuyerOrAdmin ? [{
-      key: 'sellerOrgName',
-      header: 'Seller Organization',
-      width: 'w-[30%]',
-      cell: (row: ReverseAuctionBid) => (
-        <span className="font-bold text-zinc-800">
-          {row.sellerOrgName || `Org #${row.sellerOrgId}`}
-        </span>
-      )
-    }] : []),
+    {
+      key: 'bidder',
+      header: 'Participant / Bidder',
+      width: 'w-[32%]',
+      cell: (row: ReverseAuctionBid) => {
+        if (row.isMyBid) {
+          return (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-xs">
+                YOU
+              </span>
+              <span className="font-extrabold text-blue-900 dark:text-blue-300 truncate max-w-[180px]" title={row.sellerOrgName || 'Your Organization'}>
+                {isBuyerOrAdmin ? row.sellerOrgName : 'Your Organization'}
+              </span>
+            </div>
+          );
+        }
+        return (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-zinc-300 shrink-0" aria-hidden="true" />
+            <span className="font-bold text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]" title={row.sellerOrgName || 'Competitor'}>
+              {row.sellerOrgName || 'Competitor Bidder'}
+            </span>
+          </div>
+        );
+      }
+    },
     {
       key: 'submittedAt',
       header: 'Bid Time',
-      width: 'w-[22%]',
+      width: 'w-[20%]',
       cell: (row) => (
-        <span className="font-semibold text-zinc-500">
+        <span className="font-semibold text-zinc-500 dark:text-zinc-400 text-xs">
           {formatDateTime(row.submittedAt)}
         </span>
       )
     },
     {
       key: 'amount',
-      header: 'Bid Amount',
+      header: 'Commercial Bid',
       width: 'w-[20%]',
-      cell: (row) => (
-        <span className="font-black text-zinc-900">
-          {formatCurrency(getBidAmount(row))}
-        </span>
-      )
+      cell: (row) => {
+        const amt = getBidAmount(row);
+        const isLowest = amt === currentLowest && currentLowest > 0;
+        return (
+          <span className={cn(
+            "font-black font-mono text-sm tracking-tight",
+            isLowest ? "text-emerald-700 dark:text-emerald-400 font-extrabold" : "text-zinc-900 dark:text-zinc-100"
+          )}>
+            {formatCurrency(amt)}
+          </span>
+        );
+      }
     },
     {
       key: 'status',
       header: 'Status',
-      width: 'w-[13%]',
+      width: 'w-[14%]',
       cell: (row) => (
         <span className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase",
-          row.isValid === false ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
+          "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wide",
+          row.isValid === false
+            ? "bg-red-50 text-red-700 border border-red-200"
+            : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
         )}>
-          {row.isValid === false ? 'Invalid' : 'Valid'}
+          {row.isValid === false ? 'Invalid' : '✓ Valid'}
         </span>
       )
     }
-  ], [isBuyerOrAdmin]);
+  ], [isBuyerOrAdmin, currentLowest]);
+
+  // Leaderboard columns for Participant Standings Tab
+  const leaderboardColumns = useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
+    {
+      key: 'rank',
+      header: 'Rank',
+      width: 'w-[15%]',
+      cell: (part, idx) => {
+        const rank = part.currentRank || idx + 1;
+        const isL1 = rank === 1;
+        return (
+          <span className={cn(
+            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black shadow-xs",
+            isL1
+              ? "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300"
+              : rank === 2
+              ? "bg-slate-100 text-slate-800 border border-slate-300"
+              : rank === 3
+              ? "bg-amber-50 text-amber-800 border border-amber-200"
+              : "bg-zinc-100 text-zinc-600"
+          )}>
+            {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'participant',
+      header: 'Participant / Organization',
+      width: 'w-[35%]',
+      cell: (part) => {
+        if (part.isCurrentViewer) {
+          return (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
+                YOU
+              </span>
+              <span className="font-black text-blue-900 dark:text-blue-200">
+                {isBuyerOrAdmin ? part.sellerOrgName : 'Your Organization'}
+              </span>
+            </div>
+          );
+        }
+        return (
+          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+            {part.sellerOrgName || `Bidder #${part.sellerOrgId || '?'}`}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'lastBid',
+      header: 'Best Submitted Offer',
+      width: 'w-[25%]',
+      cell: (part) => {
+        const amt = Number(part.lastBidAmount || 0);
+        const isL1 = (part.currentRank || 1) === 1;
+        return (
+          <span className={cn("font-mono text-xs font-black", isL1 ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100")}>
+            {amt > 0 ? formatCurrency(amt) : 'Awaiting First Bid'}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'gap',
+      header: 'Gap to L1',
+      width: 'w-[25%]',
+      cell: (part) => {
+        const amt = Number(part.lastBidAmount || 0);
+        if (amt <= 0) return <span className="text-zinc-400 text-xs">-</span>;
+        if ((part.currentRank || 1) === 1) {
+          return (
+            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <Sparkles className="h-3 w-3" /> Leading L1
+            </span>
+          );
+        }
+        const gap = currentLowest > 0 && amt > currentLowest ? amt - currentLowest : 0;
+        const gapPct = currentLowest > 0 ? (gap / currentLowest) * 100 : 0;
+        return (
+          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 font-mono">
+            +{formatCurrency(gap)} (+{gapPct.toFixed(1)}%)
+          </span>
+        );
+      }
+    }
+  ], [isBuyerOrAdmin, currentLowest]);
 
   if (loading) return <LoadingState label="Loading live auction..." />;
   if (summary.error) return <InlineError message={(summary.error as Error).message} onRetry={() => summary.refetch()} />;
   if (!auction) return <EmptyState title="Auction not found" />;
 
-  const participant = (summary.data?.participant || liveSummaryCache.get(id)?.participant) as ReverseAuctionParticipant | null | undefined;
-  const participantRows = participants.data?.participants || [];
-  const bidRows = (bids.data?.bids || []).slice().sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime());
-  const currentLowest = getCurrentLowest(auction);
-  const startPrice = numberValue(auction.startPrice);
-  const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
-  const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
-  const minNextBid = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, currentLowest);
-  const decrement = numberValue(auction.minDecrementAmount ?? auction.minDecrement, 0);
-  const latestBid = bidRows[0];
-  const myBestBid = bidRows.reduce((best, row) => {
-    const value = getBidAmount(row);
-    return value > 0 && (!best || value < best) ? value : best;
-  }, 0);
-  const extensionCount = numberValue(auction.extensionCount, 0);
-  const maxExtensions = auction.maxAutoExtensions ?? 0;
-
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextAmount = Number(amount);
     if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-      setLocalError('Please enter a valid positive number');
+      setLocalError('Please enter a valid positive bid amount');
       return;
     }
     if (minNextBid > 0 && nextAmount > minNextBid) {
-      setLocalError(`Bid amount cannot exceed ${formatCurrency(minNextBid)}`);
+      setLocalError(`Bid amount cannot exceed the permitted maximum of ${formatCurrency(minNextBid)}`);
       return;
     }
     if (!acceptedTerms) {
-      setLocalError('Please accept the auction terms and rules first');
+      setLocalError('Please accept the auction terms and bidding rules before placing a bid');
       return;
     }
     setLocalError('');
@@ -317,8 +490,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     bid.mutate(nextAmount);
   };
 
-  // Process data for the real-time bid chart
-  // Group bids chronologically to show pricing drops
+  // Process data for the real-time bid chart in chronological order
   const chartData = bidRows
     .slice()
     .reverse()
@@ -326,91 +498,140 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       index: idx + 1,
       amount: getBidAmount(b),
       time: formatTime(b.submittedAt || 0),
-      label: b.sellerOrgName || `Bid #${idx + 1}`
+      fullTime: formatDateTime(b.submittedAt || 0),
+      label: b.isMyBid ? 'Your Bid' : (b.sellerOrgName || `Bidder #${idx + 1}`),
+      isMyBid: Boolean(b.isMyBid),
+      rank: b.bidderRank || b.rankAtSubmission || (idx === bidRows.length - 1 ? 1 : null),
+      isLowest: getBidAmount(b) === currentLowest
     }));
 
+  // Quick helper to fill amount
+  const handleQuickFill = (targetAmt: number) => {
+    if (targetAmt > 0) {
+      setAmount(String(targetAmt));
+      setLocalError('');
+    }
+  };
+
   return (
-    <div className="space-y-6 pb-8 bg-white text-zinc-900 p-6 rounded-3xl border border-zinc-200 shadow-xl animate-in fade-in duration-500">
+    <div className="space-y-6 pb-12 bg-zinc-50/50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 p-4 sm:p-6 lg:p-8 rounded-3xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm animate-in fade-in duration-300">
       
-      {/* Error alert */}
+      {/* Error notification */}
       {localError && (
-        <div className="rounded-xl border border-red-500/30 bg-red-950/40 p-4 text-xs font-bold text-red-400 flex justify-between items-center shadow-lg shadow-red-950/20 backdrop-blur-md">
-          <span>{localError}</span>
-          <button onClick={() => setLocalError('')} className="text-red-400 hover:text-red-300">
-            <X className="h-4.5 w-4.5" />
+        <div 
+          role="alert"
+          aria-live="polite"
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-800 flex justify-between items-center shadow-xs"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
+            <span>{localError}</span>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setLocalError('')} 
+            className="text-red-600 hover:text-red-800 p-1 rounded-md transition"
+            aria-label="Dismiss error"
+          >
+            <X className="h-4 w-4" />
           </button>
         </div>
       )}
 
-      {/* Header section */}
-      <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-zinc-200 pb-6">
+      {/* Header section with status, title, details & glowing countdown */}
+      <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-zinc-200/80 dark:border-zinc-800 pb-6">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <Link href={`/seller/procurement/reverse-auction/${canonicalCode}`} className="inline-flex h-8 items-center rounded-lg border border-zinc-200 bg-white px-3 text-xs font-bold text-zinc-600 hover:border-zinc-300 hover:text-zinc-900 transition">
+            <Link 
+              href={`${rolePrefix}/procurement/reverse-auction/${canonicalCode}`} 
+              className="inline-flex h-8 items-center rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 px-3 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-xs"
+            >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Auction Details
             </Link>
             
             {/* Live Indicator */}
             {live ? (
-              <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-red-600">
+              <span className="inline-flex items-center rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-red-600 dark:text-red-400 shadow-xs">
                 <span className="mr-2 h-2 w-2 rounded-full bg-red-500 animate-ping" />
-                Live Auction
+                Live Reverse Auction
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-full bg-zinc-100 border border-zinc-200 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-600">
+              <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
                 {status.replace(/_/g, ' ')}
               </span>
             )}
             
             {auction.auctionCode && (
-              <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+              <span className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
                 {auction.auctionCode}
+              </span>
+            )}
+
+            {auction.autoExtensionEnabled && (
+              <span className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-400">
+                Auto-Extension: {extensionCount} / {maxExtensions}
               </span>
             )}
           </div>
           
-          <h1 className="text-2xl font-black tracking-tight text-zinc-900">{auction.title || `Auction #${id}`}</h1>
-          <p className="max-w-4xl text-sm font-semibold leading-relaxed text-zinc-500">
-            {auction.description || 'Participate in a price-only reverse auction with server-time validation, rank tracking, decrement controls, and audit-backed bid submission.'}
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
+            {auction.title || `Auction #${id}`}
+          </h1>
+          <p className="max-w-4xl text-xs sm:text-sm font-semibold leading-relaxed text-zinc-500 dark:text-zinc-400">
+            {auction.description || 'Participate in a competitive reverse auction with live downward price tracking, real-time rank updates, and server timestamp verification.'}
           </p>
         </div>
 
-        {/* Controls and Countdown */}
+        {/* Countdown & Action Buttons */}
         <div className="flex flex-col sm:items-end gap-3.5 shrink-0">
-          {/* Glowing Red Countdown Timer */}
           <div className="flex flex-col sm:items-end">
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Remaining Time</p>
-            <div className="mt-1 text-3xl font-mono font-extrabold text-red-600 tracking-wider drop-shadow-[0_0_8px_rgba(220,38,38,0.2)]">
+            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              Remaining Bidding Window
+            </p>
+            <div className={cn(
+              "mt-1 text-2xl sm:text-3xl font-mono font-extrabold tracking-wider drop-shadow-xs",
+              isNearEnding 
+                ? "text-red-600 animate-pulse drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]" 
+                : "text-red-600"
+            )}>
               ( {timeLeft} )
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={invalidate} disabled={summary.isFetching} className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={invalidate} 
+              disabled={summary.isFetching} 
+              className="rounded-xl border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 shadow-xs"
+            >
               <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', summary.isFetching && 'animate-spin')} /> Refresh
             </Button>
-            <Link href={`/seller/procurement/reverse-auction/${canonicalCode}`}>
-              <Button type="button" variant="outline" className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">Details</Button>
+            <Link href={`${rolePrefix}/procurement/reverse-auction/${canonicalCode}`}>
+              <Button type="button" variant="outline" className="rounded-xl border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 shadow-xs">
+                Details
+              </Button>
             </Link>
             
             {isBuyerOrAdmin && (
               <>
                 {status === 'DRAFT' && (
-                  <Button onClick={() => transition.mutate('schedule')} variant="outline" className="border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700">Schedule</Button>
+                  <Button onClick={() => transition.mutate('schedule')} variant="outline" className="rounded-xl border-zinc-200">Schedule</Button>
                 )}
                 {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(status) && (
-                  <Button onClick={() => transition.mutate('start')} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Start</Button>
+                  <Button onClick={() => transition.mutate('start')} className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Start</Button>
                 )}
                 {status === 'LIVE' && (
-                  <Button onClick={() => transition.mutate('pause')} variant="secondary" className="bg-zinc-100 hover:bg-zinc-200 text-zinc-800">Pause</Button>
+                  <Button onClick={() => transition.mutate('pause')} variant="secondary" className="rounded-xl bg-zinc-100 text-zinc-800">Pause</Button>
                 )}
                 {['LIVE', 'PAUSED'].includes(status) && (
-                  <Button onClick={() => transition.mutate('close')} className="bg-red-600 hover:bg-red-500 text-white font-bold">Close</Button>
+                  <Button onClick={() => transition.mutate('close')} className="rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold">Close Auction</Button>
                 )}
                 <button
                   type="button"
                   onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
-                  className="rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 px-3 py-1.5 text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-zinc-400"
+                  className="rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-3 py-1.5 text-xs font-bold transition"
                 >
                   Results
                 </button>
@@ -420,130 +641,308 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         </div>
       </section>
 
-      {/* Stats Row */}
+      {/* KPI Cards Row — Role Differentiated */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Card 1: Current Lowest Bid (L1) */}
         <StatsCard
           icon={IndianRupee}
-          label="Current Lowest Bid"
+          label="Current Lowest Bid (L1)"
           value={currentLowest > 0 ? formatCurrency(currentLowest) : 'No bids yet'}
+          subtitle={startPrice > currentLowest && currentLowest > 0 
+            ? `Price Drop: -${formatCurrency(startPrice - currentLowest)} (-${savingsPercent.toFixed(1)}%)` 
+            : `Starting Price: ${formatCurrency(startPrice)}`}
           color="emerald"
         />
+
+        {/* Card 2: My Current Rank (Seller) / Event Standing (Buyer) */}
         <StatsCard
           icon={Trophy}
-          label="My Current Rank"
-          value={isBuyerOrAdmin ? 'N/A (Buyer Mode)' : participant?.currentRank ? `L${participant.currentRank}` : 'Not ranked'}
+          label={isBuyerOrAdmin ? "Auction Leader" : "My Current Rank"}
+          value={
+            isBuyerOrAdmin
+              ? (latestBid ? (latestBid.sellerOrgName || 'L1 Bidder') : 'Awaiting Bids')
+              : myRank === 1
+              ? '🥇 L1 (Leading)'
+              : myRank === 2
+              ? '🥈 L2 (Trailing)'
+              : myRank === 3
+              ? '🥉 L3 (Trailing)'
+              : myRank
+              ? `L${myRank}`
+              : myBestBid > 0
+              ? 'Rank Processing'
+              : 'Not Ranked'
+          }
+          subtitle={
+            isBuyerOrAdmin
+              ? `${bidRows.length} total bids received`
+              : myRank === 1
+              ? 'Holding the winning commercial offer'
+              : myBestBid > 0
+              ? 'Submit lower downward bid to take L1'
+              : 'Submit a valid bid to enter leaderboard'
+          }
           color="amber"
         />
+
+        {/* Card 3: Active Participants (Verified Real Count) */}
         <StatsCard
           icon={Users}
           label="Active Participants"
-          value={formatNumber(participantRows.length)}
+          value={formatNumber(activeParticipantsCount)}
+          subtitle={`${formatNumber(summary.data?.totalParticipantsCount ?? participantRows.length)} qualified bidders`}
           color="blue"
         />
-        <StatsCard
-          icon={Percent}
-          label="Savings Generated"
-          value={savings > 0 ? `${formatCurrency(savings)} (${savingsPercent.toFixed(1)}%)` : '0.0%'}
-          color="cyan"
-        />
+
+        {/* Card 4: For Sellers: YOUR BEST OFFER (Replaces Savings Generated!); For Buyers: SAVINGS GENERATED */}
+        {isBuyerOrAdmin ? (
+          <StatsCard
+            icon={Percent}
+            label="Savings Generated"
+            value={savings > 0 ? `${formatCurrency(savings)} (${savingsPercent.toFixed(1)}%)` : '₹0.00 (0.0%)'}
+            subtitle={`Compared to opening benchmark of ${formatCurrency(startPrice)}`}
+            color="cyan"
+          />
+        ) : (
+          <StatsCard
+            icon={Award}
+            label="Your Best Offer"
+            value={myBestBid > 0 ? formatCurrency(myBestBid) : 'No Bids Placed'}
+            subtitle={
+              myRank === 1
+                ? '🥇 Currently winning (L1 lead)'
+                : myBestBid > 0 && currentLowest > 0
+                ? `+${formatCurrency(myBestBid - currentLowest)} behind L1 (Drop needed)`
+                : `Benchmark Opening: ${formatCurrency(startPrice)}`
+            }
+            color="violet"
+          />
+        )}
       </div>
 
-      {/* Real-time price chart */}
-      <Card className="border-zinc-200 bg-white shadow-md overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3 border-b border-zinc-200 pb-4 mb-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-              <LineChartIcon className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900">Live Bidding Price Movement</h2>
-              <p className="text-[11px] text-zinc-500 font-semibold mt-0.5">Visual mapping of bid downward progression over server time.</p>
+      {/* Real-time Dynamic Price Chart */}
+      <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
+            <div className="flex items-center gap-3">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+                <TrendingDown className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <span>Live Bidding Price Movement</span>
+                  {live && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Live Stream
+                    </span>
+                  )}
+                </h2>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                  Visual mapping of downward commercial offers across all participants over time.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Chart Legend / Metric Pills */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />
+                Current L1: <span className="font-mono font-black text-emerald-600">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</span>
+              </span>
+              {!isBuyerOrAdmin && myBestBid > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800">
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-600 inline-block" />
+                  Your Best: <span className="font-mono font-black">{formatCurrency(myBestBid)}</span>
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-1 text-zinc-600 dark:text-zinc-400">
+                Total Bids: <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{chartData.length}</span>
+              </span>
             </div>
           </div>
 
-          <div className="h-72 w-full mt-4">
+          <div className="h-72 sm:h-80 w-full pt-2">
             {chartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full border border-dashed border-zinc-200 rounded-xl bg-zinc-50 text-zinc-400 p-6">
-                <LineChartIcon className="h-10 w-10 text-zinc-300 mb-2 stroke-[1.5]" />
-                <p className="text-xs font-bold">Waiting for bidding data to populate chart...</p>
+              <div className="flex flex-col items-center justify-center h-full border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-400 p-6">
+                <LineChartIcon className="h-10 w-10 text-zinc-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
+                <p className="text-xs font-bold text-zinc-500">Waiting for live bids to populate chart…</p>
+                <p className="text-[11px] text-zinc-400 mt-1">Once verified downward bids are registered, the price drop curve will display here.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+                <AreaChart data={chartData} margin={{ top: 15, right: 20, left: 15, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="time" stroke="#71717a" fontSize={9} tickLine={false} />
-                  <YAxis stroke="#71717a" fontSize={9} tickLine={false} domain={['auto', 'auto']} />
-                  <RechartsTooltip
-                    contentStyle={{ backgroundColor: '#ffffff', borderColor: '#e2e8f0', borderRadius: '12px' }}
-                    labelClassName="text-[10px] font-black text-zinc-500"
-                    itemStyle={{ fontSize: '11px', color: '#059669', fontWeight: 'bold' }}
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    dy={5}
                   />
-                  <Line
+                  <YAxis 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    tickLine={false} 
+                    domain={['auto', 'auto']}
+                    tickFormatter={(val) => `₹${val >= 100000 ? (val / 100000).toFixed(1) + 'L' : val.toLocaleString('en-IN')}`}
+                    dx={-5}
+                  />
+                  
+                  {/* Start price benchmark reference line */}
+                  {startPrice > 0 && (
+                    <ReferenceLine 
+                      y={startPrice} 
+                      stroke="#94a3b8" 
+                      strokeDasharray="4 4" 
+                      label={{ value: `Start: ₹${startPrice.toLocaleString('en-IN')}`, position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 700 }} 
+                    />
+                  )}
+
+                  {/* Current L1 benchmark reference line */}
+                  {currentLowest > 0 && (
+                    <ReferenceLine 
+                      y={currentLowest} 
+                      stroke="#10b981" 
+                      strokeDasharray="3 3" 
+                      label={{ value: `L1: ₹${currentLowest.toLocaleString('en-IN')}`, position: 'bottom', fill: '#059669', fontSize: 10, fontWeight: 800 }} 
+                    />
+                  )}
+
+                  <RechartsTooltip content={<CustomChartTooltip />} />
+
+                  <Area
                     type="monotone"
                     dataKey="amount"
                     stroke="#10b981"
                     strokeWidth={2.5}
-                    dot={{ fill: '#10b981', strokeWidth: 1, r: 4 }}
-                    activeDot={{ r: 6, fill: '#059669', stroke: '#10b981' }}
+                    fillOpacity={1}
+                    fill="url(#priceGradient)"
+                    dot={<CustomizedDot />}
+                    activeDot={{ r: 7, fill: '#059669', stroke: '#ffffff', strokeWidth: 2 }}
+                    isAnimationActive={true}
+                    animationDuration={600}
+                    animationEasing="ease-in-out"
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Bottom Grid Layout */}
+      {/* Bottom Grid Layout: Live Bidding Log & Place Bid Console */}
       <div className="grid gap-6 xl:grid-cols-[1fr_390px]">
         
-        {/* Left Column: Live Bidding History Table */}
-        <Card className="border-zinc-200 bg-white shadow-md overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 border-b border-zinc-200 pb-4 mb-4">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
-                <History className="h-5 w-5" />
-              </span>
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900">Live Bidding Log</h2>
-                <p className="text-[11px] text-zinc-500 font-semibold mt-0.5">Real-time sequence of valid downward commercial offers.</p>
+        {/* Left Column: Live Bidding Log & Leaderboard with Tabs */}
+        <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                  <History className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                    Live Bidding Log & Standings
+                  </h2>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                    Real-time sequence of downward commercial offers. Your submissions are highlighted.
+                  </p>
+                </div>
+              </div>
+
+              {/* Tab Selector: Live Stream vs Leaderboard */}
+              <div className="inline-flex rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveLogTab('stream')}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 transition duration-150",
+                    activeLogTab === 'stream'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                  )}
+                >
+                  Live Bid Stream ({bidRows.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveLogTab('leaderboard')}
+                  className={cn(
+                    "rounded-lg px-3 py-1.5 transition duration-150",
+                    activeLogTab === 'leaderboard'
+                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
+                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                  )}
+                >
+                  Participant Leaderboard ({participantRows.length})
+                </button>
               </div>
             </div>
 
-            <DataTable<ReverseAuctionBid>
-              columns={liveBidColumns}
-              data={bidRows}
-              keyExtractor={(row) => String(row.id)}
-              emptyTitle="No bids placed yet"
-              emptyDescription="Once live bids are validated by the server, they will populate here."
-              minWidth="min-w-[540px]"
-            />
+            {/* Tab 1: Live Bid Stream */}
+            {activeLogTab === 'stream' && (
+              <div className="overflow-x-auto">
+                <DataTable<ReverseAuctionBid>
+                  columns={liveBidColumns}
+                  data={bidRows}
+                  keyExtractor={(row) => String(row.id)}
+                  emptyTitle="No bids placed yet"
+                  emptyDescription="Once live bids are validated by the server, they will populate here in real-time."
+                  minWidth="min-w-[560px]"
+                  rowClassName={(row) => row.isMyBid ? 'bg-blue-50/50 dark:bg-blue-950/20 border-l-4 border-l-blue-600 font-medium' : ''}
+                />
+              </div>
+            )}
+
+            {/* Tab 2: Participant Standings / Leaderboard */}
+            {activeLogTab === 'leaderboard' && (
+              <div className="overflow-x-auto">
+                <DataTable<ReverseAuctionParticipant>
+                  columns={leaderboardColumns}
+                  data={participantRows}
+                  keyExtractor={(row) => String(row.id)}
+                  emptyTitle="No participants joined"
+                  emptyDescription="Qualified participants will appear here with their live standing and lowest offers."
+                  minWidth="min-w-[560px]"
+                  rowClassName={(row) => row.isCurrentViewer ? 'bg-blue-50/60 dark:bg-blue-950/30 border-l-4 border-l-blue-600' : ''}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Right Column: PLACE YOUR BID Console Card */}
         <aside className="space-y-4">
-          <Card className="border-zinc-200 bg-white shadow-md overflow-hidden">
+          <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
             <CardContent className="p-6 space-y-5">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-red-600">
-                  {isBuyerOrAdmin ? 'Live Console' : 'Bid Console'}
+                <p className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
+                  {isBuyerOrAdmin ? 'Live Console' : 'Competitive Bid Console'}
                 </p>
-                <h2 className="mt-1 text-base font-black text-zinc-900">
-                  {isBuyerOrAdmin ? 'Sourcing Monitor' : 'Place Your Bid'}
+                <h2 className="mt-1 text-lg font-black text-zinc-900 dark:text-zinc-100">
+                  {isBuyerOrAdmin ? 'Sourcing Monitor' : 'Place Your Downward Bid'}
                 </h2>
-                <p className="mt-1 text-xs font-semibold leading-relaxed text-zinc-500">
+                <p className="mt-1 text-xs font-semibold leading-relaxed text-zinc-500 dark:text-zinc-400">
                   {isBuyerOrAdmin
-                    ? 'Monitor active MSME participant bids, adjust parameters, or close the event.'
-                    : 'Submit a lower downward offer. Bids are verified using UTC server timestamps.'}
+                    ? 'Monitor active MSME participant bids, review ranks, and manage auction stages.'
+                    : 'Submit a lower commercial offer. Bids are cryptographically verified using server timestamps.'}
                 </p>
               </div>
 
-              {/* Status constraints warning */}
+              {/* Status constraints warning if not live */}
               {!live && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 p-3.5">
                   <div className="flex items-start gap-2.5">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <p className="text-xs font-bold leading-relaxed text-amber-800">
+                    <p className="text-xs font-bold leading-relaxed text-amber-800 dark:text-amber-300">
                       Bidding console is locked. Auction status: {status.toLowerCase().replace(/_/g, ' ')}.
                     </p>
                   </div>
@@ -551,21 +950,21 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               )}
 
               {/* Bid constraints metadata */}
-              <div className="grid grid-cols-2 gap-3.5">
-                <BidSpec label="Min Next Bid" value={minNextBid > 0 ? formatCurrency(minNextBid) : '-'} color="red" />
+              <div className="grid grid-cols-2 gap-3">
+                <BidSpec label="Max Permitted Bid" value={minNextBid > 0 ? formatCurrency(minNextBid) : '-'} color="red" />
                 <BidSpec label="Min Decrement" value={decrement > 0 ? formatCurrency(decrement) : '-'} />
-                <BidSpec label="Reserve Price" value={isBuyerOrAdmin && auction.reservePrice ? formatCurrency(auction.reservePrice) : 'Protected'} />
-                <BidSpec label="Extensions" value={auction.autoExtensionEnabled ? `${extensionCount}/${maxExtensions}` : 'None'} />
+                <BidSpec label="Reserve Price" value={isBuyerOrAdmin && auction.reservePrice ? formatCurrency(auction.reservePrice) : 'Protected (Hidden)'} />
+                <BidSpec label="Auto Extensions" value={auction.autoExtensionEnabled ? `${extensionCount}/${maxExtensions}` : 'Disabled'} />
               </div>
 
-              {/* Active forms */}
+              {/* Buyer Monitor Mode or Seller Bidding Form */}
               {isBuyerOrAdmin ? (
-                <div className="rounded-xl bg-zinc-50 border border-zinc-200 p-4 text-xs font-semibold leading-relaxed text-zinc-600 space-y-2">
-                  <p className="font-bold text-zinc-800 mb-2">Buyer Monitor Statistics</p>
-                  <p className="flex justify-between"><span>Invited Suppliers:</span> <span className="font-bold text-zinc-800">{participantRows.length}</span></p>
-                  <p className="flex justify-between"><span>Active Sellers:</span> <span className="font-bold text-emerald-600">{participantRows.filter((p: any) => p.status === 'ACCEPTED').length}</span></p>
-                  <p className="flex justify-between"><span>Total Bids Placed:</span> <span className="font-bold text-zinc-800">{bidRows.length}</span></p>
-                  <p className="flex justify-between"><span>Auto Extensions Triggered:</span> <span className="font-bold text-zinc-800">{extensionCount} / {maxExtensions}</span></p>
+                <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-4 text-xs font-semibold leading-relaxed text-zinc-600 dark:text-zinc-300 space-y-2">
+                  <p className="font-bold text-zinc-900 dark:text-zinc-100 mb-2">Buyer Monitor Statistics</p>
+                  <p className="flex justify-between"><span>Invited Suppliers:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{participantRows.length}</span></p>
+                  <p className="flex justify-between"><span>Active Qualified Sellers:</span> <span className="font-bold text-emerald-600">{activeParticipantsCount}</span></p>
+                  <p className="flex justify-between"><span>Total Bids Placed:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{bidRows.length}</span></p>
+                  <p className="flex justify-between"><span>Auto Extensions Triggered:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{extensionCount} / {maxExtensions}</span></p>
                 </div>
               ) : (() => {
                 const canBid = (participant as any)?.canBid !== false;
@@ -573,19 +972,19 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                 const disqualReason = (participant as any)?.disqualificationReason || '';
                 const evalPending = (auction as any)?.evaluationPending;
 
-                // Disqualified seller — locked out with reason
+                // Disqualified seller
                 if (pStatus === 'DISQUALIFIED') {
                   return (
                     <div className="space-y-3">
-                      <div className="rounded-xl border border-red-200 bg-red-50/80 p-4 flex items-start gap-3" role="alert">
+                      <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3" role="alert">
                         <Ban className="h-5 w-5 shrink-0 text-red-600 mt-0.5" aria-hidden="true" />
                         <div>
                           <p className="text-xs font-black text-red-800">Bidding Access Revoked</p>
-                          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-red-700/90">
+                          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-red-700">
                             Your organization has been disqualified from this auction. You cannot submit bids.
                           </p>
                           {disqualReason && (
-                            <p className="mt-2 text-[10px] font-semibold leading-relaxed text-red-600/80 border-t border-red-200 pt-2">
+                            <p className="mt-2 text-[10px] font-semibold text-red-600 border-t border-red-200 pt-2">
                               <span className="font-black">Reason:</span> {disqualReason}
                             </p>
                           )}
@@ -595,98 +994,140 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   );
                 }
 
-                // Qualification under review — waiting for buyer approval
+                // Qualification under review
                 if (!canBid && (pStatus === 'SUBMITTED' || pStatus === 'IN_PROGRESS' || pStatus === 'INVITED')) {
                   return (
-                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 flex items-start gap-3" role="status" aria-live="polite">
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3" role="status" aria-live="polite">
                       <Lock className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" aria-hidden="true" />
                       <div>
                         <p className="text-xs font-black text-amber-800">Qualification Under Review</p>
-                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-amber-700/90">
-                          Your qualification documents are being reviewed by the buyer. Bidding will be enabled once you are approved.
+                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-amber-700">
+                          Your qualification documents are being reviewed by the buyer. Bidding will be enabled once approved.
                         </p>
                       </div>
                     </div>
                   );
                 }
 
-                // Evaluation pending — auction start delayed
+                // Evaluation pending
                 if (evalPending && !canBid) {
                   return (
-                    <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-4 flex items-start gap-3" role="status" aria-live="polite">
+                    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-start gap-3" role="status" aria-live="polite">
                       <Hourglass className="h-5 w-5 shrink-0 text-blue-600 mt-0.5 animate-pulse" aria-hidden="true" />
                       <div>
                         <p className="text-xs font-black text-blue-800">Evaluation In Progress</p>
-                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-blue-700/90">
-                          The buyer is reviewing seller qualifications. Bidding will open once the evaluation is complete and the auction goes live.
+                        <p className="mt-1 text-[11px] font-semibold leading-relaxed text-blue-700">
+                          The buyer is reviewing seller qualifications. Bidding will open once evaluation is completed.
                         </p>
                       </div>
                     </div>
                   );
                 }
 
-                // Qualified seller — show actual bid form
+                // Qualified seller — active bid form
                 return (
                   <form onSubmit={submit} className="space-y-4">
-                    {/* Quick Bid Helper Button */}
+                    {/* Quick Bid Helper Buttons */}
                     {live && minNextBid > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setAmount(String(minNextBid))}
-                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 p-2 text-center text-[10px] font-black text-emerald-600 hover:bg-zinc-100 hover:border-emerald-300 transition duration-200"
-                      >
-                        Fill Next Minimum Bid: {formatCurrency(minNextBid)}
-                      </button>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickFill(minNextBid)}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/40 p-2.5 text-center text-[10px] font-black text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-xs"
+                        >
+                          Fill Next Max Bid: {formatCurrency(minNextBid)}
+                        </button>
+                        {decrement > 0 && minNextBid - decrement > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleQuickFill(minNextBid - decrement)}
+                            className="rounded-xl border border-blue-200 bg-blue-50/60 dark:bg-blue-950/40 p-2.5 text-center text-[10px] font-black text-blue-800 dark:text-blue-300 hover:bg-blue-100 transition shadow-xs"
+                          >
+                            Drop by 2× Min: {formatCurrency(minNextBid - decrement)}
+                          </button>
+                        )}
+                      </div>
                     )}
 
-                    <label className="block">
-                      <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-zinc-500">Your Commercial Offer Amount</span>
-                      <input
-                        value={amount}
-                        onChange={event => setAmount(event.target.value)}
-                        name="amount"
-                        type="number"
-                        min="1"
-                        max={minNextBid > 0 ? minNextBid : undefined}
-                        step="0.01"
-                        required
-                        placeholder={minNextBid > 0 ? `Max permitted: ${minNextBid}` : 'Enter amount'}
-                        className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 text-sm font-bold text-zinc-900 outline-none transition focus:bg-white focus:border-red-500 focus:ring-1 focus:ring-red-500/30"
-                        disabled={!live || bid.isPending}
-                        aria-label="Bid amount in rupees"
-                      />
-                    </label>
+                    <div className="space-y-1.5">
+                      <label htmlFor="bid-amount-input" className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                        Your Commercial Offer (INR)
+                      </label>
+                      <div className="relative">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-400 font-bold text-sm">
+                          ₹
+                        </span>
+                        <input
+                          id="bid-amount-input"
+                          value={amount}
+                          onChange={event => setAmount(event.target.value)}
+                          name="amount"
+                          type="number"
+                          min="1"
+                          max={minNextBid > 0 ? minNextBid : undefined}
+                          step="0.01"
+                          required
+                          placeholder={minNextBid > 0 ? `Max permitted: ${minNextBid}` : 'Enter downward amount'}
+                          className="h-11 w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 pl-8 pr-3.5 text-sm font-bold font-mono text-zinc-900 dark:text-zinc-100 outline-none transition focus:bg-white dark:focus:bg-zinc-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                          disabled={!live || bid.isPending}
+                          aria-label="Bid amount in Indian Rupees"
+                        />
+                      </div>
+                    </div>
 
-                    {/* Terms acceptance */}
-                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50 p-3 transition hover:bg-zinc-100/50">
+                    {/* Terms acceptance checkbox */}
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 p-3 transition hover:bg-zinc-100/50">
                       <input
                         type="checkbox"
                         checked={acceptedTerms}
                         onChange={e => setAcceptedTerms(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-zinc-300 bg-white text-red-600 focus:ring-red-500/40"
+                        className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-500/40"
                         disabled={!live || bid.isPending}
-                        aria-label="Accept reverse auction terms and bidding rules"
+                        aria-label="Accept reverse auction terms and commercial supply rules"
                       />
-                      <span className="text-[10px] font-semibold text-zinc-500 leading-normal select-none">
-                        I accept the reverse auction terms, bidding rules, and confirm our capacity to supply.
+                      <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 leading-normal select-none">
+                        I accept the reverse auction terms, decrement rules, and confirm our capacity to fulfill at this price.
                       </span>
                     </label>
 
                     <Button 
+                      type="submit"
                       disabled={!live || bid.isPending || !acceptedTerms} 
-                      className="h-11 w-full rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-extrabold shadow-lg shadow-red-600/10 transition duration-300"
+                      className="h-12 w-full rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-extrabold shadow-md shadow-red-600/20 transition duration-200"
                     >
-                      <Send className="mr-1.5 h-3.5 w-3.5" /> {bid.isPending ? 'Submitting...' : 'SUBMIT LOWER BID'}
+                      <Send className="mr-1.5 h-4 w-4" /> {bid.isPending ? 'Submitting Bid…' : 'SUBMIT LOWER COMMERCIAL BID'}
                     </Button>
 
-                    {/* Confirmation Dialog Panel */}
+                    {/* Confirmation Dialog Modal */}
                     {showConfirmModal && (
-                      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-xs font-semibold text-zinc-700 space-y-3 shadow-md">
-                        <p className="font-bold text-zinc-900">Confirm Downward Bid</p>
-                        <p className="leading-relaxed">Are you sure you want to submit a downward commercial bid of <span className="font-black text-red-600">{formatCurrency(Number(amount))}</span>? This is a legally binding contract submission.</p>
-                        <div className="flex gap-2">
-                          <Button size="sm" type="button" onClick={confirmSubmit} className="bg-red-600 hover:bg-red-500 text-white font-bold">Confirm & Submit</Button>
-                          <Button size="sm" type="button" variant="outline" onClick={() => setShowConfirmModal(false)} className="border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50">Cancel</Button>
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/90 dark:bg-amber-950/50 p-4 text-xs font-semibold text-zinc-800 dark:text-zinc-200 space-y-3 shadow-md animate-in fade-in">
+                        <p className="font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                          <AlertTriangle className="h-4 w-4 text-amber-600" />
+                          Confirm Binding Downward Offer
+                        </p>
+                        <p className="leading-relaxed">
+                          Are you sure you want to submit a downward commercial bid of{' '}
+                          <span className="font-black text-red-600 font-mono text-sm">{formatCurrency(Number(amount))}</span>? 
+                          This offer is legally binding and will be permanently logged in the audit ledger.
+                        </p>
+                        <div className="flex gap-2 pt-1">
+                          <Button 
+                            size="sm" 
+                            type="button" 
+                            onClick={confirmSubmit} 
+                            className="bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg"
+                          >
+                            Confirm & Submit
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => setShowConfirmModal(false)} 
+                            className="border-zinc-200 bg-white text-zinc-700 rounded-lg"
+                          >
+                            Cancel
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -696,21 +1137,23 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             </CardContent>
           </Card>
 
-          {/* Compliance & Audit information */}
-          <Card className="border-zinc-200 bg-white shadow-md overflow-hidden">
+          {/* Compliance & Audit Information */}
+          <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
             <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3 border-b border-zinc-200 pb-4 mb-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
-                  <ShieldCheck className="h-5 w-5" />
+              <div className="flex items-center gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+                  <ShieldCheck className="h-4.5 w-4.5" />
                 </span>
-                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900">Compliance & Audit</h2>
+                <h2 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                  Compliance & Audit Verification
+                </h2>
               </div>
 
-              <div className="space-y-2 text-xs font-semibold text-zinc-500">
-                <div className="flex justify-between"><span>Server Validation:</span> <span className="text-emerald-600 font-bold">Active</span></div>
-                <div className="flex justify-between"><span>Audit Log ID:</span> <span className="text-zinc-800 font-mono">MD-RA-{id}</span></div>
-                <div className="flex justify-between"><span>Auto Extension Window:</span> <span className="text-zinc-800">{auction.autoExtensionEnabled ? `${auction.autoExtensionWindowMinutes || 0} min` : 'Disabled'}</span></div>
-                <div className="flex justify-between"><span>Extension Period:</span> <span className="text-zinc-800">{auction.autoExtensionEnabled ? `${auction.autoExtensionByMinutes || 0} min` : 'Disabled'}</span></div>
+              <div className="space-y-2.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                <div className="flex justify-between"><span>Server Validation:</span> <span className="text-emerald-600 font-black">Active (UTC NTP Synced)</span></div>
+                <div className="flex justify-between"><span>Audit Log Event ID:</span> <span className="text-zinc-800 dark:text-zinc-200 font-mono">AUD-RA-{id}</span></div>
+                <div className="flex justify-between"><span>Extension Trigger:</span> <span className="text-zinc-800 dark:text-zinc-200">{auction.autoExtensionEnabled ? `Last ${auction.autoExtensionWindowMinutes || 0} min` : 'Disabled'}</span></div>
+                <div className="flex justify-between"><span>Extension By:</span> <span className="text-zinc-800 dark:text-zinc-200">{auction.autoExtensionEnabled ? `+${auction.autoExtensionByMinutes || 0} min` : 'Disabled'}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -718,21 +1161,25 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       </div>
 
       {/* Rules Summary Card */}
-      <Card className="border-zinc-200 bg-white shadow-md overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3 border-b border-zinc-200 pb-4 mb-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 text-zinc-600">
-              <Gavel className="h-5 w-5" />
+      <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex items-center gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+              <Gavel className="h-4.5 w-4.5" />
             </span>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900">Reverse Auction Rules & Parameters</h2>
-              <p className="text-[11px] text-zinc-500 font-semibold mt-0.5">Verified parameters and commercial conditions applied to bid packets.</p>
+              <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                Reverse Auction Rules & Parameters
+              </h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                Verified commercial parameters and operational constraints governing this event.
+              </p>
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+          <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-4">
             <RuleItem label="Start Price" value={formatCurrency(auction.startPrice)} />
-            <RuleItem label="Reserve Price" value={auction.reservePrice ? formatCurrency(auction.reservePrice) : 'Not configured'} />
+            <RuleItem label="Reserve Price" value={isBuyerOrAdmin && auction.reservePrice ? formatCurrency(auction.reservePrice) : 'Protected'} />
             <RuleItem label="Auto Extension" value={auction.autoExtensionEnabled ? 'Enabled' : 'Disabled'} />
             <RuleItem label="Extension Limit" value={auction.autoExtensionEnabled ? `${auction.maxAutoExtensions || 0} times` : 'N/A'} />
             <RuleItem label="Auction Start" value={formatDateTime(auction.startTime)} className="sm:col-span-2" />
@@ -744,24 +1191,48 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   );
 }
 
-function StatsCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: string; color: 'emerald' | 'amber' | 'blue' | 'cyan' }) {
+// ── Supporting Helper Components ──
+
+function StatsCard({ 
+  icon: Icon, 
+  label, 
+  value, 
+  subtitle, 
+  color 
+}: { 
+  icon: any; 
+  label: string; 
+  value: string; 
+  subtitle?: string; 
+  color: 'emerald' | 'amber' | 'blue' | 'cyan' | 'violet' 
+}) {
   const colorMap = {
-    emerald: 'text-emerald-600 bg-emerald-50 border-emerald-200/50',
-    amber: 'text-amber-600 bg-amber-50 border-amber-200/50',
-    blue: 'text-blue-600 bg-blue-50 border-blue-200/50',
-    cyan: 'text-cyan-600 bg-cyan-50 border-cyan-200/50',
+    emerald: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-800/60',
+    amber: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/60',
+    blue: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border-blue-200/60 dark:border-blue-800/60',
+    cyan: 'text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200/60 dark:border-cyan-800/60',
+    violet: 'text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 border-violet-200/60 dark:border-violet-800/60',
   };
 
   return (
-    <Card className="border-zinc-200 bg-white shadow-md overflow-hidden transition hover:border-zinc-300 duration-200">
-      <CardContent className="p-5 flex justify-between items-start gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{label}</p>
-          <p title={value} className={cn("text-lg font-mono font-extrabold truncate", colorMap[color].split(' ')[0])}>{value}</p>
+    <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden transition hover:border-zinc-300 dark:hover:border-zinc-700 duration-200">
+      <CardContent className="p-5 flex flex-col justify-between h-full space-y-2">
+        <div className="flex justify-between items-start gap-2">
+          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
+          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border shadow-2xs", colorMap[color])}>
+            <Icon className="h-4 w-4" />
+          </span>
         </div>
-        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border", colorMap[color])}>
-          <Icon className="h-4.5 w-4.5" />
-        </span>
+        <div>
+          <p title={value} className={cn("text-xl font-mono font-extrabold tracking-tight truncate", colorMap[color].split(' ')[0])}>
+            {value}
+          </p>
+          {subtitle && (
+            <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mt-1 truncate" title={subtitle}>
+              {subtitle}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
@@ -769,18 +1240,82 @@ function StatsCard({ icon: Icon, label, value, color }: { icon: any; label: stri
 
 function BidSpec({ label, value, color }: { label: string; value: string; color?: 'red' }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500">{label}</p>
-      <p className={cn("mt-1.5 text-xs font-mono font-extrabold", color === 'red' ? 'text-red-650' : 'text-zinc-800')}>{value}</p>
+    <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-3">
+      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
+      <p className={cn("mt-1 text-xs font-mono font-extrabold", color === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200')}>
+        {value}
+      </p>
     </div>
   );
 }
 
 function RuleItem({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-zinc-200 bg-zinc-50 p-3.5", className)}>
-      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">{label}</p>
-      <p className="mt-2 text-xs font-bold text-zinc-800 leading-normal">{value}</p>
+    <div className={cn("rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-3.5", className)}>
+      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
+      <p className="mt-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200 leading-normal">{value}</p>
     </div>
+  );
+}
+
+// Custom Tooltip for the Animated Area Chart
+function CustomChartTooltip({ active, payload }: any) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 p-3.5 shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
+        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+          <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Bid #{data.index}</span>
+          <span className={cn(
+            "px-1.5 py-0.5 rounded text-[9px] font-extrabold",
+            data.rank === 1 ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-zinc-100 text-zinc-700"
+          )}>
+            {data.rank === 1 ? '🥇 L1' : data.rank ? `L${data.rank}` : 'Valid'}
+          </span>
+        </div>
+        <div className="text-base font-black font-mono text-zinc-900 dark:text-zinc-100">
+          {formatCurrency(data.amount)}
+        </div>
+        <div className="flex items-center justify-between text-[11px] pt-1">
+          <span className="text-zinc-500 dark:text-zinc-400">Bidder:</span>
+          <span className={cn("font-bold", data.isMyBid ? "text-blue-600 dark:text-blue-400 font-extrabold" : "text-zinc-700 dark:text-zinc-300")}>
+            {data.isMyBid ? 'You (Your Organization)' : data.label}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+          <span>Time</span>
+          <span className="font-semibold text-zinc-600 dark:text-zinc-300">{data.fullTime || data.time}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+// Custom Dot for AreaChart: Highlights user's own bids and lowest point
+function CustomizedDot(props: any) {
+  const { cx, cy, payload } = props;
+  if (!cx || !cy) return null;
+
+  if (payload?.isMyBid) {
+    return (
+      <g key={`dot-my-${payload.index}`}>
+        <circle cx={cx} cy={cy} r={8} fill="#3b82f6" fillOpacity={0.25} />
+        <circle cx={cx} cy={cy} r={5} fill="#2563eb" stroke="#ffffff" strokeWidth={2} />
+      </g>
+    );
+  }
+
+  if (payload?.isLowest) {
+    return (
+      <g key={`dot-low-${payload.index}`}>
+        <circle cx={cx} cy={cy} r={7} fill="#10b981" fillOpacity={0.3} />
+        <circle cx={cx} cy={cy} r={4.5} fill="#10b981" stroke="#ffffff" strokeWidth={2} />
+      </g>
+    );
+  }
+
+  return (
+    <circle key={`dot-other-${payload.index}`} cx={cx} cy={cy} r={3.5} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
   );
 }

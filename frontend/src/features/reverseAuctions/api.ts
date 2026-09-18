@@ -113,6 +113,7 @@ export type ReverseAuctionParticipant = {
   invitedAt?: string | null;
   sellerOrgName?: string | null;
   disqualificationReason?: string | null;
+  isCurrentViewer?: boolean;
 };
 
 export type ReverseAuctionBid = {
@@ -126,6 +127,8 @@ export type ReverseAuctionBid = {
   rankAtSubmission?: number | null;
   submittedAt?: string | null;
   isValid?: boolean | null;
+  isMyBid?: boolean;
+  bidderRank?: number | null;
 };
 
 export const reverseAuctionApi = {

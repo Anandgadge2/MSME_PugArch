@@ -400,6 +400,103 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     }
   }
 
+  // Quotation and Proposal documents uploaded by suppliers for buyer requirements / procurement bids
+  if (['quotation', 'quote', 'requirement_response', 'technical_proposal', 'commercial_bid', 'procurement_participation_document', 'procurement_bid_participation'].includes(asset.entityType) || !asset.entityId) {
+    if (user.role === 'buyer') {
+      const fileIdStr = String(asset.id);
+      const userOrgId = (user as any).organizationId ? Number((user as any).organizationId) : null;
+
+      // 1. Direct attachmentUrl match on RequirementResponses for this buyer
+      const matchedReqResponse = await prisma.requirementResponse.findFirst({
+        where: {
+          OR: [
+            { attachmentUrl: { contains: `/files/${fileIdStr}` } },
+            ...(asset.key ? [{ attachmentUrl: { contains: asset.key } }] : [])
+          ],
+          requirement: {
+            OR: [
+              { createdById: user.id },
+              ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+            ]
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (matchedReqResponse) return true;
+
+      // 2. Check if file is referenced in responseData of any requirement response for this buyer
+      const recentBuyerResponses = await prisma.requirementResponse.findMany({
+        where: {
+          requirement: {
+            OR: [
+              { createdById: user.id },
+              ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+            ]
+          }
+        },
+        select: { id: true, attachmentUrl: true, responseData: true }
+      }).catch(() => []);
+
+      for (const resp of recentBuyerResponses) {
+        if (resp.attachmentUrl && (resp.attachmentUrl.includes(`/files/${fileIdStr}`) || (asset.key && resp.attachmentUrl.includes(asset.key)))) {
+          return true;
+        }
+        if (resp.responseData) {
+          const respStr = typeof resp.responseData === 'string' ? resp.responseData : JSON.stringify(resp.responseData);
+          if (
+            respStr.includes(`"fileAssetId":${asset.id}`) ||
+            respStr.includes(`"fileAssetId": "${asset.id}"`) ||
+            respStr.includes(`"id":${asset.id}`) ||
+            respStr.includes(`"id": "${asset.id}"`) ||
+            (asset.key && respStr.includes(asset.key)) ||
+            respStr.includes(`/files/${fileIdStr}`)
+          ) {
+            return true;
+          }
+        }
+      }
+
+      // 3. Check procurement bid participations for this buyer
+      const bidParticipationDoc = await prisma.procurementBidParticipationDocument.findFirst({
+        where: {
+          OR: [
+            { fileAssetId: asset.id },
+            ...(asset.key ? [{ fileKey: asset.key }] : []),
+            { fileUrl: { contains: `/files/${fileIdStr}` } }
+          ],
+          participation: {
+            bid: {
+              OR: [
+                { buyerId: user.id },
+                ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+              ]
+            }
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (bidParticipationDoc) return true;
+
+      // 4. Check QuoteResponses for this buyer's QuoteRequests
+      const quoteResp = await prisma.quoteResponse.findFirst({
+        where: {
+          OR: [
+            { documentUrl: { contains: `/files/${fileIdStr}` } },
+            ...(asset.key ? [{ documentUrl: { contains: asset.key } }] : [])
+          ],
+          quoteRequest: {
+            buyerId: user.id
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (quoteResp) return true;
+    }
+  }
+
   if (!asset.entityId) {
     if (['procurement_bid', 'procurement_draft'].includes(asset.entityType) && user.role === 'seller') {
       try {

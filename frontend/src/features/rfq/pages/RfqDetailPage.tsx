@@ -495,7 +495,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         }
 
         // 2. Quotation details: preserve authentic offered quantity, timeline, line items, documents
-        if ((!existing.offeredQuantity || existing.offeredQuantity === 1) && itemOfferedQty > 1) {
+        if (!existing.offeredQuantity && itemOfferedQty > 0) {
           existing.offeredQuantity = itemOfferedQty;
         }
         if ((!existing.deliveryTimeline || existing.deliveryTimeline === 'Standard') && itemTimeline && itemTimeline !== 'Standard') {
@@ -545,8 +545,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
           offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
           quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
           totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
-          offeredQuantity: itemOfferedQty || 1,
-          deliveryTimeline: itemTimeline || 'Standard',
+          offeredQuantity: itemOfferedQty > 0 ? itemOfferedQty : undefined,
+          deliveryTimeline: (itemTimeline && itemTimeline !== 'Standard') ? itemTimeline : undefined,
           message: r.message || r.coverNote || respData.message || respData.coverNote,
           terms: r.terms || respData.terms,
           attachmentUrl: r.attachmentUrl || respData.attachmentUrl,
@@ -1227,6 +1227,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       boqTable={preferReq ? (reqObj?.payload?.boqTable || reqObj?.boqTable) : (rawBid?.technicalPacket?.boqTable || rawBid?.boqTable || reqObj?.payload?.boqTable)}
       documents={docs}
       items={items}
+      rawBid={rawBid}
+      lifecycleStage={rawBid?.lifecycleStage || reqObj?.lifecycleStage}
+      quantity={rawBid?.quantity || reqObj?.quantity}
+      unit={rawBid?.unit || reqObj?.unit}
       evaluationMethod={evalMethod}
       participations={sellerResponses}
       participantsCount={sellerResponses.length}

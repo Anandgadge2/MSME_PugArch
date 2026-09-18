@@ -1552,34 +1552,69 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
                 uploadedAt: r.createdAt,
               });
             }
-            bid.participations.push({
-              id: r.id,
-              bidId: bid.id,
-              sellerId: sellerId,
-              seller: {
-                ...r.sellerUser,
-                organization: r.sellerOrganization
-              },
-              participationNumber: `PRT-REQ-${r.id}`,
-              technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
-              financialStatus: 'OPENED',
-              financialSealed: false,
-              finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-              submissionStatus: 'SUBMITTED',
-              quotedAmount: Number(r.offeredPrice || 0),
-              totalAmount: Number(r.offeredPrice || 0),
-              offeredQuantity: r.offeredQuantity,
-              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
-              terms: r.terms || respData.terms,
-              makeBrand: respData.makeBrand || r.makeBrand,
-              model: respData.model || r.model,
-              offeredItemDescription: r.message || '',
-              responseData: respData,
-              lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
-              documents,
-              createdAt: r.createdAt,
-              submittedAt: r.createdAt,
-            });
+            if (!existingSellerIds.has(sellerId)) {
+              existingSellerIds.add(sellerId);
+              bid.participations.push({
+                id: r.id,
+                bidId: bid.id,
+                sellerId: sellerId,
+                seller: {
+                  ...r.sellerUser,
+                  organization: r.sellerOrganization
+                },
+                participationNumber: `PRT-REQ-${r.id}`,
+                technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
+                financialStatus: 'OPENED',
+                financialSealed: false,
+                finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+                submissionStatus: 'SUBMITTED',
+                quotedAmount: Number(r.offeredPrice || 0),
+                totalAmount: Number(r.offeredPrice || 0),
+                offeredQuantity: r.offeredQuantity ? Number(r.offeredQuantity) : 1,
+                deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
+                terms: r.terms || respData.terms,
+                makeBrand: respData.makeBrand || r.makeBrand,
+                model: respData.model || r.model,
+                offeredItemDescription: r.message || '',
+                responseData: respData,
+                lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
+                documents,
+                createdAt: r.createdAt,
+                submittedAt: r.createdAt,
+              });
+            } else {
+              // Existing participation in DB: merge rich documents, lineItems, specs, SLA, and responseData
+              const existingPart = bid.participations.find((p: any) => p.sellerId === sellerId);
+              if (existingPart) {
+                if ((!existingPart.documents || existingPart.documents.length === 0) && documents.length > 0) {
+                  existingPart.documents = documents;
+                }
+                if (!existingPart.offeredQuantity && r.offeredQuantity) {
+                  existingPart.offeredQuantity = Number(r.offeredQuantity);
+                }
+                if ((!existingPart.deliveryTimeline || existingPart.deliveryTimeline === 'Standard') && (r.deliveryTimeline || respData.deliveryTimeline)) {
+                  existingPart.deliveryTimeline = r.deliveryTimeline || respData.deliveryTimeline;
+                }
+                if ((!existingPart.makeBrand || existingPart.makeBrand === 'Standard' || existingPart.makeBrand === 'As per specification') && (respData.makeBrand || r.makeBrand)) {
+                  existingPart.makeBrand = respData.makeBrand || r.makeBrand;
+                }
+                if (!existingPart.model && (respData.model || r.model)) {
+                  existingPart.model = respData.model || r.model;
+                }
+                if ((!existingPart.terms || existingPart.terms === 'Standard Payment Terms') && (r.terms || respData.terms)) {
+                  existingPart.terms = r.terms || respData.terms;
+                }
+                if (!existingPart.offeredItemDescription && (r.message || respData.message)) {
+                  existingPart.offeredItemDescription = r.message || respData.message;
+                }
+                if ((!existingPart.lineItems || existingPart.lineItems.length === 0) && Array.isArray(respData.lineItems) && respData.lineItems.length > 0) {
+                  existingPart.lineItems = respData.lineItems;
+                }
+                if (!existingPart.responseData || Object.keys(existingPart.responseData).length === 0) {
+                  existingPart.responseData = respData;
+                }
+              }
+            }
           }
         }
       }
@@ -1592,8 +1627,7 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
 
         if (isQuoteIdMatch) {
           const sellerId = qr.sellerId;
-          if (sellerId && !existingSellerIds.has(sellerId)) {
-            existingSellerIds.add(sellerId);
+          if (sellerId) {
             const qrTech = String(qr.technicalStatus || '').toUpperCase();
             const normalizedTechStatus = qrTech === 'DISQUALIFIED' || qrTech === 'NOT_QUALIFIED'
               ? 'DISQUALIFIED'
@@ -1601,30 +1635,57 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
             const respData = typeof (qr as any).responseData === 'string'
               ? (() => { try { return JSON.parse((qr as any).responseData); } catch { return {}; } })()
               : ((qr as any).responseData || {});
+            const qrDocs = Array.isArray((qr as any).documents) ? (qr as any).documents : (Array.isArray(respData.documents) ? respData.documents : []);
+            const qrLineItems = Array.isArray((qr as any).lineItems) ? (qr as any).lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : []);
 
-            bid.participations.push({
-              id: qr.id,
-              bidId: bid.id,
-              sellerId: sellerId,
-              seller: qr.seller,
-              participationNumber: `PRT-QR-${qr.id}`,
-              technicalStatus: normalizedTechStatus,
-              technicalRemarks: qr.technicalRemarks || null,
-              financialStatus: normalizedTechStatus === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
-              financialSealed: normalizedTechStatus !== 'QUALIFIED',
-              finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-              submissionStatus: 'SUBMITTED',
-              quotedAmount: Number(qr.totalAmount || 0),
-              totalAmount: Number(qr.totalAmount || 0),
-              offeredQuantity: (qr as any).offeredQuantity || respData.offeredQuantity || 1,
-              deliveryTimeline: (qr as any).deliveryTimeline || respData.deliveryTimeline || 'Standard',
-              offeredItemDescription: qr.notes || respData.message || '',
-              documents: Array.isArray((qr as any).documents) ? (qr as any).documents : (Array.isArray(respData.documents) ? respData.documents : []),
-              lineItems: Array.isArray((qr as any).lineItems) ? (qr as any).lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : []),
-              responseData: respData,
-              createdAt: qr.createdAt,
-              submittedAt: qr.createdAt,
-            });
+            if (!existingSellerIds.has(sellerId)) {
+              existingSellerIds.add(sellerId);
+              bid.participations.push({
+                id: qr.id,
+                bidId: bid.id,
+                sellerId: sellerId,
+                seller: qr.seller,
+                participationNumber: `PRT-QR-${qr.id}`,
+                technicalStatus: normalizedTechStatus,
+                technicalRemarks: qr.technicalRemarks || null,
+                financialStatus: normalizedTechStatus === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                financialSealed: normalizedTechStatus !== 'QUALIFIED',
+                finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+                submissionStatus: 'SUBMITTED',
+                quotedAmount: Number(qr.totalAmount || 0),
+                totalAmount: Number(qr.totalAmount || 0),
+                offeredQuantity: (qr as any).offeredQuantity || respData.offeredQuantity || 1,
+                deliveryTimeline: (qr as any).deliveryTimeline || respData.deliveryTimeline || 'Standard',
+                offeredItemDescription: qr.notes || respData.message || '',
+                documents: qrDocs,
+                lineItems: qrLineItems,
+                responseData: respData,
+                createdAt: qr.createdAt,
+                submittedAt: qr.createdAt,
+              });
+            } else {
+              const existingPart = bid.participations.find((p: any) => p.sellerId === sellerId);
+              if (existingPart) {
+                if ((!existingPart.documents || existingPart.documents.length === 0) && qrDocs.length > 0) {
+                  existingPart.documents = qrDocs;
+                }
+                if (!existingPart.offeredQuantity && ((qr as any).offeredQuantity || respData.offeredQuantity)) {
+                  existingPart.offeredQuantity = Number((qr as any).offeredQuantity || respData.offeredQuantity);
+                }
+                if ((!existingPart.deliveryTimeline || existingPart.deliveryTimeline === 'Standard') && ((qr as any).deliveryTimeline || respData.deliveryTimeline)) {
+                  existingPart.deliveryTimeline = (qr as any).deliveryTimeline || respData.deliveryTimeline;
+                }
+                if (!existingPart.offeredItemDescription && (qr.notes || respData.message)) {
+                  existingPart.offeredItemDescription = qr.notes || respData.message;
+                }
+                if ((!existingPart.lineItems || existingPart.lineItems.length === 0) && qrLineItems.length > 0) {
+                  existingPart.lineItems = qrLineItems;
+                }
+                if (!existingPart.responseData || Object.keys(existingPart.responseData).length === 0) {
+                  existingPart.responseData = respData;
+                }
+              }
+            }
           }
         }
       }

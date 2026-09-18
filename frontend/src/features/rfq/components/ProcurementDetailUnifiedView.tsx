@@ -3882,6 +3882,11 @@ export interface ProcurementDetailUnifiedViewProps {
   customClarificationPanel?: React.ReactNode;
   sellerAuctionActions?: React.ReactNode;
   buyerAuctionActions?: React.ReactNode;
+
+  lifecycleStage?: string;
+  rawBid?: any;
+  quantity?: number | string;
+  unit?: string;
 }
 
 export function ProcurementDetailUnifiedView(
@@ -3906,6 +3911,7 @@ export function ProcurementDetailUnifiedView(
     any | null
   >(null);
   const [isCompletingTechEval, setIsCompletingTechEval] = useState(false);
+  const [isCompletingTechEvalSuccess, setIsCompletingTechEvalSuccess] = useState(false);
   const queryClient = useQueryClient();
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
@@ -4046,9 +4052,13 @@ export function ProcurementDetailUnifiedView(
               r.totalPrice ||
               0,
           ),
-          offeredQuantity: r.offeredQuantity || r.quantity || 1,
+          offeredQuantity: r.offeredQuantity || r.quantity || undefined,
           deliveryTimeline:
-            r.deliveryTimeline || respData.deliveryTimeline || "Standard",
+            (r.deliveryTimeline && r.deliveryTimeline !== "Standard"
+              ? r.deliveryTimeline
+              : (respData.deliveryTimeline && respData.deliveryTimeline !== "Standard"
+                ? respData.deliveryTimeline
+                : undefined)),
           paymentTerms:
             r.paymentTerms || respData.paymentTerms || "As per tender",
           makeBrand: r.makeBrand || respData.makeBrand || "Standard",
@@ -4302,6 +4312,12 @@ export function ProcurementDetailUnifiedView(
   );
 
   const statusUpper = String(props.status || "").toUpperCase();
+  const lifecycleStageUpper = String(
+    (props as any).lifecycleStage ||
+      (props as any).rawBid?.lifecycleStage ||
+      payload.lifecycleStage ||
+      "",
+  ).toUpperCase();
   const isPostBiddingStage = [
     "FINANCIAL_EVALUATION",
     "L1_GENERATED",
@@ -4310,6 +4326,30 @@ export function ProcurementDetailUnifiedView(
     "CLOSED",
     "COMPLETED",
   ].includes(statusUpper);
+
+  const isTechEvalCompleted = useMemo(() => {
+    if (isCompletingTechEvalSuccess) return true;
+    return (
+      statusUpper === "TECHNICAL_EVALUATION_COMPLETED" ||
+      lifecycleStageUpper === "TECHNICAL_EVALUATION_COMPLETED" ||
+      [
+        "FINANCIAL_EVALUATION",
+        "L1_GENERATED",
+        "AWARD_RECOMMENDED",
+        "AWARDED",
+        "PO_GENERATED",
+        "CLOSED",
+        "COMPLETED",
+      ].includes(statusUpper) ||
+      [
+        "FINANCIAL_EVALUATION",
+        "L1_GENERATED",
+        "AWARD_RECOMMENDED",
+        "AWARDED",
+        "PO_GENERATED",
+      ].includes(lifecycleStageUpper)
+    );
+  }, [isCompletingTechEvalSuccess, statusUpper, lifecycleStageUpper]);
 
   const shouldShowEstimatedCost = Boolean(
     isBuyerSide ||
@@ -5392,6 +5432,50 @@ export function ProcurementDetailUnifiedView(
   const vendors = payload.vendors || {};
   const approval = payload.approval || {};
 
+  const defaultRequirementQuantity = useMemo(() => {
+    if (lineItems && lineItems.length > 0) {
+      const sum = lineItems.reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0);
+      if (sum > 0) return sum;
+    }
+    const rawQty = Number(
+      props.quantity ||
+        payload.quantity ||
+        payload.basics?.quantity ||
+        (props as any).rawBid?.quantity ||
+        0,
+    );
+    return Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 0;
+  }, [lineItems, props.quantity, payload, (props as any).rawBid?.quantity]);
+
+  const defaultRequirementUnit = useMemo(() => {
+    if (lineItems && lineItems.length > 0) {
+      const u = lineItems[0]?.unitOfMeasure || lineItems[0]?.unit || lineItems[0]?.uom;
+      if (u) return String(u);
+    }
+    return String(
+      props.unit ||
+        payload.unit ||
+        payload.basics?.unit ||
+        (props as any).rawBid?.unit ||
+        "Nos",
+    );
+  }, [lineItems, props.unit, payload, (props as any).rawBid?.unit]);
+
+  const defaultProcurementDeliverySchedule = useMemo(() => {
+    if (requiredByDateValue) {
+      const parsed = formatDateString(requiredByDateValue, false);
+      if (parsed && parsed !== "—") return `By ${parsed}`;
+    }
+    if (lineItems && lineItems.length > 0 && lineItems[0]?.deliveryDate) {
+      const parsed = formatDateString(lineItems[0].deliveryDate, false);
+      if (parsed && parsed !== "—") return `By ${parsed}`;
+    }
+    if (deliveryTerms && deliveryTerms !== "—" && deliveryTerms !== "N/A" && deliveryTerms !== "Standard") {
+      return deliveryTerms;
+    }
+    return "As per RFQ schedule";
+  }, [requiredByDateValue, lineItems, deliveryTerms]);
+
   const rawSpecificEvalMethod = [
     evaluation.method,
     evaluation.evaluationMethod,
@@ -5666,7 +5750,7 @@ export function ProcurementDetailUnifiedView(
         }
 
         // 2. Commercial / Quotation details priority: preserve authentic offered quantity, timeline, line items, documents
-        if ((!existing.offeredQuantity || existing.offeredQuantity === 1) && itemOfferedQty > 1) {
+        if (!existing.offeredQuantity && itemOfferedQty > 0) {
           existing.offeredQuantity = itemOfferedQty;
         }
         if ((!existing.deliveryTimeline || existing.deliveryTimeline === "Standard") && itemTimeline && itemTimeline !== "Standard") {
@@ -5712,8 +5796,13 @@ export function ProcurementDetailUnifiedView(
             ts === "DISQUALIFIED" ||
             s === "REJECTED" ||
             Boolean(p.isDisqualified),
-          offeredQuantity: itemOfferedQty || p.offeredQuantity || 1,
-          deliveryTimeline: itemTimeline || p.deliveryTimeline || "Standard",
+          offeredQuantity: itemOfferedQty > 0 ? itemOfferedQty : (p.offeredQuantity || undefined),
+          deliveryTimeline:
+            itemTimeline && itemTimeline !== "Standard"
+              ? itemTimeline
+              : (p.deliveryTimeline && p.deliveryTimeline !== "Standard"
+                ? p.deliveryTimeline
+                : undefined),
           documents: itemDocs.length ? itemDocs : (p.documents || []),
           lineItems: itemLines.length ? itemLines : (p.lineItems || []),
           quotedAmount: offeredPrice != null ? Number(offeredPrice) : (p.quotedAmount ?? 0),
@@ -5793,15 +5882,28 @@ export function ProcurementDetailUnifiedView(
     try {
       setIsCompletingTechEval(true);
       await procurementBidApi.completeTechnicalEvaluation(targetId);
+      setIsCompletingTechEvalSuccess(true);
       toast.success(
         "Stage 1 Technical Evaluation completed successfully! You can now open financial bids or launch Stage 2 Reverse Auction.",
       );
       queryClient.invalidateQueries({
+        queryKey: ["procurement-bid-detail", targetId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["procurement-bid-detail"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["procurement-bid", targetId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["procurement-bid"],
+      });
+      queryClient.invalidateQueries({
         queryKey: ["buyer-unified-participations"],
       });
       queryClient.invalidateQueries({ queryKey: ["rfq-buyer-responses-v2"] });
-      queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
       queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2"] });
+      queryClient.invalidateQueries({ queryKey: ["rfq-detail"] });
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || "Failed to complete technical evaluation.");
@@ -5888,6 +5990,14 @@ export function ProcurementDetailUnifiedView(
               </span>
             );
           }
+          if (isTwoPacketMode && !isTechEvalCompleted) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
+                <Lock className="h-3 w-3 text-indigo-500" />
+                Sealed (Stage 2)
+              </span>
+            );
+          }
           const amount = Number(
             participation.totalAmount ||
               participation.quotedAmount ||
@@ -5907,19 +6017,36 @@ export function ProcurementDetailUnifiedView(
         key: "qtyDelivery",
         header: "Offered Qty & Delivery",
         cell: (participation) => {
-          const qty =
-            participation.offeredQuantity ||
-            participation.quantity ||
-            "Specified Qty";
-          const delivery =
+          const rawQty = Number(
+            participation.offeredQuantity ??
+              participation.quantity ??
+              participation.responseData?.offeredQuantity ??
+              0,
+          );
+          const hasCustomQty = Number.isFinite(rawQty) && rawQty > 0;
+          const finalQty = hasCustomQty ? rawQty : defaultRequirementQuantity;
+          const uom = defaultRequirementUnit || "Nos";
+          const qtyText =
+            finalQty > 0
+              ? `${finalQty.toLocaleString("en-IN")} ${uom}`
+              : "As specified in RFQ";
+
+          const rawDelivery = (
             participation.deliveryTimeline ||
             participation.responseData?.deliveryTimeline ||
-            "Standard";
+            ""
+          ).trim();
+          const hasCustomDelivery =
+            rawDelivery && rawDelivery.toLowerCase() !== "standard";
+          const deliveryText = hasCustomDelivery
+            ? rawDelivery
+            : defaultProcurementDeliverySchedule;
+
           return (
             <div className="text-slate-600">
-              <p className="font-semibold text-xs">{qty}</p>
-              <p className="text-[10px] font-normal text-slate-400">
-                {delivery}
+              <p className="font-semibold text-xs text-slate-900">{qtyText}</p>
+              <p className="text-[10.5px] font-normal text-slate-500">
+                {deliveryText}
               </p>
             </div>
           );
@@ -6014,14 +6141,20 @@ export function ProcurementDetailUnifiedView(
                     ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                     : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
                 )}
-                title={isEvaluationReady ? "Evaluate technical proposal, compliance and eligibility" : "Technical scrutiny unlocks after bidding window closes"}
+                title={
+                  isEvaluationReady
+                    ? isTechEvalCompleted
+                      ? "View technical evaluation decision and remarks"
+                      : "Evaluate technical proposal, compliance and eligibility"
+                    : "Technical scrutiny unlocks after bidding window closes"
+                }
               >
                 {isEvaluationReady ? (
                   <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
                 ) : (
                   <Lock className="h-3.5 w-3.5 text-slate-400" />
                 )}
-                Evaluate Bid
+                {isTechEvalCompleted ? "View Evaluation" : "Evaluate Bid"}
               </Button>
             )}
             <Button
@@ -6044,7 +6177,15 @@ export function ProcurementDetailUnifiedView(
         ),
       },
     ],
-    [isEvaluationReady, isBuyerOrAdmin],
+    [
+      isEvaluationReady,
+      isBuyerOrAdmin,
+      isTwoPacketMode,
+      isTechEvalCompleted,
+      defaultRequirementQuantity,
+      defaultRequirementUnit,
+      defaultProcurementDeliverySchedule,
+    ],
   );
 
   const proposalStatusDisplay = useMemo(() => {
@@ -8062,7 +8203,7 @@ export function ProcurementDetailUnifiedView(
                               <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
                                 Two-Packet Procurement • Stage 1
                               </span>
-                              {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                              {(isTechEvalCompleted || (techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0)) && (
                                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
                                   Technical Evaluation Complete
                                 </span>
@@ -8097,15 +8238,17 @@ export function ProcurementDetailUnifiedView(
                       {/* Action Bar for Completing Tech Eval & Opening Financial Bids */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-indigo-100/70">
                         <span className="text-[11px] font-semibold text-slate-600">
-                          {techEvaluationStats.pending > 0
-                            ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
-                            : techEvaluationStats.qualified > 0
-                              ? `✅ All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
-                              : `⚠️ At least one seller must be technically qualified to proceed.`}
+                          {isTechEvalCompleted
+                            ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                            : techEvaluationStats.pending > 0
+                              ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
+                              : techEvaluationStats.qualified > 0
+                                ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
+                                : `⚠️ At least one seller must be technically qualified to proceed.`}
                         </span>
 
                         <div className="flex items-center gap-2">
-                          {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
+                          {!isTechEvalCompleted && techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
                             <Button
                               type="button"
                               size="sm"
@@ -8117,12 +8260,25 @@ export function ProcurementDetailUnifiedView(
                               <span>{isCompletingTechEval ? "Finalizing..." : "Complete Technical Evaluation"}</span>
                             </Button>
                           )}
+
+                          {isTechEvalCompleted && (
+                            <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              <span>Stage 1 Evaluation Completed</span>
+                            </div>
+                          )}
+
                           <Button
                             type="button"
                             size="sm"
-                            variant="outline"
+                            variant={isTechEvalCompleted ? "primary" : "outline"}
                             onClick={() => router.push(`/bids/${targetId}/results`)}
-                            className="h-7.5 gap-1.5 text-xs font-bold text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 shadow-2xs cursor-pointer"
+                            className={cn(
+                              "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
+                              isTechEvalCompleted
+                                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50"
+                            )}
                           >
                             <span>View Stage 2 Financial Opening &amp; Results</span>
                             <ArrowRight className="h-3.5 w-3.5" />
@@ -8202,6 +8358,8 @@ export function ProcurementDetailUnifiedView(
                   procurementTitle={props.subject || props.procurementLabel}
                   targetId={targetId}
                   router={router}
+                  isTwoPacketMode={isTwoPacketMode}
+                  isFinancialStageOpened={isTechEvalCompleted}
                   onOpenCompare={() => {
                     setSelectedQuotationForReview(null);
                     setSelectedCompareIds(
@@ -8397,113 +8555,11 @@ interface SellerQuotationReviewModalProps {
   procurementTitle?: string;
   targetId: string;
   router: any;
+  isTwoPacketMode?: boolean;
+  isFinancialStageOpened?: boolean;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
 }
-
-const reviewLineItemsColumns: ColumnDef<any>[] = [
-  {
-    key: "itemName",
-    header: "Line Item",
-    cell: (item, idx) => (
-      <div>
-        <span className="font-bold text-slate-900">
-          {item.itemName || item.name || item.description || `Item #${idx + 1}`}
-        </span>
-        {item.remarks && (
-          <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
-            {item.remarks}
-          </p>
-        )}
-      </div>
-    ),
-  },
-  {
-    key: "makeBrand",
-    header: "Make / Brand",
-    cell: (item) => (
-      <span className="text-slate-700 font-medium">
-        {item.makeBrand || item.brand || "—"}
-      </span>
-    ),
-  },
-  {
-    key: "quantity",
-    header: "Qty",
-    align: "right",
-    cell: (item) => {
-      const q = Number(item.quantity ?? item.qty ?? 1);
-      return (
-        <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1">
-          <span>{q}</span>{" "}
-          <span
-            className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
-            title={item.unitOfMeasure || item.unit || "Nos"}
-          >
-            {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
-          </span>
-        </span>
-      );
-    },
-  },
-  {
-    key: "unitRate",
-    header: "Unit Rate (₹)",
-    align: "right",
-    cell: (item) => {
-      const uPrice = Number(
-        item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
-      );
-      return (
-        <span className="tabular-nums font-bold text-slate-900">
-          ₹
-          {uPrice.toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </span>
-      );
-    },
-  },
-  {
-    key: "gst",
-    header: "GST %",
-    align: "right",
-    cell: (item) => {
-      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
-      return (
-        <span className="tabular-nums font-semibold text-slate-700">
-          {gst}%
-        </span>
-      );
-    },
-  },
-  {
-    key: "lineTotal",
-    header: "Line Total (₹)",
-    align: "right",
-    cell: (item) => {
-      const uPrice = Number(
-        item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
-      );
-      const q = Number(item.quantity ?? item.qty ?? 1);
-      const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
-      const tot =
-        item.lineTotal != null || item.totalAmount != null
-          ? Number(item.lineTotal ?? item.totalAmount)
-          : uPrice * q * (1 + gst / 100);
-      return (
-        <span className="font-black text-slate-900 tabular-nums">
-          ₹
-          {tot.toLocaleString("en-IN", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
-        </span>
-      );
-    },
-  },
-];
 
 export function SellerQuotationReviewModal({
   isOpen,
@@ -8512,6 +8568,8 @@ export function SellerQuotationReviewModal({
   procurementTitle,
   targetId,
   router,
+  isTwoPacketMode,
+  isFinancialStageOpened,
   onOpenCompare,
   onOpenTechnicalEvaluation,
 }: SellerQuotationReviewModalProps) {
@@ -8520,29 +8578,161 @@ export function SellerQuotationReviewModal({
 
   if (!isOpen || !participation) return null;
 
+  const isFinancialSealed = Boolean(isTwoPacketMode && !isFinancialStageOpened);
+
+  const reviewLineItemsColumns = useMemo<ColumnDef<any>[]>(
+    () => [
+      {
+        key: "itemName",
+        header: "Line Item",
+        cell: (item, idx) => (
+          <div>
+            <span className="font-bold text-slate-900">
+              {item.itemName || item.name || item.description || `Item #${idx + 1}`}
+            </span>
+            {item.remarks && (
+              <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
+                {item.remarks}
+              </p>
+            )}
+          </div>
+        ),
+      },
+      {
+        key: "makeBrand",
+        header: "Make / Brand",
+        cell: (item) => (
+          <span className="text-slate-700 font-medium">
+            {item.makeBrand || item.brand || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "quantity",
+        header: "Qty",
+        align: "right",
+        cell: (item) => {
+          const q = Number(item.quantity ?? item.qty ?? 1);
+          return (
+            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1">
+              <span>{q}</span>{" "}
+              <span
+                className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
+                title={item.unitOfMeasure || item.unit || "Nos"}
+              >
+                {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
+              </span>
+            </span>
+          );
+        },
+      },
+      {
+        key: "unitRate",
+        header: "Unit Rate (₹)",
+        align: "right",
+        cell: (item) => {
+          if (isFinancialSealed) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+              </span>
+            );
+          }
+          const uPrice = Number(
+            item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
+          );
+          return (
+            <span className="tabular-nums font-bold text-slate-900">
+              ₹
+              {uPrice.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          );
+        },
+      },
+      {
+        key: "gst",
+        header: "GST %",
+        align: "right",
+        cell: (item) => {
+          if (isFinancialSealed) {
+            return <span className="text-slate-400 font-medium text-xs">—</span>;
+          }
+          const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+          return (
+            <span className="tabular-nums font-semibold text-slate-700">
+              {gst}%
+            </span>
+          );
+        },
+      },
+      {
+        key: "lineTotal",
+        header: "Line Total (₹)",
+        align: "right",
+        cell: (item) => {
+          if (isFinancialSealed) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+              </span>
+            );
+          }
+          const uPrice = Number(
+            item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
+          );
+          const q = Number(item.quantity ?? item.qty ?? 1);
+          const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+          const tot =
+            item.lineTotal != null || item.totalAmount != null
+              ? Number(item.lineTotal ?? item.totalAmount)
+              : uPrice * q * (1 + gst / 100);
+          return (
+            <span className="font-black text-slate-900 tabular-nums">
+              ₹
+              {tot.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </span>
+          );
+        },
+      },
+    ],
+    [isFinancialSealed],
+  );
+
   const handleViewAttachment = async (doc: any, docName: string) => {
-    const fileId =
-      doc.fileAssetId ||
-      doc.fileId ||
-      (typeof doc.id === "number" || /^\d+$/.test(String(doc.id || ""))
-        ? doc.id
-        : undefined);
     const rawUrl =
       doc.url ||
       doc.fileUrl ||
       doc.signedUrl ||
       doc.documentUrl ||
-      (fileId ? `/api/files/${fileId}/view` : "");
+      "";
+    const urlMatchId = String(rawUrl).match(/\/api\/(?:public\/)?files\/(\d+)/)?.[1];
+
+    const fileId =
+      doc.fileAssetId ||
+      doc.fileId ||
+      (typeof doc.id === "number" || /^\d+$/.test(String(doc.id || ""))
+        ? Number(doc.id)
+        : urlMatchId
+          ? Number(urlMatchId)
+          : undefined);
+
+    const effectiveUrl = rawUrl || (fileId ? `/api/files/${fileId}/view` : "");
 
     setPreviewLoadingId(doc.id || docName);
     try {
-      if (fileId || rawUrl) {
+      if (fileId || effectiveUrl) {
         try {
           const prev = await getFileAssetPreview(
             {
               id: fileId,
               fileAssetId: fileId,
-              url: rawUrl,
+              url: effectiveUrl,
               fileName: doc.fileName || docName,
             },
             docName,
@@ -8560,7 +8750,7 @@ export function SellerQuotationReviewModal({
             id: fileId,
             fileAssetId: fileId,
             originalName: doc.fileName || docName,
-            url: rawUrl,
+            url: effectiveUrl,
           },
           docName,
         );
@@ -8620,19 +8810,32 @@ export function SellerQuotationReviewModal({
       0,
   );
   const offeredQty =
-    participation.offeredQuantity || participation.quantity || "As Specified";
+    participation.offeredQuantity ||
+    participation.quantity ||
+    participation.responseData?.offeredQuantity ||
+    participation.acknowledgement?.offeredQuantity ||
+    "As Specified";
   const deliveryTimeline =
     participation.deliveryTimeline ||
     participation.responseData?.deliveryTimeline ||
+    participation.acknowledgement?.deliveryTimeline ||
     "Standard";
   const paymentTerms =
     participation.terms ||
     participation.responseData?.paymentTerms ||
+    participation.acknowledgement?.paymentTerms ||
     "Standard Payment Terms";
   const makeBrand =
     participation.makeBrand ||
     participation.responseData?.makeBrand ||
-    "As per specification";
+    participation.acknowledgement?.makeBrand ||
+    participation.brand ||
+    "—";
+  const model =
+    participation.model ||
+    participation.responseData?.model ||
+    participation.acknowledgement?.model ||
+    "—";
   const submittedAt =
     participation.submittedAt ||
     participation.createdAt ||
@@ -8679,15 +8882,18 @@ export function SellerQuotationReviewModal({
                 : Array.isArray(participation.acknowledgement?.lineItems)
                   ? participation.acknowledgement.lineItems
                   : [];
-  const docs: any[] = Array.isArray(participation.documents)
+  const docs: any[] = Array.isArray(participation.documents) && participation.documents.length
     ? participation.documents
-    : Array.isArray(participation.responseData?.documents)
+    : Array.isArray(participation.responseData?.documents) && participation.responseData.documents.length
       ? participation.responseData.documents
-      : [];
+      : Array.isArray(participation.acknowledgement?.documents) && participation.acknowledgement.documents.length
+        ? participation.acknowledgement.documents
+        : [];
   const message =
     participation.offeredItemDescription ||
     participation.message ||
     participation.responseData?.message ||
+    participation.acknowledgement?.offeredItemDescription ||
     "";
 
   const handleDownloadQuotationPdf = async () => {
@@ -8741,6 +8947,7 @@ export function SellerQuotationReviewModal({
         ],
         infoGrid: {
           "Make / Brand": makeBrand,
+          "Model / Specs": model,
           "Delivery Timeline": deliveryTimeline,
           "Payment Terms": paymentTerms,
           "Offered Quantity": String(offeredQty),
@@ -8776,9 +8983,9 @@ export function SellerQuotationReviewModal({
                   `Item #${idx + 1}`,
                 item.makeBrand || item.brand || "—",
                 `${q} ${item.unitOfMeasure || item.unit || "Nos"}`,
-                moneyPdf(uPrice),
-                `${gst}%`,
-                moneyPdf(tot),
+                isFinancialSealed ? "Sealed" : moneyPdf(uPrice),
+                isFinancialSealed ? "—" : `${gst}%`,
+                isFinancialSealed ? "Sealed" : moneyPdf(tot),
               ];
             })
           : [
@@ -8786,11 +8993,15 @@ export function SellerQuotationReviewModal({
                 "1",
                 message || "Procurement item quotation",
                 String(offeredQty),
-                quotedAmount > 0 ? moneyPdf(quotedAmount) : "Sealed Rate",
+                isFinancialSealed
+                  ? "Sealed (Stage 2)"
+                  : quotedAmount > 0
+                    ? moneyPdf(quotedAmount)
+                    : "Sealed Rate",
               ],
             ],
         financials: {
-          grandTotal: quotedAmount,
+          grandTotal: isFinancialSealed ? 0 : quotedAmount,
         },
         terms: message ? [`Supplier Remarks: ${message}`] : [],
         footerNote:
@@ -8817,9 +9028,15 @@ export function SellerQuotationReviewModal({
               <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
                 {statusStr}
               </span>
-              <span className="text-xs font-bold text-slate-400">
-                Submitted Seller Quotation
-              </span>
+              {isFinancialSealed ? (
+                <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-indigo-800 inline-flex items-center gap-1">
+                  <Lock className="h-2.5 w-2.5" /> Stage 1: Technical Scrutiny (Financial Sealed)
+                </span>
+              ) : (
+                <span className="text-xs font-bold text-slate-400">
+                  Submitted Seller Quotation
+                </span>
+              )}
             </div>
             <h2 className="text-lg font-black text-slate-900 mt-0.5">
               {sellerOrg}
@@ -8831,15 +9048,17 @@ export function SellerQuotationReviewModal({
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDownloadQuotationPdf}
-              className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download PDF
-            </Button>
+            {!isFinancialSealed && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadQuotationPdf}
+                className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Download PDF
+              </Button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -8851,41 +9070,61 @@ export function SellerQuotationReviewModal({
         </div>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          {/* Top Metric Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
-            <KpiCard
-              label="Total Quoted Value"
-              value={
-                quotedAmount > 0
-                  ? `₹${quotedAmount.toLocaleString("en-IN")}`
-                  : "Sealed / Rates On File"
-              }
-              subtext="Supplier price quotation"
-              icon={IndianRupee}
-              tone="green"
-            />
-            <KpiCard
-              label="Offered Quantity"
-              value={offeredQty}
-              subtext="Committed supply batch"
-              icon={Package}
-              tone="blue"
-            />
-            <KpiCard
-              label="Delivery Timeline"
-              value={deliveryTimeline}
-              subtext="Promised fulfillment SLA"
-              icon={Clock}
-              tone="indigo"
-            />
-            <KpiCard
-              label="Brand / Make Offered"
-              value={makeBrand}
-              subtext="Product specifications"
-              icon={Tag}
-              tone="purple"
-            />
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
+          {/* Supplier Technical Specifications & Offer Overview */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
+                  <Tag className="h-3.5 w-3.5" />
+                </div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                  Supplier Technical Offer &amp; Specifications
+                </h4>
+              </div>
+              {isFinancialSealed && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-[10.5px] font-bold text-indigo-700">
+                  <Lock className="h-3 w-3 text-indigo-500" />
+                  Commercial Proposal Sealed (Stage 2)
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="space-y-0.5">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
+                  Make / Brand
+                </span>
+                <p className="font-bold text-slate-900">{makeBrand}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
+                  Model / Specifications
+                </span>
+                <p className="font-bold text-slate-900">{model}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
+                  Offered Quantity
+                </span>
+                <p className="font-bold text-slate-900">{offeredQty}</p>
+              </div>
+              <div className="space-y-0.5">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
+                  Delivery Timeline SLA
+                </span>
+                <p className="font-bold text-slate-900">{deliveryTimeline}</p>
+              </div>
+            </div>
+
+            {message && (
+              <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 text-xs text-slate-700">
+                <span className="font-bold text-slate-500 uppercase text-[10px] block mb-0.5">
+                  Supplier Remarks / Item Description:
+                </span>
+                <p className="font-medium text-slate-800">"{message}"</p>
+              </div>
+            )}
           </div>
  
           {/* Stage 1: Technical Packet Evaluation Summary Card */}
@@ -9016,10 +9255,23 @@ export function SellerQuotationReviewModal({
 
             <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
               <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial
-                Terms
+                <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial &amp; Submission Terms
               </h4>
               <div className="text-xs space-y-1 text-slate-700 font-medium">
+                <p>
+                  <span className="text-slate-400 font-bold">Total Quoted Value:</span>{" "}
+                  {isFinancialSealed ? (
+                    <span className="font-bold text-indigo-700 inline-flex items-center gap-1">
+                      <Lock className="h-3 w-3 text-indigo-500" /> Sealed (Stage 2 Financial Opening)
+                    </span>
+                  ) : quotedAmount > 0 ? (
+                    <span className="font-black text-slate-900">
+                      ₹{quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                    </span>
+                  ) : (
+                    "Sealed / Rates On File"
+                  )}
+                </p>
                 <p>
                   <span className="text-slate-400 font-bold">
                     Payment Terms:
@@ -9032,14 +9284,6 @@ export function SellerQuotationReviewModal({
                   </span>{" "}
                   {submittedAt ? formatDateTime(submittedAt) : "—"}
                 </p>
-                {message && (
-                  <p className="pt-1">
-                    <span className="text-slate-400 font-bold block">
-                      Supplier Remarks:
-                    </span>{" "}
-                    "{message}"
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -9067,10 +9311,18 @@ export function SellerQuotationReviewModal({
                     >
                       Total Quoted Value (incl. GST)
                     </td>
-                    <td className="px-3 py-2 text-right text-sm font-black text-emerald-700 tabular-nums">
-                      {quotedAmount > 0
-                        ? `₹${quotedAmount.toLocaleString("en-IN")}`
-                        : "—"}
+                    <td className="px-3 py-2 text-right text-sm font-black tabular-nums">
+                      {isFinancialSealed ? (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                          <Lock className="h-3 w-3 text-indigo-500" /> Commercial Bid Sealed (Stage 2)
+                        </span>
+                      ) : quotedAmount > 0 ? (
+                        <span className="text-emerald-700 font-black">
+                          ₹{quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                   </tr>
                 }

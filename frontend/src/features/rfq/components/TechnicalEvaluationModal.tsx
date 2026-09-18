@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, CheckCircle2, XCircle, FileText, AlertTriangle, 
-  ExternalLink, Download, ShieldCheck, Award, HelpCircle, Loader2
+  ExternalLink, Download, ShieldCheck, Award, HelpCircle, Loader2, Eye, Package
 } from 'lucide-react';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { Button } from '../../../components/ui/button';
@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { procurementBidApi } from '../../procurementBid/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { postApi } from '../../shared/apiClient';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../../lib/files';
 
 export interface TechnicalEvaluationModalProps {
   isOpen: boolean;
@@ -42,6 +44,8 @@ export function TechnicalEvaluationModal({
   const [remarks, setRemarks] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string>('');
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = useState<string | number | null>(null);
 
   useEffect(() => {
     if (participation) {
@@ -83,24 +87,107 @@ export function TechnicalEvaluationModal({
   const makeBrand =
     participation.makeBrand ||
     participation.responseData?.makeBrand ||
+    participation.acknowledgement?.makeBrand ||
     participation.brand ||
-    'Standard specification';
+    '—';
 
   const model =
     participation.model ||
     participation.responseData?.model ||
-    'Standard model';
+    participation.acknowledgement?.model ||
+    '—';
 
   const deliveryTimeline =
     participation.deliveryTimeline ||
     participation.responseData?.deliveryTimeline ||
-    'Standard delivery';
+    participation.acknowledgement?.deliveryTimeline ||
+    'As per RFQ schedule';
 
-  const docs: any[] = Array.isArray(participation.documents)
+  const offeredQty =
+    participation.offeredQuantity ||
+    participation.quantity ||
+    participation.responseData?.offeredQuantity ||
+    participation.acknowledgement?.offeredQuantity ||
+    'As Specified';
+
+  const message =
+    participation.offeredItemDescription ||
+    participation.message ||
+    participation.responseData?.message ||
+    participation.acknowledgement?.offeredItemDescription ||
+    '';
+
+  const docs: any[] = Array.isArray(participation.documents) && participation.documents.length
     ? participation.documents
-    : Array.isArray(participation.responseData?.documents)
+    : Array.isArray(participation.responseData?.documents) && participation.responseData.documents.length
       ? participation.responseData.documents
-      : [];
+      : Array.isArray(participation.acknowledgement?.documents) && participation.acknowledgement.documents.length
+        ? participation.acknowledgement.documents
+        : [];
+
+  const handleViewAttachment = async (doc: any, docName: string) => {
+    const rawUrl =
+      doc.url ||
+      doc.fileUrl ||
+      doc.signedUrl ||
+      doc.documentUrl ||
+      '';
+    const urlMatchId = String(rawUrl).match(/\/api\/(?:public\/)?files\/(\d+)/)?.[1];
+
+    const fileId =
+      doc.fileAssetId ||
+      doc.fileId ||
+      (typeof doc.id === 'number' || /^\d+$/.test(String(doc.id || ''))
+        ? Number(doc.id)
+        : urlMatchId
+          ? Number(urlMatchId)
+          : undefined);
+
+    const effectiveUrl = rawUrl || (fileId ? `/api/files/${fileId}/view` : '');
+
+    setPreviewLoadingId(doc.id || docName);
+    try {
+      if (fileId || effectiveUrl) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: fileId,
+              fileAssetId: fileId,
+              url: effectiveUrl,
+              fileName: doc.fileName || docName,
+            },
+            docName,
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch (e) {
+          console.warn('getFileAssetPreview fallback to openFileAsset:', e);
+        }
+
+        await openFileAsset(
+          {
+            id: fileId,
+            fileAssetId: fileId,
+            originalName: doc.fileName || docName,
+            url: effectiveUrl,
+          },
+          docName,
+        );
+        return;
+      }
+
+      toast.error('Document file is not available for preview.');
+    } catch (err: any) {
+      console.error('Failed to view attachment:', err);
+      toast.error(
+        err instanceof Error ? err.message : 'Unable to open document file.',
+      );
+    } finally {
+      setPreviewLoadingId(null);
+    }
+  };
 
   const handleDecisionChange = (newDecision: 'QUALIFIED' | 'DISQUALIFIED') => {
     setDecision(newDecision);
@@ -189,7 +276,7 @@ export function TechnicalEvaluationModal({
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto"
+      className="fixed inset-0 z-[10050] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="technical-eval-modal-title"
@@ -240,7 +327,7 @@ export function TechnicalEvaluationModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
                 <div>
                   <span className="text-slate-400 font-bold block text-[10.5px]">Make / Brand:</span>
                   <span className="font-semibold text-slate-800">{makeBrand}</span>
@@ -250,10 +337,23 @@ export function TechnicalEvaluationModal({
                   <span className="font-semibold text-slate-800">{model}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Delivery Timeline:</span>
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Offered Qty:</span>
+                  <span className="font-semibold text-slate-800">{offeredQty}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Delivery SLA:</span>
                   <span className="font-semibold text-slate-800">{deliveryTimeline}</span>
                 </div>
               </div>
+
+              {message && (
+                <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase">
+                    Supplier Proposal Remarks:
+                  </span>
+                  <p className="mt-0.5 font-medium text-slate-700">"{message}"</p>
+                </div>
+              )}
             </div>
 
             {/* Attached Technical Documents Section */}
@@ -271,10 +371,10 @@ export function TechnicalEvaluationModal({
                   No separate document files uploaded by supplier. Review specifications on file.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {docs.map((doc: any, idx: number) => {
                     const docName = doc.documentName || doc.name || doc.fileName || `Technical Attachment #${idx + 1}`;
-                    const fileId = doc.fileAssetId || doc.id;
+                    const isCurrentlyLoading = previewLoadingId === (doc.id || docName);
                     return (
                       <div 
                         key={idx}
@@ -286,25 +386,19 @@ export function TechnicalEvaluationModal({
                             {doc.documentCategory || doc.documentType || 'Technical Proposal'}
                           </p>
                         </div>
-                        {fileId ? (
-                          <a
-                            href={`/api/files/${fileId}/view`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 shrink-0"
-                          >
-                            <ExternalLink className="h-3 w-3" /> View
-                          </a>
-                        ) : doc.url ? (
-                          <a
-                            href={doc.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 shrink-0"
-                          >
-                            <ExternalLink className="h-3 w-3" /> View
-                          </a>
-                        ) : null}
+                        <button
+                          type="button"
+                          disabled={isCurrentlyLoading}
+                          onClick={() => handleViewAttachment(doc, docName)}
+                          className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          {isCurrentlyLoading ? (
+                            <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                          ) : (
+                            <Eye className="h-3 w-3 text-blue-600" />
+                          )}
+                          View
+                        </button>
                       </div>
                     );
                   })}
@@ -502,6 +596,14 @@ export function TechnicalEvaluationModal({
 
         </div>
       </FocusTrap>
+
+      {/* Document Preview Modal */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          previewDocument={previewDocument}
+          onClose={() => setPreviewDocument(null)}
+        />
+      )}
     </div>
   );
 }
