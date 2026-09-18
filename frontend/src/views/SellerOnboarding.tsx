@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
@@ -51,9 +51,8 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 
 const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
-  if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified', 'under_compliance_review', 'resubmission_required', 'rejected'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -2491,7 +2490,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   )}
 
                                   {/* Upload Action */}
-                                  {(!isProfileLocked || currentSection === 'documents' || isHerShg) && (
+                                  {(!isProfileLocked || status === 'REJECTED' || Boolean(remarks)) ? (
                                     <label className="relative cursor-pointer">
                                       <input
                                         type="file"
@@ -2517,16 +2516,25 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                         )}
                                       </span>
                                     </label>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                      <Lock className="h-3.5 w-3.5 text-slate-400" /> Locked & Verified
+                                    </span>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Rejection Remarks */}
-                              {status === 'REJECTED' && remarks && (
-                                <div className="mt-3 p-3 bg-red-50/50 border border-red-100 rounded-lg flex items-start gap-2 text-xs text-red-800 animate-in fade-in duration-200">
-                                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              {/* Correction / Rejection Remarks */}
+                              {Boolean(remarks) && (
+                                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                                   <div>
-                                    <span className="font-bold">Rejection Reason:</span> {remarks}
+                                    <span className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800 block">
+                                      Correction Requested by Admin
+                                    </span>
+                                    <span className="text-xs font-semibold text-amber-950 mt-0.5 block">
+                                      {remarks}
+                                    </span>
                                   </div>
                                 </div>
                               )}

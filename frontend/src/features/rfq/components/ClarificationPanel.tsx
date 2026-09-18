@@ -22,9 +22,18 @@ interface ClarificationPanelProps {
   deadlinePassed?: boolean;
   /** Procurement label for dynamic messaging (e.g. Open Tender, RFQ, Rate Contract) */
   procurementLabel?: string;
+  /** Clarification deadline date/time for informative display */
+  clarificationDeadline?: string | Date | null;
 }
 
-export default function ClarificationPanel({ quoteRequestId, kind = 'quote-request', role, deadlinePassed, procurementLabel }: ClarificationPanelProps) {
+export default function ClarificationPanel({
+  quoteRequestId,
+  kind = 'quote-request',
+  role,
+  deadlinePassed,
+  procurementLabel,
+  clarificationDeadline
+}: ClarificationPanelProps) {
   const entityId = React.useMemo<number | string | undefined>(() => {
     if (quoteRequestId === null || quoteRequestId === undefined) return undefined;
     if (typeof quoteRequestId === 'number' && !isNaN(quoteRequestId) && Math.abs(quoteRequestId) > 0) {
@@ -50,6 +59,11 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>('PUBLIC');
   const [replyDrafts, setReplyDrafts] = useState<Record<number, string>>({});
 
+  const formattedDeadline = React.useMemo(() => {
+    if (!clarificationDeadline) return null;
+    return formatDateTime(clarificationDeadline);
+  }, [clarificationDeadline]);
+
   // Filter clarifications: Private messages must NOT be shown to the public or other sellers.
   // They must be visible to the asking seller and the buyer/admin only.
   const visibleClarifications = React.useMemo(() => {
@@ -69,6 +83,10 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
       return false;
     });
   }, [clarifications, role, user]);
+
+  const pendingReplyCount = React.useMemo(() => {
+    return visibleClarifications.filter(c => !c.response).length;
+  }, [visibleClarifications]);
 
   if (!entityId) return null;
 
@@ -133,12 +151,12 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
   };
 
   return (
-    <section className="border border-slate-100 rounded-3xl bg-white p-6 shadow-sm space-y-4">
+    <section aria-labelledby="clarification-heading" className="border border-slate-100 rounded-3xl bg-white p-6 shadow-sm space-y-4">
       <div className="flex items-center gap-2 pb-3.5 border-b border-slate-100">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-          <MessageSquare className="h-4 w-4" />
+          <MessageSquare className="h-4 w-4" aria-hidden="true" />
         </div>
-        <h2 className="text-base font-black text-slate-900 uppercase tracking-wider">
+        <h2 id="clarification-heading" className="text-base font-black text-slate-900 uppercase tracking-wider">
           Clarifications & Q&amp;A
         </h2>
         <span className="ml-auto text-[10px] font-black uppercase bg-[#12335f]/5 text-[#12335f] px-2.5 py-1 rounded-full border border-[#12335f]/10">
@@ -146,82 +164,137 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
         </span>
       </div>
 
-      {/* Ask box — sellers only */}
-      {role === 'seller' && (
+      {/* Deadline Passed Banner — Shown to Sellers */}
+      {deadlinePassed && role === 'seller' && (
+        <div
+          className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-amber-900">
+            <Lock className="h-4 w-4 text-amber-700 shrink-0" aria-hidden="true" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-amber-900">
+              Clarification Window Closed
+            </h3>
+          </div>
+          <p className="text-xs font-semibold text-amber-800 leading-relaxed">
+            The deadline for submitting clarification requests has passed{formattedDeadline ? ` (closed on ${formattedDeadline})` : ''} for this {procurementLabel || 'procurement'}. New questions can no longer be submitted.
+            {visibleClarifications.length > 0
+              ? ' All earlier clarification questions and official buyer responses remain recorded below for your reference.'
+              : ''}
+          </p>
+        </div>
+      )}
+
+      {/* Deadline Passed Banner — Shown to Buyers */}
+      {deadlinePassed && role === 'buyer' && (
+        <div
+          className="rounded-2xl border border-blue-200 bg-blue-50/60 p-4 space-y-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 text-[#12335f]">
+            <Lock className="h-4 w-4 text-[#12335f] shrink-0" aria-hidden="true" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-[#12335f]">
+              Clarification Window Closed
+            </h3>
+          </div>
+          <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+            The clarification submission deadline for bidders has passed{formattedDeadline ? ` (closed on ${formattedDeadline})` : ''}. Bidders can no longer submit new questions.
+            {pendingReplyCount > 0
+              ? ` You have ${pendingReplyCount} pending ${pendingReplyCount === 1 ? 'question' : 'questions'} submitted prior to the deadline awaiting your response below.`
+              : visibleClarifications.length > 0
+                ? ' All bidder clarification queries have been answered and recorded below.'
+                : ' No clarification requests were submitted during the clarification window.'}
+          </p>
+        </div>
+      )}
+
+      {/* Active Ask box — sellers only, only when deadline has NOT passed */}
+      {role === 'seller' && !deadlinePassed && (
         <div className="rounded-2xl border border-slate-100 bg-slate-50/40 p-4 space-y-3">
-          {deadlinePassed ? (
-            <p className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5" /> The clarification window has closed for this {procurementLabel || 'procurement'}.
-            </p>
-          ) : (
-            <>
-              <label className="block">
-                <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Ask the buyer a question</span>
-                <textarea
-                  value={question}
-                  onChange={e => setQuestion(e.target.value)}
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="e.g. Can the delivery timeline be extended by a week for bulk quantities?"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
-                />
-              </label>
-              <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setVisibility('PUBLIC')}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition',
-                      visibility === 'PUBLIC' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                    )}
-                  >
-                    <Globe className="h-3 w-3" /> Public
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setVisibility('PRIVATE')}
-                    className={cn(
-                      'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition',
-                      visibility === 'PRIVATE' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
-                    )}
-                  >
-                    <Lock className="h-3 w-3" /> Private
-                  </button>
-                  <span className="text-[10px] font-semibold text-slate-400">
-                    {visibility === 'PUBLIC' ? 'Answer visible to all bidders & public' : 'Answer visible only to you and buyer'}
-                  </span>
-                </div>
-                <Button
-                  type="button"
-                  onClick={submitQuestion}
-                  disabled={ask.isPending || question.trim().length < 3}
-                  className="h-9 rounded-xl bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b2447] flex items-center gap-1.5"
-                >
-                  {ask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  {ask.isPending ? 'Sending' : 'Send Question'}
-                </Button>
-              </div>
-            </>
-          )}
+          <label htmlFor="clarification-question-input" className="block">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Ask the buyer a question</span>
+            <textarea
+              id="clarification-question-input"
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder="e.g. Can the delivery timeline be extended by a week for bulk quantities?"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+            />
+          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setVisibility('PUBLIC')}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition',
+                  visibility === 'PUBLIC' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                )}
+              >
+                <Globe className="h-3 w-3" aria-hidden="true" /> Public
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisibility('PRIVATE')}
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider transition',
+                  visibility === 'PRIVATE' ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                )}
+              >
+                <Lock className="h-3 w-3" aria-hidden="true" /> Private
+              </button>
+              <span className="text-[10px] font-semibold text-slate-400">
+                {visibility === 'PUBLIC' ? 'Answer visible to all bidders & public' : 'Answer visible only to you and buyer'}
+              </span>
+            </div>
+            <Button
+              type="button"
+              onClick={submitQuestion}
+              disabled={ask.isPending || question.trim().length < 3}
+              className="h-9 rounded-xl bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b2447] flex items-center gap-1.5"
+            >
+              {ask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Send className="h-3.5 w-3.5" aria-hidden="true" />}
+              {ask.isPending ? 'Sending' : 'Send Question'}
+            </Button>
+          </div>
         </div>
       )}
 
       {/* Thread list */}
       {isLoading ? (
         <div className="flex items-center justify-center py-8 text-slate-400">
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          <span className="sr-only">Loading clarifications...</span>
         </div>
       ) : visibleClarifications.length === 0 ? (
-        <div className="flex flex-col items-center gap-2 py-8 text-center">
-          <HelpCircle className="h-8 w-8 text-slate-300" />
-          <p className="text-xs font-bold text-slate-500">No clarifications yet.</p>
-          <p className="text-[11px] font-semibold text-slate-400">
-            {role === 'seller' ? 'Ask the buyer a question above to start a thread.' : 'Seller questions will appear here for you to answer.'}
-          </p>
+        <div className="flex flex-col items-center gap-2.5 py-8 text-center" role="status" aria-live="polite">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <HelpCircle className="h-5 w-5" aria-hidden="true" />
+          </div>
+          {deadlinePassed ? (
+            <>
+              <p className="text-xs font-bold text-slate-700">No Clarifications Submitted</p>
+              <p className="text-[11px] font-medium text-slate-500 max-w-md">
+                {role === 'seller'
+                  ? `The clarification window closed without any queries submitted. No clarification threads are active for this ${procurementLabel || 'procurement'}.`
+                  : `No clarification questions were submitted by bidders before the clarification deadline passed for this ${procurementLabel || 'procurement'}.`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-bold text-slate-500">No clarifications yet.</p>
+              <p className="text-[11px] font-semibold text-slate-400">
+                {role === 'seller' ? 'Ask the buyer a question above to start a thread.' : 'Seller questions will appear here for you to answer.'}
+              </p>
+            </>
+          )}
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3" role="feed" aria-label="Clarification threads">
           {visibleClarifications.map((c, idx) => (
             <div key={c.id} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-xs">
               {/* Question */}
@@ -234,11 +307,24 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
                       'inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase border',
                       c.visibility === 'PUBLIC' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-indigo-200 bg-indigo-50 text-indigo-700'
                     )}>
-                      {c.visibility === 'PUBLIC' ? <Globe className="h-2.5 w-2.5" /> : <Lock className="h-2.5 w-2.5" />}
+                      {c.visibility === 'PUBLIC' ? <Globe className="h-2.5 w-2.5" aria-hidden="true" /> : <Lock className="h-2.5 w-2.5" aria-hidden="true" />}
                       {c.visibility === 'PUBLIC' ? 'Public' : (role === 'buyer' ? 'Private (Buyer & Seller)' : 'Private (You & Buyer)')}
                     </span>
+                    {c.response ? (
+                      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase border border-emerald-200 bg-emerald-50 text-emerald-700">
+                        <CheckCircle2 className="h-2.5 w-2.5" aria-hidden="true" /> Answered
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-black uppercase border border-amber-200 bg-amber-50 text-amber-700">
+                        Pending Response
+                      </span>
+                    )}
                   </div>
-                  {c.askedAt && <p className="mt-0.5 text-[10px] font-semibold text-slate-400">Asked {formatWhen(c.askedAt)}</p>}
+                  {c.askedAt && (
+                    <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                      Asked {formatWhen(c.askedAt)}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -246,19 +332,30 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
               {c.response ? (
                 <div className="mt-3 ml-8 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
                   <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">
-                    <CheckCircle2 className="h-3 w-3" /> Buyer Response
+                    <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Buyer Response
                   </p>
                   <p className="mt-1 text-xs font-semibold text-slate-700 leading-relaxed break-words whitespace-pre-wrap">{c.response}</p>
                   {c.answeredAt && <p className="mt-1 text-[10px] font-semibold text-slate-400">Answered {formatWhen(c.answeredAt)}</p>}
                 </div>
               ) : role === 'buyer' ? (
                 <div className="mt-3 ml-8 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor={`reply-input-${c.id}`} className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Respond to Seller Query
+                    </label>
+                    {deadlinePassed && (
+                      <span className="text-[9.5px] font-medium text-slate-400">
+                        Submitted before clarification deadline
+                      </span>
+                    )}
+                  </div>
                   <textarea
+                    id={`reply-input-${c.id}`}
                     value={replyDrafts[c.id] || ''}
                     onChange={e => setReplyDrafts(prev => ({ ...prev, [c.id]: e.target.value }))}
                     rows={2}
                     maxLength={3000}
-                    placeholder="Type your answer…"
+                    placeholder="Type your official answer…"
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
                   />
                   <Button
@@ -267,13 +364,14 @@ export default function ClarificationPanel({ quoteRequestId, kind = 'quote-reque
                     disabled={reply.isPending || !(replyDrafts[c.id] || '').trim()}
                     className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-black uppercase text-white hover:bg-emerald-700 flex items-center gap-1.5"
                   >
-                    {reply.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-                    Answer
+                    {reply.isPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Send className="h-3 w-3" aria-hidden="true" />}
+                    Publish Answer
                   </Button>
                 </div>
               ) : (
                 <p className="mt-3 ml-8 text-[11px] font-semibold text-amber-600 flex items-center gap-1.5">
-                  <Loader2 className="h-3 w-3 animate-spin" /> Awaiting buyer response…
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                  Awaiting buyer response… {deadlinePassed ? '(Submitted before clarification deadline)' : ''}
                 </p>
               )}
             </div>

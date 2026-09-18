@@ -8,7 +8,7 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   validateField,
@@ -176,9 +176,8 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 
 const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
-  if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified', 'under_compliance_review', 'resubmission_required', 'rejected'].includes(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {
@@ -875,8 +874,26 @@ export default function BuyerOnboarding() {
     });
   };
 
+  const isDocFieldEditable = (fieldName: string) => {
+    if (!isProfileLocked) return true;
+    const docField = fieldName.startsWith('documents.') ? fieldName.replace('documents.', '') : fieldName;
+    const reasons = (user?.sectionRejectionReasons as Record<string, string>) ||
+                    (cachedProfile?.user?.sectionRejectionReasons as Record<string, string>) || {};
+    const docRejectionReason = reasons[docField] ||
+      (docField === 'panCard' && (reasons.pan || reasons.panCard)) ||
+      (docField === 'gstCert' && (reasons.gst || reasons.gstCert)) ||
+      (docField === 'regCert' && (reasons.cin || reasons.registration || reasons.regCert)) ||
+      (docField === 'addressProof' && reasons.addressProof) ||
+      (docField === 'authLetter' && reasons.authLetter) ||
+      null;
+    return Boolean(docRejectionReason);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && !isDocFieldEditable(fieldName)) {
+      toast.info('This document is locked and cannot be modified.');
+      return;
+    }
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -937,19 +954,26 @@ export default function BuyerOnboarding() {
       // (NOT as a side-effect inside setFormData) so the PUT call is always reliably made.
       let nextDocumentsForSave: any = null;
       if (fieldPath.length > 1 && fieldPath[0] === 'documents') {
-        const currentFiles = getDocumentFiles(formData[fieldPath[0]]?.[fieldPath[1]]);
+        const docField = fieldPath[1];
+        const currentFiles = getDocumentFiles(formData[fieldPath[0]]?.[docField]);
+        // When replacing an existing file or uploading for a rejected/correction slot, replace with the newly uploaded file(s)
+        const shouldReplace = isProfileLocked || currentFiles.length > 0;
+        const nextFiles = shouldReplace ? uploadedFiles : [...currentFiles, ...uploadedFiles];
         nextDocumentsForSave = {
           ...(formData.documents || {}),
-          [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+          [docField]: nextFiles
         };
       }
       // Update local state
       setFormData((prev: any) => {
         if (fieldPath.length > 1) {
-          const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[fieldPath[1]]);
+          const docField = fieldPath[1];
+          const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[docField]);
+          const shouldReplace = isProfileLocked || currentFiles.length > 0;
+          const nextFiles = shouldReplace ? uploadedFiles : [...currentFiles, ...uploadedFiles];
           const nextNested = {
             ...prev[fieldPath[0]],
-            [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+            [docField]: nextFiles
           };
           return {
             ...prev,
@@ -958,7 +982,7 @@ export default function BuyerOnboarding() {
         }
         return {
           ...prev,
-          [fieldName]: [...getDocumentFiles(prev[fieldName]), ...uploadedFiles]
+          [fieldName]: uploadedFiles
         };
       });
       // Persist documents to backend immediately after upload
@@ -971,7 +995,7 @@ export default function BuyerOnboarding() {
           throw new Error(errData.message || 'Document uploaded, but profile document save failed.');
         }
       }
-      toast.success(files.length === 1 ? 'Document uploaded successfully' : `${files.length} documents uploaded successfully`);
+      toast.success(files.length === 1 ? 'Document replaced successfully' : `${files.length} documents uploaded successfully`);
     } catch (err: any) {
       console.error('Upload error:', err);
       toast.error(`Upload error: ${err.message || 'Check network'}`);
@@ -983,10 +1007,14 @@ export default function BuyerOnboarding() {
   };
 
   const removeUploadedDocument = async (fieldName: string, index: number) => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && !isDocFieldEditable(fieldName)) {
+      toast.info('This document is locked and cannot be modified.');
+      return;
+    }
     let nextDocumentsForSave: any = null;
     setFormData((prev: any) => {
-      const nextFiles = getDocumentFiles(prev.documents?.[fieldName]).filter((_, fileIndex) => fileIndex !== index);
+      const currentFiles = getDocumentFiles(prev.documents?.[fieldName]);
+      const nextFiles = currentFiles.filter((_, fileIndex) => fileIndex !== index);
       nextDocumentsForSave = {
         ...prev.documents,
         [fieldName]: nextFiles
@@ -1000,7 +1028,11 @@ export default function BuyerOnboarding() {
       const saveRes = await api.put('/api/buyer/onboarding', { documents: nextDocumentsForSave }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!saveRes.ok) toast.error('Removed locally, but failed to save the document list.');
+      if (!saveRes.ok) {
+        toast.error('Removed locally, but failed to save the document list.');
+      } else {
+        toast.success('Document removed successfully');
+      }
     }
   };
 
@@ -1306,9 +1338,71 @@ export default function BuyerOnboarding() {
     }
   };
 
+  const isResubmissionActive = Boolean(
+    user?.onboardingStatus === 'resubmission_required' ||
+    (user?.sectionStatus as any)?.docs === 'resubmission_required' ||
+    cachedProfile?.user?.onboardingStatus === 'resubmission_required' ||
+    (cachedProfile?.user?.sectionStatus as any)?.docs === 'resubmission_required'
+  );
+
+  const handleResubmitBuyerDocuments = async () => {
+    const reasons = (user?.sectionRejectionReasons as Record<string, string>) ||
+                    (cachedProfile?.user?.sectionRejectionReasons as Record<string, string>) || {};
+    const keyToDocField: Record<string, string> = {
+      pan: 'panCard',
+      panCard: 'panCard',
+      gst: 'gstCert',
+      gstCert: 'gstCert',
+      cin: 'regCert',
+      registration: 'regCert',
+      regCert: 'regCert',
+      addressProof: 'addressProof',
+      authLetter: 'authLetter'
+    };
+
+    for (const rKey of Object.keys(reasons)) {
+      const docField = keyToDocField[rKey] || rKey;
+      const files = getDocumentFiles(formData.documents?.[docField]);
+      if (!files || files.length === 0) {
+        toast.error(`Please upload the requested document (${docField}) before submitting.`);
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await api.post('/api/onboarding/submit', {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.message || 'Failed to submit updated documents.');
+        return;
+      }
+      toast.success('Updated documents submitted for compliance review successfully!');
+      const refreshRes = await api.fetch('/api/auth/me', authHeaders);
+      const refreshData = await refreshRes.json();
+      if (refreshData.user) {
+        setOnboardingStatus(refreshData.user.onboardingStatus || 'under_compliance_review');
+        setIsProfileLocked(shouldLockBuyerProfile(refreshData.user, refreshData.profile));
+        setShowSuccessOverlay(shouldShowSubmissionOverlay(refreshData.user, refreshData.profile));
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error while submitting updated documents.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitAttempted(true);
+
+    if (activeSection === 'docs' && isResubmissionActive) {
+      await handleResubmitBuyerDocuments();
+      return;
+    }
+
     if (isProfileLocked) {
       toast.info('Approved profiles are locked');
       return;
@@ -1541,15 +1635,21 @@ export default function BuyerOnboarding() {
                             'Confirm declarations and verify with OTP.'}
                 </p>
               </div>
-              {user?.onboardingStatus === 'approved_for_procurement' && (
-                <p className="mt-1 inline-flex rounded-full border border-slate-100 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
-                  Approved Profile: Unlocked for Manual Updates
-                </p>
-              )}
+              {user?.onboardingStatus === 'approved_for_procurement' ? (
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
+                  <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                  Verified & Approved Profile (Read-Only)
+                </span>
+              ) : isProfileLocked ? (
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
+                  <Lock className="h-3 w-3 text-slate-500" />
+                  Application Locked Under Compliance
+                </span>
+              ) : null}
             </div>
 
             <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-4">
-              <fieldset disabled={isProfileLocked && activeSection !== 'docs'} className={cn(isProfileLocked && "opacity-70")}>
+              <fieldset disabled={isProfileLocked && user?.sectionStatus?.[activeSection] !== 'resubmission_required' && activeSection !== 'docs'} className={cn(isProfileLocked && user?.sectionStatus?.[activeSection] !== 'resubmission_required' && activeSection !== 'docs' && "opacity-75")}>
                 {/* Section Content */}
                 {activeSection === 'org' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1956,14 +2056,28 @@ export default function BuyerOnboarding() {
                         const isVerifiedOrgDoc = false;
                         const isInvalid = submitAttempted && isRequired && !hasFile;
 
+                        // Check if admin requested re-upload for this specific document
+                        const reasons = (user?.sectionRejectionReasons as Record<string, string>) || {};
+                        const docRejectionReason = reasons[doc.field] ||
+                          (doc.field === 'panCard' && (reasons.pan || reasons.panCard)) ||
+                          (doc.field === 'gstCert' && (reasons.gst || reasons.gstCert)) ||
+                          (doc.field === 'regCert' && (reasons.cin || reasons.registration || reasons.regCert)) ||
+                          (doc.field === 'addressProof' && reasons.addressProof) ||
+                          (doc.field === 'authLetter' && reasons.authLetter) ||
+                          null;
+
+                        const isDocSlotEditable = !isSubmittedOrApproved || Boolean(docRejectionReason);
+
                         return (
                           <div
                             key={doc.field}
                             className={cn(
                               "p-3 rounded-lg border flex flex-col gap-2 transition-all duration-300",
-                              isInvalid
-                                ? "border-red-400 bg-red-50/30 animate-shake"
-                                : "border-slate-100 bg-slate-50/50"
+                              docRejectionReason
+                                ? "border-amber-300 bg-amber-50/40 shadow-xs ring-1 ring-amber-300/60"
+                                : isInvalid
+                                  ? "border-red-400 bg-red-50/30 animate-shake"
+                                  : "border-slate-100 bg-slate-50/50"
                             )}
                           >
                             <div className="flex items-start justify-between">
@@ -1972,12 +2086,31 @@ export default function BuyerOnboarding() {
                                 <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-700 border border-green-200">
                                   <Check className="h-3 w-3" /> Verified Org Document
                                 </span>
+                              ) : docRejectionReason ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wide text-amber-800 border border-amber-300 animate-pulse">
+                                  <AlertTriangle className="h-3 w-3 text-amber-600" /> Action Required
+                                </span>
                               ) : isRequired ? (
                                 <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>
                               ) : null}
                             </div>
+
+                            {docRejectionReason && (
+                              <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-start gap-2 animate-in fade-in duration-300">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800">
+                                    Correction Requested by Admin
+                                  </p>
+                                  <p className="text-[11px] font-semibold text-amber-950 mt-0.5">
+                                    {docRejectionReason}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-between gap-2">
-                              {!isSubmittedOrApproved && !isVerifiedOrgDoc && (
+                              {isDocSlotEditable && !isVerifiedOrgDoc ? (
                                 <>
                                   <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
                                   {isFieldUploading ? (
@@ -1985,11 +2118,15 @@ export default function BuyerOnboarding() {
                                       <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" /> Uploading...
                                     </span>
                                   ) : (
-                                    <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-slate-800 underline transition-colors">
-                                      {hasFile ? 'Add Files' : 'Upload Files'}
+                                    <label htmlFor={`upload-${doc.field}`} className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:text-[#0b2445] underline transition-colors">
+                                      <Upload className="h-3 w-3" /> {hasFile ? 'Replace Document' : 'Upload Files'}
                                     </label>
                                   )}
                                 </>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                  <Lock className="h-3 w-3 text-slate-400" /> Locked & Verified
+                                </span>
                               )}
                             </div>
                             {hasFile && (
@@ -2006,7 +2143,7 @@ export default function BuyerOnboarding() {
                                       <button type="button" onClick={() => openDocumentPreview(doc.label, file)} className="text-[11px] font-bold text-[#12335f] hover:underline">
                                         View
                                       </button>
-                                      {!isSubmittedOrApproved && (
+                                      {isDocSlotEditable && (
                                         <button type="button" onClick={() => removeUploadedDocument(doc.field, fileIndex)} className="text-[11px] font-bold text-red-500 hover:underline">
                                           Remove
                                         </button>
@@ -2138,15 +2275,27 @@ export default function BuyerOnboarding() {
                   <Button
                     type="submit"
                     isLoading={isLoading}
-                    loadingText={activeSection === 'account' ? 'Submitting...' : 'Processing...'}
+                    loadingText={
+                      isResubmissionActive && activeSection === 'docs'
+                        ? 'Submitting...'
+                        : activeSection === 'account'
+                          ? 'Submitting...'
+                          : 'Processing...'
+                    }
                     disabled={
                       isLoading ||
-                      isProfileLocked ||
+                      (isProfileLocked && !(isResubmissionActive && activeSection === 'docs')) ||
                       (activeSection === 'account' && (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp)))
                     }
                     className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-6 rounded-lg h-9 text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isProfileLocked ? 'Locked' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
+                    {isResubmissionActive && activeSection === 'docs'
+                      ? 'Submit Updated Documents'
+                      : isProfileLocked
+                        ? 'Locked'
+                        : activeSection === 'account'
+                          ? 'Final Submission'
+                          : 'Continue'}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>

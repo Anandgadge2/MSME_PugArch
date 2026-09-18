@@ -20,6 +20,7 @@ import { approveOnboardingAndEnsureOrganization, createOrUpdatePendingOrganizati
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
+import { invalidateUserAuthCache } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
@@ -448,6 +449,8 @@ const paged = (records: unknown[], total: number, query: Record<string, unknown>
 
 const profileStatus = (user?: any, profile?: any) =>
   profile?.verificationStatusEnum ||
+  (profile?.verificationStatus === 'VERIFIED' ? 'VERIFIED' : null) ||
+  (user?.organization?.verificationStatus === 'VERIFIED' ? 'VERIFIED' : null) ||
   (approvedProcurementStatuses.has(String(user?.onboardingStatus)) ? 'VERIFIED' : 'PENDING');
 
 const assertBuyerProcurementApproved = async (req: AuthRequest) => {
@@ -462,6 +465,7 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
       mobile: true,
       role: true,
       onboardingStatus: true,
+      sectionStatus: true,
       accountStatus: true,
       isDualRole: true,
       organizationId: true,
@@ -471,9 +475,37 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
   });
   if (!user) throw new ApiError(404, 'User not found');
 
-  const isApproved = user.isDualRole
-    ? (user.buyerProfile?.verificationStatusEnum === 'VERIFIED' || user.buyerProfile?.verificationStatus === 'VERIFIED')
-    : approvedProcurementStatuses.has(String(user.onboardingStatus));
+  const buyerProfileVerified = Boolean(
+    user.buyerProfile?.verificationStatusEnum === 'VERIFIED' ||
+    user.buyerProfile?.verificationStatus === 'VERIFIED'
+  );
+
+  const organizationVerified = Boolean(
+    user.organization?.verificationStatus === 'VERIFIED' ||
+    user.organization?.organizationOnboardingStatus === 'approved_for_procurement'
+  );
+
+  const allSectionsApproved = Boolean(
+    user.sectionStatus &&
+    typeof user.sectionStatus === 'object' &&
+    Object.keys(user.sectionStatus).length > 0 &&
+    Object.values(user.sectionStatus).every((s: any) => s === 'approved')
+  );
+
+  const isApproved =
+    approvedProcurementStatuses.has(String(user.onboardingStatus)) ||
+    buyerProfileVerified ||
+    organizationVerified ||
+    allSectionsApproved;
+
+  if (isApproved && !approvedProcurementStatuses.has(String(user.onboardingStatus))) {
+    // Harmonize user onboarding status to approved_for_procurement so downstream systems match
+    await db.user.update({
+      where: { id: user.id },
+      data: { onboardingStatus: 'approved_for_procurement' }
+    }).catch((err: any) => console.error('[HarmonizeBuyerOnboardingStatus]', err));
+    user.onboardingStatus = 'approved_for_procurement';
+  }
 
   if (!isApproved) {
     throw new ApiError(
@@ -2671,7 +2703,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
 
   const finalSectionStatus = { ...sectionStatus };
   for (const sec of sections) {
-    if (!finalSectionStatus[sec]) {
+    if (!finalSectionStatus[sec] || finalSectionStatus[sec] === 'resubmission_required') {
       finalSectionStatus[sec] = 'pending';
     }
   }
@@ -2702,6 +2734,17 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       where: { userId: user.id },
       data: { verificationStatusEnum: 'UNDER_REVIEW' }
     });
+    if (user.sellerProfile?.id) {
+      await db.sellerDocument.updateMany({
+        where: {
+          sellerProfileId: user.sellerProfile.id,
+          verificationStatus: 'REJECTED'
+        },
+        data: {
+          verificationStatus: 'PENDING'
+        }
+      });
+    }
   }
 
   const updated = await db.user.update({
@@ -2712,7 +2755,9 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       sectionStatus: {
         ...finalSectionStatus,
         submitted: true
-      }
+      },
+      sectionRejectionReasons: {},
+      adminFeedback: null
     }
   });
 
@@ -2721,8 +2766,10 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     console.error('[Onboarding Submit] Failed to create pending organization:', err);
   });
 
+  await invalidateUserAuthCache(updated.id).catch(() => undefined);
   deleteCache('/api/auth/me').catch(() => undefined);
   deleteCache('/api/org/status').catch(() => undefined);
+  deleteCache(`/api/admin/onboarding/${updated.id}`).catch(() => undefined);
 
   await auditWrite(req, 'onboarding.submitted', 'user', updated.id);
 
@@ -3891,6 +3938,95 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
   }
 
   ok(res, user);
+}));
+
+router.post('/admin/onboarding/:id/document-request', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    documentType: z.string().trim().min(1).max(100),
+    reason: z.string().trim().min(3).max(1000)
+  }), req.body);
+
+  const existing = await db.user.findUnique({
+    where: { id },
+    include: {
+      sellerProfile: {
+        include: {
+          sellerDocuments: true
+        }
+      },
+      buyerProfile: true
+    }
+  });
+  if (!existing) throw new ApiError(404, 'User not found');
+
+  const cleanReason = body.reason.replace(/\0/g, '').trim();
+  const docType = body.documentType.trim();
+
+  // If seller, update the specific SellerDocument if it exists
+  if (existing.role === 'seller' && existing.sellerProfile) {
+    const existingSellerDoc = existing.sellerProfile.sellerDocuments.find(
+      (d: any) => d.documentType.toLowerCase() === docType.toLowerCase()
+    );
+    if (existingSellerDoc) {
+      await db.sellerDocument.update({
+        where: { id: existingSellerDoc.id },
+        data: {
+          verificationStatus: 'REJECTED',
+          remarks: cleanReason,
+          verifiedById: Number(req.user?.id) || null,
+          verifiedAt: new Date()
+        }
+      });
+    }
+  }
+
+  // Update section status and rejection reasons on user
+  const currentSectionStatus = (existing.sectionStatus as Record<string, unknown>) || {};
+  const currentReasons = (existing.sectionRejectionReasons as Record<string, unknown>) || {};
+
+  const docSectionKey = existing.role === 'buyer' ? 'docs' : 'documents';
+  const updatedSectionStatus = {
+    ...currentSectionStatus,
+    [docSectionKey]: 'resubmission_required'
+  };
+
+  const updatedReasons = {
+    ...currentReasons,
+    [docType]: cleanReason
+  };
+
+  const updatedUser = await db.user.update({
+    where: { id },
+    data: {
+      onboardingStatus: 'resubmission_required',
+      sectionStatus: updatedSectionStatus,
+      sectionRejectionReasons: updatedReasons,
+      adminFeedback: cleanReason
+    }
+  });
+
+  // Invalidate caches
+  await invalidateUserAuthCache(id).catch(() => undefined);
+  await deleteCache('/api/auth/me').catch(() => undefined);
+  await deleteCache(`/api/admin/onboarding/${id}`).catch(() => undefined);
+
+  // Send notification & email
+  const displayDocName = docType.replace(/_/g, ' ').toUpperCase();
+  await notificationService.notifyWithEmail(id, {
+    title: `Document Correction Required: ${displayDocName}`,
+    message: `The verification team has requested a re-upload of your ${displayDocName}: "${cleanReason}"`,
+    type: 'document_correction_requested',
+    priority: 'high',
+    redirectUrl: existing.role === 'buyer' ? `/buyer/onboarding?section=docs` : `/seller/onboarding?section=documents`
+  }).catch((err) => console.error('[Document Request Notification Error]:', err));
+
+  await auditWrite(req, 'admin.onboarding.document_requested', 'user', id, {
+    documentType: docType,
+    reason: cleanReason
+  });
+
+  ok(res, { success: true, documentType: docType, reason: cleanReason, user: updatedUser });
 }));
 
 router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -6916,21 +7052,25 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
   const rawSubmissionDeadline = quote.deadlineDate;
   let effectiveClarDeadline: Date | null = null;
   if (rawClarDeadline && rawSubmissionDeadline) {
-    const d1 = new Date(rawClarDeadline);
+    let d1 = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    }
     const d2 = new Date(rawSubmissionDeadline);
     const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
     const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-    effectiveClarDeadline = new Date(Math.max(t1, t2));
+    effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
   } else if (rawClarDeadline) {
-    effectiveClarDeadline = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    } else {
+      effectiveClarDeadline = new Date(rawClarDeadline);
+    }
   } else if (rawSubmissionDeadline) {
     effectiveClarDeadline = new Date(rawSubmissionDeadline);
   }
 
   if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    }
     if (effectiveClarDeadline.getTime() < Date.now()) {
       throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
     }
@@ -7014,30 +7154,52 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
       where: { id: clarId, entityId: quote.id }
     }).catch(() => null);
 
-    if (!clar2) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+    if (clar2) {
+      updated = await db.requirementClarification.update({
+        where: { id: clar2.id },
+        data: {
+          response: body.response,
+          answeredById: userId(req),
+          answeredAt: new Date()
+        }
+      });
+    } else {
+      const clar3 = await db.procurementBidClarification.findFirst({
+        where: { id: clarId, bidId: quote.id }
+      }).catch(() => null);
 
-    updated = await db.requirementClarification.update({
-      where: { id: clar2.id },
-      data: {
-        response: body.response,
-        answeredById: userId(req),
-        answeredAt: new Date()
-      }
+      if (!clar3) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+
+      updated = await db.procurementBidClarification.update({
+        where: { id: clar3.id },
+        data: {
+          response: body.response,
+          status: 'RESOLVED',
+          respondedById: userId(req),
+          respondedAt: new Date()
+        }
+      });
+    }
+  }
+
+  const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
+  if (targetId) {
+    // Non-blocking background notification for fast HTTP response
+    setImmediate(() => {
+      notifySafe(
+        targetId,
+        'Clarification Answered',
+        `Buyer answered your question regarding "${quote.subject}"`,
+        'quote_request_clarification',
+        `/quotations`
+      );
     });
   }
 
-  const askedById = (updated as any).askedById;
-  if (askedById) {
-    await notifySafe(
-      askedById,
-      'Clarification Response Received',
-      `Regarding "${quote.subject}": ${body.response.substring(0, 100)}${body.response.length > 100 ? '...' : ''}`,
-      'quote_request_clarification',
-      `/quotations`
-    );
-  }
-
-  await auditWrite(req, 'quote_request.clarification_replied', 'quoteRequestClarification', updated.id);
+  // Non-blocking audit write
+  setImmediate(() => {
+    void auditWrite(req, 'quote_request.clarification_answered', 'quoteRequestClarification', updated.id);
+  });
   ok(res, updated);
 }));
 
@@ -7046,7 +7208,7 @@ router.get('/quote-requests/:id/clarifications', optionalAuthenticate, asyncRout
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
 
-  const [qrClarifications, reqClarifications] = await Promise.all([
+  const [qrClarifications, reqClarifications, procClarifications] = await Promise.all([
     db.quoteRequestClarification.findMany({
       where: { quoteRequestId: id },
       orderBy: { askedAt: 'asc' }
@@ -7054,10 +7216,26 @@ router.get('/quote-requests/:id/clarifications', optionalAuthenticate, asyncRout
     db.requirementClarification.findMany({
       where: { entityType: 'REQUIREMENT', entityId: id },
       orderBy: { askedAt: 'asc' }
+    }).catch(() => []),
+    db.procurementBidClarification.findMany({
+      where: { bidId: id },
+      orderBy: { createdAt: 'asc' }
     }).catch(() => [])
   ]);
 
-  const allClarifications = [...qrClarifications, ...reqClarifications].sort((a: any, b: any) =>
+  const normalizedProcClarifications = procClarifications.map((c: any) => ({
+    id: c.id,
+    quoteRequestId: c.bidId,
+    question: c.question,
+    response: c.response,
+    visibility: c.isPublic ? 'PUBLIC' : 'PRIVATE',
+    askedById: c.sellerId || c.requestedById,
+    answeredById: c.respondedById,
+    askedAt: c.createdAt,
+    answeredAt: c.respondedAt,
+  }));
+
+  const allClarifications = [...qrClarifications, ...reqClarifications, ...normalizedProcClarifications].sort((a: any, b: any) =>
     new Date(a.askedAt || a.createdAt).getTime() - new Date(b.askedAt || b.createdAt).getTime()
   );
 

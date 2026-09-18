@@ -3868,184 +3868,6 @@ export function ProcurementDetailUnifiedView(
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
-  const quotationListColumns = useMemo<ColumnDef<any>[]>(
-    () => [
-      {
-        key: "supplier",
-        header: "Supplier Organization",
-        cell: (participation, idx) => {
-          const sellerOrgName =
-            participation.sellerOrgName ||
-            participation.sellerOrganization?.organizationName ||
-            participation.seller?.sellerProfile?.organizationName ||
-            participation.seller?.organization?.organizationName ||
-            participation.sellerProfile?.organizationName ||
-            participation.companyName ||
-            participation.sellerName ||
-            participation.seller?.name ||
-            participation.sellerUser?.name ||
-            (participation.sellerId ||
-            participation.sellerUserId ||
-            (participation.id && !String(participation.id).startsWith("id-"))
-              ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-              : `Supplier ${idx + 1}`);
-          const contactName =
-            participation.sellerName ||
-            participation.contactPerson ||
-            participation.seller?.name ||
-            participation.sellerUser?.name ||
-            "";
-          return (
-            <div>
-              <p className="font-bold text-slate-950 text-xs">
-                {sellerOrgName}
-              </p>
-              {contactName && contactName !== sellerOrgName && (
-                <p className="text-[10px] font-normal text-slate-400">
-                  Contact: {contactName}
-                </p>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        key: "amount",
-        header: "Quoted Amount (INR)",
-        cell: (participation) => {
-          const amount = Number(
-            participation.totalAmount ||
-              participation.quotedAmount ||
-              participation.offeredPrice ||
-              0,
-          );
-          return (
-            <span className="font-bold text-slate-900 text-xs">
-              {amount > 0
-                ? `₹${amount.toLocaleString("en-IN")}`
-                : "Sealed / Rates On File"}
-            </span>
-          );
-        },
-      },
-      {
-        key: "qtyDelivery",
-        header: "Offered Qty & Delivery",
-        cell: (participation) => {
-          const qty =
-            participation.offeredQuantity ||
-            participation.quantity ||
-            "Specified Qty";
-          const delivery =
-            participation.deliveryTimeline ||
-            participation.responseData?.deliveryTimeline ||
-            "Standard";
-          return (
-            <div className="text-slate-600">
-              <p className="font-semibold text-xs">{qty}</p>
-              <p className="text-[10px] font-normal text-slate-400">
-                {delivery}
-              </p>
-            </div>
-          );
-        },
-      },
-      {
-        key: "submittedAt",
-        header: "Submitted At",
-        cell: (participation) => {
-          const dateStr = formatDateString(
-            participation.submittedAt ||
-              participation.updatedAt ||
-              participation.createdAt,
-            true,
-          );
-          return <span className="text-slate-500 font-normal">{dateStr}</span>;
-        },
-      },
-      {
-        key: "technicalStatus",
-        header: "Technical Evaluation",
-        cell: (participation) => {
-          const ts = String(participation.technicalStatus || "").toUpperCase();
-          const isQual = ts === "QUALIFIED";
-          const isDisq = ts === "DISQUALIFIED" || participation.isDisqualified;
-          return (
-            <div>
-              {isQual ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-800">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                  Qualified
-                </span>
-              ) : isDisq ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[9.5px] font-extrabold text-rose-800">
-                  <XCircle className="h-3 w-3 text-rose-600" />
-                  Disqualified
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9.5px] font-extrabold text-amber-800">
-                  <Clock className="h-3 w-3 text-amber-600" />
-                  Pending Review
-                </span>
-              )}
-              {participation.score !== undefined &&
-                participation.score !== null && (
-                  <span className="text-[10px] font-bold text-slate-500 block mt-0.5">
-                    Score: {participation.score}/100
-                  </span>
-                )}
-            </div>
-          );
-        },
-      },
-      {
-        key: "status",
-        header: "Submission",
-        cell: (participation) => {
-          const statusLabel =
-            participation.submissionStatus ||
-            participation.status ||
-            "Submitted";
-          return (
-            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold uppercase text-slate-700">
-              {statusLabel}
-            </span>
-          );
-        },
-      },
-      {
-        key: "action",
-        header: "Action",
-        align: "right",
-        cell: (participation) => (
-          <div className="flex items-center justify-end gap-1.5">
-            {isBuyerOrAdmin && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setSelectedForTechnicalEval(participation)}
-                className="h-7.5 px-2.5 gap-1 text-[11px] font-bold border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 shadow-2xs cursor-pointer"
-                title="Evaluate technical proposal, compliance and eligibility"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                Evaluate Bid
-              </Button>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setSelectedQuotationForReview(participation)}
-              className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs cursor-pointer"
-            >
-              <Eye className="h-3 w-3" />
-              Review Quotation
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [],
-  );
 
   const linkedAuctionQuery = useQuery({
     queryKey: ["linked-reverse-auction", targetId],
@@ -5101,6 +4923,12 @@ export function ProcurementDetailUnifiedView(
     : props.closingDate
       ? formatDateString(props.closingDate, true, "endOfDay")
       : undefined;
+  const displaySealedClosingDate: string = String(
+    closingDateFormatted ||
+      (props.closingDate ? String(props.closingDate) : "") ||
+      (props.deadlineDate ? String(props.deadlineDate) : "") ||
+      "the submission deadline",
+  );
   const clarificationDateFormatted = clarificationDateValue
     ? formatDateString(clarificationDateValue, true)
     : props.clarificationDate
@@ -5800,6 +5628,234 @@ export function ProcurementDetailUnifiedView(
       const parsed = parseDateValue(effectiveDeadlineTarget);
       return parsed ? parsed.getTime() < nowMs : false;
     })(),
+  );
+
+  const isEvaluationReady = Boolean(
+    isPostBiddingStage ||
+    isDeadlinePassed ||
+    Boolean(props.isSubmitDisabled) ||
+    [
+      "CLOSED",
+      "TECHNICAL_EVALUATION",
+      "FINANCIAL_EVALUATION",
+      "L1_GENERATED",
+      "AWARD_RECOMMENDED",
+      "AWARDED",
+      "COMPLETED",
+      "EXPIRED",
+    ].includes(statusUpper),
+  );
+
+  const quotationListColumns = useMemo<ColumnDef<any>[]>(
+    () => [
+      {
+        key: "supplier",
+        header: "Supplier Organization",
+        cell: (participation, idx) => {
+          const sellerOrgName =
+            participation.sellerOrgName ||
+            participation.sellerOrganization?.organizationName ||
+            participation.seller?.sellerProfile?.organizationName ||
+            participation.seller?.organization?.organizationName ||
+            participation.sellerProfile?.organizationName ||
+            participation.companyName ||
+            participation.sellerName ||
+            participation.seller?.name ||
+            participation.sellerUser?.name ||
+            (participation.sellerId ||
+            participation.sellerUserId ||
+            (participation.id && !String(participation.id).startsWith("id-"))
+              ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+              : `Supplier ${idx + 1}`);
+          const contactName =
+            participation.sellerName ||
+            participation.contactPerson ||
+            participation.seller?.name ||
+            participation.sellerUser?.name ||
+            "";
+          return (
+            <div>
+              <p className="font-bold text-slate-950 text-xs">
+                {sellerOrgName}
+              </p>
+              {contactName && contactName !== sellerOrgName && (
+                <p className="text-[10px] font-normal text-slate-400">
+                  Contact: {contactName}
+                </p>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        key: "amount",
+        header: "Quoted Amount (INR)",
+        cell: (participation) => {
+          if (!isEvaluationReady) {
+            return (
+              <span className="inline-flex items-center gap-1 font-semibold text-slate-500 text-xs">
+                <Lock className="h-3 w-3 text-slate-400" />
+                Sealed until closing
+              </span>
+            );
+          }
+          const amount = Number(
+            participation.totalAmount ||
+              participation.quotedAmount ||
+              participation.offeredPrice ||
+              0,
+          );
+          return (
+            <span className="font-bold text-slate-900 text-xs">
+              {amount > 0
+                ? `₹${amount.toLocaleString("en-IN")}`
+                : "Sealed / Rates On File"}
+            </span>
+          );
+        },
+      },
+      {
+        key: "qtyDelivery",
+        header: "Offered Qty & Delivery",
+        cell: (participation) => {
+          const qty =
+            participation.offeredQuantity ||
+            participation.quantity ||
+            "Specified Qty";
+          const delivery =
+            participation.deliveryTimeline ||
+            participation.responseData?.deliveryTimeline ||
+            "Standard";
+          return (
+            <div className="text-slate-600">
+              <p className="font-semibold text-xs">{qty}</p>
+              <p className="text-[10px] font-normal text-slate-400">
+                {delivery}
+              </p>
+            </div>
+          );
+        },
+      },
+      {
+        key: "submittedAt",
+        header: "Submitted At",
+        cell: (participation) => {
+          const dateStr = formatDateString(
+            participation.submittedAt ||
+              participation.updatedAt ||
+              participation.createdAt,
+            true,
+          );
+          return <span className="text-slate-500 font-normal">{dateStr}</span>;
+        },
+      },
+      {
+        key: "technicalStatus",
+        header: "Technical Evaluation",
+        cell: (participation) => {
+          if (!isEvaluationReady) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600">
+                <Lock className="h-3 w-3 text-slate-400" />
+                Sealed Proposal
+              </span>
+            );
+          }
+          const ts = String(participation.technicalStatus || "").toUpperCase();
+          const isQual = ts === "QUALIFIED";
+          const isDisq = ts === "DISQUALIFIED" || participation.isDisqualified;
+          return (
+            <div>
+              {isQual ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-800">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  Qualified
+                </span>
+              ) : isDisq ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[9.5px] font-extrabold text-rose-800">
+                  <XCircle className="h-3 w-3 text-rose-600" />
+                  Disqualified
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9.5px] font-extrabold text-amber-800">
+                  <Clock className="h-3 w-3 text-amber-600" />
+                  Pending Review
+                </span>
+              )}
+              {participation.score !== undefined &&
+                participation.score !== null && (
+                  <span className="text-[10px] font-bold text-slate-500 block mt-0.5">
+                    Score: {participation.score}/100
+                  </span>
+                )}
+            </div>
+          );
+        },
+      },
+      {
+        key: "status",
+        header: "Submission",
+        cell: (participation) => {
+          const statusLabel =
+            participation.submissionStatus ||
+            participation.status ||
+            "Submitted";
+          return (
+            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold uppercase text-slate-700">
+              {statusLabel}
+            </span>
+          );
+        },
+      },
+      {
+        key: "action",
+        header: "Action",
+        align: "right",
+        cell: (participation) => (
+          <div className="flex items-center justify-end gap-1.5">
+            {isBuyerOrAdmin && (
+              <Button
+                type="button"
+                size="sm"
+                disabled={!isEvaluationReady}
+                onClick={isEvaluationReady ? () => setSelectedForTechnicalEval(participation) : undefined}
+                className={cn(
+                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs",
+                  isEvaluationReady
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
+                )}
+                title={isEvaluationReady ? "Evaluate technical proposal, compliance and eligibility" : "Technical scrutiny unlocks after bidding window closes"}
+              >
+                {isEvaluationReady ? (
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <Lock className="h-3.5 w-3.5 text-slate-400" />
+                )}
+                Evaluate Bid
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              disabled={!isEvaluationReady}
+              onClick={isEvaluationReady ? () => setSelectedQuotationForReview(participation) : undefined}
+              className={cn(
+                "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs",
+                isEvaluationReady
+                  ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+              )}
+              title={isEvaluationReady ? "Review quotation details" : "Quotation remains sealed until bidding closes"}
+            >
+              <Eye className="h-3 w-3" />
+              Review Quotation
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [isEvaluationReady, isBuyerOrAdmin],
   );
 
   const proposalStatusDisplay = useMemo(() => {
@@ -6744,10 +6800,23 @@ export function ProcurementDetailUnifiedView(
                     Bidding Concluded
                   </span>
                 )}
+                {isBuyerOrAdmin && !isEvaluationReady && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    title={`Quotations remain strictly sealed until the bidding window closes on ${displaySealedClosingDate}.`}
+                    className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Evaluation Opens at Closing</span>
+                  </Button>
+                )}
                 {props.onSubmitClick &&
-                  (isBuyerOrAdmin ||
-                    (!props.hasSubmittedProposal &&
-                      !isBiddingClosed)) && (
+                  ((isBuyerOrAdmin
+                    ? isEvaluationReady
+                    : (!props.hasSubmittedProposal && !isBiddingClosed))) && (
                     <Button
                       type="button"
                       size="sm"
@@ -7407,15 +7476,6 @@ export function ProcurementDetailUnifiedView(
                     )}
                     fullWidth
                   />
-                  <PropertyItem
-                    label="Eligibility Criteria"
-                    value={cleanBuyerTerms(
-                      terms.eligibilityCriteria ||
-                        basics.eligibilityCriteria ||
-                        payload.eligibility,
-                    )}
-                    fullWidth
-                  />
                 </PropertyGrid>
               </DataCard>
 
@@ -7709,7 +7769,7 @@ export function ProcurementDetailUnifiedView(
 
                     {/* Action Buttons: Compare Quotes & Reverse Auction */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {submittedParticipations.length >= 2 && (
+                      {submittedParticipations.length >= 2 && isEvaluationReady && (
                         <Button
                           type="button"
                           size="sm"
@@ -7737,6 +7797,7 @@ export function ProcurementDetailUnifiedView(
                         </Button>
                       )}
                       {allowsReverseAuction &&
+                        isEvaluationReady &&
                         (!linkedAuction ||
                           (linkedAuction as any).auctionPlanned === true ||
                           ["DRAFT", "CANCELLED"].includes(
@@ -7773,7 +7834,7 @@ export function ProcurementDetailUnifiedView(
                   </div>
 
                   {/* Two-Packet Stage 1 Technical Evaluation Progress Banner */}
-                  {isTwoPacketMode && submittedParticipations.length > 0 && (
+                  {isTwoPacketMode && submittedParticipations.length > 0 && isEvaluationReady && (
                     <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div className="flex items-start gap-3">
@@ -7870,6 +7931,25 @@ export function ProcurementDetailUnifiedView(
                           ? "As soon as suppliers submit their quotations for this RFQ, their responses will appear here for your review."
                           : "As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review."}
                       </p>
+                    </div>
+                  ) : !isEvaluationReady ? (
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 py-8 px-5 text-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white mb-3 shadow-md shadow-indigo-600/20">
+                        <Lock className="h-5 w-5" />
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-0.5 text-xs font-black text-emerald-800 mb-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Bidding Window Active
+                      </span>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                        {submittedParticipations.length} Quotation{submittedParticipations.length === 1 ? '' : 's'} Received (Sealed)
+                      </h4>
+                      <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
+                        In accordance with procurement integrity and sealed-bidding rules, supplier quotes and commercial proposals remain strictly confidential until bidding concludes on <strong className="text-slate-800">{displaySealedClosingDate}</strong>.
+                      </p>
+                      <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-100/80 px-3 py-1 text-xs font-bold text-indigo-900 border border-indigo-200">
+                        <Clock className="h-3.5 w-3.5 text-indigo-600" /> Quotations and evaluation tools will unlock upon closing
+                      </span>
                     </div>
                   ) : (
                     <DataTable<any>
@@ -8062,17 +8142,19 @@ export function ProcurementDetailUnifiedView(
                     const d2 = parseDateValue(
                       closingDateValue || props.deadlineDate,
                     );
-                    const t1 = d1 ? d1.getTime() : 0;
-                    const t2 = d2 ? d2.getTime() : 0;
-                    const maxTime = Math.max(t1, t2);
-                    return maxTime > 0 ? maxTime < nowMs : false;
+                    const t1 = d1 && !isNaN(d1.getTime()) ? d1.getTime() : 0;
+                    const t2 = d2 && !isNaN(d2.getTime()) ? d2.getTime() : 0;
+                    const effectiveClarTime =
+                      t1 > 0 ? (t2 > 0 ? Math.min(t1, t2) : t1) : t2;
+                    return effectiveClarTime > 0 ? effectiveClarTime < nowMs : false;
                   })();
                   return (
                     <ClarificationPanel
                       quoteRequestId={clarId}
                       kind={clarKind}
-                      role={currentUser?.role === "buyer" ? "buyer" : "seller"}
+                      role={isBuyerOrAdmin || isBuyerSide ? "buyer" : "seller"}
                       deadlinePassed={isClarDeadlinePassed}
+                      clarificationDeadline={clarificationDeadlineValue}
                       procurementLabel={
                         props.procurementLabel || procurementTypeLabel
                       }

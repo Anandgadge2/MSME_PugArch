@@ -46,7 +46,7 @@ import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
-import { formatDate, formatDateTime, formatTime } from '../../shared/format';
+import { formatDate, formatDateTime, formatTime, hasExplicitTime } from '../../shared/format';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -916,9 +916,21 @@ export default function SubmitQuotationPage() {
 
   // Submission and read-only states
   const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
-  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
-  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
-  const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED', 'EXPIRED'].includes(rfqData?.status);
+  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && (() => {
+    try {
+      const dStr = String(rfqData.deadlineDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+        const endOfDay = new Date(`${dStr}T23:59:59.999`);
+        return endOfDay.getTime() < Date.now();
+      }
+      return new Date(rfqData.deadlineDate).getTime() < Date.now();
+    } catch {
+      return false;
+    }
+  })();
+  const isExpiredOrClosed = isClosed || isDeadlinePassed || rfqData?.status === 'EXPIRED';
+  const isReadOnly = isExpiredOrClosed || isSubmittedQuote;
 
   const techStatusRaw = String(ownResponse?.technicalStatus || (ownResponse as any)?.status || '').toUpperCase();
   const isTechQualified = techStatusRaw === 'QUALIFIED';
@@ -1007,7 +1019,9 @@ export default function SubmitQuotationPage() {
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
   const rfqNumber = formatRefId('RFQ', requirementId || rfqData?.id, rfqData?.requirementNumber, rfqData?.procurementMethod || rfqData?.canonicalMethod || 'RFQ');
-  const deadline = rfqData?.deadlineDate ? formatDate(rfqData.deadlineDate) : '—';
+  const deadline = rfqData?.deadlineDate
+    ? (hasExplicitTime(rfqData.deadlineDate) ? formatDateTime(rfqData.deadlineDate) : formatDate(rfqData.deadlineDate))
+    : '—';
 
   const itemsList: Array<{
     itemName: string;
@@ -1995,95 +2009,122 @@ export default function SubmitQuotationPage() {
   const submittedAtDisplay = submittedAtValue ? formatDateTime(submittedAtValue) : null;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {/* Navigation & Breadcrumb */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleBackToRfq}
-          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
-          aria-label={backButtonLabelText}
-        >
-          <ArrowLeft className="h-4 w-4 text-slate-500" />
-          <span>{backButtonLabelText}</span>
-        </Button>
-
-        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs" aria-label="Breadcrumb">
-          <button
+    <div className="mx-auto max-w-[1400px] space-y-3.5 px-4 py-3 md:px-6 pb-12">
+      {/* Top Bar: Navigation & Live Status */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
-          >
-            Opportunities
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(procurementBackRoute)}
-          >
-            {procurementTypePluralLabel}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+            variant="outline"
+            size="sm"
             onClick={handleBackToRfq}
+            className="h-7 gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
+            aria-label={backButtonLabelText}
           >
-            {rfqNumber}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
-            {submitActionHeaderLabel}
-          </span>
-        </nav>
+            <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+            <span>{backButtonLabelText}</span>
+          </Button>
+
+          <nav className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1 shadow-2xs" aria-label="Breadcrumb">
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
+            >
+              Opportunities
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(procurementBackRoute)}
+            >
+              {procurementTypePluralLabel}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+              onClick={handleBackToRfq}
+            >
+              {rfqNumber}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
+              {submitActionHeaderLabel}
+            </span>
+          </nav>
+        </div>
+
+        {/* Live Status Chip */}
+        <div>
+          {isSubmittedQuote ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <CheckCircle2 className="h-3 w-3" /> Submitted
+            </span>
+          ) : isExpiredOrClosed ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+              <Lock className="h-3 w-3 text-amber-600" /> Submission Closed
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 animate-pulse" /> Accepting Quotations
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Header Card */}
-      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
+      {/* Header Card (Compact & High-Density) */}
+      <section className="relative overflow-hidden border border-slate-200/90 rounded-xl bg-white px-4 py-3 md:px-5 md:py-3.5 shadow-2xs">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-1">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-                {submitActionHeaderLabel}
-              </h1>
-              <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                {procurementTypeBadgeLabel}
-              </span>
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between pt-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-900">
+              {submitActionHeaderLabel}
+            </h1>
+            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold tracking-wider text-indigo-700 border border-indigo-200">
+              {procurementTypeBadgeLabel}
+            </span>
+            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
+              {rfqNumber}
+            </span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-xs md:text-sm font-semibold text-slate-800 truncate max-w-xs md:max-w-md" title={subject}>
+              {subject}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+              <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="font-semibold text-slate-800 truncate max-w-[200px]" title={orgName}>{orgName}</span>
             </div>
-            <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
-              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumber}</span>
-              <span className="text-slate-300">•</span>
-              <span className="font-semibold text-slate-800">{subject}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-0.5">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">{orgName}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">Deadline: {deadline}</span>
-              </div>
+            <div className={cn(
+              "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border",
+              isExpiredOrClosed
+                ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                : "bg-slate-50 border-slate-200 text-slate-600"
+            )}>
+              <Calendar className={cn("h-3.5 w-3.5 shrink-0", isExpiredOrClosed ? "text-amber-600" : "text-slate-400")} />
+              <span className="font-semibold">
+                Deadline: <strong className={isExpiredOrClosed ? "text-amber-950 font-bold" : "text-slate-800"}>{deadline}</strong>
+              </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Status Banner (Submitted or Closed) ── */}
+      {/* ── Status Banner (Submitted, Expired, or Closed) ── */}
       {isSubmittedQuote ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
-            <CheckCircle2 className="h-5 w-5" />
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
+            <CheckCircle2 className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
-              <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
+              <h3 className="text-xs md:text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
+              <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-850">
                 {submittedStatus(ownResponse) || 'SUBMITTED'}
               </span>
             </div>
@@ -2092,20 +2133,27 @@ export default function SubmitQuotationPage() {
             </p>
           </div>
         </div>
-      ) : isClosed ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-500 text-white font-bold">
-            <AlertTriangle className="h-5 w-5" />
+      ) : isExpiredOrClosed ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white font-bold">
+            <AlertTriangle className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
-            <p className="text-xs font-semibold text-slate-500 mt-0.5">This requirement is no longer accepting new quotations.</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs md:text-sm font-extrabold text-amber-950">Quotation Submission Closed</h3>
+              <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
+                {rfqData?.status === 'EXPIRED' ? 'EXPIRED' : isDeadlinePassed ? 'DEADLINE ELAPSED' : (rfqData?.status || 'CLOSED')}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-amber-800 mt-0.5">
+              The submission deadline for this requirement was <strong>{deadline}</strong>. This requirement is no longer accepting quotations, so all form fields are locked in read-only mode.
+            </p>
           </div>
         </div>
       ) : null}
 
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
-      <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-xs" role="tablist" aria-label="Quotation Sections">
+      <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
             {
@@ -2194,9 +2242,9 @@ export default function SubmitQuotationPage() {
             id="quotation-details"
             role="tabpanel"
             aria-labelledby="tab-quotation-details"
-            className="border border-slate-200/90 rounded-2xl bg-white p-6 md:p-8 shadow-xs space-y-6"
+            className="border border-slate-200/90 rounded-xl bg-white p-5 md:p-6 shadow-2xs space-y-5"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
                   {isRfp ? 'Proposal Details' : 'Quotation Details'}
@@ -2216,6 +2264,19 @@ export default function SubmitQuotationPage() {
                 </button>
               )}
             </div>
+
+            {isReadOnly && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-900 font-medium">
+                <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>
+                  {isSubmittedQuote
+                    ? 'This quotation has already been submitted and cannot be edited.'
+                    : isExpiredOrClosed
+                    ? `Quotation submission has closed (${deadline}). Inputs are displayed in read-only mode.`
+                    : 'This requirement is closed and no longer accepting inputs.'}
+                </span>
+              </div>
+            )}
 
             <div className="grid gap-6 md:grid-cols-2">
               {/* Offered Price */}
@@ -3513,7 +3574,7 @@ export default function SubmitQuotationPage() {
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isExpiredOrClosed ? 'Submission Closed (Deadline Elapsed)' : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
                       </>
                     )}
                   </Button>

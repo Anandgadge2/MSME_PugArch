@@ -3330,37 +3330,16 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             }
         }
 
-        const targetTitles = Array.from(new Set([linkedBuyerReq?.title, linkedLegacyReq?.title, linkedBid?.title].filter(Boolean) as string[]));
-        const targetBuyerIds = Array.from(new Set([linkedBuyerReq?.createdById, linkedLegacyReq?.buyerId, linkedBid?.buyerId].filter(Boolean) as number[]));
-        const targetBuyerOrgIds = Array.from(new Set([linkedBuyerReq?.buyerOrganizationId, linkedLegacyReq?.organizationId, linkedBid?.buyerOrganizationId].filter(Boolean) as number[]));
-
-        const matchingModernReqs = targetTitles.length > 0 ? await db.buyerRequirement.findMany({
-            where: {
-                OR: [
-                    ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
-                    {
-                        title: { in: targetTitles },
-                        OR: [
-                            ...(targetBuyerIds.length ? [{ createdById: { in: targetBuyerIds } }] : []),
-                            ...(targetBuyerOrgIds.length ? [{ buyerOrganizationId: { in: targetBuyerOrgIds } }] : [])
-                        ]
-                    }
-                ]
-            },
-            select: { id: true }
-        }).catch(() => []) : [];
-
+        // Scope targets strictly to the authentic matched entities (do not bleed across same-titled or sourceRequirementId requirements)
         const allTargetReqIds = Array.from(new Set([
-            ...matchingModernReqs.map(r => r.id),
             linkedBuyerReq?.id,
             linkedLegacyReq?.id,
-            Number((linkedBid?.technicalPacket as any)?.sourceRequirementId || (linkedBid?.technicalPacket as any)?.requirementId || 0) || null,
-            candidateIds[0]
+            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const allTargetBidIds = Array.from(new Set([
             linkedBid?.id,
-            (candidateIds.length && linkedBid) ? candidateIds[0] : null
+            (!linkedBuyerReq && !linkedLegacyReq && candidateIds.length && linkedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const nonDraftFilter = {
@@ -3733,21 +3712,25 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
         // Allow clarifications up to the later of clarification deadline and submission deadline, as long as the tender is open
         let effectiveClarDeadline: Date | null = null;
         if (rawClarDeadline && rawSubmissionDeadline) {
-            const d1 = new Date(rawClarDeadline);
+            let d1 = new Date(rawClarDeadline);
+            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+                d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+            }
             const d2 = new Date(rawSubmissionDeadline);
             const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
             const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-            effectiveClarDeadline = new Date(Math.max(t1, t2));
+            effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
         } else if (rawClarDeadline) {
-            effectiveClarDeadline = new Date(rawClarDeadline);
+            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+                effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+            } else {
+                effectiveClarDeadline = new Date(rawClarDeadline);
+            }
         } else if (rawSubmissionDeadline) {
             effectiveClarDeadline = new Date(rawSubmissionDeadline);
         }
 
         if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-                effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-            }
             if (effectiveClarDeadline.getTime() < Date.now()) {
                 return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
             }
