@@ -105,6 +105,7 @@ export default function BuyerProfile() {
   const [uploadSummary, setUploadSummary] = useState<{ savedCount: number; invalidCount: number; hasDuplicates: boolean; duplicateCount: number } | null>(null);
   // Image lightbox/preview
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  const [bannerLoadError, setBannerLoadError] = useState(false);
 
   // Items table sorting & pagination
   const [itemsSortKey, setItemsSortKey] = useState<string>('serialNo');
@@ -133,6 +134,7 @@ export default function BuyerProfile() {
       if (res.ok) {
         const body = await res.json();
         setShowcaseProfile(body.data);
+        setBannerLoadError(false);
         initialProfileRef.current = body.data;
       }
     } catch (err) {
@@ -283,6 +285,7 @@ export default function BuyerProfile() {
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_logo');
     const loadingToast = toast.loading('Uploading logo...');
     try {
       const res = await api.fetch('/api/upload', {
@@ -313,6 +316,7 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Upload failed due to network error');
     } finally {
+      e.target.value = '';
       toast.dismiss(loadingToast);
     }
   };
@@ -322,6 +326,7 @@ export default function BuyerProfile() {
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_banner');
     const loadingToast = toast.loading('Uploading banner...');
     try {
       const res = await api.fetch('/api/upload', {
@@ -342,6 +347,7 @@ export default function BuyerProfile() {
           const updateBody = await updateRes.json().catch(() => null);
           const finalBannerUrl = updateBody?.data?.bannerUrl || bannerUrl;
           setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl: finalBannerUrl }));
+          setBannerLoadError(false);
           toast.success('Banner uploaded successfully');
         } else {
           toast.error('Failed to update profile banner');
@@ -352,6 +358,7 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Upload failed due to network error');
     } finally {
+      e.target.value = '';
       toast.dismiss(loadingToast);
     }
   };
@@ -367,6 +374,7 @@ export default function BuyerProfile() {
       });
       if (updateRes.ok) {
         setShowcaseProfile((prev: any) => ({ ...prev, [field]: null }));
+        if (field === 'bannerUrl') setBannerLoadError(false);
         toast.success(`${field === 'logoUrl' ? 'Logo' : 'Banner'} removed successfully`);
       } else {
         toast.error('Failed to update profile');
@@ -1614,31 +1622,42 @@ export default function BuyerProfile() {
                             {showcaseProfile.bannerUrl ? (
                               <div className="space-y-4">
                                 {/* Banner preview */}
-                                <div className="relative group rounded-xl overflow-hidden border shadow-md">
-                                  <img
-                                    src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
-                                    alt="Org Banner"
-                                    referrerPolicy="no-referrer"
-                                    crossOrigin="anonymous"
-                                    className="w-full h-28 object-cover"
-                                  />
-                                  <button
-                                    onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
-                                    className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
-                                    title="View full size"
-                                  >
-                                    <Eye className="h-6 w-6 text-white drop-shadow" />
-                                  </button>
+                                <div className="relative group rounded-xl overflow-hidden border shadow-md bg-slate-100">
+                                  {!bannerLoadError ? (
+                                    <img
+                                      src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
+                                      alt="Org Banner"
+                                      className="w-full h-28 object-cover"
+                                      onError={() => setBannerLoadError(true)}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-28 flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-1.5 p-4 text-center">
+                                      <ImageIcon className="h-6 w-6 text-slate-300" />
+                                      <p className="text-[11px] font-medium text-slate-500">Banner image could not be loaded</p>
+                                      <p className="text-[9px] text-slate-400 font-mono truncate max-w-xs">{showcaseProfile.bannerUrl}</p>
+                                    </div>
+                                  )}
+                                  {!bannerLoadError && (
+                                    <button
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      title="View full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" />
+                                    </button>
+                                  )}
                                 </div>
                                 {/* Action buttons */}
                                 <div className="flex flex-wrap gap-2 justify-center">
-                                  <Button
-                                    type="button"
-                                    onClick={() => setViewImageUrl(showcaseProfile.bannerUrl)}
-                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> View
-                                  </Button>
+                                  {!bannerLoadError && (
+                                    <Button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
+                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" /> View
+                                    </Button>
+                                  )}
                                   <label className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors">
                                     <Pencil className="h-3.5 w-3.5" /> Change
                                     <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} />

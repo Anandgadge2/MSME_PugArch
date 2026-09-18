@@ -276,18 +276,19 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
           const matchedState = data.state ? data.state.trim().toUpperCase() : '';
           let matchedDistrict = '';
-          if (matchedState && data.city) {
+          if (matchedState) {
             const districts = indiaStatesDistricts[matchedState] || [];
-            const searchCity = data.city.trim().toLowerCase();
-            const found = districts.find(d => d.toLowerCase() === searchCity);
-            if (found) {
-              matchedDistrict = found;
-            } else {
-              const foundPartial = districts.find(d => 
-                d.toLowerCase().includes(searchCity) || searchCity.includes(d.toLowerCase())
-              );
-              if (foundPartial) matchedDistrict = foundPartial;
-            }
+            const searchDistrict = (data.district || '').trim().toLowerCase();
+            const searchCity = (data.city || '').trim().toLowerCase();
+            const found = districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && dl === searchDistrict) || (searchCity && dl === searchCity);
+            }) || districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && (dl.includes(searchDistrict) || searchDistrict.includes(dl))) ||
+                     (searchCity && (dl.includes(searchCity) || searchCity.includes(dl)));
+            });
+            if (found) matchedDistrict = found;
           }
 
           setFormData((prev: any) => ({

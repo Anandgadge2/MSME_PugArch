@@ -2839,6 +2839,26 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
     if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
   }
 
+  // Check if file is a buyer profile branding asset (logo or banner)
+  const buyerProfile = await db.buyerProfile.findFirst({
+    where: {
+      OR: [
+        { logoUrl: { contains: `/files/${fileId}/` } },
+        { bannerUrl: { contains: `/files/${fileId}/` } },
+        { logoUrl: { endsWith: `/files/${fileId}/view` } },
+        { bannerUrl: { endsWith: `/files/${fileId}/view` } }
+      ]
+    },
+    select: { userId: true }
+  }).catch(() => null);
+  if (buyerProfile) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'buyer') };
+  }
+
   // Check if file is referenced as organization logo
   const org = await db.organization.findFirst({
     where: { organizationLogoFileId: fileId },
@@ -4417,10 +4437,12 @@ router.post('/catalogue/upload', authenticate, authorize('seller'), upload.singl
 // General file upload endpoint (all authenticated users)
 router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   if (!req.file) throw new ApiError(400, 'File is required', 'FILE_REQUIRED');
+  const rawEntityType = req.body?.entityType;
+  const entityType = typeof rawEntityType === 'string' && rawEntityType.trim() ? rawEntityType.trim() : 'general';
   const context = {
     ownerId: userId(req),
     ownerRole: String(req.user?.role),
-    entityType: 'general',
+    entityType,
     ipAddress: req.ip,
     userAgent: req.headers['user-agent']
   };
