@@ -33,6 +33,9 @@ import {
   AlertCircle,
   AlertTriangle,
   ImageIcon,
+  Check,
+  KeyRound,
+  RefreshCw,
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
@@ -78,6 +81,23 @@ export default function BuyerProfile() {
   const [isSendingEmailOtp, setIsSendingEmailOtp] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Address edit state & snapshot
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const initialAddressRef = useRef<any>(null);
+
+  // Password change states
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState('');
+  const [passwordOtpSent, setPasswordOtpSent] = useState(false);
+  const [isSendingPasswordOtp, setIsSendingPasswordOtp] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordCountdown, setPasswordCountdown] = useState(0);
 
   // Showcase profile states
   const [showcaseTab, setShowcaseTab] = useState('details');
@@ -672,8 +692,7 @@ export default function BuyerProfile() {
           const data = await res.json();
           setProfile(data.profile);
           if (data.profile) {
-            setFormData(prev => ({
-              ...prev,
+            const addressSnapshot = {
               pincode: data.profile.pincode || '',
               state: data.profile.state || '',
               district: data.profile.district || '',
@@ -682,6 +701,11 @@ export default function BuyerProfile() {
               officeContact: data.profile.officeContact || data.profile.mobile || '',
               extensionNo: data.profile.extensionNo || '',
               websiteUrl: data.profile.website || '',
+            };
+            initialAddressRef.current = addressSnapshot;
+            setFormData(prev => ({
+              ...prev,
+              ...addressSnapshot,
               msmeType: data.profile.msmeType || '',
               organizationType: data.profile.organizationType || '',
               ministry: data.profile.ministry || '',
@@ -843,6 +867,160 @@ export default function BuyerProfile() {
       toast.error(err?.message || 'Failed to update email');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    let timer: any;
+    if (passwordCountdown > 0) {
+      timer = setInterval(() => {
+        setPasswordCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [passwordCountdown]);
+
+  const handleCancelAddressEdit = () => {
+    if (initialAddressRef.current) {
+      setFormData(prev => ({
+        ...prev,
+        pincode: initialAddressRef.current.pincode || '',
+        state: initialAddressRef.current.state || '',
+        district: initialAddressRef.current.district || '',
+        streetAddress: initialAddressRef.current.streetAddress || '',
+        stdCode: initialAddressRef.current.stdCode || '',
+        officeContact: initialAddressRef.current.officeContact || '',
+        extensionNo: initialAddressRef.current.extensionNo || '',
+        websiteUrl: initialAddressRef.current.websiteUrl || '',
+      }));
+    }
+    setFormErrors({});
+    setIsEditingAddress(false);
+  };
+
+  const passwordStrength = useMemo(() => {
+    const pwd = passwordForm.newPassword;
+    return {
+      minLength: pwd.length >= 8,
+      hasUpper: /[A-Z]/.test(pwd),
+      hasLower: /[a-z]/.test(pwd),
+      hasNumber: /\d/.test(pwd),
+      hasSpecial: /[^A-Za-z0-9]/.test(pwd),
+      match: pwd.length > 0 && pwd === passwordForm.confirmPassword,
+    };
+  }, [passwordForm.newPassword, passwordForm.confirmPassword]);
+
+  const isPasswordValid =
+    passwordStrength.minLength &&
+    passwordStrength.hasUpper &&
+    passwordStrength.hasLower &&
+    passwordStrength.hasNumber &&
+    passwordStrength.hasSpecial &&
+    passwordStrength.match;
+
+  const handleGetPasswordOtp = async () => {
+    if (!passwordForm.newPassword) {
+      toast.error('Please enter new password first');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!passwordStrength.minLength || !passwordStrength.hasUpper || !passwordStrength.hasLower || !passwordStrength.hasNumber || !passwordStrength.hasSpecial) {
+      toast.error('Password does not meet the security criteria');
+      return;
+    }
+
+    setIsSendingPasswordOtp(true);
+    try {
+      const res = await api.fetch('/api/buyer/settings/change-password/send-otp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        toast.success('Password verification code sent to registered email');
+        setPasswordOtpSent(true);
+        setPasswordCountdown(60);
+      } else {
+        // Fallback to seller settings endpoint if running across unified routes
+        const fallbackRes = await api.fetch('/api/seller/settings/change-password/send-otp', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        const fallbackBody = await fallbackRes.json().catch(() => null);
+        if (fallbackRes.ok) {
+          toast.success('Password verification code sent to registered email');
+          setPasswordOtpSent(true);
+          setPasswordCountdown(60);
+        } else {
+          toast.error(body?.message || fallbackBody?.message || 'Failed to send OTP');
+        }
+      }
+    } catch (err) {
+      toast.error('Network error sending OTP');
+    } finally {
+      setIsSendingPasswordOtp(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.newPassword) {
+      toast.error('Please enter new password');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!passwordOtp.trim()) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const payload = {
+        newPassword: passwordForm.newPassword,
+        otp: passwordOtp.trim()
+      };
+      let res = await api.fetch('/api/buyer/settings/change-password', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      let body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        // Fallback to seller settings endpoint
+        res = await api.fetch('/api/seller/settings/change-password', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        body = await res.json().catch(() => null);
+      }
+
+      if (res.ok) {
+        toast.success('Password updated successfully');
+        setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setPasswordOtp('');
+        setPasswordOtpSent(false);
+        setPasswordCountdown(0);
+      } else {
+        toast.error(body?.message || 'Failed to update password');
+      }
+    } catch (err) {
+      toast.error('Network error updating password');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -1015,7 +1193,26 @@ export default function BuyerProfile() {
       if (res.ok) {
         const body = await res.json().catch(() => null);
         setProfile(body?.data || body || profile);
-        toast.success(`${activeSection === 'bank' ? 'Bank details' : 'Profile'} updated successfully`);
+        toast.success(
+          activeSection === 'bank'
+            ? 'Bank details updated successfully'
+            : activeSection === 'address'
+            ? 'Address updated successfully'
+            : 'Profile updated successfully'
+        );
+        if (activeSection === 'address') {
+          setIsEditingAddress(false);
+          initialAddressRef.current = {
+            pincode: formData.pincode,
+            state: formData.state,
+            district: formData.district,
+            streetAddress: formData.streetAddress,
+            stdCode: formData.stdCode,
+            officeContact: formData.officeContact,
+            extensionNo: formData.extensionNo,
+            websiteUrl: formData.websiteUrl,
+          };
+        }
         if (activeSection === 'personal') {
           setPersonalOtp('');
           setPersonalOtpSent(false);
@@ -2021,10 +2218,24 @@ export default function BuyerProfile() {
             )}
 
             {activeSection === 'address' && (
-              <div className="space-y-2 animate-in fade-in duration-500">
-                <div className="flex items-center justify-between border-b border-slate-50 pb-0">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Update Address</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">PRIMARY OFFICE</Badge>
+              <div className="space-y-4 animate-in fade-in duration-500">
+                <div className="flex items-center justify-between border-b border-slate-50 pb-2">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Org Address</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Official organizational registered office and communication address</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!isEditingAddress ? (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Active on Record
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Editing Mode
+                      </Badge>
+                    )}
+                    <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-3 py-1 text-[9px] font-black uppercase">PRIMARY OFFICE</Badge>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
@@ -2035,7 +2246,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('pincode', e.target.value)}
                       placeholder="e.g. 411030"
                       error={formErrors.pincode}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       label="State *"
@@ -2043,7 +2255,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('state', e.target.value)}
                       placeholder="MAHARASHTRA"
                       error={formErrors.state}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       label="District *"
@@ -2051,7 +2264,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('district', e.target.value)}
                       placeholder="Pune"
                       error={formErrors.district}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                   </div>
 
@@ -2063,8 +2277,10 @@ export default function BuyerProfile() {
                         onChange={(e) => handleFieldChange('streetAddress', e.target.value)}
                         placeholder="Enter full street address"
                         rows={5}
+                        disabled={!isEditingAddress}
                         className={cn(
-                          "w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none",
+                          "w-full rounded-xl border p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none",
+                          !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200",
                           formErrors.streetAddress && "border-red-500 focus:ring-red-500 bg-red-50/30"
                         )}
                       />
@@ -2083,21 +2299,24 @@ export default function BuyerProfile() {
                       value={formData.stdCode}
                       onChange={(e) => handleFieldChange('stdCode', e.target.value)}
                       error={formErrors.stdCode}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       placeholder="Office Contact No."
                       value={formData.officeContact}
                       onChange={(e) => handleFieldChange('officeContact', e.target.value)}
                       error={formErrors.officeContact}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       placeholder="Extension No."
                       value={formData.extensionNo}
                       onChange={(e) => handleFieldChange('extensionNo', e.target.value)}
                       error={formErrors.extensionNo}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                   </div>
                 </div>
@@ -2109,18 +2328,41 @@ export default function BuyerProfile() {
                     onChange={(e) => handleFieldChange('websiteUrl', e.target.value)}
                     placeholder="WWW.GEMEXPERT.COM"
                     error={formErrors.websiteUrl}
-                    className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                    disabled={!isEditingAddress}
+                    className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                   />
                 </div>
 
-                <div className="pt-6 border-t border-slate-50 flex justify-end">
-                  <Button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]"
-                  >
-                    {isSaving ? 'Processing...' : 'Save Changes'}
-                  </Button>
+                <div className="pt-6 border-t border-slate-50 flex justify-end gap-3">
+                  {!isEditingAddress ? (
+                    <Button
+                      type="button"
+                      onClick={() => setIsEditingAddress(true)}
+                      className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center gap-2"
+                    >
+                      <Pencil className="h-4 w-4" /> Edit Address
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancelAddressEdit}
+                        disabled={isSaving}
+                        className="border border-slate-200 text-slate-600 hover:bg-slate-50 font-black uppercase text-xs tracking-wider h-14 px-8 rounded-2xl transition-all"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center gap-2"
+                      >
+                        <Save className="h-4 w-4" /> {isSaving ? 'Processing...' : 'Save Changes'}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -2748,16 +2990,171 @@ export default function BuyerProfile() {
             )}
 
             {activeSection === 'password' && (
-              <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
+              <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Change Password</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">SECURITY POLICIES</Badge>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Change Password</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Update account password via secure multi-factor authorization</p>
+                  </div>
+                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black uppercase">SECURITY POLICIES</Badge>
                 </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4 mt-4">
-                  <p className="text-sm font-semibold text-slate-600  max-w-xl">Please complete OTP verification, by clicking the below button to proceed with change of password.</p>
-                  <Button className="bg-[#12335f] hover:bg-slate-800 text-white rounded-xl px-8 h-12 font-black uppercase  text-xs tracking-widest whitespace-nowrap shadow-lg shadow-blue-100">
-                    Get OTP
+
+                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-[#12335f]">
+                    <KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <h4 className="text-xs font-black uppercase tracking-wide">Password Requirements &amp; Policy</h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-[11px] font-bold">
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.minLength ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.minLength ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>8+ Chars</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasUpper ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasUpper ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Uppercase</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasLower ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasLower ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Lowercase</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasNumber ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasNumber ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Number</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasSpecial ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasSpecial ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Special Char</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  <div className="space-y-1.5 relative">
+                    <Input
+                      label="New Password *"
+                      type={showNewPassword ? "text" : "password"}
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                      placeholder="Enter new strong password"
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-8 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      title={showNewPassword ? "Hide password" : "Show password"}
+                      aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 relative">
+                    <Input
+                      label="Confirm New Password *"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Confirm new password"
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-8 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
+                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordForm.confirmPassword && (
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    {passwordStrength.match ? (
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Passwords match
+                      </span>
+                    ) : (
+                      <span className="text-rose-600 flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> Passwords do not match
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-[#12335f]/5 border border-[#12335f]/10 p-5 rounded-2xl flex items-start gap-3.5 mt-4">
+                  <div className="h-9 w-9 bg-white rounded-xl flex items-center justify-center text-[#12335f] shadow-xs shrink-0 mt-0.5">
+                    <Shield className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-[#12335f] tracking-widest leading-none">Authorization Code Security</p>
+                    <p className="text-xs font-medium text-slate-600 leading-relaxed pt-0.5">
+                      To complete the password update, an authorization code will be sent to your registered login email: <strong className="text-slate-900">{user?.email}</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {passwordOtpSent && (
+                  <div className="max-w-md pt-2 space-y-2 animate-in fade-in duration-300">
+                    <Input
+                      label="Enter Authorization OTP *"
+                      placeholder="Enter 6-digit OTP from email"
+                      value={passwordOtp}
+                      onChange={(e) => setPasswordOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      maxLength={6}
+                      inputMode="numeric"
+                    />
+                    <p className="text-[11px] text-slate-400 font-medium ml-1">
+                      Enter the 6-digit OTP code sent to your registered email to authorize the password reset.
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-6 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3">
+                  <Button
+                    type="button"
+                    onClick={handleGetPasswordOtp}
+                    disabled={isSendingPasswordOtp || isChangingPassword || !isPasswordValid || passwordCountdown > 0}
+                    variant={passwordOtpSent ? "outline" : "primary"}
+                    className={cn(
+                      "font-black uppercase text-xs tracking-wider h-12 sm:h-14 px-8 rounded-2xl transition-all shadow-sm",
+                      passwordOtpSent
+                        ? "border-slate-200 text-[#12335f] hover:bg-slate-50"
+                        : "bg-[#12335f] hover:bg-slate-800 text-white shadow-xl shadow-blue-200"
+                    )}
+                  >
+                    {isSendingPasswordOtp ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Sending...
+                      </>
+                    ) : passwordCountdown > 0 ? (
+                      `Resend in ${passwordCountdown}s`
+                    ) : passwordOtpSent ? (
+                      'Resend OTP'
+                    ) : (
+                      'Get OTP'
+                    )}
                   </Button>
+
+                  {passwordOtpSent && (
+                    <Button
+                      type="button"
+                      onClick={handleChangePassword}
+                      disabled={isChangingPassword || isSendingPasswordOtp || passwordOtp.length < 6 || !isPasswordValid}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-xs tracking-[0.2em] h-12 sm:h-14 px-10 rounded-2xl shadow-xl shadow-emerald-200 transition-all active:scale-[0.98]"
+                    >
+                      {isChangingPassword ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Updating...
+                        </>
+                      ) : (
+                        'Verify & Change Password'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}

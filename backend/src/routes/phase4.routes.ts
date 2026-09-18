@@ -2323,6 +2323,63 @@ router.post('/buyer/settings/change-email', authenticate, authorize('buyer'), as
   ok(res, { success: true, message: 'Email updated successfully' });
 }));
 
+router.post('/buyer/settings/change-password/send-otp', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+  const { sendOtpEmail } = await import('../services/mail.service.js');
+
+  const user = await db.user.findUnique({ where: { id: userId(req) }, select: { id: true, email: true } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'User email not registered');
+
+  const otp = generateOtp();
+  await storeOtp('forgot_password', user.email, otp, { userId: user.id, channel: 'email' }, 'email');
+  const deliveryConfigured = await sendOtpEmail(user.email, otp, '[SECURE AUTH] Buyer password change authorization code');
+
+  await auditWrite(req, 'buyer.change_password_otp.sent', 'user', user.id, {
+    channel: 'email',
+    deliveryConfigured
+  });
+
+  ok(res, { success: true, channel: 'email', deliveryConfigured });
+}));
+
+router.post('/buyer/settings/change-password', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+  const { hashPassword, validatePasswordStrength } = await import('../services/password.service.js');
+
+  const { newPassword, otp } = req.body || {};
+  if (!newPassword || !otp) throw new ApiError(400, 'New password and OTP are required');
+
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'User email not found');
+
+  const cleanOtp = String(otp).trim();
+  const result = await verifyOtp('forgot_password', user.email, cleanOtp);
+  if (!result.ok) throw new ApiError(400, 'Invalid or expired OTP');
+
+  const passwordValidation = validatePasswordStrength(newPassword);
+  if (!passwordValidation.ok) {
+    throw new ApiError(400, 'Password does not meet security requirements: ' + passwordValidation.errors.join(', '));
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      passwordResetVersion: { increment: 1 },
+      sessionVersion: { increment: 1 },
+      lastPasswordChangeAt: new Date()
+    }
+  });
+
+  await consumeOtp('forgot_password', user.email);
+  await auditWrite(req, 'buyer.password_changed', 'user', user.id, {});
+
+  ok(res, { success: true, message: 'Password updated successfully' });
+}));
+
 router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const data = req.body || {};
 

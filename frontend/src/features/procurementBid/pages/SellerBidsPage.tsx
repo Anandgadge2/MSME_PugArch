@@ -997,14 +997,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                 >
                   View Quote
                 </Button>
-                <Button 
-                  onClick={(e) => handleViewDetails(e, item)} 
-                  variant="outline"
-                  className="h-8 border-slate-200 text-slate-700 hover:bg-slate-100 text-[10px] font-black uppercase rounded-lg px-2"
-                  title="View Procurement Notice"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                </Button>
+               
               </div>
             )}
           </div>
