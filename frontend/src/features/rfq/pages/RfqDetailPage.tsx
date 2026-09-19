@@ -1277,7 +1277,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       emdAmount={emdRes?.emdAmount}
       isEmdRequired={emdRes?.isEmdRequired}
       backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
-      submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
+      submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results & Ranking' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onViewQuotationClick={submitted ? handleSubmitQuotation : undefined}
       onDownloadClick={handleDownloadPdf}
