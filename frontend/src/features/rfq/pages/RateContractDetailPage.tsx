@@ -710,8 +710,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const allTimelineEvents = [
     { label: 'PUBLISHING DATE', value: formatDateString(authenticPublishDate) },
     { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || rcData.startDate) },
-    { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? authenticPublishDate : null) },
-    { label: 'CLARIFICATION END', value: formatDateString(schedule.clarificationDeadline) },
+    { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? (schedule.submissionStartDate || rcData.startDate || authenticPublishDate) : null) },
+    { label: 'CLARIFICATION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true) },
     { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true), red: true },
     { label: 'TECHNICAL OPENING', value: formatDateString(schedule.technicalOpeningDate || rcData.technicalOpeningDate) },
     { label: 'FINANCIAL OPENING', value: formatDateString(schedule.financialOpeningDate || rcData.financialOpeningDate) },
@@ -725,7 +725,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   const timelineSteps = [
     { label: 'Rate Contract Published', date: publishedDate, active: true },
-    { label: 'Clarification Window', date: schedule.clarificationDeadline ? `Up to ${formatDateString(schedule.clarificationDeadline)}` : 'Active', active: false },
+    { label: 'Clarification Window', date: `Up to ${closesAt}`, active: false },
     { label: 'Rate Quote Submission', date: `Up to ${closesAt}`, active: false },
     { label: 'Evaluation & Empanelment', date: 'Pending', active: false },
     { label: 'Contract Awarded', date: 'Pending', active: false },
@@ -822,7 +822,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
         submissionStartDate={schedule.submissionStartDate || rcData.startDate ? (formatDateString(schedule.submissionStartDate || rcData.startDate, true) || undefined) : undefined}
         closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
-        clarificationDate={schedule.clarificationDeadline ? (formatDateString(schedule.clarificationDeadline, true) || undefined) : undefined}
+        clarificationDate={(schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd) ? (formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd, true) || undefined) : undefined}
         technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}
         category={rcData.categoryName}
         procurementMethod="Rate Contract"

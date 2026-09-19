@@ -318,7 +318,6 @@ type Draft = {
     validityDays: number | string;
     submissionStartDate: string;
     clarificationAllowed: boolean;
-    clarificationDeadline: string;
     preBidMeeting: boolean;
     preBidDate: string;
     technicalOpeningDate: string;
@@ -1037,7 +1036,6 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     validityDays: 90,
     submissionStartDate: todayDateTime,
     clarificationAllowed: true,
-    clarificationDeadline: nextWeekDateTime,
     preBidMeeting: false,
     preBidDate: '',
     technicalOpeningDate: '',
@@ -1151,7 +1149,6 @@ export default function CreateProcurementPage() {
                 submissionDate: saved.schedule.submissionDate || '',
                 technicalOpeningDate: saved.schedule.technicalOpeningDate || '',
                 financialOpeningDate: saved.schedule.financialOpeningDate || '',
-                clarificationDeadline: saved.schedule.clarificationDeadline || '',
                 preBidDate: saved.schedule.preBidDate || '',
               };
             }
@@ -1434,7 +1431,6 @@ export default function CreateProcurementPage() {
             submissionDate: payload.schedule?.submissionDate || base.schedule.submissionDate || '',
             technicalOpeningDate: payload.schedule?.technicalOpeningDate || '',
             financialOpeningDate: payload.schedule?.financialOpeningDate || '',
-            clarificationDeadline: payload.schedule?.clarificationDeadline || '',
             preBidDate: payload.schedule?.preBidDate || '',
           },
           terms: { ...base.terms, ...(payload.terms || {}) },
@@ -5937,9 +5933,6 @@ function ScheduleStepForm({
   const updateSchedule = (key: keyof Draft['schedule'], val: any) => {
     updateDraft(c => {
       const nextSchedule = { ...c.schedule, [key]: val };
-      if (key === 'clarificationAllowed' && !val) {
-        nextSchedule.clarificationDeadline = '';
-      }
       let nextApproval = c.approval;
       if (key === 'packetType') {
         if (val === 'Single') {
@@ -7319,26 +7312,22 @@ function ScheduleStepForm({
       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
         <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Clarification & Visibility Rules</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={draft.schedule.clarificationAllowed}
-              onChange={e => updateSchedule('clarificationAllowed', e.target.checked)}
-              className="h-4 w-4 rounded accent-[#12335f]"
-            />
-            <span>Allow bidder clarifications?</span>
-          </label>
-
-          {draft.schedule.clarificationAllowed && (
-            <Field label="Clarification Deadline Date">
-              <DateTimePicker
-                id="clarification-deadline-datetime"
-                value={draft.schedule.clarificationDeadline || ''}
-                onChange={val => updateSchedule('clarificationDeadline', val)}
-                placeholder="Select clarification deadline date & time"
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={draft.schedule.clarificationAllowed}
+                onChange={e => updateSchedule('clarificationAllowed', e.target.checked)}
+                className="h-4 w-4 rounded accent-[#12335f]"
               />
-            </Field>
-          )}
+              <span>Allow bidder clarifications?</span>
+            </label>
+            {draft.schedule.clarificationAllowed && (
+              <p className="text-[11px] text-slate-500 font-medium pl-6">
+                Clarifications window opens at quotation submission start date/time and remains open until submission deadline.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -8128,7 +8117,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     validityDays: Number(draft.schedule.validityDays) || 90,
     minimumBidders: Number(draft.schedule.minimumBidders) || 3,
     clarificationAllowed: isClarificationAllowed,
-    clarificationDeadline: isClarificationAllowed ? (draft.schedule.clarificationDeadline || null) : null,
     technicalOpeningDate: isTechnicalNeeded ? (draft.schedule.technicalOpeningDate || null) : null,
     financialOpeningDate: isTwoPacket ? (draft.schedule.financialOpeningDate || null) : null,
     bidValidityDate: cleanBidValidityDate,

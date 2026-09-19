@@ -27,7 +27,7 @@ import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
 import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
-import { Stamp, Printer, Download, ChevronDown } from 'lucide-react';
+import { Stamp, Printer, Download, ChevronDown, Truck } from 'lucide-react';
 
 type InvoiceRow = {
   id: number;
@@ -1768,6 +1768,106 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                 {invoiceModalMode === 'view' && (
                   <div className="space-y-4">
+                    {/* Unified Connected Cross-Document Lifecycle Bar */}
+                    {selectedInvoice && (
+                      <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gradient-to-r from-slate-100 via-indigo-50/50 to-slate-100 rounded-2xl border border-slate-200/90 no-print">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-2 py-0.5">
+                          Connected Lifecycle:
+                        </span>
+
+                        {((selectedInvoice as any).bidId || (selectedInvoice as any).purchaseOrder?.bidId) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const bId = (selectedInvoice as any).bidId || (selectedInvoice as any).purchaseOrder?.bidId;
+                              router.push(`/bids/${bId}`);
+                            }}
+                            className="h-7 border-slate-250 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3 text-slate-500" />
+                            <span>View Quotation</span>
+                          </Button>
+                        )}
+
+                        {((selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const poSearch = (selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId || '';
+                              const poRoute = role === 'buyer' ? '/buyer/orders' : '/seller/orders';
+                              router.push(`${poRoute}?search=${encodeURIComponent(poSearch)}`);
+                            }}
+                            className="h-7 border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3 text-indigo-600" />
+                            <span>View PO</span>
+                          </Button>
+                        )}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const delSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
+                            const delRoute = role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
+                            router.push(`${delRoute}?search=${encodeURIComponent(delSearch)}`);
+                          }}
+                          className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        >
+                          <Truck className="h-3 w-3 text-blue-600" />
+                          <span>View Delivery</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const grnSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
+                            router.push(`/grn?search=${encodeURIComponent(grnSearch)}`);
+                          }}
+                          className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          <span>View GRN</span>
+                        </Button>
+
+                        {(() => {
+                          const isPaid = statusOf(selectedInvoice) === 'paid';
+                          const payRoute = role === 'buyer' ? '/buyer/payments' : '/payments';
+                          if (isPaid) {
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setViewProofInvoiceId(selectedInvoice.id)}
+                                className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                <span>View Payment Proof (Paid)</span>
+                              </Button>
+                            );
+                          }
+                          return (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => router.push(`${payRoute}?search=${encodeURIComponent(selectedInvoice.invoiceNumber || '')}`)}
+                              className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              <span>Pay Now / Upload Payment Proof</span>
+                            </Button>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Invoice Action Bar / Toolbar */}
                     <div className="flex items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-2xl no-print flex-nowrap overflow-x-auto scrollbar-none">
                       {/* Left: Copy Type Dropdown */}

@@ -786,7 +786,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const evalMethod = specificEvalMethod || evalCandidates.find(
     c => typeof c === 'string' && c.trim().length > 0 && c.trim() !== 'null' && c.trim() !== 'undefined'
   ) || 'L1 Basis';
-  const clarDeadline = preferReq ? (reqObj?.payload?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationDeadline) : (rawBid?.technicalPacket?.schedule?.clarificationDeadline || rawBid?.technicalPacket?.schedule?.clarificationEndDate || reqObj?.payload?.schedule?.clarificationDeadline || reqObj?.payload?.schedule?.clarificationEndDate);
+  const clarDeadline = deadline;
   const techOpen   = preferReq
     ? (reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate || rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate)
     : (rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate);

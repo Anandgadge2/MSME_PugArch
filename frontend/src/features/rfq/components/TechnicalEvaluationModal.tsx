@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, CheckCircle2, XCircle, FileText, AlertTriangle, 
-  ExternalLink, Download, ShieldCheck, Award, HelpCircle, Loader2, Eye, Package
+  ExternalLink, Download, ShieldCheck, Award, HelpCircle, Loader2, Eye, Package,
+  Lock, Building2, Calendar, UserCheck, Check
 } from 'lucide-react';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { Button } from '../../../components/ui/button';
@@ -70,90 +71,248 @@ export function TechnicalEvaluationModal({
 
   if (!isOpen || !participation) return null;
 
-  const sellerOrg =
-    participation.sellerOrgName ||
-    participation.sellerOrganization?.organizationName ||
-    participation.seller?.sellerProfile?.organizationName ||
-    participation.seller?.organization?.organizationName ||
-    participation.companyName ||
-    participation.sellerName ||
-    `Supplier #${participation.sellerId || participation.sellerUserId || participation.id || ''}`;
+  const parseJsonSafe = (val: any): Record<string, any> => {
+    if (!val) return {};
+    if (typeof val === 'object' && !Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const p = JSON.parse(val);
+        return p && typeof p === 'object' && !Array.isArray(p) ? p : {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  };
 
-  const contactPerson =
-    participation.contactPerson ||
-    participation.sellerName ||
-    participation.sellerUser?.name ||
-    participation.seller?.name ||
-    'Authorized Representative';
+  const ackData = parseJsonSafe(participation.acknowledgement || participation.rawParticipation?.acknowledgement);
+  const respData = parseJsonSafe(participation.responseData || participation.rawParticipation?.responseData);
+  const descData = parseJsonSafe(participation.offeredItemDescription || participation.details?.offeredItemDescription || participation.rawParticipation?.offeredItemDescription);
+  const detailsData = parseJsonSafe(participation.details || participation.rawParticipation?.details);
+  const rawPart = participation.rawParticipation || {};
 
-  const makeBrand =
-    participation.makeBrand ||
-    participation.responseData?.makeBrand ||
-    participation.acknowledgement?.makeBrand ||
-    participation.brand ||
-    '—';
+  const firstValid = (...vals: any[]) => {
+    for (const v of vals) {
+      if (
+        v !== undefined &&
+        v !== null &&
+        typeof v === 'string' &&
+        v.trim() !== '' &&
+        v.trim() !== '—' &&
+        v.trim() !== '-' &&
+        v.trim().toLowerCase() !== 'null' &&
+        v.trim().toLowerCase() !== 'undefined'
+      ) {
+        return v.trim();
+      }
+      if (typeof v === 'number' && !isNaN(v)) {
+        return String(v);
+      }
+    }
+    return '';
+  };
 
-  const model =
-    participation.model ||
-    participation.responseData?.model ||
-    participation.acknowledgement?.model ||
-    '—';
+  // Extract all candidate line items
+  const candidateItemArrays = [
+    participation.lineItems,
+    detailsData.lineItems,
+    respData.lineItems,
+    respData.lineQuotes,
+    respData.items,
+    ackData.lineItems,
+    ackData.lineQuotes,
+    ackData.items,
+    descData.lineItems,
+    rawPart.lineItems,
+  ];
 
-  const techSpecs =
-    participation.technicalSpecifications ||
-    participation.specifications ||
-    participation.responseData?.technicalSpecifications ||
-    participation.responseData?.specifications ||
-    participation.acknowledgement?.technicalSpecifications ||
-    participation.acknowledgement?.specifications ||
-    (participation.offeredItemDescription && participation.offeredItemDescription !== participation.message ? participation.offeredItemDescription : '') ||
-    (participation.responseData?.offeredItemDescription && participation.responseData?.offeredItemDescription !== participation.responseData?.message ? participation.responseData?.offeredItemDescription : '') ||
-    '';
+  let lineItems: any[] = [];
+  for (const arr of candidateItemArrays) {
+    if (Array.isArray(arr) && arr.length > lineItems.length) {
+      lineItems = arr;
+    }
+  }
 
-  const complianceStatement =
-    participation.complianceStatement ||
-    participation.responseData?.complianceStatement ||
-    participation.acknowledgement?.complianceStatement ||
-    '';
+  const firstLine = lineItems.length > 0 ? lineItems[0] : {};
 
-  const lineItems: any[] =
-    Array.isArray(participation.lineItems) && participation.lineItems.length
-      ? participation.lineItems
-      : Array.isArray(participation.responseData?.lineItems) && participation.responseData.lineItems.length
-        ? participation.responseData.lineItems
-        : Array.isArray(participation.acknowledgement?.lineItems) && participation.acknowledgement.lineItems.length
-          ? participation.acknowledgement.lineItems
-          : Array.isArray(participation.acknowledgement?.responseData?.lineItems) && participation.acknowledgement.responseData.lineItems.length
-            ? participation.acknowledgement.responseData.lineItems
-            : [];
+  const sellerOrg = firstValid(
+    participation.sellerOrgName,
+    participation.sellerOrganization?.organizationName,
+    participation.seller?.sellerProfile?.organizationName,
+    participation.seller?.organization?.organizationName,
+    detailsData.organizationName,
+    participation.companyName,
+    participation.sellerName,
+    participation.seller?.name,
+    rawPart.sellerOrgName,
+    `Supplier #${participation.sellerId || participation.sellerUserId || participation.id || ''}`
+  );
 
-  const deliveryTimeline =
-    participation.deliveryTimeline ||
-    participation.responseData?.deliveryTimeline ||
-    participation.acknowledgement?.deliveryTimeline ||
-    'As per RFQ schedule';
+  const contactPerson = firstValid(
+    participation.contactPerson,
+    detailsData.contactPerson,
+    participation.sellerName,
+    participation.sellerUser?.name,
+    participation.seller?.name,
+    'Authorized Representative'
+  );
 
-  const offeredQty =
-    participation.offeredQuantity ||
-    participation.quantity ||
-    participation.responseData?.offeredQuantity ||
-    participation.acknowledgement?.offeredQuantity ||
-    'As Specified';
+  const sellerEmail = firstValid(
+    participation.sellerEmail,
+    detailsData.email,
+    detailsData.sellerEmail,
+    participation.sellerUser?.email,
+    participation.seller?.email,
+    respData.sellerEmail,
+    ackData.sellerEmail
+  );
 
-  const message =
-    participation.offeredItemDescription ||
-    participation.message ||
-    participation.responseData?.message ||
-    participation.acknowledgement?.offeredItemDescription ||
-    '';
+  const sellerMobile = firstValid(
+    participation.sellerMobile,
+    detailsData.mobile,
+    detailsData.sellerMobile,
+    participation.sellerUser?.mobile,
+    participation.seller?.mobile,
+    respData.sellerMobile,
+    ackData.sellerMobile
+  );
 
-  const docs: any[] = Array.isArray(participation.documents) && participation.documents.length
-    ? participation.documents
-    : Array.isArray(participation.responseData?.documents) && participation.responseData.documents.length
-      ? participation.responseData.documents
-      : Array.isArray(participation.acknowledgement?.documents) && participation.acknowledgement.documents.length
-        ? participation.acknowledgement.documents
-        : [];
+  const model = firstValid(
+    participation.model,
+    participation.offeredModel,
+    participation.modelNumber,
+    participation.modelRef,
+    participation.partNumber,
+    participation.catalogNumber,
+    participation.itemModel,
+    detailsData.model,
+    detailsData.offeredModel,
+    detailsData.modelNumber,
+    respData.model,
+    respData.offeredModel,
+    respData.modelNumber,
+    respData.modelRef,
+    respData.partNumber,
+    respData.technicalOffer?.model,
+    respData.technicalOffer?.modelNumber,
+    ackData.model,
+    ackData.offeredModel,
+    ackData.modelNumber,
+    ackData.modelRef,
+    ackData.partNumber,
+    ackData.technicalOffer?.model,
+    ackData.technicalOffer?.modelNumber,
+    descData.model,
+    descData.offeredModel,
+    descData.modelNumber,
+    rawPart.model,
+    rawPart.offeredModel,
+    rawPart.modelNumber,
+    firstLine.model,
+    firstLine.modelNumber,
+    firstLine.partNumber,
+    firstLine.catalogNumber,
+    firstLine.ref,
+    // Regex extract if Model: is in text description
+    typeof participation.offeredItemDescription === 'string'
+      ? participation.offeredItemDescription.match(/Model[:\s]+([^\n,;]+)/i)?.[1]
+      : null,
+    'Standard'
+  );
+
+  const makeBrand = firstValid(
+    participation.makeBrand,
+    participation.brand,
+    participation.brandName,
+    detailsData.makeBrand,
+    detailsData.brand,
+    respData.makeBrand,
+    respData.brand,
+    respData.technicalOffer?.makeBrand,
+    ackData.makeBrand,
+    ackData.brand,
+    ackData.technicalOffer?.makeBrand,
+    descData.makeBrand,
+    descData.brand,
+    rawPart.makeBrand,
+    rawPart.brand,
+    firstLine.makeBrand,
+    firstLine.brand,
+    'Standard / As Quoted'
+  );
+
+  const techSpecs = firstValid(
+    participation.technicalSpecifications,
+    participation.specifications,
+    detailsData.technicalSpecifications,
+    detailsData.specifications,
+    respData.technicalSpecifications,
+    respData.specifications,
+    ackData.technicalSpecifications,
+    ackData.specifications,
+    firstLine.technicalSpecs,
+    firstLine.specifications,
+    firstLine.technicalSpecification,
+    (typeof participation.offeredItemDescription === 'string' && participation.offeredItemDescription !== participation.message ? participation.offeredItemDescription : ''),
+    (typeof respData.offeredItemDescription === 'string' && respData.offeredItemDescription !== respData.message ? respData.offeredItemDescription : '')
+  );
+
+  const complianceStatement = firstValid(
+    participation.complianceStatement,
+    detailsData.complianceStatement,
+    respData.complianceStatement,
+    ackData.complianceStatement,
+    firstLine.complianceStatus
+  );
+
+  const deliveryTimeline = firstValid(
+    participation.deliveryTimeline,
+    detailsData.deliveryTimeline,
+    respData.deliveryTimeline,
+    ackData.deliveryTimeline,
+    rawPart.deliveryTimeline,
+    firstLine.deliveryTimeline,
+    'As per RFQ schedule'
+  );
+
+  const offeredQty = firstValid(
+    participation.offeredQuantity,
+    participation.quantity,
+    detailsData.offeredQuantity,
+    respData.offeredQuantity,
+    ackData.offeredQuantity,
+    rawPart.offeredQuantity,
+    lineItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 0), 0) || null,
+    'As Specified'
+  );
+
+  const message = firstValid(
+    participation.message,
+    detailsData.message,
+    detailsData.rfqNotes,
+    respData.message,
+    respData.coverNote,
+    ackData.message,
+    typeof participation.offeredItemDescription === 'string' ? participation.offeredItemDescription : ''
+  );
+
+  // Extract documents from all authentic sources
+  const docCandidates = [
+    participation.documents,
+    detailsData.documents,
+    respData.documents,
+    ackData.documents,
+    rawPart.documents,
+  ];
+
+  let rawDocs: any[] = [];
+  for (const cand of docCandidates) {
+    if (Array.isArray(cand) && cand.length > rawDocs.length) {
+      rawDocs = cand;
+    }
+  }
+
+  const docs: any[] = rawDocs.filter((d: any) => Boolean(d));
 
   const handleViewAttachment = async (doc: any, docName: string) => {
     const rawUrl =
@@ -311,143 +470,265 @@ export function TechnicalEvaluationModal({
       aria-modal="true"
       aria-labelledby="technical-eval-modal-title"
     >
-      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-2xl my-8">
+      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-3xl my-6">
         <div className="relative w-full rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
           
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-900 to-slate-800 px-6 py-4 text-white">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-emerald-400">
-                <ShieldCheck className="h-5 w-5" />
+          {/* Header Section: Official MSME Government Enterprise Navy Gradient */}
+          <div className="relative overflow-hidden border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
+            <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none opacity-50" />
+            <div className="relative z-10 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-emerald-300 border border-white/20 shadow-inner">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    
+                    {readOnly ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 text-amber-200 border border-amber-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <Lock className="h-2.5 w-2.5" /> Sealed Audit Record
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Stage 1 Scrutiny
+                      </span>
+                    )}
+                  </div>
+                  <h3 id="technical-eval-modal-title" className="text-base sm:text-lg font-black text-white tracking-tight mt-0.5 truncate">
+                    {readOnly ? 'Technical Evaluation Record (Read-Only Audit Trail)' : 'Technical Packet Evaluation & Compliance Record'}
+                  </h3>
+                 
+                </div>
               </div>
-              <div>
-                <h3 id="technical-eval-modal-title" className="text-sm sm:text-base font-bold text-white tracking-tight">
-                  {readOnly ? 'Technical Evaluation Record (Read-Only)' : 'Technical Packet Evaluation (Stage 1)'}
-                </h3>
-                <p className="text-[11px] text-slate-300">
-                  {readOnly
-                    ? 'Final recorded technical evaluation decision and evaluation remarks'
-                    : 'Evaluate technical proposal and eligibility for Stage 2 advancement'}
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-200 hover:bg-white/15 hover:text-white transition-all cursor-pointer border border-transparent hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                aria-label="Close technical evaluation modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              aria-label="Close technical evaluation modal"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
 
           {/* Form Content */}
-          <form onSubmit={readOnly ? (e) => { e.preventDefault(); onClose(); } : handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-5">
-            {readOnly && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 font-medium flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0" />
+          <form onSubmit={readOnly ? (e) => { e.preventDefault(); onClose(); } : handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5">
+            {readOnly ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 font-medium flex items-center gap-2.5 shadow-2xs">
+                <Lock className="h-4 w-4 text-amber-700 shrink-0" />
                 <span>
-                  <strong>Audit Record Sealed:</strong> This procurement is awarded. Technical evaluation decisions and committee notes are permanently preserved and cannot be altered.
+                  <strong>Audit Record Sealed:</strong> This procurement has been awarded or finalized. Technical evaluation decisions, scoring, and committee notes are permanently preserved and cannot be altered.
+                </span>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-900 font-medium flex items-center gap-2.5 shadow-2xs">
+                <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0" />
+                <span>
+                  <strong>Stage 1 Technical Scrutiny:</strong> Verify offered model conformity, technical parameters, and statutory eligibility. Bidders marked as Qualified will proceed to Stage 2 Commercial Opening / Reverse Auction.
                 </span>
               </div>
             )}
             
-            {/* Vendor Overview Box */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-slate-200/80 pb-2">
+            {/* Vendor & Quoted Parameters Box */}
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-3 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
                 <div>
-                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    Supplier Organization
-                  </span>
-                  <h4 className="text-sm font-bold text-slate-900">{sellerOrg}</h4>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                      Supplier Organization
+                    </span>
+                    <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.2 text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      Verified Bidder
+                    </span>
+                  </div>
+                  <h4 className="text-sm sm:text-base font-black text-slate-900 mt-0.5">{sellerOrg}</h4>
                 </div>
                 <div className="text-left sm:text-right">
-                  <span className="text-[10px] font-bold text-slate-400 block">Contact Person</span>
-                  <span className="text-xs font-semibold text-slate-700">{contactPerson}</span>
+                  <span className="text-[10px] font-bold text-slate-400 block">Contact & Representative</span>
+                  <span className="text-xs font-bold text-slate-800">{contactPerson}</span>
+                  {(sellerEmail || sellerMobile) && (
+                    <span className="text-[10px] text-slate-500 block">
+                      {[sellerEmail, sellerMobile].filter(Boolean).join(' • ')}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1 text-xs">
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Make / Brand:</span>
-                  <span className="font-semibold text-slate-800">{makeBrand}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Model / Ref:</span>
-                  <span className="font-semibold text-slate-800">{model}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Compliance:</span>
-                  <span className="font-bold text-emerald-800">
-                    {complianceStatement === 'DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative' : '✓ Fully Compliant'}
+              {/* 5 Distinct Technical Parameter Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-0.5 text-xs">
+                <div className="rounded-lg bg-white p-2 border border-slate-200/90 shadow-2xs">
+                  <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">Make / Brand</span>
+                  <span className="font-extrabold text-slate-900 truncate block mt-0.5 text-xs" title={makeBrand}>
+                    {makeBrand}
                   </span>
                 </div>
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Offered Qty:</span>
-                  <span className="font-semibold text-slate-800">{offeredQty}</span>
+                <div className="rounded-lg bg-blue-50/70 p-2 border border-blue-200/90 shadow-2xs">
+                  <span className="text-blue-700 font-bold block text-[9.5px] uppercase tracking-wider">Model / Ref:</span>
+                  <span className="font-black text-blue-950 truncate block mt-0.5 text-xs" title={model}>
+                    {model}
+                  </span>
                 </div>
-                <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Delivery SLA:</span>
-                  <span className="font-semibold text-slate-800">{deliveryTimeline}</span>
+                <div className="rounded-lg bg-emerald-50/70 p-2 border border-emerald-200/90 shadow-2xs">
+                  <span className="text-emerald-700 font-bold block text-[9.5px] uppercase tracking-wider">Compliance</span>
+                  <span className="font-extrabold text-emerald-900 truncate block mt-0.5 text-xs">
+                    {complianceStatement === 'DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative' : '✓ Compliant'}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-white p-2 border border-slate-200/90 shadow-2xs">
+                  <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">Offered Qty</span>
+                  <span className="font-extrabold text-slate-900 truncate block mt-0.5 text-xs">
+                    {offeredQty}
+                  </span>
+                </div>
+                <div className="rounded-lg bg-white p-2 border border-slate-200/90 shadow-2xs">
+                  <span className="text-slate-400 font-bold block text-[9.5px] uppercase tracking-wider">Delivery SLA</span>
+                  <span className="font-extrabold text-slate-900 truncate block mt-0.5 text-xs" title={deliveryTimeline}>
+                    {deliveryTimeline}
+                  </span>
                 </div>
               </div>
 
               {techSpecs && (
-                <div className="mt-2.5 rounded-lg bg-white/90 border border-slate-200 p-2.5 text-xs text-slate-800">
-                  <span className="font-bold text-slate-500 block text-[10px] uppercase mb-0.5">
+                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800 shadow-2xs">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider mb-1">
                     Offered Technical Specifications / Parameters:
                   </span>
-                  <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">{techSpecs}</p>
+                  <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed text-xs">{techSpecs}</p>
                 </div>
               )}
 
               {lineItems.length > 0 && (
-                <div className="mt-2.5 space-y-1.5">
-                  <span className="font-bold text-slate-500 block text-[10px] uppercase">
-                    Quoted Line Items Technical Specifications ({lineItems.length}):
-                  </span>
-                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
-                    {lineItems.map((item: any, i: number) => (
-                      <div key={i} className="p-2 text-xs space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-slate-900">
-                            {item.itemName || item.name || `Item #${i + 1}`}
-                          </span>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {(item.makeBrand || item.brand) && (
-                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 border border-slate-200">
-                                {item.makeBrand || item.brand}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-600 block text-[10px] uppercase tracking-wider">
+                      Quoted Item Technical Breakdown ({lineItems.length}):
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-semibold">
+                      Individual item models & parameters
+                    </span>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 shadow-2xs">
+                    {lineItems.map((item: any, i: number) => {
+                      const itemModel = item.model || item.modelNumber || item.partNumber || model;
+                      const itemMake = item.makeBrand || item.brand || makeBrand;
+                      const itemHsn = item.hsnCode || item.hsn_sac_code;
+                      const itemBrandPolicy = item.brandPolicy;
+                      const itemAttachments: any[] = Array.isArray(item.attachments) ? item.attachments : [];
+                      return (
+                        <div key={i} className="p-3 text-xs space-y-2 hover:bg-slate-50/50 transition-colors">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="h-5 w-5 rounded-md bg-slate-100 text-slate-700 font-mono text-[10px] font-black flex items-center justify-center shrink-0">
+                                {i + 1}
                               </span>
-                            )}
-                            {item.model && (
-                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 border border-slate-200">
-                                Model: {item.model}
+                              <span className="font-extrabold text-slate-900">
+                                {item.itemName || item.name || `Item #${i + 1}`}
                               </span>
-                            )}
-                            {item.complianceStatus && (
-                              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                                {item.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : item.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
-                              </span>
-                            )}
+                              {item.quantity && (
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  ({item.quantity} {item.unitOfMeasure || item.uom || 'units'})
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                              {itemHsn && (
+                                <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-[10px] font-mono font-bold text-indigo-800 border border-indigo-200">
+                                  HSN: {itemHsn}
+                                </span>
+                              )}
+                              {itemMake && (
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 text-[10px] font-bold text-slate-700 border border-slate-200">
+                                  Make: {itemMake}
+                                </span>
+                              )}
+                              {itemBrandPolicy && (
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                                  itemBrandPolicy === 'EQUIVALENT_ACCEPTED'
+                                    ? 'bg-purple-50 text-purple-800 border-purple-200'
+                                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                                }`}>
+                                  {itemBrandPolicy === 'EQUIVALENT_ACCEPTED' ? 'Equivalent OK' : 'Strict Lock'}
+                                </span>
+                              )}
+                              {itemModel && (
+                                <span className="px-2 py-0.5 rounded-md bg-blue-50 text-[10px] font-bold text-blue-900 border border-blue-200">
+                                  Model: {itemModel}
+                                </span>
+                              )}
+                              {item.complianceStatus && (
+                                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                  {item.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : item.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          {(item.technicalSpecs || item.specifications || item.technicalSpecification) && (
+                            <div className="bg-slate-50/80 border border-slate-200/80 rounded-lg p-2 text-[11px] text-slate-600 leading-relaxed">
+                              <span className="font-bold text-slate-500 block text-[9.5px] uppercase tracking-wider mb-0.5">
+                                Offered Specifications:
+                              </span>
+                              <p className="whitespace-pre-wrap font-normal">
+                                {item.technicalSpecs || item.specifications || item.technicalSpecification}
+                              </p>
+                            </div>
+                          )}
+
+                          {itemAttachments.length > 0 && (
+                            <div className="pt-1">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1 mb-1.5">
+                                <FileText className="h-3 w-3 text-blue-600" />
+                                Item Technical Documents ({itemAttachments.length}):
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                {itemAttachments.map((att: any, attIdx: number) => {
+                                  const attName = att.fileName || att.name || att.documentName || `Document #${attIdx + 1}`;
+                                  const isAttLoading = previewLoadingId === (att.id || attName);
+                                  return (
+                                    <div
+                                      key={attIdx}
+                                      className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-2 text-xs shadow-2xs"
+                                    >
+                                      <div className="min-w-0 pr-2">
+                                        <p className="font-bold text-slate-800 truncate text-[11px]" title={attName}>
+                                          {attName}
+                                        </p>
+                                        <p className="text-[9.5px] font-semibold text-slate-400">
+                                          {att.documentType ? att.documentType.replace(/_/g, ' ') : 'Technical Proposal'}
+                                          {att.customNote ? ` • ${att.customNote}` : ''}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        disabled={isAttLoading}
+                                        onClick={() => handleViewAttachment(att, attName)}
+                                        className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                                      >
+                                        {isAttLoading ? (
+                                          <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                                        ) : (
+                                          <Eye className="h-3 w-3 text-blue-600" />
+                                        )}
+                                        View
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {item.specifications && (
-                          <p className="text-[11px] text-slate-600 font-normal bg-slate-50 border border-slate-100 rounded p-1.5 whitespace-pre-wrap">
-                            {item.specifications}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {message && message !== techSpecs && (
-                <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
-                  <span className="font-bold text-slate-500 block text-[10px] uppercase">
+                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800 shadow-2xs">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">
                     Supplier Proposal Remarks / Cover Note:
                   </span>
-                  <p className="mt-0.5 font-medium text-slate-700">"{message}"</p>
+                  <p className="font-medium text-slate-700 italic">"{message}"</p>
                 </div>
               )}
             </div>
@@ -666,7 +947,7 @@ export function TechnicalEvaluationModal({
                 <Button
                   type="button"
                   onClick={onClose}
-                  className="text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white px-5 cursor-pointer shadow-xs"
+                  className="text-xs font-bold bg-[#1B365D] hover:bg-[#122744] text-white px-5 cursor-pointer shadow-xs transition-colors"
                 >
                   Close Record
                 </Button>

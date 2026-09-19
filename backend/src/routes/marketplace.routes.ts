@@ -760,17 +760,28 @@ const responseDocumentSchema = z.object({
 const responseLineItemSchema = z.object({
     itemName: z.string().trim().max(200),
     quantity: z.coerce.number().nonnegative().optional().nullable(),
+    unitOfMeasure: z.string().trim().max(50).optional().nullable(),
     unitPrice: z.coerce.number().nonnegative().optional().nullable(),
+    unitRate: z.coerce.number().nonnegative().optional().nullable(),
     gstPercent: z.coerce.number().nonnegative().max(100).optional().nullable(),
+    lineTotal: z.coerce.number().nonnegative().optional().nullable(),
+    totalAmount: z.coerce.number().nonnegative().optional().nullable(),
     makeBrand: z.string().trim().max(160).optional().nullable(),
-    remarks: z.string().trim().max(500).optional().nullable()
-});
+    model: z.string().trim().max(160).optional().nullable(),
+    specifications: z.string().trim().max(5000).optional().nullable(),
+    complianceStatus: z.string().trim().max(100).optional().nullable(),
+    hsnCode: z.string().trim().max(50).optional().nullable(),
+    brandPolicy: z.string().trim().max(100).optional().nullable(),
+    remarks: z.string().trim().max(500).optional().nullable(),
+    attachments: z.array(z.any()).optional().nullable()
+}).passthrough();
 
 const responseDataSchema = z.object({
     documents: z.array(responseDocumentSchema).max(50).optional(),
     lineItems: z.array(responseLineItemSchema).max(200).optional(),
+    lineQuotes: z.array(responseLineItemSchema).max(200).optional(),
     customFields: z.record(z.string(), z.any()).optional()
-}).optional().nullable();
+}).passthrough().optional().nullable();
 
 const responseSchema = z.object({
     offeredPrice: z.coerce.number().nonnegative().optional().nullable(),
@@ -3682,6 +3693,14 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
                     offeredPrice: Number(p.quotedAmount || p.totalAmount || 0),
                     offeredQuantity: p.offeredQuantity || 1,
                     deliveryTimeline: p.deliveryTimeline || 'Standard',
+                    makeBrand: p.makeBrand || null,
+                    model: p.model || null,
+                    acknowledgement: p.acknowledgement || null,
+                    offeredItemDescription: p.offeredItemDescription || null,
+                    technicalStatus: p.technicalStatus || 'PENDING',
+                    financialStatus: p.financialStatus || 'LOCKED',
+                    finalStatus: p.finalStatus || 'PENDING',
+                    rank: p.rank || null,
                     status: p.submissionStatus || p.status || 'SUBMITTED',
                     message: p.message || (p.responseData as any)?.message || p.offeredItemDescription || '',
                     terms: p.terms || (p.responseData as any)?.terms || '',
@@ -3918,8 +3937,16 @@ const findRequirementRecord = async (idParam: string | number) => {
             }).catch(() => null)
         ]);
 
-        if (req) return req;
+        if (req) {
+            const sched = (req.payload as any)?.schedule;
+            return {
+                ...req,
+                submissionStartDate: sched?.submissionStartDate || sched?.startDate || req.startDate || null,
+                allowClarification: sched?.clarificationAllowed !== false && (req as any).allowClarification !== false
+            };
+        }
         if (bid) {
+            const sched = (bid.technicalPacket as any)?.schedule;
             return {
                 id: bid.id,
                 title: bid.title,
@@ -3927,6 +3954,8 @@ const findRequirementRecord = async (idParam: string | number) => {
                 status: bid.status,
                 createdById: bid.buyerId,
                 buyerOrganizationId: bid.buyerOrganizationId,
+                submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
+                allowClarification: (bid as any).allowClarification !== false,
                 payload: bid.technicalPacket || {}
             };
         }
@@ -3936,26 +3965,29 @@ const findRequirementRecord = async (idParam: string | number) => {
             select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null);
         if (legacy) {
+            const sched = (legacy.payload as any)?.schedule;
             return {
                 id: legacy.id,
                 title: legacy.title,
-                lastDate: null,
+                lastDate: sched?.submissionDate || sched?.submissionDeadline || null,
                 status: 'PUBLISHED',
                 createdById: legacy.createdById,
                 buyerOrganizationId: null,
+                submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacy.payload as any)?.tender?.bidStartDate || null,
+                allowClarification: sched?.clarificationAllowed !== false,
                 payload: legacy.payload || {}
             };
         }
     }
 
-    const tokenVariants = getCanonicalLookupVariants(token);
+    const tokenVariants = Array.from(new Set([token, ...getCanonicalLookupVariants(token)]));
 
     const [bid, legacyMatch] = await Promise.all([
         db.procurementBid.findFirst({
             where: {
                 OR: tokenVariants.map(t => ({ bidNumber: t }))
             },
-            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, allowClarification: true }
         }).catch(() => null),
         db.requirement.findFirst({
             where: {
@@ -3966,6 +3998,7 @@ const findRequirementRecord = async (idParam: string | number) => {
     ]);
 
     if (bid) {
+        const sched = (bid.technicalPacket as any)?.schedule;
         return {
             id: bid.id,
             title: bid.title,
@@ -3973,17 +4006,22 @@ const findRequirementRecord = async (idParam: string | number) => {
             status: bid.status,
             createdById: bid.buyerId,
             buyerOrganizationId: bid.buyerOrganizationId,
+            submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || null,
+            allowClarification: bid.allowClarification !== false,
             payload: bid.technicalPacket || {}
         };
     }
     if (legacyMatch) {
+        const sched = (legacyMatch.payload as any)?.schedule;
         return {
             id: legacyMatch.id,
             title: legacyMatch.title,
-            lastDate: null,
+            lastDate: sched?.submissionDate || sched?.submissionDeadline || null,
             status: 'PUBLISHED',
             createdById: legacyMatch.createdById,
             buyerOrganizationId: null,
+            submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacyMatch.payload as any)?.tender?.bidStartDate || null,
+            allowClarification: sched?.clarificationAllowed !== false,
             payload: legacyMatch.payload || {}
         };
     }
@@ -3998,8 +4036,12 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
         const id = requirement.id;
         const body = requirementClarificationAskBody.parse(req.body);
 
+        if ((requirement as any).allowClarification === false) {
+            return apiResponse.error(res, 400, 'Clarifications are not enabled for this procurement.', 'CLARIFICATIONS_DISABLED');
+        }
+
         const sched = (requirement.payload as any)?.schedule;
-        const rawSubmissionStart = sched?.submissionStartDate || sched?.startDate || (requirement.payload as any)?.tender?.bidStartDate || requirement.startDate;
+        const rawSubmissionStart = (requirement as any).submissionStartDate || sched?.submissionStartDate || sched?.startDate || (requirement.payload as any)?.tender?.bidStartDate || (requirement as any).startDate;
         if (rawSubmissionStart) {
             let startD = new Date(rawSubmissionStart);
             if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
@@ -4010,35 +4052,14 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
             }
         }
 
-        const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
-        const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || requirement.lastDate || requirement.endDate;
-
-        // Allow clarifications up to the later of clarification deadline and submission deadline, as long as the tender is open
-        let effectiveClarDeadline: Date | null = null;
-        if (rawClarDeadline && rawSubmissionDeadline) {
-            let d1 = new Date(rawClarDeadline);
-            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-                d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-            }
-            const d2 = new Date(rawSubmissionDeadline);
-            const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
-            const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-            effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
-        } else if (rawClarDeadline) {
-            if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-                effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-            } else {
-                effectiveClarDeadline = new Date(rawClarDeadline);
-            }
-        } else if (rawSubmissionDeadline) {
-            effectiveClarDeadline = new Date(rawSubmissionDeadline);
-        }
-
-        if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-            if (effectiveClarDeadline.getTime() < Date.now()) {
-                return apiResponse.error(res, 400, 'The clarification window has closed for this requirement.', 'REQUIREMENT_DEADLINE_PASSED');
+        const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || requirement.lastDate || (requirement as any).endDate;
+        if (rawSubmissionDeadline) {
+            const deadlineD = new Date(rawSubmissionDeadline);
+            if (!isNaN(deadlineD.getTime()) && deadlineD.getTime() < Date.now()) {
+                return apiResponse.error(res, 400, 'The clarification window has closed as the quotation submission deadline has passed.', 'REQUIREMENT_DEADLINE_PASSED');
             }
         }
+
         // Sellers ask; the buyer owner may also post (their message doubles as an announcement).
         if (req.user?.role !== 'seller' && !isRequirementOwner(req, requirement)) {
             return apiResponse.error(res, 403, 'Access denied', 'ACCESS_DENIED');
@@ -4049,89 +4070,50 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
                 entityType: 'REQUIREMENT',
                 entityId: id,
                 question: body.question,
-                visibility: body.visibility,
+                visibility: body.visibility || 'PUBLIC',
                 askedById: Number(req.user?.id)
             }
         });
 
-        // Notify the buyer owner asynchronously (best-effort, non-blocking for fast response).
-        if (requirement.createdById && requirement.createdById !== Number(req.user?.id)) {
-            setImmediate(async () => {
-                try {
-                    const { notificationService } = await import('../services/notification.service.js');
-                    await notificationService.notifyNow(requirement.createdById, {
-                        title: 'New Clarification Question',
-                        message: `Regarding "${requirement.title}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '…' : ''}`,
-                        type: 'requirement_clarification',
-                        priority: 'medium',
-                        redirectUrl: `/marketplace/requirements/${id}`
-                    });
-                } catch (notifyError) {
-                    console.warn('[Requirement Clarification] notify failed', notifyError);
-                }
-            });
-        }
-
-        return res.status(201).json({ success: true, data: clarification });
+        res.status(201);
+        return ok(res, clarification);
     } catch (error) {
-        if (error instanceof z.ZodError) {
-            return apiResponse.error(res, 400, 'Question must be 3-2000 characters.', 'VALIDATION_ERROR');
-        }
         console.error('[Requirement Clarification Ask]', error);
-        return apiResponse.error(res, 500, 'Failed to submit clarification', 'REQUIREMENT_CLARIFICATION_ERROR');
+        return apiResponse.error(res, 500, 'Failed to post clarification', 'REQUIREMENT_CLARIFICATION_ERROR');
     }
 });
 
 router.post('/marketplace/requirements/:id/clarifications/:clarId/reply', authenticate, async (req: AuthRequest, res: Response) => {
     try {
-        const clarId = Number(req.params.clarId);
         const requirement = await findRequirementRecord(req.params.id);
-        if (!requirement || !clarId || clarId < 1) return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
-        const id = requirement.id;
+        if (!requirement) return apiResponse.error(res, 404, 'RFQ not found', 'REQUIREMENT_NOT_FOUND');
+        const clarId = Number(req.params.clarId);
+        if (isNaN(clarId) || clarId <= 0) return apiResponse.error(res, 400, 'Invalid clarification ID', 'INVALID_ID');
         const body = requirementClarificationReplyBody.parse(req.body);
 
-        // Only the requirement owner (buyer side) or admin can answer.
-        const isPrivileged = req.user?.role === 'admin' || req.user?.role === 'master_admin';
-        if (!isPrivileged && !isRequirementOwner(req, requirement)) {
-            return apiResponse.error(res, 403, 'Only the requirement owner can answer clarifications.', 'ACCESS_DENIED');
+        // Only the buyer owner (or admin) can reply to clarification questions.
+        if (!isRequirementOwner(req, requirement) && req.user?.role !== 'admin' && req.user?.role !== 'master_admin') {
+            return apiResponse.error(res, 403, 'Only the procurement buyer may answer clarifications', 'ACCESS_DENIED');
         }
 
-        const clarification = await db.requirementClarification.findUnique({ where: { id: clarId } });
-        if (!clarification || clarification.entityType !== 'REQUIREMENT' || clarification.entityId !== id) {
-            return apiResponse.error(res, 404, 'Clarification not found', 'CLARIFICATION_NOT_FOUND');
-        }
-        if (clarification.response) {
-            return apiResponse.error(res, 409, 'Clarification already answered.', 'ALREADY_ANSWERED');
+        const existing = await db.requirementClarification.findUnique({ where: { id: clarId } });
+        if (!existing || existing.entityId !== requirement.id) {
+            return apiResponse.error(res, 404, 'Clarification not found', 'NOT_FOUND');
         }
 
         const updated = await db.requirementClarification.update({
             where: { id: clarId },
-            data: { response: body.response, answeredById: Number(req.user?.id), answeredAt: new Date() }
-        });
-
-        // Notify the asking seller (best-effort).
-        if (clarification.askedById) {
-            try {
-                const { notificationService } = await import('../services/notification.service.js');
-                await notificationService.notifyNow(clarification.askedById, {
-                    title: 'Clarification Answered',
-                    message: `Your question on "${requirement.title}" has been answered.`,
-                    type: 'requirement_clarification_replied',
-                    priority: 'medium',
-                    redirectUrl: `/seller/rfq?requirementId=${id}`
-                });
-            } catch (notifyError) {
-                console.warn('[Requirement Clarification] notify failed', notifyError);
+            data: {
+                response: body.response,
+                answeredById: Number(req.user?.id),
+                answeredAt: new Date()
             }
-        }
+        });
 
         return ok(res, updated);
     } catch (error) {
-        if (error instanceof z.ZodError) {
-            return apiResponse.error(res, 400, 'Reply must be 1-3000 characters.', 'VALIDATION_ERROR');
-        }
         console.error('[Requirement Clarification Reply]', error);
-        return apiResponse.error(res, 500, 'Failed to submit reply', 'REQUIREMENT_CLARIFICATION_ERROR');
+        return apiResponse.error(res, 500, 'Failed to reply to clarification', 'REQUIREMENT_CLARIFICATION_ERROR');
     }
 });
 
@@ -4141,10 +4123,36 @@ router.get('/marketplace/requirements/:id/clarifications', optionalAuthenticate,
         if (!requirement) return apiResponse.error(res, 404, 'RFQ not found', 'REQUIREMENT_NOT_FOUND');
         const id = requirement.id;
 
-        const clarifications = await db.requirementClarification.findMany({
-            where: { entityType: 'REQUIREMENT', entityId: id },
-            orderBy: { askedAt: 'asc' }
-        });
+        const [reqClarifications, qrClarifications, procClarifications] = await Promise.all([
+            db.requirementClarification.findMany({
+                where: { entityType: 'REQUIREMENT', entityId: id },
+                orderBy: { askedAt: 'asc' }
+            }).catch(() => []),
+            db.quoteRequestClarification.findMany({
+                where: { quoteRequestId: id },
+                orderBy: { askedAt: 'asc' }
+            }).catch(() => []),
+            db.procurementBidClarification.findMany({
+                where: { bidId: id },
+                orderBy: { createdAt: 'asc' }
+            }).catch(() => [])
+        ]);
+
+        const normalizedProcClarifications = procClarifications.map((c: any) => ({
+            id: c.id,
+            quoteRequestId: c.bidId,
+            question: c.question,
+            response: c.response,
+            visibility: c.isPublic ? 'PUBLIC' : 'PRIVATE',
+            askedById: c.sellerId || c.requestedById,
+            answeredById: c.respondedById,
+            askedAt: c.createdAt,
+            answeredAt: c.respondedAt,
+        }));
+
+        const allClarifications = [...reqClarifications, ...qrClarifications, ...normalizedProcClarifications].sort((a: any, b: any) =>
+            new Date(a.askedAt || a.createdAt).getTime() - new Date(b.askedAt || b.createdAt).getTime()
+        );
 
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
         const isPrivileged = Boolean(
@@ -4158,8 +4166,8 @@ router.get('/marketplace/requirements/:id/clarifications', optionalAuthenticate,
         // Private clarifications must NOT be shown to the public or other sellers/bidders.
         // They must be visible to the asking seller and the buyer only.
         const filtered = isPrivileged
-            ? clarifications
-            : clarifications.filter((c: any) => {
+            ? allClarifications
+            : allClarifications.filter((c: any) => {
                 const vis = String(c.visibility || 'PUBLIC').toUpperCase();
                 if (vis === 'PUBLIC') return true;
                 if (!currentUserId) return false;

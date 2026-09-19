@@ -230,37 +230,54 @@ const OrderActionsMenu = ({
         </>
       )}
 
+      {order.bidId && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            router.push(`/bids/${order.bidId}`);
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+        >
+          <FileText className="h-3.5 w-3.5 text-indigo-600" />
+          <span>View Quotation / Tender</span>
+        </button>
+      )}
+
       {isSeller && (isAccepted || isDelivered) && (
         <>
           {(() => {
-            const hasApprovedGrn = Boolean(
-              (order as any).grns && (order as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+            const hasInvoice = Boolean(
+              (order as any).invoices?.length > 0 || (order as any).invoiceId || (order as any).invoiceNumber
             );
-            if (hasApprovedGrn) {
+            if (hasInvoice) {
+              const invNo = (order as any).invoices?.[0]?.invoiceNumber || (order as any).invoiceNumber || order.id;
               return (
                 <button
                   type="button"
                   onClick={() => {
                     onClose();
-                    const amountVal = order.amount || order.totalValue || 0;
-                    router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+                    router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
                   }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                 >
                   <FileText className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Create Invoice from PO (GRN Verified)</span>
+                  <span>View Invoice</span>
                 </button>
               );
             }
             return (
               <button
                 type="button"
-                disabled
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 opacity-60 cursor-not-allowed text-left"
-                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+                onClick={() => {
+                  onClose();
+                  const amountVal = order.amount || order.totalValue || 0;
+                  router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
               >
-                <Lock className="h-3.5 w-3.5 text-slate-400" />
-                <span>Convert PO to Invoice (GRN Locked)</span>
+                <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Create Invoice from PO</span>
               </button>
             );
           })()}
@@ -270,13 +287,51 @@ const OrderActionsMenu = ({
               onClose();
               handleOpenDelivery(order);
             }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
           >
             <Truck className="h-3.5 w-3.5 text-blue-600" />
-            <span>Delivery</span>
+            <span>Delivery Tracking</span>
           </button>
         </>
       )}
+
+      {(() => {
+        const hasGrn = Boolean(
+          (order as any).grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(String(order.status || '').toLowerCase())
+        );
+        const isPaid = String(order.status || '').toLowerCase().includes('paid');
+        if (hasGrn && !isPaid) {
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push('/payments');
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
+            >
+              <CreditCard className="h-3.5 w-3.5 text-purple-600" />
+              <span>Pay Now / Upload Payment Proof</span>
+            </button>
+          );
+        }
+        if (isPaid) {
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push('/payments');
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span>View Payment Proof (Paid)</span>
+            </button>
+          );
+        }
+        return null;
+      })()}
 
       <button
         type="button"
@@ -1595,564 +1650,251 @@ export default function PurchaseOrders() {
       )}
 
       {viewingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
-            
-            {/* Top Gradient Header */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white px-6 py-5 shrink-0">
-              {/* Background Glow Overlay */}
-              <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-blue-400/10 blur-2xl pointer-events-none" />
-              <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/10 blur-2xl pointer-events-none" />
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-md animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="po-modal-title"
+        >
+          <FocusTrap onEscape={() => setViewingOrder(null)}>
+            <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
               
-              <div className="relative flex items-center justify-between gap-4">
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-white/15 backdrop-blur-sm">
-                      <FileText className="h-3 w-3 text-blue-300" /> Purchase Order Details
+              {/* Compact Sleek Header */}
+              <div className="relative bg-gradient-to-r from-slate-950 via-slate-900 to-[#12335f] text-white px-5 py-3.5 sm:px-6 shrink-0 border-b border-slate-800/80 shadow-xs">
+                <div className="flex items-center justify-between gap-3">
+                  {/* Left: Badge, PO Number, and Status */}
+                  <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 flex-wrap">
+                    <div className="flex items-center gap-1.5 rounded-md bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-300 border border-white/10 backdrop-blur-xs shrink-0">
+                      <FileText className="h-3 w-3 text-blue-400" />
+                      <span>PO Details</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h2 id="po-modal-title" className="text-base sm:text-lg font-bold font-mono tracking-tight text-white truncate">
+                        {viewingOrder.poNumber}
+                      </h2>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (viewingOrder.poNumber) {
+                            navigator.clipboard.writeText(viewingOrder.poNumber);
+                            toast.success('PO Number copied to clipboard');
+                          }
+                        }}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer shrink-0"
+                        title="Copy PO Number"
+                        aria-label="Copy PO Number"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Inline Status Pill */}
+                    <span className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] sm:text-xs font-bold uppercase tracking-wider border shrink-0",
+                      ['delivered', 'completed', 'accepted'].includes(String(viewingOrder.status || '').toLowerCase())
+                        ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                        : ['cancelled', 'rejected'].includes(String(viewingOrder.status || '').toLowerCase())
+                        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                        : "bg-blue-500/15 text-blue-300 border-blue-500/30"
+                    )}>
+                      <span className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        ['delivered', 'completed', 'accepted'].includes(String(viewingOrder.status || '').toLowerCase())
+                          ? "bg-emerald-400 animate-pulse"
+                          : ['cancelled', 'rejected'].includes(String(viewingOrder.status || '').toLowerCase())
+                          ? "bg-rose-400"
+                          : "bg-blue-400 animate-pulse"
+                      )} />
+                      {readableStatus(viewingOrder.status)}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white drop-shadow-sm">
-                      {viewingOrder.poNumber}
-                    </h2>
+
+                  {/* Right Side: Total Amount & Close */}
+                  <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+                    <div className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-1 border border-white/10 backdrop-blur-xs">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-300 hidden md:inline">Total:</span>
+                      <span className="text-sm sm:text-base font-bold text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (viewingOrder.poNumber) {
-                          navigator.clipboard.writeText(viewingOrder.poNumber);
-                          toast.success('PO Number copied to clipboard');
-                        }
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all border border-white/10"
-                      title="Copy PO Number"
+                      onClick={() => setViewingOrder(null)}
+                      className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white transition-all border border-white/15 shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      aria-label="Close PO Details"
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
-
-                {/* Right Side: Total Amount & Close */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="hidden sm:flex flex-col items-end rounded-2xl bg-white/10 px-4 py-2 border border-white/15 backdrop-blur-md">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-blue-200">Grand Total Value</span>
-                    <span className="text-lg font-black text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
-                  </div>
-                  <button
-                    onClick={() => setViewingOrder(null)}
-                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 hover:text-white transition-all border border-white/15 shadow-sm"
-                    aria-label="Close PO Details"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Body */}
-            <div className="overflow-y-auto p-5 sm:p-6 space-y-6 flex-1 bg-slate-50/50">
-              
-              {/* Order Title & Badges Card */}
-              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-3.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">Order Title & Reference</span>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">{viewingOrder.title}</h3>
-                  </div>
-                  <div className="sm:hidden text-right shrink-0">
-                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Total</span>
-                    <span className="text-sm font-black text-[#12335f] font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-emerald-800 shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                    {readableStatus(viewingOrder.status)}
-                  </span>
-
-                  {viewingOrder.paymentTerms && (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-teal-800 shadow-2xs">
-                      <CreditCard className="h-3.5 w-3.5 text-teal-600" />
-                      Payment: {readableStatus(viewingOrder.paymentTerms)}
-                    </span>
-                  )}
-
-                  {viewingOrder.deliveryType && (
-                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-purple-800 shadow-2xs">
-                      <Truck className="h-3.5 w-3.5 text-purple-600" />
-                      Delivery: {readableStatus(viewingOrder.deliveryType)}
-                    </span>
-                  )}
-                </div>
               </div>
 
-              {/* Fulfillment Parties & Settings Grid */}
-              <div className="grid gap-4 md:grid-cols-2">
+              {/* Modal Body */}
+              <div className="overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5 flex-1 bg-slate-50/60">
                 
-                {/* Fulfillment Parties Card */}
-                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                    <User className="h-4 w-4 text-[#12335f]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment Parties</h4>
-                  </div>
-
-                  <div className="space-y-3.5">
-                    {/* Buyer Info */}
-                    {(() => {
-                      const buyerObj = (viewingOrder.buyer as any) || {};
-                      const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || buyerObj.registrationDetails?.businessName || viewingOrder.buyer?.name || 'MSME Portal Buyer';
-                      const buyerLogoUrl = resolveMediaUrl(
-                        buyerObj.organization?.profile?.logoUrl ||
-                        buyerObj.registrationDetails?.logoUrl ||
-                        buyerObj.organization?.logoFile?.url ||
-                        (buyerObj.organization?.organizationLogoFileId ? `/api/files/${buyerObj.organization.organizationLogoFileId}/view` : null) ||
-                        (viewingOrder.buyerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
-                      );
-                      return (
-                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                          {buyerLogoUrl ? (
-                            <img src={buyerLogoUrl} alt="Buyer Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
-                          ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
-                              BY
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
-                            <p className="text-xs font-black text-slate-900 truncate">
-                              {buyerOrgDisplay}
-                            </p>
-                            {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
-                              <p className="text-[10px] font-medium text-slate-500 truncate">Attn: {viewingOrder.buyer.name}</p>
-                            )}
-                            {viewingOrder.buyer?.email && (
-                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* Seller Info */}
-                    {(() => {
-                      const sellerObj = (viewingOrder.seller as any) || {};
-                      const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sellerObj.registrationDetails?.businessName || viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller';
-                      const sellerLogoUrl = resolveMediaUrl(
-                        sellerObj.organization?.profile?.logoUrl ||
-                        sellerObj.registrationDetails?.logoUrl ||
-                        sellerObj.organization?.logoFile?.url ||
-                        (sellerObj.organization?.organizationLogoFileId ? `/api/files/${sellerObj.organization.organizationLogoFileId}/view` : null) ||
-                        (viewingOrder.sellerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
-                      );
-                      return (
-                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                          {sellerLogoUrl ? (
-                            <img src={sellerLogoUrl} alt="Seller Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
-                          ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
-                              SL
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
-                            <p className="text-xs font-black text-slate-900 truncate">
-                              {sellerOrgDisplay}
-                            </p>
-                            {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
-                              <p className="text-[10px] font-medium text-slate-500 truncate">Contact: {viewingOrder.seller.name}</p>
-                            )}
-                            {viewingOrder.seller?.email && (
-                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-
-                {/* Fulfillment Settings Card */}
-                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
-                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                    <Calendar className="h-4 w-4 text-[#12335f]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment & Schedule</h4>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-start gap-2.5 rounded-xl bg-indigo-50/50 p-3 border border-indigo-100">
-                      <Clock className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block">Expected Delivery Date</span>
-                        <p className="text-xs font-black text-slate-900">{formatDate(viewingOrder.expectedDelivery)}</p>
-                      </div>
+                {/* Order Overview Bar */}
+                <div className="rounded-xl bg-white p-4 border border-slate-200/80 shadow-2xs space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Order Title & Reference</span>
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900 leading-snug">{viewingOrder.title}</h3>
                     </div>
-
-                    {viewingOrder.deliveryAddress && (
-                      <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100">
-                        <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
-                        <div className="min-w-0">
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Delivery Address</span>
-                          <p title={viewingOrder.deliveryAddress} className="text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2">
-                            {viewingOrder.deliveryAddress}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 && (
-                      <div className="pt-1">
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Delivery Trackings</span>
-                        <div className="flex flex-wrap gap-2">
-                          {viewingOrder.deliveryTrackings.map((dt: any) => (
-                            <div key={dt.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1">
-                              <EntityIdLink
-                                label={dt.trackingNumber || `DLV-${dt.id}`}
-                                id={dt.id}
-                                size="sm"
-                                onClick={() => {
-                                  setViewingOrder(null);
-                                  router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
-                                }}
-                              />
-                              <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <div className="sm:hidden text-right shrink-0">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Total</span>
+                      <span className="text-xs font-bold text-slate-900 font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                    </div>
                   </div>
-                </div>
 
-              </div>
+                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                      <Calendar className="h-3 w-3 text-slate-400" />
+                      Created: {formatDate(viewingOrder.createdAt)}
+                    </span>
 
-              {/* Shipment Tracking & Delivery Progress Card */}
-              {(() => {
-                const deliveryStatusRaw = String(activeDelivery?.status || viewingOrder.status || 'pending').toLowerCase();
-                
-                // Determine milestone step (1 to 5)
-                let stepNumber = 1;
-                let stepStatusLabel = 'Order Placed';
-                let stepStatusTone = 'bg-blue-100 text-blue-800 border-blue-200';
-
-                if (['delivered', 'completed'].includes(deliveryStatusRaw)) {
-                  stepNumber = 5;
-                  stepStatusLabel = 'Delivered';
-                  stepStatusTone = 'bg-emerald-100 text-emerald-800 border-emerald-300';
-                } else if (['out_for_delivery'].includes(deliveryStatusRaw)) {
-                  stepNumber = 4;
-                  stepStatusLabel = 'Out for Delivery';
-                  stepStatusTone = 'bg-purple-100 text-purple-800 border-purple-300';
-                } else if (['in_transit', 'dispatched', 'picked_up', 'at_hub'].includes(deliveryStatusRaw)) {
-                  stepNumber = 3;
-                  stepStatusLabel = 'In Transit';
-                  stepStatusTone = 'bg-indigo-100 text-indigo-800 border-indigo-300';
-                } else if (['ready_for_pickup', 'packed', 'pickup_scheduled', 'accepted', 'in_fulfillment'].includes(deliveryStatusRaw)) {
-                  stepNumber = 2;
-                  stepStatusLabel = 'Ready / Packed';
-                  stepStatusTone = 'bg-sky-100 text-sky-800 border-sky-300';
-                } else if (['cancelled', 'rejected'].includes(deliveryStatusRaw)) {
-                  stepNumber = 1;
-                  stepStatusLabel = 'Cancelled';
-                  stepStatusTone = 'bg-rose-100 text-rose-800 border-rose-300';
-                } else {
-                  stepNumber = 1;
-                  stepStatusLabel = readableStatus(activeDelivery?.status || viewingOrder.status || 'pending');
-                  stepStatusTone = 'bg-blue-100 text-[#12335f] border-blue-200';
-                }
-
-                const milestones = [
-                  { step: 1, title: 'Order Placed', desc: formatDate(viewingOrder.createdAt) },
-                  { step: 2, title: 'Packed & Ready', desc: activeDelivery?.packedAt ? formatDate(activeDelivery.packedAt) : 'Warehouse' },
-                  { step: 3, title: 'In Transit', desc: activeDelivery?.pickedUpAt ? formatDate(activeDelivery.pickedUpAt) : 'Carrier dispatch' },
-                  { step: 4, title: 'Out for Delivery', desc: 'Last mile handover' },
-                  { step: 5, title: 'Delivered', desc: activeDelivery?.actualDelivery ? formatDate(activeDelivery.actualDelivery) : formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery) },
-                ];
-
-                const progressWidthPercent = Math.min(100, Math.max(0, ((stepNumber - 1) / 4) * 100));
-
-                const trackingNumber = activeDelivery?.trackingNumber || (viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 ? viewingOrder.deliveryTrackings[0]?.trackingNumber : null);
-                const carrierName = activeDelivery?.carrierName || activeDelivery?.logisticsPartnerName || (trackingNumber ? 'Standard Courier Partner' : 'Awaiting Seller Assignment');
-                const arrivalDate = formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery);
-                const locationText = activeDelivery?.currentLocation || (stepNumber === 5 ? 'Delivered to Consignee' : stepNumber >= 3 ? 'In Transit to Destination' : 'Seller Fulfillment Center');
-
-                return (
-                  <div className="rounded-2xl border border-blue-200/90 bg-gradient-to-b from-blue-50/70 via-indigo-50/30 to-white p-5 space-y-4 shadow-sm">
-                    {/* Header */}
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm">
-                          <Truck className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs font-black text-[#12335f] uppercase tracking-wider">
-                              Shipment Tracking & Delivery Progress
-                            </h4>
-                          </div>
-                          <p className="text-[11px] font-semibold text-slate-500">Live dispatch and tracking status</p>
-                        </div>
-                      </div>
-                      <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs", stepStatusTone)}>
-                        {stepStatusLabel}
+                    {viewingOrder.paymentTerms && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        <CreditCard className="h-3 w-3 text-slate-500" />
+                        Payment: {readableStatus(viewingOrder.paymentTerms)}
                       </span>
+                    )}
+
+                    {viewingOrder.deliveryType && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                        <Truck className="h-3 w-3 text-blue-600" />
+                        Delivery: {readableStatus(viewingOrder.deliveryType)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fulfillment Parties & Settings Grid */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  
+                  {/* Fulfillment Parties Card */}
+                  <div className="rounded-xl bg-white p-4 border border-slate-200/80 shadow-2xs space-y-3.5">
+                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <User className="h-4 w-4 text-[#12335f]" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Fulfillment Parties</h4>
                     </div>
 
-                    {/* Visual Progress Stepper */}
-                    <div className="bg-white rounded-xl p-4 border border-blue-100/90 shadow-2xs">
-                      <div className="relative">
-                        {/* Connecting Track Background */}
-                        <div className="absolute top-4 left-6 right-6 h-1 bg-slate-200 rounded-full" />
-                        {/* Active Progress Bar */}
-                        <div
-                          className="absolute top-4 left-6 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `calc(${progressWidthPercent}% * (100% - 48px) / 100)` }}
-                        />
-
-                        {/* Milestones Nodes */}
-                        <div className="relative flex justify-between items-start">
-                          {milestones.map((m) => {
-                            const isCompleted = m.step < stepNumber || (m.step === 5 && stepNumber === 5);
-                            const isCurrent = m.step === stepNumber && stepNumber !== 5;
-                            const isUpcoming = m.step > stepNumber;
-
-                            return (
-                              <div key={m.step} className="flex flex-col items-center text-center max-w-[70px] sm:max-w-[100px]">
-                                <div
-                                  className={cn(
-                                    "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all shadow-sm",
-                                    isCompleted && "bg-emerald-500 text-white ring-4 ring-emerald-50",
-                                    isCurrent && "bg-[#12335f] text-white ring-4 ring-blue-100 ring-offset-1 ring-offset-white",
-                                    isUpcoming && "bg-slate-100 text-slate-400 border border-slate-300"
-                                  )}
-                                >
-                                  {isCompleted ? (
-                                    <CheckCircle2 className="h-4 w-4" />
-                                  ) : isCurrent ? (
-                                    <Truck className="h-3.5 w-3.5 animate-pulse" />
-                                  ) : (
-                                    <span className="font-mono text-[11px]">{m.step}</span>
-                                  )}
-                                </div>
-                                <span
-                                  className={cn(
-                                    "mt-2 text-[10px] sm:text-[11px] font-bold leading-tight",
-                                    isCompleted ? "text-slate-800" : isCurrent ? "text-[#12335f] font-black" : "text-slate-400"
-                                  )}
-                                >
-                                  {m.title}
-                                </span>
-                                <span className="text-[9px] text-slate-400 hidden sm:block mt-0.5 font-medium truncate max-w-full">
-                                  {m.desc}
-                                </span>
+                    <div className="space-y-3">
+                      {/* Buyer Info */}
+                      {(() => {
+                        const buyerObj = (viewingOrder.buyer as any) || {};
+                        const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || buyerObj.registrationDetails?.businessName || viewingOrder.buyer?.name || 'MSME Portal Buyer';
+                        const buyerLogoUrl = resolveMediaUrl(
+                          buyerObj.organization?.profile?.logoUrl ||
+                          buyerObj.registrationDetails?.logoUrl ||
+                          buyerObj.organization?.logoFile?.url ||
+                          (buyerObj.organization?.organizationLogoFileId ? `/api/files/${buyerObj.organization.organizationLogoFileId}/view` : null) ||
+                          (viewingOrder.buyerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                        );
+                        return (
+                          <div className="flex items-start gap-3 rounded-lg bg-slate-50/80 p-3 border border-slate-200/60">
+                            {buyerLogoUrl ? (
+                              <img src={buyerLogoUrl} alt="Buyer Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                            ) : (
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-800 font-bold text-xs border border-blue-200">
+                                BY
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {buyerOrgDisplay}
+                              </p>
+                              {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
+                                <p className="text-[10px] font-medium text-slate-600 truncate">Attn: {viewingOrder.buyer.name}</p>
+                              )}
+                              {viewingOrder.buyer?.email && (
+                                <p className="text-[10px] font-medium text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Seller Info */}
+                      {(() => {
+                        const sellerObj = (viewingOrder.seller as any) || {};
+                        const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sellerObj.registrationDetails?.businessName || viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller';
+                        const sellerLogoUrl = resolveMediaUrl(
+                          sellerObj.organization?.profile?.logoUrl ||
+                          sellerObj.registrationDetails?.logoUrl ||
+                          sellerObj.organization?.logoFile?.url ||
+                          (sellerObj.organization?.organizationLogoFileId ? `/api/files/${sellerObj.organization.organizationLogoFileId}/view` : null) ||
+                          (viewingOrder.sellerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                        );
+                        return (
+                          <div className="flex items-start gap-3 rounded-lg bg-slate-50/80 p-3 border border-slate-200/60">
+                            {sellerLogoUrl ? (
+                              <img src={sellerLogoUrl} alt="Seller Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                            ) : (
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-200">
+                                SL
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {sellerOrgDisplay}
+                              </p>
+                              {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
+                                <p className="text-[10px] font-medium text-slate-600 truncate">Contact: {viewingOrder.seller.name}</p>
+                              )}
+                              {viewingOrder.seller?.email && (
+                                <p className="text-[10px] font-medium text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
-
-                    {/* Consignment Meta Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white/95 rounded-xl p-3.5 border border-blue-100/90 text-xs">
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Carrier Partner</span>
-                        <div className="flex items-center gap-1.5">
-                          <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <p className="font-bold text-slate-800 truncate" title={carrierName}>{carrierName}</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Tracking Number / AWB</span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn("font-mono font-bold truncate", trackingNumber ? "text-slate-900" : "text-slate-500 italic")}>
-                            {trackingNumber || 'Pending Waybill'}
-                          </span>
-                          {trackingNumber && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(trackingNumber);
-                                toast.success('Tracking number copied to clipboard');
-                              }}
-                              className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer rounded hover:bg-slate-100 transition-colors"
-                              title="Copy Tracking Number"
-                              aria-label="Copy Tracking Number"
-                            >
-                              <Copy className="h-3 w-3" aria-hidden="true" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Expected Arrival</span>
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <p className="font-bold text-slate-800">{arrivalDate}</p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Current Location</span>
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <p className="font-bold text-slate-800 truncate" title={locationText}>{locationText}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Track Details Action Button */}
-                    <Button 
-                      size="sm"
-                      className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-black uppercase tracking-wider h-10 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
-                      onClick={() => {
-                        setViewingOrder(null);
-                        if (isSeller) {
-                          router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
-                        } else {
-                          router.push(`/orders/tracking?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
-                        }
-                      }}
-                    >
-                      <Truck className="h-4 w-4" /> Track Shipment Details
-                    </Button>
-                  </div>
-                );
-              })()}
-
-              {/* Workflow Timeline Section */}
-              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-[#12335f]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Workflow Tracking & Timestamps</h4>
-                  </div>
-                  <span className="text-[10px] font-semibold text-slate-400">Order Lifecycle Audit</span>
-                </div>
-
-                <div className="relative border-l-2 border-slate-200 pl-6 ml-3 space-y-5 py-1">
-                  {/* Step 1: PO Generated */}
-                  <div className="relative">
-                    <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
-                      <CheckCircle2 className="h-3 w-3" />
-                    </span>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                      <span className="text-xs font-extrabold text-slate-900">Purchase Order Generated</span>
-                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{formatTimestamp(viewingOrder.createdAt)}</span>
-                    </div>
-                    <p className="text-[11px] font-semibold text-slate-500 mt-1">PO record successfully created from procurement bidding workflow.</p>
                   </div>
 
-                  {/* Step 2: PO Acknowledged */}
-                  {(() => {
-                    const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
-                    return viewingStatusLower !== 'generated' && viewingStatusLower !== 'order_placed' && viewingStatusLower !== 'cancelled' && (
-                      <div className="relative">
-                        <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
-                          <CheckCircle2 className="h-3 w-3" />
-                        </span>
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                          <span className="text-xs font-extrabold text-slate-900">PO Acknowledged by Seller</span>
-                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                            {viewingOrder.acceptedAt ? formatTimestamp(viewingOrder.acceptedAt) : 'Acknowledged'}
-                          </span>
+                  {/* Fulfillment Settings Card */}
+                  <div className="rounded-xl bg-white p-4 border border-slate-200/80 shadow-2xs space-y-3.5">
+                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                      <Calendar className="h-4 w-4 text-[#12335f]" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Fulfillment & Schedule</h4>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-2.5 rounded-lg bg-slate-50/80 p-3 border border-slate-200/70">
+                        <Clock className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Expected Delivery Date</span>
+                          <p className="text-xs font-bold text-slate-900">{formatDate(viewingOrder.expectedDelivery)}</p>
                         </div>
-                        <p className="text-[11px] font-semibold text-slate-500 mt-1">Seller acknowledged and committed to fulfilling this order.</p>
                       </div>
-                    );
-                  })()}
 
-                  {/* Step 3: Delivered */}
-                  {viewingOrder.status === 'delivered' && (
-                    <div className="relative">
-                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
-                        <CheckCircle2 className="h-3 w-3" />
-                      </span>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <span className="text-xs font-extrabold text-slate-900">Delivered & Completed</span>
-                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">Completed</span>
-                      </div>
-                      <p className="text-[11px] font-semibold text-slate-500 mt-1">Consignment has been safely delivered and confirmed by buyer.</p>
-                    </div>
-                  )}
-
-                  {/* Step 4: Cancelled */}
-                  {viewingOrder.status === 'cancelled' && (
-                    <div className="relative">
-                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 ring-4 ring-rose-50 text-white shadow-2xs">
-                        <XCircle className="h-3 w-3" />
-                      </span>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-                        <span className="text-xs font-extrabold text-rose-700">Order Cancelled</span>
-                        <span className="text-[10px] font-mono font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">Cancelled</span>
-                      </div>
-                      <p className="text-[11px] font-semibold text-rose-500 mt-1">Fulfillment terminated by one of the parties.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Terms & Documents section */}
-              {(() => {
-                const terms = (viewingOrder.metadata as any)?.termsDocuments || {};
-                const docs = (Array.isArray(terms.documents) ? terms.documents : []) as Array<{
-                  documentType: string;
-                  fileAssetId: number;
-                  fileName: string;
-                  fileSize: number;
-                }>;
-                
-                const hasTerms = terms.deliveryTerms || terms.paymentTerms || terms.warrantyTerms || terms.inspectionTerms || terms.delayPenaltyDetails || terms.additionalTerms;
-                const hasDocs = docs.length > 0;
-
-                if (!hasTerms && !hasDocs) return null;
-
-                return (
-                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4 text-[#12335f]" />
-                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Procurement Terms & Documents</h4>
-                      </div>
-                    </div>
-                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
-                      {hasTerms && (
-                        <div className="space-y-2.5">
-                          {terms.deliveryTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Delivery Terms</p><p className="font-semibold text-slate-700">{terms.deliveryTerms}</p></div>}
-                          {terms.paymentTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Payment Terms</p><p className="font-semibold text-slate-700">{terms.paymentTerms}</p></div>}
-                          {terms.warrantyTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Warranty Terms</p><p className="font-semibold text-slate-700">{terms.warrantyTerms}</p></div>}
-                          {terms.inspectionTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Inspection Terms</p><p className="font-semibold text-slate-700">{terms.inspectionTerms}</p></div>}
-                          {terms.delayPenaltyDetails && <div><p className="text-[9px] font-black uppercase text-slate-400">Delay Penalty Details</p><p className="font-semibold text-slate-700">{terms.delayPenaltyDetails}</p></div>}
-                          {terms.additionalTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Additional Terms</p><p className="font-semibold text-slate-700">{terms.additionalTerms}</p></div>}
+                      {viewingOrder.deliveryAddress && (
+                        <div className="flex items-start gap-2.5 rounded-lg bg-slate-50/80 p-3 border border-slate-200/70">
+                          <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Delivery Address</span>
+                            <p title={viewingOrder.deliveryAddress} className="text-xs font-medium text-slate-700 leading-relaxed line-clamp-2">
+                              {viewingOrder.deliveryAddress}
+                            </p>
+                          </div>
                         </div>
                       )}
-                      {hasDocs && (
-                        <div className="space-y-2">
-                          <p className="text-[9px] font-black uppercase text-slate-400">Uploaded Procurement Documents</p>
-                          <div className="space-y-2">
-                            {docs.map((doc, dIdx) => (
-                              <div key={dIdx} className="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-200/80 p-3 hover:border-slate-300 transition-all">
-                                <FileText className="h-5 w-5 shrink-0 text-[#12335f]" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{doc.documentType}</p>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      openFileAsset({
-                                        id: doc.fileAssetId,
-                                        fileAssetId: doc.fileAssetId,
-                                        originalName: doc.fileName,
-                                      }, doc.fileName).catch(err => {
-                                        toast.error(err instanceof Error ? err.message : 'Unable to open document');
-                                      });
-                                    }}
-                                    title={doc.fileName}
-                                    className="block truncate text-xs font-bold text-[#12335f] hover:underline text-left w-full"
-                                  >
-                                    {doc.fileName}
-                                  </button>
-                                </div>
-                                <span className="text-[10px] font-bold text-slate-400 shrink-0 font-mono">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
+
+                      {viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">Delivery Trackings</span>
+                          <div className="flex flex-wrap gap-2">
+                            {viewingOrder.deliveryTrackings.map((dt: any) => (
+                              <div key={dt.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1">
+                                <EntityIdLink
+                                  label={dt.trackingNumber || `DLV-${dt.id}`}
+                                  id={dt.id}
+                                  size="sm"
+                                  onClick={() => {
+                                    setViewingOrder(null);
+                                    router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                  }}
+                                />
+                                <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
                               </div>
                             ))}
                           </div>
@@ -2160,210 +1902,559 @@ export default function PurchaseOrders() {
                       )}
                     </div>
                   </div>
-                );
-              })()}
 
-              {/* Line Items Table Section - Responsive with Zero Horizontal Scroll */}
-              <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden space-y-0">
-                <div className="flex items-center justify-between bg-slate-50/80 px-5 py-3.5 border-b border-slate-200/80">
-                  <div className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-[#12335f]" />
-                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Line Items</h4>
-                  </div>
-                  <span className="rounded-full bg-slate-200/70 px-2.5 py-0.5 text-[10px] font-black text-slate-700">
-                    {(viewingOrder.items?.length || 1)} Item(s)
-                  </span>
                 </div>
 
-                {/* Table with fixed layout to prevent horizontal scroll */}
-                <div className="w-full">
-                  <table className="w-full text-left border-collapse table-fixed">
-                    <thead>
-                      <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                        <th scope="col" className="py-3 px-3 text-center w-12 sm:w-14">#</th>
-                        <th scope="col" className="py-3 px-3 text-left">Item Description</th>
-                        <th scope="col" className="py-3 px-2 text-center w-16 sm:w-20">Qty</th>
-                        <th scope="col" className="py-3 px-3 text-right w-24 sm:w-28">Unit Price</th>
-                        <th scope="col" className="py-3 px-3 text-right w-28 sm:w-32">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
-                      {((viewingOrder.items && viewingOrder.items.length > 0)
-                        ? viewingOrder.items
-                        : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]
-                      ).map((item: any, idx: number) => {
-                        const qty = Number(item.quantity || 1);
-                        const unitPrice = Number(item.unitPrice || 0);
-                        const totalAmount = Number(item.totalAmount || (qty * unitPrice));
-                        return (
-                          <tr key={item.id || `po-item-${idx}`} className="hover:bg-blue-50/30 transition-colors">
-                            <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-400 text-[11px] align-top">
-                              {String(idx + 1).padStart(2, '0')}
-                            </td>
-                            <td className="py-3.5 px-3 align-top">
-                              <p className="font-black text-slate-900 leading-snug break-words">
-                                {item.itemName || viewingOrder.title}
-                              </p>
-                              {item.description && (
-                                <p className="text-[11px] font-semibold text-slate-500 mt-1 leading-relaxed break-words">
-                                  {item.description}
+                {/* Shipment Tracking & Delivery Progress Card */}
+                {(() => {
+                  const deliveryStatusRaw = String(activeDelivery?.status || viewingOrder.status || 'pending').toLowerCase();
+                  
+                  // Determine milestone step (1 to 5)
+                  let stepNumber = 1;
+                  let stepStatusLabel = 'Order Placed';
+                  let stepStatusTone = 'bg-blue-50 text-blue-800 border-blue-200';
+
+                  if (['delivered', 'completed'].includes(deliveryStatusRaw)) {
+                    stepNumber = 5;
+                    stepStatusLabel = 'Delivered';
+                    stepStatusTone = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                  } else if (['out_for_delivery'].includes(deliveryStatusRaw)) {
+                    stepNumber = 4;
+                    stepStatusLabel = 'Out for Delivery';
+                    stepStatusTone = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+                  } else if (['in_transit', 'dispatched', 'picked_up', 'at_hub'].includes(deliveryStatusRaw)) {
+                    stepNumber = 3;
+                    stepStatusLabel = 'In Transit';
+                    stepStatusTone = 'bg-blue-50 text-blue-800 border-blue-200';
+                  } else if (['ready_for_pickup', 'packed', 'pickup_scheduled', 'accepted', 'in_fulfillment'].includes(deliveryStatusRaw)) {
+                    stepNumber = 2;
+                    stepStatusLabel = 'Ready / Packed';
+                    stepStatusTone = 'bg-sky-50 text-sky-800 border-sky-200';
+                  } else if (['cancelled', 'rejected'].includes(deliveryStatusRaw)) {
+                    stepNumber = 1;
+                    stepStatusLabel = 'Cancelled';
+                    stepStatusTone = 'bg-rose-50 text-rose-800 border-rose-200';
+                  } else {
+                    stepNumber = 1;
+                    stepStatusLabel = readableStatus(activeDelivery?.status || viewingOrder.status || 'pending');
+                    stepStatusTone = 'bg-slate-100 text-slate-800 border-slate-200';
+                  }
+
+                  const milestones = [
+                    { step: 1, title: 'Order Placed', desc: formatDate(viewingOrder.createdAt) },
+                    { step: 2, title: 'Packed & Ready', desc: activeDelivery?.packedAt ? formatDate(activeDelivery.packedAt) : 'Warehouse' },
+                    { step: 3, title: 'In Transit', desc: activeDelivery?.pickedUpAt ? formatDate(activeDelivery.pickedUpAt) : 'Carrier dispatch' },
+                    { step: 4, title: 'Out for Delivery', desc: 'Last mile handover' },
+                    { step: 5, title: 'Delivered', desc: activeDelivery?.actualDelivery ? formatDate(activeDelivery.actualDelivery) : formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery) },
+                  ];
+
+                  const progressWidthPercent = Math.min(100, Math.max(0, ((stepNumber - 1) / 4) * 100));
+
+                  const trackingNumber = activeDelivery?.trackingNumber || (viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 ? viewingOrder.deliveryTrackings[0]?.trackingNumber : null);
+                  const carrierName = activeDelivery?.carrierName || activeDelivery?.logisticsPartnerName || (trackingNumber ? 'Standard Courier Partner' : 'Awaiting Seller Assignment');
+                  const arrivalDate = formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery);
+                  const locationText = activeDelivery?.currentLocation || (stepNumber === 5 ? 'Delivered to Consignee' : stepNumber >= 3 ? 'In Transit to Destination' : 'Seller Fulfillment Center');
+
+                  return (
+                    <div className="rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 space-y-4 shadow-2xs">
+                      {/* Header */}
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs">
+                            <Truck className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                              Shipment Tracking & Delivery Progress
+                            </h4>
+                            <p className="text-[11px] font-medium text-slate-500">Live dispatch and tracking status</p>
+                          </div>
+                        </div>
+                        <span className={cn("rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wider", stepStatusTone)}>
+                          {stepStatusLabel}
+                        </span>
+                      </div>
+
+                      {/* Visual Progress Stepper */}
+                      <div className="bg-slate-50/70 rounded-xl p-4 border border-slate-200/70 shadow-2xs">
+                        <div className="relative">
+                          {/* Connecting Track Background */}
+                          <div className="absolute top-4 left-6 right-6 h-1 bg-slate-200 rounded-full" />
+                          {/* Active Progress Bar */}
+                          <div
+                            className="absolute top-4 left-6 h-1 bg-emerald-500 rounded-full transition-all duration-500"
+                            style={{ width: `calc(${progressWidthPercent}% * (100% - 48px) / 100)` }}
+                          />
+
+                          {/* Milestones Nodes */}
+                          <div className="relative flex justify-between items-start">
+                            {milestones.map((m) => {
+                              const isCompleted = m.step < stepNumber || (m.step === 5 && stepNumber === 5);
+                              const isCurrent = m.step === stepNumber && stepNumber !== 5;
+                              const isUpcoming = m.step > stepNumber;
+
+                              return (
+                                <div key={m.step} className="flex flex-col items-center text-center max-w-[70px] sm:max-w-[100px]">
+                                  <div
+                                    className={cn(
+                                      "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all shadow-2xs",
+                                      isCompleted && "bg-emerald-500 text-white ring-4 ring-emerald-50",
+                                      isCurrent && "bg-slate-900 text-white ring-4 ring-slate-100 ring-offset-1 ring-offset-white",
+                                      isUpcoming && "bg-slate-100 text-slate-400 border border-slate-300"
+                                    )}
+                                  >
+                                    {isCompleted ? (
+                                      <CheckCircle2 className="h-4 w-4" />
+                                    ) : isCurrent ? (
+                                      <Truck className="h-3.5 w-3.5 animate-pulse" />
+                                    ) : (
+                                      <span className="font-mono text-[11px]">{m.step}</span>
+                                    )}
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "mt-2 text-[10px] sm:text-[11px] font-bold leading-tight",
+                                      isCompleted ? "text-slate-800" : isCurrent ? "text-slate-900 font-black" : "text-slate-400"
+                                    )}
+                                  >
+                                    {m.title}
+                                  </span>
+                                  <span className="text-[9px] text-slate-500 hidden sm:block mt-0.5 font-medium truncate max-w-full">
+                                    {m.desc}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Consignment Meta Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50/70 rounded-xl p-3 border border-slate-200/70 text-xs">
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Carrier Partner</span>
+                          <div className="flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <p className="font-bold text-slate-800 truncate" title={carrierName}>{carrierName}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Tracking Number / AWB</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn("font-mono font-bold truncate", trackingNumber ? "text-slate-900" : "text-slate-500 italic")}>
+                              {trackingNumber || 'Pending Waybill'}
+                            </span>
+                            {trackingNumber && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(trackingNumber);
+                                  toast.success('Tracking number copied to clipboard');
+                                }}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer rounded hover:bg-slate-200 transition-colors"
+                                title="Copy Tracking Number"
+                                aria-label="Copy Tracking Number"
+                              >
+                                <Copy className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Expected Arrival</span>
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <p className="font-bold text-slate-800">{arrivalDate}</p>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block mb-0.5">Current Location</span>
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <p className="font-bold text-slate-800 truncate" title={locationText}>{locationText}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Track Details Action Button */}
+                      <Button 
+                        size="sm"
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-wider h-9 rounded-lg shadow-2xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        onClick={() => {
+                          setViewingOrder(null);
+                          if (isSeller) {
+                            router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
+                          } else {
+                            router.push(`/orders/tracking?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
+                          }
+                        }}
+                      >
+                        <Truck className="h-3.5 w-3.5" /> Track Shipment Details
+                      </Button>
+                    </div>
+                  );
+                })()}
+
+                {/* Workflow Timeline Section */}
+                <div className="rounded-xl bg-white p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-[#12335f]" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Workflow Tracking & Timestamps</h4>
+                    </div>
+                    <span className="text-[10px] font-medium text-slate-500">Order Lifecycle Audit</span>
+                  </div>
+
+                  <div className="relative border-l-2 border-slate-200 pl-6 ml-3 space-y-4 py-1">
+                    {/* Step 1: PO Generated */}
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                      </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <span className="text-xs font-bold text-slate-900">Purchase Order Generated</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">{formatTimestamp(viewingOrder.createdAt)}</span>
+                      </div>
+                      <p className="text-[11px] font-medium text-slate-500 mt-0.5">PO record successfully created from procurement bidding workflow.</p>
+                    </div>
+
+                    {/* Step 2: PO Acknowledged */}
+                    {(() => {
+                      const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                      return viewingStatusLower !== 'generated' && viewingStatusLower !== 'order_placed' && viewingStatusLower !== 'cancelled' && (
+                        <div className="relative">
+                          <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                            <CheckCircle2 className="h-3 w-3" />
+                          </span>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                            <span className="text-xs font-bold text-slate-900">PO Acknowledged by Seller</span>
+                            <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                              {viewingOrder.acceptedAt ? formatTimestamp(viewingOrder.acceptedAt) : 'Acknowledged'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] font-medium text-slate-500 mt-0.5">Seller acknowledged and committed to fulfilling this order.</p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Step 3: Delivered */}
+                    {viewingOrder.status === 'delivered' && (
+                      <div className="relative">
+                        <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3" />
+                        </span>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs font-bold text-slate-900">Delivered & Completed</span>
+                          <span className="text-[10px] font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">Completed</span>
+                        </div>
+                        <p className="text-[11px] font-medium text-slate-500 mt-0.5">Consignment has been safely delivered and confirmed by buyer.</p>
+                      </div>
+                    )}
+
+                    {/* Step 4: Cancelled */}
+                    {viewingOrder.status === 'cancelled' && (
+                      <div className="relative">
+                        <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 ring-4 ring-rose-50 text-white shadow-2xs">
+                          <XCircle className="h-3 w-3" />
+                        </span>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs font-bold text-rose-700">Order Cancelled</span>
+                          <span className="text-[10px] font-mono font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">Cancelled</span>
+                        </div>
+                        <p className="text-[11px] font-medium text-rose-500 mt-0.5">Fulfillment terminated by one of the parties.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Terms & Documents section */}
+                {(() => {
+                  const terms = (viewingOrder.metadata as any)?.termsDocuments || {};
+                  const docs = (Array.isArray(terms.documents) ? terms.documents : []) as Array<{
+                    documentType: string;
+                    fileAssetId: number;
+                    fileName: string;
+                    fileSize: number;
+                  }>;
+                  
+                  const hasTerms = terms.deliveryTerms || terms.paymentTerms || terms.warrantyTerms || terms.inspectionTerms || terms.delayPenaltyDetails || terms.additionalTerms;
+                  const hasDocs = docs.length > 0;
+
+                  if (!hasTerms && !hasDocs) return null;
+
+                  return (
+                    <div className="rounded-xl bg-white p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-[#12335f]" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Procurement Terms & Documents</h4>
+                        </div>
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                        {hasTerms && (
+                          <div className="space-y-2">
+                            {terms.deliveryTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delivery Terms</p><p className="font-semibold text-slate-800">{terms.deliveryTerms}</p></div>}
+                            {terms.paymentTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Payment Terms</p><p className="font-semibold text-slate-800">{terms.paymentTerms}</p></div>}
+                            {terms.warrantyTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Warranty Terms</p><p className="font-semibold text-slate-800">{terms.warrantyTerms}</p></div>}
+                            {terms.inspectionTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Inspection Terms</p><p className="font-semibold text-slate-800">{terms.inspectionTerms}</p></div>}
+                            {terms.delayPenaltyDetails && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delay Penalty Details</p><p className="font-semibold text-slate-800">{terms.delayPenaltyDetails}</p></div>}
+                            {terms.additionalTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Additional Terms</p><p className="font-semibold text-slate-800">{terms.additionalTerms}</p></div>}
+                          </div>
+                        )}
+                        {hasDocs && (
+                          <div className="space-y-2">
+                            <p className="text-[9px] font-bold uppercase text-slate-500">Uploaded Procurement Documents</p>
+                            <div className="space-y-2">
+                              {docs.map((doc, dIdx) => (
+                                <div key={dIdx} className="flex items-center gap-3 rounded-lg bg-slate-50/80 border border-slate-200/80 p-2.5 hover:border-slate-300 transition-all">
+                                  <FileText className="h-4 w-4 shrink-0 text-[#12335f]" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{doc.documentType}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        openFileAsset({
+                                          id: doc.fileAssetId,
+                                          fileAssetId: doc.fileAssetId,
+                                          originalName: doc.fileName,
+                                        }, doc.fileName).catch(err => {
+                                          toast.error(err instanceof Error ? err.message : 'Unable to open document');
+                                        });
+                                      }}
+                                      title={doc.fileName}
+                                      className="block truncate text-xs font-bold text-[#12335f] hover:underline text-left w-full cursor-pointer"
+                                    >
+                                      {doc.fileName}
+                                    </button>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-500 shrink-0 font-mono">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Line Items Table Section - Responsive with Zero Horizontal Scroll */}
+                <div className="rounded-xl bg-white border border-slate-200/80 shadow-2xs overflow-hidden space-y-0">
+                  <div className="flex items-center justify-between bg-slate-50 px-4 py-3 border-b border-slate-200/80">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-[#12335f]" />
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Line Items</h4>
+                    </div>
+                    <span className="rounded-full bg-slate-200/80 px-2.5 py-0.5 text-[10px] font-bold text-slate-700">
+                      {(viewingOrder.items?.length || 1)} Item(s)
+                    </span>
+                  </div>
+
+                  {/* Table with fixed layout to prevent horizontal scroll */}
+                  <div className="w-full">
+                    <table className="w-full text-left border-collapse table-fixed">
+                      <thead>
+                        <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <th scope="col" className="py-2.5 px-3 text-center w-12 sm:w-14">#</th>
+                          <th scope="col" className="py-2.5 px-3 text-left">Item Description</th>
+                          <th scope="col" className="py-2.5 px-2 text-center w-16 sm:w-20">Qty</th>
+                          <th scope="col" className="py-2.5 px-3 text-right w-24 sm:w-28">Unit Price</th>
+                          <th scope="col" className="py-2.5 px-3 text-right w-28 sm:w-32">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {((viewingOrder.items && viewingOrder.items.length > 0)
+                          ? viewingOrder.items
+                          : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]
+                        ).map((item: any, idx: number) => {
+                          const qty = Number(item.quantity || 1);
+                          const unitPrice = Number(item.unitPrice || 0);
+                          const totalAmount = Number(item.totalAmount || (qty * unitPrice));
+                          return (
+                            <tr key={item.id || `po-item-${idx}`} className="hover:bg-slate-50/70 transition-colors">
+                              <td className="py-3 px-3 text-center font-mono font-bold text-slate-400 text-[11px] align-top">
+                                {String(idx + 1).padStart(2, '0')}
+                              </td>
+                              <td className="py-3 px-3 align-top">
+                                <p className="font-bold text-slate-900 leading-snug break-words">
+                                  {item.itemName || viewingOrder.title}
                                 </p>
-                              )}
-                              {item.hsnCode && (
-                                <span className="inline-block mt-1 text-[9px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                                  HSN: {item.hsnCode}
+                                {item.description && (
+                                  <p className="text-[11px] font-medium text-slate-500 mt-0.5 leading-relaxed break-words">
+                                    {item.description}
+                                  </p>
+                                )}
+                                {item.hsnCode && (
+                                  <span className="inline-block mt-1 text-[9px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                    HSN: {item.hsnCode}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-2 text-center align-top">
+                                <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
+                                  {qty}
                                 </span>
-                              )}
-                            </td>
-                            <td className="py-3.5 px-2 text-center align-top">
-                              <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
-                                {qty}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-3 text-right font-mono font-semibold text-slate-600 align-top whitespace-nowrap">
-                              {formatCurrency(unitPrice)}
-                            </td>
-                            <td className="py-3.5 px-3 text-right font-mono font-black text-slate-900 align-top whitespace-nowrap">
-                              {formatCurrency(totalAmount)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              </td>
+                              <td className="py-3 px-3 text-right font-mono font-semibold text-slate-600 align-top whitespace-nowrap">
+                                {formatCurrency(unitPrice)}
+                              </td>
+                              <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 align-top whitespace-nowrap">
+                                {formatCurrency(totalAmount)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-slate-50/80 border-t border-slate-200/80">
+                    <div className="text-xs text-slate-500 font-medium">
+                      Showing <span className="font-bold text-slate-800">{(viewingOrder.items?.length || 1)}</span> line item(s)
+                    </div>
+                    <div className="bg-slate-900 text-white rounded-lg px-4 py-2 text-right shadow-2xs flex items-center gap-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300">Grand Total:</span>
+                      <span className="text-base font-bold text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-slate-50/70 border-t border-slate-200/80">
-                  <div className="text-xs text-slate-500 font-medium">
-                    Showing <span className="font-bold text-slate-800">{(viewingOrder.items?.length || 1)}</span> line item(s)
-                  </div>
-                  <div className="bg-[#12335f] text-white rounded-xl px-5 py-2.5 text-right shadow-sm flex items-center gap-4">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Grand Total Amount</span>
-                    <span className="text-lg font-black text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
-                  </div>
-                </div>
+                {/* Signatures & Stamps Card */}
+                {(() => {
+                  const buyerObj = (viewingOrder.buyer as any) || {};
+                  const sellerObj = (viewingOrder.seller as any) || {};
+                  const bReg = (buyerObj.registrationDetails as Record<string, any>) || {};
+                  const sReg = (sellerObj.registrationDetails as Record<string, any>) || {};
+                  const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+                  const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+                  const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+
+                  const bStamp = resolveMediaUrl(bReg.stampUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null));
+                  const bSig = resolveMediaUrl(bReg.signatureUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null));
+                  const sStamp = resolveMediaUrl(sReg.stampUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null));
+                  const sSig = resolveMediaUrl(sReg.signatureUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null));
+
+                  const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || bReg.businessName || viewingOrder.buyer?.name || 'Buyer';
+                  const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sReg.businessName || viewingOrder.seller?.name || 'Seller';
+
+                  return (
+                    <div className="rounded-xl bg-white p-4 sm:p-5 border border-slate-200/80 shadow-2xs space-y-3.5">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 text-[#12335f]" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-[#12335f]">Signatures & Official Authorization</h4>
+                        </div>
+                        <span className="text-[10px] font-medium text-slate-500">Verified MSME Seals</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Buyer Authorization */}
+                        <div className="rounded-lg bg-slate-50/80 p-3.5 border border-slate-200/60 flex flex-col justify-between space-y-2.5">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Buyer Authorization</span>
+                            <p className="text-xs font-bold text-slate-900 truncate">For {buyerOrgDisplay}</p>
+                          </div>
+                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70">
+                            {bStamp ? (
+                              <img src={bStamp} alt="Buyer Stamp" className="h-8 w-8 object-contain mix-blend-multiply shrink-0" />
+                            ) : (
+                              <div className="h-8 w-8 rounded border border-dashed border-slate-300 flex items-center justify-center text-[7px] font-bold text-slate-400 shrink-0 uppercase">
+                                Stamp
+                              </div>
+                            )}
+                            {bSig ? (
+                              <img src={bSig} alt="Buyer Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                            ) : (
+                              <span className="text-[10px] font-medium text-slate-400 italic">Signature on file</span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-medium border-t border-slate-200 pt-1 text-center block">Authorized Buyer Signatory</span>
+                        </div>
+
+                        {/* Seller Authorization */}
+                        <div className="rounded-lg bg-slate-50/80 p-3.5 border border-slate-200/60 flex flex-col justify-between space-y-2.5">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Supplier Authorization</span>
+                            <p className="text-xs font-bold text-slate-900 truncate">For {sellerOrgDisplay}</p>
+                          </div>
+                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70">
+                            {sStamp ? (
+                              <img src={sStamp} alt="Seller Stamp" className="h-8 w-8 object-contain mix-blend-multiply shrink-0" />
+                            ) : (
+                              <div className="h-8 w-8 rounded border border-dashed border-slate-300 flex items-center justify-center text-[7px] font-bold text-slate-400 shrink-0 uppercase">
+                                Stamp
+                              </div>
+                            )}
+                            {sSig ? (
+                              <img src={sSig} alt="Seller Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                            ) : (
+                              <span className="text-[10px] font-medium text-slate-400 italic">Signature on file</span>
+                            )}
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-medium border-t border-slate-200 pt-1 text-center block">Authorized Supplier Signatory</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
               </div>
 
-              {/* Signatures & Stamps Card */}
-              {(() => {
-                const buyerObj = (viewingOrder.buyer as any) || {};
-                const sellerObj = (viewingOrder.seller as any) || {};
-                const bReg = (buyerObj.registrationDetails as Record<string, any>) || {};
-                const sReg = (sellerObj.registrationDetails as Record<string, any>) || {};
-                const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
-                const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
-                const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
-
-                const bStamp = resolveMediaUrl(bReg.stampUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null));
-                const bSig = resolveMediaUrl(bReg.signatureUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null));
-                const sStamp = resolveMediaUrl(sReg.stampUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null));
-                const sSig = resolveMediaUrl(sReg.signatureUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null));
-
-                const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || bReg.businessName || viewingOrder.buyer?.name || 'Buyer';
-                const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sReg.businessName || viewingOrder.seller?.name || 'Seller';
-
-                return (
-                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-[#12335f]" />
-                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Signatures & Official Authorization</h4>
-                      </div>
-                      <span className="text-[10px] font-semibold text-slate-400">Verified MSME Seals</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Buyer Authorization */}
-                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer Authorization</span>
-                          <p className="text-xs font-black text-slate-900 truncate">For {buyerOrgDisplay}</p>
-                        </div>
-                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
-                          {bStamp ? (
-                            <img src={bStamp} alt="Buyer Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
-                          ) : (
-                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
-                              Stamp
-                            </div>
-                          )}
-                          {bSig ? (
-                            <img src={bSig} alt="Buyer Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
-                          )}
-                        </div>
-                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Buyer Signatory</span>
-                      </div>
-
-                      {/* Seller Authorization */}
-                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
-                        <div>
-                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Supplier Authorization</span>
-                          <p className="text-xs font-black text-slate-900 truncate">For {sellerOrgDisplay}</p>
-                        </div>
-                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
-                          {sStamp ? (
-                            <img src={sStamp} alt="Seller Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
-                          ) : (
-                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
-                              Stamp
-                            </div>
-                          )}
-                          {sSig ? (
-                            <img src={sSig} alt="Seller Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
-                          )}
-                        </div>
-                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Supplier Signatory</span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-            </div>
-
-            {/* Modal Sticky Action Footer - Single Row */}
-            <div className="flex items-center justify-between gap-2.5 border-t border-slate-200 bg-white px-5 py-3 shrink-0 shadow-lg overflow-x-auto no-scrollbar">
-              <div className="flex items-center gap-2 shrink-0">
-                {(() => {
-                  const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
-                  const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
-                  const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
-                  return (
-                    <>
-                      {isSeller && isIssuedModal && (
-                        <>
-                          <Button
-                            onClick={() => {
-                              setViewingOrder(null);
-                              handleAcceptOrder(viewingOrder);
-                            }}
-                            className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                          >
-                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept PO
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setViewingOrder(null);
-                              handleRejectOrder(viewingOrder);
-                            }}
-                            className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
-                          >
-                            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject PO
-                          </Button>
-                        </>
-                      )}
-                      {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
-                        <>
-                          {(() => {
-                            const hasApprovedGrn = Boolean(
-                              (viewingOrder as any)?.grns && (viewingOrder as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
-                            );
-                            if (hasApprovedGrn) {
+              {/* Modal Sticky Action Footer - Harmonized & Professional */}
+              <div className="flex items-center justify-between gap-2.5 border-t border-slate-200 bg-white px-4 sm:px-5 py-3 shrink-0 shadow-lg overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-2 shrink-0">
+                  {(() => {
+                    const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                    const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
+                    const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
+                    return (
+                      <>
+                        {isSeller && isIssuedModal && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                setViewingOrder(null);
+                                handleAcceptOrder(viewingOrder);
+                              }}
+                              className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept PO
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setViewingOrder(null);
+                                handleRejectOrder(viewingOrder);
+                              }}
+                              className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject PO
+                            </Button>
+                          </>
+                        )}
+                        {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
+                          <>
+                            {(() => {
+                              const hasInvoice = Boolean(
+                                (viewingOrder as any)?.invoices?.length > 0 || (viewingOrder as any)?.invoiceId || (viewingOrder as any)?.invoiceNumber
+                              );
+                              if (hasInvoice) {
+                                const invNo = (viewingOrder as any)?.invoices?.[0]?.invoiceNumber || (viewingOrder as any)?.invoiceNumber || viewingOrder.id;
+                                return (
+                                  <Button
+                                    onClick={() => {
+                                      setViewingOrder(null);
+                                      router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                                    }}
+                                    className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                  >
+                                    <FileText className="mr-1.5 h-3.5 w-3.5" /> View Invoice
+                                  </Button>
+                                );
+                              }
                               return (
                                 <Button
                                   onClick={() => {
@@ -2371,128 +2462,165 @@ export default function PurchaseOrders() {
                                     const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
                                     router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
                                   }}
-                                  className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                                  className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                                 >
-                                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice from PO (GRN Verified)
+                                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice from PO
                                 </Button>
                               );
-                            }
+                            })()}
+                            <Button
+                              onClick={() => {
+                                setViewingOrder(null);
+                                handleOpenDelivery(viewingOrder);
+                              }}
+                              className="h-9 bg-slate-800 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-900 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery Tracking
+                            </Button>
+                          </>
+                        )}
+                        {(viewingOrder as any)?.bidId && (
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              const bId = (viewingOrder as any).bidId;
+                              setViewingOrder(null);
+                              router.push(`/bids/${bId}`);
+                            }}
+                            className="h-9 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap cursor-pointer shadow-2xs"
+                          >
+                            <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Quotation
+                          </Button>
+                        )}
+                        {(() => {
+                          const hasGrn = Boolean(
+                            (viewingOrder as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(viewingStatusLower)
+                          );
+                          const isPaid = viewingStatusLower.includes('paid');
+                          if (hasGrn && !isPaid) {
                             return (
                               <Button
-                                disabled
-                                className="h-9 bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap opacity-60 cursor-not-allowed"
-                                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+                                onClick={() => {
+                                  setViewingOrder(null);
+                                  router.push('/payments');
+                                }}
+                                className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                               >
-                                <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Convert PO to Invoice (GRN Locked)
+                                <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Proof
                               </Button>
                             );
-                          })()}
+                          }
+                          if (isPaid) {
+                            return (
+                              <Button
+                                onClick={() => {
+                                  setViewingOrder(null);
+                                  router.push('/payments');
+                                }}
+                                className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-400" /> View Payment Proof
+                              </Button>
+                            );
+                          }
+                          return null;
+                        })()}
+                        {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
                           <Button
-                            onClick={() => {
-                              setViewingOrder(null);
-                              handleOpenDelivery(viewingOrder);
-                            }}
-                            className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                            variant="outline"
+                            onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
+                            className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                           >
-                            <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery / Manage Dispatch
+                            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
                           </Button>
-                        </>
-                      )}
-                      {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
-                        <Button
-                          variant="outline"
-                          onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
-                          className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
-                        >
-                          <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
-                        </Button>
-                      )}
-                      {isBuyer && viewingStatusLower !== 'cancelled' && (
-                        <>
+                        )}
+                        {isBuyer && viewingStatusLower !== 'cancelled' && (
+                          <>
+                            <Button
+                              onClick={() => {
+                                const target = viewingOrder;
+                                setViewingOrder(null);
+                                setRecordPaymentOrder(target);
+                              }}
+                              className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                            </Button>
+                            <Button
+                              onClick={() => setUploadProofOrder(viewingOrder)}
+                              className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                            >
+                              <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => setViewProofOrder(viewingOrder)}
+                              className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                            >
+                              <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
+                            </Button>
+                          </>
+                        )}
+                        {isSeller && viewingStatusLower !== 'cancelled' && (
                           <Button
                             onClick={() => {
                               const target = viewingOrder;
                               setViewingOrder(null);
-                              setRecordPaymentOrder(target);
+                              setConfirmSettlementOrder(target);
                             }}
-                            className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                            className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                           >
-                            <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
                           </Button>
-                          <Button
-                            onClick={() => setUploadProofOrder(viewingOrder)}
-                            className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                          >
-                            <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
-                          </Button>
+                        )}
+                        {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
                           <Button
                             variant="outline"
                             onClick={() => setViewProofOrder(viewingOrder)}
-                            className="h-9 border-slate-300 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-xl px-3.5 whitespace-nowrap"
+                            className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                           >
-                            <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Payment Slip
+                            <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
                           </Button>
-                        </>
-                      )}
-                      {isSeller && viewingStatusLower !== 'cancelled' && (
-                        <Button
-                          onClick={() => {
-                            const target = viewingOrder;
-                            setViewingOrder(null);
-                            setConfirmSettlementOrder(target);
-                          }}
-                          className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                        >
-                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
-                        </Button>
-                      )}
-                      {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
-                        <Button
-                          variant="outline"
-                          onClick={() => setViewProofOrder(viewingOrder)}
-                          className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap"
-                        >
-                          <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Slip
-                        </Button>
-                      )}
-                      {isBuyer && viewingStatusLower === 'delivered' && (
-                        <Button
-                          onClick={() => handleOpenRepeatModal(viewingOrder)}
-                          className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                        >
-                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
-                        </Button>
-                      )}
-                    </>
-                  );
-                })()}
+                        )}
+                        {isBuyer && viewingStatusLower === 'delivered' && (
+                          <Button
+                            onClick={() => handleOpenRepeatModal(viewingOrder)}
+                            className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                          >
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
+                          </Button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setReceiptModalOrder(viewingOrder)} 
+                    className="h-9 text-xs font-bold uppercase tracking-wider rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                  >
+                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Official PO
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
+                    className="h-9 text-xs font-bold uppercase tracking-wider rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Download PO
+                  </Button>
+                  <Button 
+                    onClick={() => setViewingOrder(null)} 
+                    className="h-9 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold uppercase tracking-wider rounded-lg px-4 whitespace-nowrap cursor-pointer"
+                  >
+                    Close
+                  </Button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setReceiptModalOrder(viewingOrder)} 
-                  className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-blue-200 bg-blue-50/60 text-[#12335f] hover:bg-blue-100/60 px-3.5 whitespace-nowrap"
-                >
-                  <Receipt className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> View Official PO
-                </Button>
-                <Button 
-                  variant="outline" 
-                  onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
-                  className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap"
-                >
-                  <Download className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Download PO
-                </Button>
-                <Button 
-                  onClick={() => setViewingOrder(null)} 
-                  className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-4 shadow-sm whitespace-nowrap"
-                >
-                  Close
-                </Button>
-              </div>
             </div>
-
-          </div>
+          </FocusTrap>
         </div>
       )}
 

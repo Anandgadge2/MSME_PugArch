@@ -35,6 +35,7 @@ export interface SupplierQuotationDetailViewProps {
   onBack: () => void;
   onAcceptAndGeneratePo?: (result: any) => void;
   onDownloadPdf?: (result: any) => void;
+  onOpenTechnicalEvaluation?: (result: any) => void;
 }
 
 export interface SupplierQuotationDetailModalProps {
@@ -45,6 +46,7 @@ export interface SupplierQuotationDetailModalProps {
   bidId?: string;
   onAcceptAndGeneratePo?: (result: any) => void;
   onDownloadPdf?: (result: any) => void;
+  onOpenTechnicalEvaluation?: (result: any) => void;
 }
 
 const formatCurrency = (val?: number | string | null) => {
@@ -117,9 +119,10 @@ export function normalizeQuotationDocuments(source: any): NormalizedQuotationDoc
   for (const urlItem of candidateUrls) {
     const urlStr = typeof urlItem === 'string' ? urlItem : (urlItem?.url || urlItem?.fileUrl);
     if (urlStr) {
+      const diskName = typeof urlItem === 'object' && (urlItem.fileName || urlItem.originalName) ? (urlItem.fileName || urlItem.originalName) : (source.attachmentFileName || source.details?.attachmentFileName || urlStr.split('/').pop() || 'Attachment Document');
       rawDocs.push({
-        name: typeof urlItem === 'object' && urlItem.name ? urlItem.name : 'Supporting Document',
-        fileName: typeof urlItem === 'object' && urlItem.fileName ? urlItem.fileName : (source.attachmentFileName || source.details?.attachmentFileName || urlStr.split('/').pop() || 'Supporting Document'),
+        name: diskName,
+        fileName: diskName,
         fileUrl: urlStr,
         fileAssetId: typeof urlItem === 'object' && urlItem.fileAssetId ? urlItem.fileAssetId : (source.fileAssetId || source.details?.fileAssetId),
       });
@@ -135,73 +138,38 @@ export function normalizeQuotationDocuments(source: any): NormalizedQuotationDoc
     const urlMatch = String(fileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
     const fileAssetId = item.fileAssetId || (typeof item.id === 'number' ? item.id : (urlMatch ? Number(urlMatch[1]) : null));
     const rawDiskFile = String(item.fileName || item.originalName || item.file || '').trim();
-    const rawName = String(item.documentName || item.name || item.title || '').trim();
+    const rawCategoryName = String(item.documentName || item.name || item.title || '').trim();
 
-    let cleanDocName = rawName;
     let cleanFileName = rawDiskFile;
-
-    if (!cleanFileName && cleanDocName.includes('.')) {
-      cleanFileName = cleanDocName;
-    }
     if (!cleanFileName && fileUrl) {
-      cleanFileName = fileUrl.split('/').pop() || 'document.pdf';
+      cleanFileName = fileUrl.split('/').pop() || 'Document';
+    }
+    if (!cleanFileName && rawCategoryName && rawCategoryName.includes('.')) {
+      cleanFileName = rawCategoryName;
     }
 
-    if (!cleanDocName || cleanDocName === 'Document' || cleanDocName === 'Supporting Document' || cleanDocName === 'TECHNICAL_PROPOSAL') {
-      cleanDocName = cleanFileName || 'Attachment Document';
-    }
+    // Display name MUST be the actual uploaded file name
+    const actualFileName = cleanFileName || rawCategoryName || 'Uploaded Document';
+    const categoryTag = rawCategoryName && rawCategoryName !== actualFileName
+      ? rawCategoryName
+      : inferDocumentCategory(actualFileName, cleanFileName);
 
-    const urlKey = fileUrl ? fileUrl.toLowerCase().trim() : '';
-    const assetKey = fileAssetId ? `asset-${fileAssetId}` : '';
-    const fileKey = cleanFileName ? cleanFileName.toLowerCase().trim() : '';
-    const nameKey = cleanDocName ? cleanDocName.toLowerCase().trim() : '';
+    const primaryKey = fileAssetId ? `asset-${fileAssetId}` : (fileUrl ? fileUrl.toLowerCase().trim() : (actualFileName ? actualFileName.toLowerCase().trim() : `doc-${docMap.size}`));
 
-    let matchedKey: string | null = null;
-    for (const [k, existing] of docMap.entries()) {
-      const existingUrl = existing.fileUrl ? existing.fileUrl.toLowerCase().trim() : '';
-      const existingAsset = existing.fileAssetId ? `asset-${existing.fileAssetId}` : '';
-      const existingFile = existing.fileName ? existing.fileName.toLowerCase().trim() : '';
-      const existingName = existing.name ? existing.name.toLowerCase().trim() : '';
-
-      if (urlKey && existingUrl && urlKey === existingUrl) {
-        matchedKey = k;
-        break;
-      }
-      if (assetKey && existingAsset && assetKey === existingAsset) {
-        matchedKey = k;
-        break;
-      }
-      if (fileKey && existingFile && fileKey === existingFile) {
-        matchedKey = k;
-        break;
-      }
-      if (nameKey && existingName && nameKey === existingName && nameKey !== 'document' && nameKey !== 'supporting document') {
-        matchedKey = k;
-        break;
-      }
-    }
-
-    if (matchedKey) {
-      const existing = docMap.get(matchedKey)!;
-      if (cleanDocName && !cleanDocName.includes('.') && (existing.name.includes('.') || existing.name === existing.fileName)) {
-        existing.name = cleanDocName;
-      }
-      if (!existing.fileUrl && fileUrl) existing.fileUrl = fileUrl;
-      if (!existing.fileAssetId && fileAssetId) existing.fileAssetId = fileAssetId;
-      if (cleanFileName && (!existing.fileName || existing.fileName === 'document.pdf')) existing.fileName = cleanFileName;
-      existing.category = inferDocumentCategory(existing.name, existing.fileName);
-    } else {
-      const primaryKey = urlKey || assetKey || fileKey || nameKey || `doc-${docMap.size}`;
-      const category = inferDocumentCategory(cleanDocName, cleanFileName);
-
+    if (!docMap.has(primaryKey)) {
       docMap.set(primaryKey, {
         id: item.id || fileAssetId || `doc-${docMap.size + 1}`,
-        name: cleanDocName,
-        fileName: cleanFileName || cleanDocName,
+        name: actualFileName,
+        fileName: actualFileName,
         fileUrl,
         fileAssetId,
-        category,
+        category: categoryTag,
       });
+    } else {
+      const existing = docMap.get(primaryKey)!;
+      if (!existing.fileUrl && fileUrl) existing.fileUrl = fileUrl;
+      if (!existing.fileAssetId && fileAssetId) existing.fileAssetId = fileAssetId;
+      if (categoryTag && categoryTag !== 'Statutory Document') existing.category = categoryTag;
     }
   }
 
@@ -219,7 +187,11 @@ export function SupplierQuotationDetailView({
   onBack,
   onAcceptAndGeneratePo,
   onDownloadPdf,
+  onOpenTechnicalEvaluation,
 }: SupplierQuotationDetailViewProps) {
+  const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
+  const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
+
   if (!result) return null;
 
   // Extract seller identity & contact information
@@ -236,21 +208,21 @@ export function SupplierQuotationDetailView({
     result.details?.contactPerson ||
     result.sellerUser?.name ||
     result.seller?.name ||
-    'Authorized Representative';
+    '—';
 
   const sellerEmail =
     result.sellerEmail ||
     result.details?.email ||
     result.sellerUser?.email ||
     result.seller?.email ||
-    'Not provided';
+    '—';
 
   const sellerMobile =
     result.sellerMobile ||
     result.details?.mobile ||
     result.sellerUser?.mobile ||
     result.seller?.mobile ||
-    'Not listed';
+    '—';
 
   const submittedAt = result.submittedAt || result.details?.submittedAt || result.createdAt;
   const statusStr = String(result.resultStatus || result.technicalStatus || result.status || 'Under Review');
@@ -296,7 +268,7 @@ export function SupplierQuotationDetailView({
   const deliveryTimeline =
     result.deliveryTimeline ||
     result.details?.deliveryTimeline ||
-    'Standard SLA (20 Days)';
+    'As per tender SLA';
 
   const termsAndConditions =
     result.terms ||
@@ -308,7 +280,7 @@ export function SupplierQuotationDetailView({
     result.paymentTerms ||
     result.details?.complianceRemarks ||
     result.complianceRemarks ||
-    'Standard procurement terms and conditions apply.';
+    '';
 
   const coverNoteMessage =
     result.message ||
@@ -319,10 +291,7 @@ export function SupplierQuotationDetailView({
     result.details?.rfqNotes ||
     result.offeredItem ||
     result.details?.offeredItemDescription ||
-    'No cover note provided by supplier.';
-
-  const makeBrand = result.makeBrand || result.details?.makeBrand || result.responseData?.makeBrand || 'As quoted';
-  const model = result.model || result.details?.model || result.responseData?.model || 'Standard';
+    '';
 
   // Extract Line Items from all authentic quotation sources
   const parseJsonSafe = (val: any) => {
@@ -361,6 +330,72 @@ export function SupplierQuotationDetailView({
     }
   }
 
+  const firstValidStr = (...vals: any[]) => {
+    for (const v of vals) {
+      if (
+        v !== undefined &&
+        v !== null &&
+        typeof v === 'string' &&
+        v.trim() !== '' &&
+        v.trim() !== '—' &&
+        v.trim() !== '-' &&
+        v.trim().toLowerCase() !== 'null' &&
+        v.trim().toLowerCase() !== 'undefined'
+      ) {
+        return v.trim();
+      }
+      if (typeof v === 'number' && !isNaN(v)) {
+        return String(v);
+      }
+    }
+    return '';
+  };
+
+  const makeBrand = firstValidStr(
+    result.makeBrand,
+    result.brand,
+    result.details?.makeBrand,
+    result.details?.brand,
+    result.responseData?.makeBrand,
+    result.rawParticipation?.makeBrand,
+    result.rawParticipation?.brand,
+    parsedResp.makeBrand,
+    parsedResp.brand,
+    parsedResp.technicalOffer?.makeBrand,
+    parsedAck.makeBrand,
+    parsedAck.brand,
+    parsedDesc.makeBrand,
+    rawLineItems[0]?.makeBrand,
+    rawLineItems[0]?.brand,
+    '—'
+  );
+
+  const model = firstValidStr(
+    result.model,
+    result.offeredModel,
+    result.modelNumber,
+    result.modelRef,
+    result.partNumber,
+    result.details?.model,
+    result.details?.offeredModel,
+    result.details?.modelNumber,
+    result.responseData?.model,
+    result.rawParticipation?.model,
+    result.rawParticipation?.offeredModel,
+    parsedResp.model,
+    parsedResp.offeredModel,
+    parsedResp.modelNumber,
+    parsedResp.technicalOffer?.model,
+    parsedAck.model,
+    parsedAck.offeredModel,
+    parsedAck.modelNumber,
+    parsedDesc.model,
+    rawLineItems[0]?.model,
+    rawLineItems[0]?.modelNumber,
+    rawLineItems[0]?.partNumber,
+    '—'
+  );
+
   // Gather tender items from bid for authentic item-wise mapping
   const tenderItems: any[] = [
     ...(Array.isArray(bid?.items) && bid.items.length ? bid.items : []),
@@ -384,21 +419,21 @@ export function SupplierQuotationDetailView({
 
     rawLineItems = uniqueTenderItems.map((item: any) => {
       const qty = Number(item.quantity || 1);
-      const uPrice = Number(item.unitPrice || item.unitRate || rawLineItems[0]?.unitPrice || rawLineItems[0]?.unitRate || unitRateFromTotal || 15);
+      const uPrice = Number(item.unitPrice || item.unitRate || rawLineItems[0]?.unitPrice || rawLineItems[0]?.unitRate || unitRateFromTotal || 0);
       const itemGst = Number(item.gstPercent ?? item.gstPercentage ?? gstPercentage ?? 18);
       const lineTot = Math.round(uPrice * qty * (1 + itemGst / 100));
       return {
         itemName: item.itemName || item.name || 'Tender Item',
         description: item.description || item.technicalSpecification || '',
-        technicalSpecs: item.technicalSpecification || item.technicalSpecs || item.specificationsText || 'As per tender requirements',
+        technicalSpecs: item.technicalSpecification || item.technicalSpecs || item.specificationsText || '—',
         quantity: qty,
         unitOfMeasure: item.unitOfMeasure || item.unit || 'Nos.',
         unitPrice: uPrice,
         unitRate: uPrice,
         gstPercent: itemGst,
-        makeBrand: item.brand || item.makeBrand || item.brandPreference || makeBrand || 'Standard',
-        model: item.model || model || 'Standard',
-        hsn: item.hsn || item.hsnSac || 'HSN-SAC',
+        makeBrand: item.brand || item.makeBrand || item.brandPreference || makeBrand || '—',
+        model: item.model || model || '—',
+        hsn: item.hsn || item.hsnSac || '—',
         lineTotal: lineTot,
         totalAmount: lineTot,
       };
@@ -435,17 +470,23 @@ export function SupplierQuotationDetailView({
   // Extract & deduplicate authentic quotation documents
   const uniqueDocs = normalizeQuotationDocuments(result);
 
-  const statutoryChecklist = [
-    { label: 'GST Registration', verified: uniqueDocs.some(d => /gst/i.test(`${d.name} ${d.category}`)) },
-    { label: 'PAN Card Verification', verified: uniqueDocs.some(d => /pan/i.test(`${d.name} ${d.category}`)) },
-    { label: 'Bank Mandate', verified: uniqueDocs.some(d => /bank|mandate/i.test(`${d.name} ${d.category}`)) },
-    { label: 'Technical Compliance', verified: uniqueDocs.some(d => /technical|compliance/i.test(`${d.name} ${d.category}`)) },
-    { label: 'Price Breakup', verified: uniqueDocs.some(d => /price|breakup|boq/i.test(`${d.name} ${d.category}`)) },
-    { label: 'UDYAM / MSME', verified: uniqueDocs.some(d => /udyam|msme/i.test(`${d.name} ${d.category}`)) },
+  // Derive statutory checklist dynamically from bid requested documents or uploaded document categories
+  const bidReqDocs: any[] = [
+    ...(Array.isArray(bid?.requestedDocuments) ? bid.requestedDocuments : []),
+    ...(Array.isArray(bid?.technicalPacket?.requestedDocuments) ? bid.technicalPacket.requestedDocuments : []),
+    ...(Array.isArray(bid?.technicalPacket?.documents) ? bid.technicalPacket.documents : [])
   ];
 
-  const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
-  const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
+  const statutoryChecklist = bidReqDocs.length > 0
+    ? bidReqDocs.map((req: any) => {
+        const reqName = typeof req === 'string' ? req : (req.name || req.title || req.documentName || 'Document');
+        const isVerified = uniqueDocs.some(d =>
+          d.name.toLowerCase().includes(reqName.toLowerCase()) ||
+          d.category.toLowerCase().includes(reqName.toLowerCase())
+        );
+        return { label: reqName, verified: isVerified };
+      })
+    : uniqueDocs.map(d => ({ label: d.category || d.name, verified: true }));
 
   const handlePreviewDoc = async (doc: any) => {
     try {
@@ -489,7 +530,7 @@ export function SupplierQuotationDetailView({
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-3 sm:px-5 py-3 space-y-3 pb-20 animate-in fade-in duration-150">
+    <div className="mx-auto w-full max-w-7xl px-3 sm:px-5 py-3 space-y-3 pb-28 animate-in fade-in duration-150">
       
       {/* ── 1. Compact Top Bar: Navigation + Breadcrumb + Primary Actions ── */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 pb-0.5">
@@ -526,7 +567,20 @@ export function SupplierQuotationDetailView({
 
         {/* Quick Actions */}
         <div className="flex items-center gap-2">
-          {/* {onDownloadPdf && (
+          {onOpenTechnicalEvaluation && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenTechnicalEvaluation(result)}
+              className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+              <span>Technical Evaluation Record</span>
+            </Button>
+          )}
+
+          {onDownloadPdf && (
             <Button
               type="button"
               variant="outline"
@@ -537,11 +591,11 @@ export function SupplierQuotationDetailView({
               <Download className="h-3.5 w-3.5 text-blue-600" />
               <span>PDF</span>
             </Button>
-          )} */}
+          )}
 
-          {/* {isAwarded ? (
-            <span className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-100 border border-emerald-200 px-3 text-xs font-black text-emerald-800 uppercase tracking-wide">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
+          {isAwarded ? (
+            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-100 border border-emerald-200 px-3 text-xs font-black text-emerald-800 uppercase tracking-wide">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
             </span>
           ) : onAcceptAndGeneratePo ? (
             <button
@@ -550,9 +604,9 @@ export function SupplierQuotationDetailView({
               className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 text-xs font-black text-white transition-all inline-flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Accept Quotation & Generate PO</span>
+              <span>Accept Quotation &amp; Generate PO</span>
             </button>
-          ) : null} */}
+          ) : null}
         </div>
       </div>
 
@@ -703,21 +757,34 @@ export function SupplierQuotationDetailView({
         </div>
 
         {/* KPI 4 */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 border border-purple-100">
-            <ShieldCheck className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 border border-purple-100">
+              <ShieldCheck className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
+                Evaluation Standing
+              </span>
+              <p className="text-xs font-black text-purple-900 mt-0.5 leading-tight truncate">
+                Rank {rank} • {statusStr}
+              </p>
+              <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
+                Verified &amp; Qualified Bidder
+              </p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Evaluation Standing
-            </span>
-            <p className="text-xs font-black text-purple-900 mt-0.5 leading-tight truncate">
-              Rank {rank} • Responsive
-            </p>
-            <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
-              Verified & Qualified Bidder
-            </p>
-          </div>
+          {onOpenTechnicalEvaluation && (
+            <button
+              type="button"
+              onClick={() => onOpenTechnicalEvaluation(result)}
+              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50/80 hover:bg-purple-100 text-purple-800 px-2 py-1 text-[10px] font-bold transition-colors cursor-pointer shrink-0 shadow-2xs"
+              title="Open Technical Evaluation Record"
+            >
+              <Eye className="h-3 w-3 text-purple-600" />
+              <span>Eval Record</span>
+            </button>
+          )}
         </div>
 
       </div>
@@ -791,15 +858,15 @@ export function SupplierQuotationDetailView({
                     <td className="px-3 py-2.5 text-[11px] text-slate-700">
                       <div>
                         <span className="text-slate-400">Make:</span>{' '}
-                        <strong className="text-slate-800">{line.makeBrand || makeBrand || 'Standard'}</strong>
+                        <strong className="text-slate-800">{line.makeBrand || makeBrand || '—'}</strong>
                       </div>
                       <div className="text-[10px] text-slate-500">
-                        Model: {line.model || model || 'Standard'}
+                        Model: {line.model || model || '—'}
                       </div>
                     </td>
 
                     <td className="px-3 py-2.5 text-[11px] text-slate-700">
-                      <div className="font-mono text-slate-500 text-[10px]">{line.hsn || 'HSN-SAC'}</div>
+                      <div className="font-mono text-slate-500 text-[10px]">{line.hsn || '—'}</div>
                       <span className="inline-block px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200/70 font-bold text-[9px]">
                         GST {gst}%
                       </span>
@@ -855,7 +922,7 @@ export function SupplierQuotationDetailView({
       {/* ── 5. Balanced Operational 2-Column Grid (Zero Wasted Space) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         
-        {/* Left: Supplier Cover Note, Terms & Conditions, and Supporting Documents */}
+        {/* Left: Supplier Cover Note, Terms & Conditions */}
         <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-3 flex flex-col justify-between">
           <div className="space-y-2.5">
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
@@ -870,21 +937,27 @@ export function SupplierQuotationDetailView({
               </span>
             </div>
 
-            {/* Compact Quote Statement Box (Screenshot 1: Quotation Message / Cover Note) */}
-            <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 relative">
-              <Quote className="h-3.5 w-3.5 text-slate-300 absolute top-2 left-2 -scale-x-100" />
-              <p className="text-xs font-medium text-slate-800 leading-relaxed pl-5 whitespace-pre-wrap">
-                {coverNoteMessage}
-              </p>
-            </div>
+            {/* Quote Statement Box */}
+            {coverNoteMessage ? (
+              <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 relative">
+                <Quote className="h-3.5 w-3.5 text-slate-300 absolute top-2 left-2 -scale-x-100" />
+                <p className="text-xs font-medium text-slate-800 leading-relaxed pl-5 whitespace-pre-wrap">
+                  {coverNoteMessage}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-slate-50/50 border border-slate-200/60 p-2 text-[11px] text-slate-400 font-medium text-center">
+                No cover note or remarks provided by supplier.
+              </div>
+            )}
 
-            {/* Terms & Conditions (Screenshot 2: Terms & Conditions) */}
+            {/* Terms & Conditions */}
             <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 space-y-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <FileText className="h-3 w-3 text-slate-600" />
                   <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                    Terms & Conditions
+                    Terms &amp; Conditions
                   </span>
                 </div>
                 {termsAndConditions && termsAndConditions !== 'Standard procurement terms and conditions apply.' && (
@@ -894,62 +967,8 @@ export function SupplierQuotationDetailView({
                 )}
               </div>
               <p className="text-xs font-medium text-slate-800 leading-relaxed pl-4.5 whitespace-pre-wrap">
-                {termsAndConditions || 'Standard procurement terms, warranty and payment terms apply.'}
+                {termsAndConditions || '—'}
               </p>
-            </div>
-
-            {/* Supporting Documents (Screenshot 1: Upload Supporting Documents) */}
-            <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <FileCheck2 className="h-3 w-3 text-slate-600" />
-                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                    Supporting Documents
-                  </span>
-                </div>
-                <span className="text-[9px] font-bold text-slate-500">
-                  {uniqueDocs.length > 0 ? `${uniqueDocs.length} Attached` : 'No Attachment'}
-                </span>
-              </div>
-              {uniqueDocs.length > 0 ? (
-                <div className="space-y-1.5">
-                  {uniqueDocs.map((doc, idx) => (
-                    <div
-                      key={doc.id || idx}
-                      className="rounded-lg border border-slate-200 bg-white p-2 flex items-center justify-between gap-2 shadow-2xs hover:bg-slate-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div className="h-6 w-6 rounded bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0 border border-indigo-100">
-                          <FileText className="h-3 w-3" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-slate-900 truncate leading-tight">
-                            {doc.name}
-                          </p>
-                          {doc.fileName && doc.fileName !== doc.name && (
-                            <p className="text-[9px] text-slate-400 font-mono truncate leading-tight mt-0.5">
-                              {doc.fileName}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc(doc)}
-                        className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700 hover:bg-indigo-100 transition-colors shrink-0 cursor-pointer"
-                        title="Preview Document"
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>Preview</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="flex min-h-10 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white/60 p-2 text-center">
-                  <span className="text-[11px] font-semibold text-slate-400">No supporting document attached</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -969,7 +988,7 @@ export function SupplierQuotationDetailView({
             </div>
             <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Validity</span>
-              <span className="font-bold text-slate-900 truncate block">{result.validity || result.details?.validity || '30 Days'}</span>
+              <span className="font-bold text-slate-900 truncate block">{result.validity || result.details?.validity || '—'}</span>
             </div>
           </div>
         </div>
@@ -1078,44 +1097,7 @@ export function SupplierQuotationDetailView({
 
       </div>
 
-      {/* ── 6. Sleek Floating Action Bar ── */}
-      <div className="fixed bottom-3 left-3 right-3 sm:left-6 sm:right-6 max-w-7xl mx-auto z-40 bg-white/95 backdrop-blur-md border border-slate-250/90 rounded-2xl px-4 py-2.5 shadow-lg flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* {isAwarded ? (
-            <span className="inline-flex h-8.5 items-center gap-1 rounded-xl bg-emerald-100 border border-emerald-200 px-3.5 text-xs font-black text-emerald-800 uppercase tracking-wide">
-              <CheckCircle2 className="h-3.5 w-3.5" /> PO Generated (Awarded)
-            </span>
-          ) : onAcceptAndGeneratePo ? (
-            <button
-              type="button"
-              onClick={() => onAcceptAndGeneratePo(result)}
-              className="h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 text-xs font-black text-white transition-all inline-flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
-            >
-              <CheckCircle2 className="h-4 w-4" /> Accept Quotation & Generate PO
-            </button>
-          ) : null} */}
-
-          {/* {onDownloadPdf && (
-            <button
-              type="button"
-              onClick={() => onDownloadPdf(result)}
-              className="h-8.5 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 text-xs font-bold text-slate-800 transition-all inline-flex items-center gap-1 cursor-pointer active:scale-95"
-            >
-              <Download className="h-3.5 w-3.5 text-slate-600" /> Download PDF
-            </button>
-          )} */}
-        </div>
-
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onBack}
-          className="h-8.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 px-4 text-xs font-bold text-slate-700 transition-colors cursor-pointer"
-        >
-          Back to Results
-        </Button>
-      </div>
+   
 
       {/* Regular Document Preview Modal */}
       <DocumentPreviewModal
@@ -1138,6 +1120,7 @@ export function SupplierQuotationDetailModal({
   bidId,
   onAcceptAndGeneratePo,
   onDownloadPdf,
+  onOpenTechnicalEvaluation,
 }: SupplierQuotationDetailModalProps) {
   if (!isOpen || !result) return null;
 
@@ -1151,6 +1134,7 @@ export function SupplierQuotationDetailModal({
           onBack={onClose}
           onAcceptAndGeneratePo={onAcceptAndGeneratePo}
           onDownloadPdf={onDownloadPdf}
+          onOpenTechnicalEvaluation={onOpenTechnicalEvaluation}
         />
       </div>
     </div>

@@ -5211,14 +5211,17 @@ export function ProcurementDetailUnifiedView(
     // 3. Explicit false in payload root
     if (
       payload.clarificationAllowed === false ||
-      payload.clarificationAllowed === "false"
+      payload.clarificationAllowed === "false" ||
+      payload.allowClarification === false ||
+      payload.allowClarification === "false"
     ) {
       return false;
     }
     // 4. Props override if false
     if (
       (props as any).allowClarification === false ||
-      (props as any).allowClarification === "false"
+      (props as any).allowClarification === "false" ||
+      (props as any).rawBid?.allowClarification === false
     ) {
       return false;
     }
@@ -5227,23 +5230,17 @@ export function ProcurementDetailUnifiedView(
       schedule.clarificationAllowed === true ||
       schedule.clarificationAllowed === "true" ||
       schedule.clarificationAllowed === "Yes" ||
-      schedule.clarificationAllowed === "yes"
-    ) {
-      return true;
-    }
-    if (
+      schedule.clarificationAllowed === "yes" ||
       rules.clarificationAllowed === true ||
       rules.clarificationAllowed === "true" ||
-      rules.clarificationAllowed === "Yes" ||
-      rules.clarificationAllowed === "yes"
+      payload.clarificationAllowed === true ||
+      payload.allowClarification === true ||
+      (props as any).allowClarification === true ||
+      (props as any).rawBid?.allowClarification === true
     ) {
       return true;
     }
-    if ((props as any).allowClarification === true) {
-      return true;
-    }
-    // For RFQ, if not explicitly enabled, clarifications are disabled by default
-    return !isRfqType;
+    return true;
   })();
 
   // Packet & Opening Evaluation checks: Resolve candidates from all paths
@@ -5349,12 +5346,11 @@ export function ProcurementDetailUnifiedView(
 
   const clarificationDeadlineValue = isClarificationAllowed
     ? firstPresent(
-        schedule.clarificationDeadline,
-        schedule.clarificationEndDate,
-        schedule.clarificationDate,
-        tender.clarificationDeadline,
-        tender.clarificationEndDate,
-        props.clarificationDate,
+        closingDateValue,
+        props.deadlineDate,
+        schedule.submissionDate,
+        schedule.submissionDeadline,
+        tender.bidClosingDate,
       )
     : undefined;
 
@@ -7686,7 +7682,7 @@ export function ProcurementDetailUnifiedView(
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
                     <Button
                       type="button"
                       size="sm"
@@ -7699,8 +7695,20 @@ export function ProcurementDetailUnifiedView(
                     <Button
                       type="button"
                       size="sm"
+                      onClick={() => {
+                        const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+                        router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
+                      }}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Create Invoice from PO
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
                       onClick={() => router.push("/seller/delivery-management")}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
                     >
                       <Truck className="h-3.5 w-3.5" />
                       Go to Delivery Management
@@ -8206,13 +8214,23 @@ export function ProcurementDetailUnifiedView(
             </div>
           )}
 
-          {/* Purchase Order Receipt Modal for Viewing/Printing/Downloading */}
           {isReceiptModalOpen && effectiveActiveOrder && (
             <PurchaseOrderReceiptModal
               order={effectiveActiveOrder}
               onClose={() => setIsReceiptModalOpen(false)}
               isBuyer={isBuyerSide}
               isSeller={!isBuyerSide}
+              onCreateInvoice={(o) => {
+                setIsReceiptModalOpen(false);
+                const amountVal = o.amount || (o as any).totalValue || 0;
+                router.push(`/seller/invoices?convertPoId=${o.id}&amount=${amountVal}`);
+              }}
+              onManageDispatch={(o) => {
+                setIsReceiptModalOpen(false);
+                const poNum = o.poNumber || o.id;
+                const targetRoute = isBuyerSide ? '/orders/tracking' : '/seller/delivery-management';
+                router.push(`${targetRoute}?search=${encodeURIComponent(poNum)}`);
+              }}
             />
           )}
 
@@ -10546,17 +10564,11 @@ export function ProcurementDetailUnifiedView(
                         : "quote-request");
                     const clarId = props.clarificationEntityId ?? targetId;
                     const isClarDeadlinePassed = (() => {
-                      const d1 = parseDateValue(clarificationDeadlineValue);
-                      const d2 = parseDateValue(
-                        closingDateValue || props.deadlineDate,
+                      const d = parseDateValue(
+                        closingDateValue || props.deadlineDate || schedule.submissionDate,
                       );
-                      const t1 = d1 && !isNaN(d1.getTime()) ? d1.getTime() : 0;
-                      const t2 = d2 && !isNaN(d2.getTime()) ? d2.getTime() : 0;
-                      const effectiveClarTime =
-                        t1 > 0 ? (t2 > 0 ? Math.min(t1, t2) : t1) : t2;
-                      return effectiveClarTime > 0
-                        ? effectiveClarTime < nowMs
-                        : false;
+                      const t = d && !isNaN(d.getTime()) ? d.getTime() : 0;
+                      return t > 0 ? t < nowMs : false;
                     })();
                     return (
                       <ClarificationPanel
@@ -10620,54 +10632,178 @@ export function SellerQuotationReviewModal({
 
   const isFinancialSealed = Boolean(isTwoPacketMode && !isFinancialStageOpened);
 
+  const handleViewAttachment = async (doc: any, docName: string) => {
+    const rawUrl =
+      doc.url || doc.fileUrl || doc.signedUrl || doc.documentUrl || "";
+    const urlMatchId = String(rawUrl).match(
+      /\/api\/(?:public\/)?files\/(\d+)/,
+    )?.[1];
+
+    const fileId =
+      doc.fileAssetId ||
+      doc.fileId ||
+      (typeof doc.id === "number" || /^\d+$/.test(String(doc.id || ""))
+        ? Number(doc.id)
+        : urlMatchId
+          ? Number(urlMatchId)
+          : undefined);
+
+    const effectiveUrl = rawUrl || (fileId ? `/api/files/${fileId}/view` : "");
+
+    setPreviewLoadingId(doc.id || docName);
+    try {
+      if (fileId || effectiveUrl) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: fileId,
+              fileAssetId: fileId,
+              url: effectiveUrl,
+              fileName: doc.fileName || docName,
+            },
+            docName,
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch (e) {
+          console.warn("getFileAssetPreview fallback to openFileAsset:", e);
+        }
+
+        await openFileAsset(
+          {
+            id: fileId,
+            fileAssetId: fileId,
+            originalName: doc.fileName || docName,
+            url: effectiveUrl,
+          },
+          docName,
+        );
+        return;
+      }
+
+      toast.error("Document file is not available for preview.");
+    } catch (err: any) {
+      console.error("Failed to view attachment:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Unable to open document file.",
+      );
+    } finally {
+      setPreviewLoadingId(null);
+    }
+  };
+
   const reviewLineItemsColumns = useMemo<ColumnDef<any>[]>(
     () => [
       {
         key: "itemName",
         header: "Line Item & Specifications",
-        cell: (item, idx) => (
-          <div className="space-y-1">
-            <div>
-              <span className="font-bold text-slate-900">
-                {item.itemName ||
-                  item.name ||
-                  item.description ||
-                  `Item #${idx + 1}`}
-              </span>
-              {item.remarks && (
-                <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
-                  {item.remarks}
-                </p>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-1.5">
-              {item.model && (
-                <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">
-                  Model: {item.model}
+        cell: (item, idx) => {
+          const itemHsn = item.hsnCode || item.hsn_sac_code;
+          const itemBrandPolicy = item.brandPolicy;
+          const itemAttachments: any[] = Array.isArray(item.attachments) ? item.attachments : [];
+          return (
+            <div className="space-y-1.5">
+              <div>
+                <span className="font-bold text-slate-900">
+                  {item.itemName ||
+                    item.name ||
+                    item.description ||
+                    `Item #${idx + 1}`}
                 </span>
-              )}
-              {item.complianceStatus && (
-                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
-                  {item.complianceStatus === "DEVIATION"
-                    ? "⚠ Deviation"
-                    : item.complianceStatus === "ALTERNATIVE"
-                      ? "✦ Alternative"
-                      : "✓ 100% Compliant"}
-                </span>
-              )}
-            </div>
-
-            {item.specifications && (
-              <div className="rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                <span className="text-[9.5px] font-bold uppercase text-slate-400 block">
-                  Offered Specifications:
-                </span>
-                {item.specifications}
+                {item.remarks && (
+                  <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
+                    {item.remarks}
+                  </p>
+                )}
               </div>
-            )}
-          </div>
-        ),
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {itemHsn && (
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[10px] font-mono font-bold text-indigo-800">
+                    HSN: {itemHsn}
+                  </span>
+                )}
+                {itemBrandPolicy && (
+                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.2 text-[10px] font-bold ${
+                    itemBrandPolicy === "EQUIVALENT_ACCEPTED"
+                      ? "bg-purple-50 text-purple-800 border-purple-200"
+                      : "bg-amber-50 text-amber-800 border-amber-200"
+                  }`}>
+                    {itemBrandPolicy === "EQUIVALENT_ACCEPTED" ? "Equivalent OK" : "Strict Lock"}
+                  </span>
+                )}
+                {item.model && (
+                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">
+                    Model: {item.model}
+                  </span>
+                )}
+                {item.complianceStatus && (
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                    {item.complianceStatus === "DEVIATION"
+                      ? "⚠ Deviation"
+                      : item.complianceStatus === "ALTERNATIVE"
+                        ? "✦ Alternative"
+                        : "✓ 100% Compliant"}
+                  </span>
+                )}
+              </div>
+
+              {item.specifications && (
+                <div className="rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  <span className="text-[9.5px] font-bold uppercase text-slate-400 block">
+                    Offered Specifications:
+                  </span>
+                  {item.specifications}
+                </div>
+              )}
+
+              {itemAttachments.length > 0 && (
+                <div className="pt-1 space-y-1">
+                  <span className="text-[9.5px] font-bold uppercase text-slate-500 block">
+                    Item Documents ({itemAttachments.length}):
+                  </span>
+                  <div className="flex flex-col gap-1">
+                    {itemAttachments.map((att: any, attIdx: number) => {
+                      const attName = att.fileName || att.name || att.documentName || `Document #${attIdx + 1}`;
+                      const isAttLoading = previewLoadingId === (att.id || attName);
+                      return (
+                        <div
+                          key={attIdx}
+                          className="flex items-center justify-between rounded border border-slate-200 bg-white p-1.5 text-xs shadow-2xs"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="font-bold text-slate-800 truncate text-[11px]" title={attName}>
+                              {attName}
+                            </p>
+                            <p className="text-[9px] font-medium text-slate-400">
+                              {att.documentType ? att.documentType.replace(/_/g, " ") : "Technical Sheet"}
+                              {att.customNote ? ` • ${att.customNote}` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={isAttLoading}
+                            onClick={() => handleViewAttachment(att, attName)}
+                            className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                          >
+                            {isAttLoading ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                            ) : (
+                              <Eye className="h-3 w-3 text-blue-600" />
+                            )}
+                            View
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        },
       },
       {
         key: "makeBrand",
@@ -10774,72 +10910,10 @@ export function SellerQuotationReviewModal({
         },
       },
     ],
-    [isFinancialSealed],
+    [isFinancialSealed, previewLoadingId],
   );
 
   if (!isOpen || !participation) return null;
-
-  const handleViewAttachment = async (doc: any, docName: string) => {
-    const rawUrl =
-      doc.url || doc.fileUrl || doc.signedUrl || doc.documentUrl || "";
-    const urlMatchId = String(rawUrl).match(
-      /\/api\/(?:public\/)?files\/(\d+)/,
-    )?.[1];
-
-    const fileId =
-      doc.fileAssetId ||
-      doc.fileId ||
-      (typeof doc.id === "number" || /^\d+$/.test(String(doc.id || ""))
-        ? Number(doc.id)
-        : urlMatchId
-          ? Number(urlMatchId)
-          : undefined);
-
-    const effectiveUrl = rawUrl || (fileId ? `/api/files/${fileId}/view` : "");
-
-    setPreviewLoadingId(doc.id || docName);
-    try {
-      if (fileId || effectiveUrl) {
-        try {
-          const prev = await getFileAssetPreview(
-            {
-              id: fileId,
-              fileAssetId: fileId,
-              url: effectiveUrl,
-              fileName: doc.fileName || docName,
-            },
-            docName,
-          );
-          if (prev) {
-            setPreviewDocument(prev);
-            return;
-          }
-        } catch (e) {
-          console.warn("getFileAssetPreview fallback to openFileAsset:", e);
-        }
-
-        await openFileAsset(
-          {
-            id: fileId,
-            fileAssetId: fileId,
-            originalName: doc.fileName || docName,
-            url: effectiveUrl,
-          },
-          docName,
-        );
-        return;
-      }
-
-      toast.error("Document file is not available for preview.");
-    } catch (err: any) {
-      console.error("Failed to view attachment:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Unable to open document file.",
-      );
-    } finally {
-      setPreviewLoadingId(null);
-    }
-  };
 
   const sellerOrg =
     participation.sellerOrgName ||

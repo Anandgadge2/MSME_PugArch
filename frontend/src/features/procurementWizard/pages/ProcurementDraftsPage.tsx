@@ -1581,7 +1581,7 @@ function DraftDetailView({
       publishedDate={schedule.publishDate}
       submissionStartDate={schedule.submissionStartDate || schedule.startDate}
       closingDate={schedule.submissionDate}
-      clarificationDate={schedule.clarificationDeadline}
+      clarificationDate={schedule.submissionDate}
       technicalDate={schedule.technicalOpeningDate}
       financialDate={schedule.financialOpeningDate}
       packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}

@@ -455,7 +455,7 @@ export default function TenderDetailPage() {
       publishedDate={publishedDateFormatted}
       submissionStartDate={schedule.submissionStartDate ? formatDateString(schedule.submissionStartDate, true) : ((tender as any).bidStartDate ? formatDateString((tender as any).bidStartDate, true) : undefined)}
       closingDate={closesAtFormatted}
-      clarificationDate={schedule.clarificationDeadline ? formatDateString(schedule.clarificationDeadline, true) : undefined}
+      clarificationDate={closesAtFormatted}
       technicalDate={(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate) ? formatDateString(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate, true) : undefined}
       financialDate={(schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? formatDateString(schedule.financialOpeningDate || (tender as any).financialEvaluationDate, true) : undefined}
       packetType={schedule.packetType || draft.packetType || tender.packetType || ((schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}

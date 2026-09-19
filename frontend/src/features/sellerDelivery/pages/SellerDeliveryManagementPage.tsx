@@ -324,24 +324,89 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </button>
                     )}
 
+                    {poId && (
+                        <>
+                            {(() => {
+                                const hasInvoice = Boolean((delivery as any).invoices?.length > 0 || (delivery as any).invoice || (delivery.purchaseOrder as any)?.invoices?.length > 0);
+                                const invNo = (delivery as any).invoices?.[0]?.invoiceNumber || (delivery as any).invoice?.invoiceNumber || (delivery.purchaseOrder as any)?.invoices?.[0]?.invoiceNumber || '';
+                                if (hasInvoice) {
+                                    return (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpen(false);
+                                                router.push(`/seller/invoices${invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : ''}`);
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                                        >
+                                            <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                                            <span>View Invoice {invNo ? `(#${invNo})` : ''}</span>
+                                        </button>
+                                    );
+                                }
+                                return (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setOpen(false);
+                                            router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
+                                        }}
+                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                                    >
+                                        <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                                        <span>Generate Invoice (PO to Invoice)</span>
+                                    </button>
+                                );
+                            })()}
+
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    const poSearch = delivery.purchaseOrder?.poNumber || (delivery as any).poNumber || poId || '';
+                                    router.push(`/seller/orders?search=${encodeURIComponent(poSearch)}`);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+                            >
+                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                <span>View Purchase Order</span>
+                            </button>
+
+                            {(() => {
+                                const bidId = (delivery as any).bidId || (delivery.purchaseOrder as any)?.bidId || (delivery as any).requirementId;
+                                if (bidId) {
+                                    return (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpen(false);
+                                                router.push(`/bids/${bidId}`);
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+                                        >
+                                            <Paperclip className="h-3.5 w-3.5 text-blue-600" />
+                                            <span>View Quotation</span>
+                                        </button>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </>
+                    )}
                     {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) && (
                         <>
-                            {poId && (
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpen(false);
-                                        router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-                                >
-                                    <FileText className="h-3.5 w-3.5 text-slate-500" />
-                                    <span>Create Invoice</span>
-                                </button>
-                            )}
                             <button
                                 type="button"
                                 role="menuitem"

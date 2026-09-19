@@ -660,7 +660,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             publishDate: rateContract.createdAt || srcPayload?.schedule?.publishDate,
             submissionStartDate: rateContract.startDate || srcPayload?.schedule?.submissionStartDate || rateContract.createdAt,
             submissionDate: rateContract.endDate || srcPayload?.schedule?.submissionDate,
-            clarificationDeadline: srcPayload?.schedule?.clarificationDeadline || null,
             preBidDate: srcPayload?.schedule?.preBidDate || null,
             technicalOpeningDate: srcPayload?.schedule?.technicalOpeningDate || null,
             financialOpeningDate: srcPayload?.schedule?.financialOpeningDate || null,
