@@ -6941,9 +6941,10 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       db.buyerRequirement.findUnique({ where: { id: numId } }).catch(() => null),
       db.procurementBid.findUnique({ where: { id: numId } }).catch(() => null)
     ]);
-    if (q) return q;
+    if (q) return { ...q, allowClarification: true };
 
     if (req) {
+      const sched = (req.payload as any)?.schedule;
       return {
         id: req.id,
         subject: req.title,
@@ -6952,7 +6953,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerOrganizationId: (req as any).buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: req.lastDate,
-        clarificationDeadline: null
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || req.startDate || null,
+        allowClarification: sched?.clarificationAllowed !== false && (req as any).allowClarification !== false
       };
     }
 
@@ -6967,13 +6969,14 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         sellerId: null,
         deadlineDate: bid.endDate,
         submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
-        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+        allowClarification: bid.allowClarification !== false
       };
     }
 
     const legacyReq = await db.requirement.findUnique({ where: { id: numId } }).catch(() => null);
     if (legacyReq) {
       const sched = (legacyReq.payload as any)?.schedule;
+      const rawEnd = sched?.submissionDate || sched?.submissionDeadline || legacyReq.requiredBy;
       return {
         id: legacyReq.id,
         subject: legacyReq.title,
@@ -6981,37 +6984,14 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         buyerId: legacyReq.createdById,
         buyerOrganizationId: null,
         sellerId: null,
-        deadlineDate: null,
+        deadlineDate: rawEnd || null,
         submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacyReq.payload as any)?.tender?.bidStartDate || legacyReq.startDate || null,
-        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+        allowClarification: sched?.clarificationAllowed !== false
       };
     }
   }
 
-  const isBidToken = CANONICAL_METHOD_PREFIXES.some(p => token.startsWith(`${p}-`));
-  if (isBidToken) {
-    const bid = await db.procurementBid.findFirst({
-      where: {
-        OR: getCanonicalLookupVariants(token).map(t => ({ bidNumber: t }))
-      }
-    });
-    if (bid) {
-      const sched = (bid.technicalPacket as any)?.schedule;
-      return {
-        id: bid.id,
-        subject: bid.title,
-        requirementNumber: bid.bidNumber,
-        buyerId: bid.buyerId,
-        buyerOrganizationId: bid.buyerOrganizationId || null,
-        sellerId: null,
-        deadlineDate: bid.endDate,
-        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
-        clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
-      };
-    }
-  }
-
-  const tokenVariants = getCanonicalLookupVariants(token);
+  const tokenVariants = Array.from(new Set([token, ...getCanonicalLookupVariants(token)]));
 
   const [bidMatch, reqMatch] = await Promise.all([
     db.procurementBid.findFirst({
@@ -7037,20 +7017,21 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       sellerId: null,
       deadlineDate: bidMatch.endDate,
       submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bidMatch.technicalPacket as any)?.tender?.bidStartDate || bidMatch.startDate || null,
-      clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+      allowClarification: bidMatch.allowClarification !== false
     };
   }
   if (reqMatch) {
     const sched = (reqMatch.payload as any)?.schedule;
+    const rawEnd = sched?.submissionDate || sched?.submissionDeadline || reqMatch.requiredBy;
     return {
       id: reqMatch.id,
       subject: reqMatch.title,
       requirementNumber: reqMatch.requirementNumber,
       buyerId: reqMatch.createdById,
       sellerId: null,
-      deadlineDate: null,
+      deadlineDate: rawEnd || null,
       submissionStartDate: sched?.submissionStartDate || sched?.startDate || (reqMatch.payload as any)?.tender?.bidStartDate || reqMatch.startDate || null,
-      clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
+      allowClarification: sched?.clarificationAllowed !== false
     };
   }
 
@@ -7066,6 +7047,10 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
   }
 
+  if ((quote as any).allowClarification === false) {
+    throw new ApiError(400, 'Clarifications are not enabled for this procurement.', 'CLARIFICATIONS_DISABLED');
+  }
+
   const rawSubmissionStart = (quote as any).submissionStartDate;
   if (rawSubmissionStart) {
     let startD = new Date(rawSubmissionStart);
@@ -7077,31 +7062,11 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     }
   }
 
-  const rawClarDeadline = (quote as any).clarificationDeadline;
   const rawSubmissionDeadline = quote.deadlineDate;
-  let effectiveClarDeadline: Date | null = null;
-  if (rawClarDeadline && rawSubmissionDeadline) {
-    let d1 = new Date(rawClarDeadline);
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    }
-    const d2 = new Date(rawSubmissionDeadline);
-    const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
-    const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-    effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
-  } else if (rawClarDeadline) {
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    } else {
-      effectiveClarDeadline = new Date(rawClarDeadline);
-    }
-  } else if (rawSubmissionDeadline) {
-    effectiveClarDeadline = new Date(rawSubmissionDeadline);
-  }
-
-  if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-    if (effectiveClarDeadline.getTime() < Date.now()) {
-      throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
+  if (rawSubmissionDeadline) {
+    const deadlineD = new Date(rawSubmissionDeadline);
+    if (!isNaN(deadlineD.getTime()) && deadlineD.getTime() < Date.now()) {
+      throw new ApiError(400, 'The clarification window has closed as the quotation submission deadline has passed.', 'CLARIFICATION_DEADLINE_PASSED');
     }
   }
 

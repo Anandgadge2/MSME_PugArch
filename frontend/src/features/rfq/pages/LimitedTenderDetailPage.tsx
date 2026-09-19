@@ -292,7 +292,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         })()}
         submissionStartDate={schedule.submissionStartDate || schedule.startDate || (payload.tender as any)?.bidStartDate || reqObj.startDate ? formatDateString(schedule.submissionStartDate || schedule.startDate || (payload.tender as any)?.bidStartDate || reqObj.startDate, true) : undefined}
         closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
-        clarificationDate={schedule.clarificationDeadline || schedule.clarificationEndDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationEndDate, true) : undefined}
+        clarificationDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
         technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate || (payload.tender as any)?.technicalEvaluationDate, true)}
         financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate || (payload.tender as any)?.financialEvaluationDate, true)}
         packetType={schedule.packetType || bid.packetType || payload.packetType || ((bid.financialOpeningDate || schedule.financialOpeningDate || (payload.tender as any)?.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}

@@ -26,7 +26,9 @@ import {
   RotateCcw,
   XCircle,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  FileText,
+  Truck
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -1186,8 +1188,29 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                   {activeTab === 'receipt' ? 'Official payment receipt and settlement summary' : 'Payment status timeline'}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleDownloadReceipt} className="bg-white hover:bg-slate-50 border-slate-300 font-bold text-slate-800 shadow-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                {((payment.purchaseOrder as any)?.bidId || (payment as any).bidId) && (
+                  <Button variant="outline" size="sm" onClick={() => window.open(`/bids/${(payment.purchaseOrder as any)?.bidId || (payment as any).bidId}`, '_blank')} className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer">
+                    <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Quotation
+                  </Button>
+                )}
+                {payment.purchaseOrderId && (
+                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/orders?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.purchaseOrderId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-indigo-200 text-indigo-700 font-bold shadow-2xs cursor-pointer">
+                    <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View PO
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => window.open(`/seller/delivery-management?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer">
+                  <Truck className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Delivery
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => window.open(`/grn?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-800 font-bold shadow-2xs cursor-pointer">
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> GRN
+                </Button>
+                {payment.invoiceId && (
+                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/invoices?viewInvoiceNo=${payment.invoice?.invoiceNumber || payment.invoiceId}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-700 font-bold shadow-2xs cursor-pointer">
+                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> View Invoice
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={handleDownloadReceipt} className="bg-white hover:bg-slate-50 border-slate-300 font-bold text-slate-800 shadow-2xs cursor-pointer">
                   <Printer className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> Print
                 </Button>
                 <Button variant={activeTab === 'receipt' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('receipt')}>

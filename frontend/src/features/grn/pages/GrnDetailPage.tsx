@@ -197,6 +197,79 @@ export default function GrnDetailPage({ id }: Props) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
+                    {(grn.purchaseOrder || grn.purchaseOrderId) && (
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                if (grn.purchaseOrder) {
+                                    setViewingOrder(grn.purchaseOrder);
+                                } else if (grn.purchaseOrderId) {
+                                    const poRoute = user?.role === 'buyer' ? '/buyer/orders' : '/seller/orders';
+                                    router.push(`${poRoute}?search=${encodeURIComponent(grn.purchaseOrderId)}`);
+                                }
+                            }}
+                            className="border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                        >
+                            <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                            View Purchase Order
+                        </Button>
+                    )}
+
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            const delSearch = grn.purchaseOrder?.poNumber || grn.grnNumber || '';
+                            const delRoute = user?.role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
+                            router.push(`${delRoute}${delSearch ? `?search=${encodeURIComponent(delSearch)}` : ''}`);
+                        }}
+                        className="border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                    >
+                        <Package className="h-3.5 w-3.5 text-blue-600" />
+                        View Delivery
+                    </Button>
+
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            const poId = grn.purchaseOrderId || grn.purchaseOrder?.id;
+                            const amt = grn.purchaseOrder?.amount || 0;
+                            const invRoute = user?.role === 'buyer' ? '/buyer/invoices' : '/seller/invoices';
+                            router.push(`${invRoute}?convertPoId=${poId}&amount=${amt}`);
+                        }}
+                        className="border-emerald-200 bg-emerald-50/50 text-emerald-800 hover:bg-emerald-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                    >
+                        <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                        View / Create Invoice
+                    </Button>
+
+                    {/* GRN Payment Gate: Pay Now / Upload Payment Proof is unlocked because GRN is created/generated */}
+                    {(() => {
+                        const poStatus = String(grn.purchaseOrder?.status || grn.status || '').toLowerCase();
+                        const isPaid = poStatus.includes('paid');
+                        const payRoute = user?.role === 'buyer' ? '/buyer/payments' : '/payments';
+                        const searchVal = grn.grnNumber || grn.purchaseOrder?.poNumber || '';
+                        if (!isPaid) {
+                            return (
+                                <Button
+                                    onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
+                                    className="bg-purple-600 text-white hover:bg-purple-700 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
+                                >
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                    Pay Now / Upload Payment Proof
+                                </Button>
+                            );
+                        }
+                        return (
+                            <Button
+                                onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
+                                className="bg-emerald-700 text-white hover:bg-emerald-800 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
+                            >
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                View Payment Proof (Paid)
+                            </Button>
+                        );
+                    })()}
+
                     <Button
                         variant="outline"
                         onClick={handleDownloadPdf}

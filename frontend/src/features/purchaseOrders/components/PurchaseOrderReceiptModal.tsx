@@ -28,6 +28,7 @@ import {
   ZoomIn,
   ZoomOut,
   Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -36,6 +37,7 @@ import { cn } from '../../../lib/utils';
 import type { DocumentConfig } from '../../../lib/pdfEngine';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
+import { useRouter } from 'next/navigation';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -181,11 +183,34 @@ export function PurchaseOrderReceiptModal({
   onViewPaymentSlip,
   activeDelivery,
 }: PurchaseOrderReceiptModalProps) {
+  const router = useRouter();
   const { user } = useAuth();
   const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
   const [activeTab, setActiveTab] = useState<'receipt' | 'audit'>('receipt');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasBg, setCanvasBg] = useState<'light' | 'dark'>('light');
+
+  const handleCreateInvoiceAction = () => {
+    if (onCreateInvoice && order) {
+      onCreateInvoice(order);
+    } else if (order) {
+      onClose();
+      const amountVal = order.amount || (order as any).totalValue || 0;
+      const targetRoute = isBuyer ? '/buyer/invoices' : '/seller/invoices';
+      router.push(`${targetRoute}?convertPoId=${order.id}&amount=${amountVal}`);
+    }
+  };
+
+  const handleManageDispatchAction = () => {
+    if (onManageDispatch && order) {
+      onManageDispatch(order);
+    } else if (order) {
+      onClose();
+      const poNum = order.poNumber || order.id;
+      const targetRoute = isBuyer ? '/orders/tracking' : '/seller/delivery-management';
+      router.push(`${targetRoute}?search=${encodeURIComponent(poNum)}`);
+    }
+  };
 
   // Auto-fit page state to ensure the entire receipt is 100% visible on screen without scrolling
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -1524,40 +1549,69 @@ export function PurchaseOrderReceiptModal({
               </>
             )}
 
-            {isSeller && isAccepted && onCreateInvoice && (() => {
-              const hasApprovedGrn = Boolean(
-                ((order as any)?.grns && (order as any).grns.some((g: any) => g.status === 'APPROVED')) ||
-                ['inspection_accepted', 'grn_completed', 'delivered'].includes(viewingStatusLower)
-              );
-              if (hasApprovedGrn) {
-                return (
-                  <Button
-                    onClick={() => onCreateInvoice(order)}
-                    className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                  >
-                    <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
-                  </Button>
-                );
-              }
-              return (
-                <Button
-                  disabled
-                  className="h-9 bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold uppercase tracking-wider shadow-none rounded-xl px-3.5 whitespace-nowrap cursor-not-allowed opacity-75"
-                  title="Locked: Invoicing is unlocked only after the buyer inspects delivery and issues an approved Goods Receipt Note (GRN)."
-                >
-                  <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Convert PO to Invoice (Requires GRN)
-                </Button>
-              );
-            })()}
-
-            {isSeller && (isAccepted || viewingStatusLower === 'delivered') && onManageDispatch && (
+            {(order as any)?.bidId && (
               <Button
-                onClick={() => onManageDispatch(order)}
-                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                variant="outline"
+                onClick={() => {
+                  onClose();
+                  router.push(`/bids/${(order as any).bidId}`);
+                }}
+                className="h-9 border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Quotation
+              </Button>
+            )}
+
+            {isSeller && isAccepted && (
+              <Button
+                onClick={handleCreateInvoiceAction}
+                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+              >
+                <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
+              </Button>
+            )}
+
+            {isSeller && (isAccepted || viewingStatusLower === 'delivered') && (
+              <Button
+                onClick={handleManageDispatchAction}
+                className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
               >
                 <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery / Manage Dispatch
               </Button>
             )}
+
+            {(() => {
+              const hasGrn = Boolean((order as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'completed'].includes(viewingStatusLower));
+              const isPaid = viewingStatusLower.includes('paid');
+              const payRoute = isBuyer ? '/buyer/payments' : '/payments';
+              if (hasGrn && !isPaid) {
+                return (
+                  <Button
+                    onClick={() => {
+                      onClose();
+                      router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
+                    }}
+                    className="h-9 bg-purple-600 text-xs font-black uppercase tracking-wider text-white hover:bg-purple-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Payment Proof
+                  </Button>
+                );
+              }
+              if (isPaid) {
+                return (
+                  <Button
+                    onClick={() => {
+                      onClose();
+                      router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
+                    }}
+                    className="h-9 bg-emerald-700 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-800 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-white" /> View Payment Proof (Paid)
+                  </Button>
+                );
+              }
+              return null;
+            })()}
 
             {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && onCancel && (
               <Button

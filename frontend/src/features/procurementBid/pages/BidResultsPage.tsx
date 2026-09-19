@@ -495,6 +495,9 @@ export default function BidResultsPage() {
           const respData = typeof r.responseData === 'string'
             ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })()
             : (r.responseData && typeof r.responseData === 'object' ? r.responseData : {});
+          const descData = typeof r.offeredItemDescription === 'string'
+            ? (() => { try { return JSON.parse(r.offeredItemDescription); } catch { return {}; } })()
+            : (r.offeredItemDescription && typeof r.offeredItemDescription === 'object' ? r.offeredItemDescription : {});
           const quotedAmt = Number(r.offeredPrice || r.quotedAmount || r.totalAmount || r.totalPrice || ackData.quotedAmount || ackData.totalAmount || respData.offeredPrice || respData.quotedAmount || respData.totalAmount || 0);
           const sellerOrg = r.sellerOrgName
             || r.sellerOrganization?.organizationName
@@ -520,6 +523,8 @@ export default function BidResultsPage() {
             ? respData.lineItems
             : (Array.isArray(respData.lineQuotes) && respData.lineQuotes.length > 0)
             ? respData.lineQuotes
+            : (Array.isArray(descData.lineItems) && descData.lineItems.length > 0)
+            ? descData.lineItems
             : [];
 
           const docs = normalizeQuotationDocuments({
@@ -530,6 +535,8 @@ export default function BidResultsPage() {
 
           const totalQty = lineItems.reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0);
           const offeredQuantity = r.offeredQuantity || ackData.offeredQuantity || respData.offeredQuantity || (totalQty > 0 ? totalQty : (r.quantity || 1));
+
+          const firstLine = lineItems.length > 0 ? lineItems[0] : {};
 
           return {
             id: r.id || `res-${idx}`,
@@ -542,8 +549,8 @@ export default function BidResultsPage() {
             submittedAt: r.createdAt || r.submittedAt,
             sellerType: 'Verified Seller',
             offeredItem: r.offeredItemDescription || r.message || respData.message || respData.coverNote || r.itemName || 'Procurement requirement',
-            makeBrand: r.makeBrand || ackData.makeBrand || respData.makeBrand || 'Standard',
-            model: r.model || ackData.model || respData.model || 'Standard',
+            makeBrand: r.makeBrand || ackData.makeBrand || respData.makeBrand || descData.makeBrand || firstLine.makeBrand || firstLine.brand || 'Standard',
+            model: r.model || r.offeredModel || r.modelNumber || r.modelRef || ackData.model || ackData.offeredModel || respData.model || respData.offeredModel || descData.model || firstLine.model || firstLine.modelNumber || firstLine.partNumber || 'Standard',
             technicalStatus: (() => {
               const rawTech = String(
                 r.technicalStatus ||
@@ -898,7 +905,7 @@ export default function BidResultsPage() {
             {isBidAlreadyAwarded ? (
               <button
                 type="button"
-                onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                onClick={() => setSelectedForTechEval({ ...((row as any).rawParticipation || {}), ...row, rawParticipation: (row as any).rawParticipation || row })}
                 className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 hover:text-slate-900 hover:underline transition cursor-pointer"
                 title="View finalized technical evaluation (read-only audit record)"
               >
@@ -908,7 +915,7 @@ export default function BidResultsPage() {
             ) : (
               <button
                 type="button"
-                onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
+                onClick={() => setSelectedForTechEval({ ...((row as any).rawParticipation || {}), ...row, rawParticipation: (row as any).rawParticipation || row })}
                 className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
               >
                 <FileText className="h-3 w-3" />
@@ -1339,7 +1346,28 @@ export default function BidResultsPage() {
           onBack={handleBackFromQuotationDetail}
           onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
           onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
+          onOpenTechnicalEvaluation={(res) => {
+            setSelectedForTechEval({
+              ...(res.rawParticipation || {}),
+              ...res,
+              rawParticipation: res.rawParticipation || res,
+            });
+          }}
         />
+
+        {/* Stage 1 Technical Evaluation Modal (Accessible when viewing Quotation Detail) */}
+        {selectedForTechEval && (
+          <TechnicalEvaluationModal
+            isOpen={Boolean(selectedForTechEval)}
+            onClose={() => setSelectedForTechEval(null)}
+            procurementId={bidId}
+            participation={selectedForTechEval}
+            readOnly={isBidAlreadyAwarded}
+            onSuccess={() => {
+              loadBid();
+            }}
+          />
+        )}
 
         {/* Award & PO Generation Confirmation Modal */}
         {awardModal.show && awardModal.row && (
@@ -1934,16 +1962,30 @@ export default function BidResultsPage() {
 
                       <div className="flex items-center justify-between text-xs pt-1">
                         <span className="text-slate-500 font-semibold">Technical Evaluation:</span>
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
-                          row.technicalStatus === 'Qualified'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : row.technicalStatus === 'Disqualified'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-amber-100 text-amber-800'
-                        }`}>
-                          {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
-                          {row.technicalStatus || 'Pending'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                            row.technicalStatus === 'Qualified'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : row.technicalStatus === 'Disqualified'
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
+                            {row.technicalStatus || 'Pending'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedForTechEval({
+                              ...((row as any).rawParticipation || {}),
+                              ...row,
+                              rawParticipation: (row as any).rawParticipation || row,
+                            })}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-[#1B365D]/30 bg-[#1B365D]/5 hover:bg-[#1B365D]/10 text-[10px] font-bold text-[#1B365D] transition cursor-pointer"
+                            title="Evaluate or review technical compliance record"
+                          >
+                            <ShieldCheck className="h-3 w-3 text-[#1B365D]" /> Record
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100">

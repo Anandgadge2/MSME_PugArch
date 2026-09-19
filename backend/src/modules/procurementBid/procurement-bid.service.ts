@@ -2349,31 +2349,22 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
   }
 
   const sched = (bid.technicalPacket as any)?.schedule || (bid.payload as any)?.schedule;
-  const rawClarDeadline = sched?.clarificationDeadline || sched?.clarificationEndDate;
-  const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || bid.endDate;
-  let effectiveClarDeadline: Date | null = null;
-  if (rawClarDeadline && rawSubmissionDeadline) {
-    let d1 = new Date(rawClarDeadline);
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+  const rawSubmissionStart = sched?.submissionStartDate || sched?.startDate || bid.startDate;
+  if (rawSubmissionStart) {
+    let startD = new Date(rawSubmissionStart);
+    if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+      startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
     }
-    const d2 = new Date(rawSubmissionDeadline);
-    const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
-    const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-    effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
-  } else if (rawClarDeadline) {
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    } else {
-      effectiveClarDeadline = new Date(rawClarDeadline);
+    if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+      throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
     }
-  } else if (rawSubmissionDeadline) {
-    effectiveClarDeadline = new Date(rawSubmissionDeadline);
   }
 
-  if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-    if (effectiveClarDeadline.getTime() < Date.now()) {
-      throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
+  const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || bid.endDate;
+  if (rawSubmissionDeadline) {
+    const deadlineD = new Date(rawSubmissionDeadline);
+    if (!isNaN(deadlineD.getTime()) && deadlineD.getTime() < Date.now()) {
+      throw new ApiError(400, 'The clarification window has closed as the quotation submission deadline has passed.', 'CLARIFICATION_DEADLINE_PASSED');
     }
   }
 
