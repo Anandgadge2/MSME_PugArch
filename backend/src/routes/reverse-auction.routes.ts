@@ -230,7 +230,6 @@ const resolveAuctionId = async (rawId: number | string): Promise<number | null> 
     const linked = await db.auction.findFirst({ where: { linkedRequirementId: req.id }, select: { id: true } });
     if (linked) return linked.id;
   }
-  }
   return null;
 };
 
