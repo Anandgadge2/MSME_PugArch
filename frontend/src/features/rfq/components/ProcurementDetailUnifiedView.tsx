@@ -1707,7 +1707,7 @@ function MetricCard({
   return (
     <article
       className={cn(
-        "flex flex-col rounded-lg border p-2 sm:px-2.5 sm:py-2 justify-between min-h-[62px] sm:min-h-[66px] shadow-2xs transition-all hover:shadow-xs",
+        "flex flex-col rounded-lg border px-2 py-1.5 sm:px-2.5 sm:py-1.5 justify-between min-h-[56px] sm:min-h-[60px] shadow-2xs transition-all hover:shadow-xs",
         styles.card,
       )}
     >
@@ -7644,47 +7644,56 @@ export function ProcurementDetailUnifiedView(
                   "",
               ).toLowerCase(),
             ) && (
-              <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-500 bg-gradient-to-r from-emerald-900 via-teal-950 to-slate-950 p-4 sm:p-5 text-white shadow-xl animate-fadeIn">
-                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 border border-emerald-400/50 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-200">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-                        Purchase Order Accepted &amp; Committed
-                      </div>
-                      <span className="rounded-md bg-white/10 px-2.5 py-0.5 text-xs font-bold text-slate-200">
-                        PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
-                      </span>
+              <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                      <CheckCircle2 className="h-4 w-4" />
                     </div>
-                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
-                      Order Confirmed — Delivery Stage Active
-                    </h3>
-                    <p className="text-xs sm:text-sm font-medium text-emerald-100 max-w-2xl leading-relaxed">
-                      You have formally accepted Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} for ₹
-                      {Number(
-                        effectiveActiveOrder.amount ||
-                          effectiveActiveOrder.totalValue ||
-                          activeAward?.finalAmount ||
-                          0,
-                      ).toLocaleString("en-IN")}
-                      . Your delivery commitment has been recorded. Dispatch goods, track shipment, and upload delivery challan for buyer GRN inspection.
-                    </p>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          Purchase Order Accepted &amp; Committed
+                        </span>
+                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                          PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
+                        </span>
+                      </div>
+                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                        Order Confirmed — Delivery Stage Active
+                      </h3>
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        You have formally accepted Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} for{" "}
+                        <strong className="text-emerald-700 font-bold">
+                          ₹{Number(
+                            effectiveActiveOrder.amount ||
+                              effectiveActiveOrder.totalValue ||
+                              activeAward?.finalAmount ||
+                              0,
+                          ).toLocaleString("en-IN")}
+                        </strong>
+                        . Your delivery commitment has been recorded. Dispatch goods, track shipment, and upload delivery challan for buyer GRN inspection.
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => setIsReceiptModalOpen(true)}
-                      className="h-10 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-4 border border-white/30 rounded-lg cursor-pointer transition-transform active:scale-95"
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
                     >
-                      <FileText className="h-4 w-4 mr-1.5" />
+                      <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View PO Copy
                     </Button>
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => router.push("/seller/delivery-management")}
-                      className="h-10 bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black text-xs px-4.5 shadow-lg border border-emerald-300 gap-1.5 cursor-pointer transition-transform active:scale-95"
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
                     >
-                      <Truck className="h-4 w-4 text-slate-950" />
+                      <Truck className="h-3.5 w-3.5" />
                       Go to Delivery Management
                     </Button>
                   </div>
@@ -7939,80 +7948,89 @@ export function ProcurementDetailUnifiedView(
           {isBuyerSide &&
             activeAward &&
             effectiveActiveOrder && (
-              <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-500 bg-gradient-to-r from-slate-950 via-slate-900 to-emerald-950 p-4 sm:p-5 text-white shadow-xl animate-fadeIn">
-                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                        Purchase Order Issued &amp; Active
-                      </div>
-                      <span className="rounded-md bg-white/10 px-2.5 py-0.5 text-xs font-bold text-slate-200">
-                        PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
-                      </span>
-                      <span
-                        className={cn(
-                          "rounded-md px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider border",
-                          ["accepted", "in_fulfillment", "dispatched"].includes(
+              <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          Purchase Order Issued &amp; Active
+                        </span>
+                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                          PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border",
+                            ["accepted", "in_fulfillment", "dispatched"].includes(
+                              String(
+                                effectiveActiveOrder.status ||
+                                  effectiveActiveOrder.poStatus ||
+                                  "",
+                              ).toLowerCase(),
+                            )
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              : "bg-amber-100 text-amber-800 border-amber-200",
+                          )}
+                        >
+                          {["accepted", "in_fulfillment", "dispatched"].includes(
                             String(
                               effectiveActiveOrder.status ||
                                 effectiveActiveOrder.poStatus ||
                                 "",
                             ).toLowerCase(),
                           )
-                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-400/40"
-                            : "bg-amber-500/20 text-amber-300 border-amber-400/40",
-                        )}
-                      >
-                        {["accepted", "in_fulfillment", "dispatched"].includes(
-                          String(
-                            effectiveActiveOrder.status ||
-                              effectiveActiveOrder.poStatus ||
-                              "",
-                          ).toLowerCase(),
-                        )
-                          ? "Supplier Accepted — Delivery In Progress"
-                          : "Awaiting Supplier Acceptance & Commitment"}
-                      </span>
+                            ? "Supplier Accepted — Delivery In Progress"
+                            : "Awaiting Supplier Acceptance & Commitment"}
+                        </span>
+                      </div>
+                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                        Official Purchase Order Released — Contract Binding Enacted
+                      </h3>
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
+                        <strong className="text-slate-900 font-bold">
+                          {activeAward.sellerName ||
+                            activeAward.seller?.name ||
+                            activeAward.awardedSellerName ||
+                            activeAward.sellerOrganization?.name ||
+                            "Awarded Supplier"}
+                        </strong>{" "}
+                        for{" "}
+                        <strong className="text-emerald-700 font-bold">
+                          ₹{Number(
+                            effectiveActiveOrder.amount ||
+                              effectiveActiveOrder.totalValue ||
+                              activeAward?.finalAmount ||
+                              0,
+                          ).toLocaleString("en-IN")}
+                        </strong>
+                        . All participating bidders have been transitioned, and order binding is legally established.
+                      </p>
                     </div>
-                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
-                      Official Purchase Order Released — Contract Binding Enacted
-                    </h3>
-                    <p className="text-xs sm:text-sm font-medium text-slate-200 max-w-2xl leading-relaxed">
-                      Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
-                      <strong className="text-emerald-300 font-bold">
-                        {activeAward.sellerName ||
-                          activeAward.seller?.name ||
-                          activeAward.awardedSellerName ||
-                          activeAward.sellerOrganization?.name ||
-                          "Awarded Supplier"}
-                      </strong>{" "}
-                      for ₹
-                      {Number(
-                        effectiveActiveOrder.amount ||
-                          effectiveActiveOrder.totalValue ||
-                          activeAward?.finalAmount ||
-                          0,
-                      ).toLocaleString("en-IN")}
-                      . All participating bidders have been transitioned, and order binding is legally established.
-                    </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
                     <Button
                       type="button"
+                      size="sm"
                       onClick={() => setIsReceiptModalOpen(true)}
-                      className="h-10 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4.5 shadow-md border border-emerald-300 gap-1.5 cursor-pointer rounded-lg transition-transform active:scale-95"
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
                     >
-                      <FileText className="h-4 w-4" />
+                      <FileText className="h-3.5 w-3.5" />
                       View Purchase Order
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
+                      size="sm"
                       onClick={() => router.push("/buyer/orders")}
-                      className="h-10 bg-white/10 hover:bg-white/20 text-white border-white/20 font-bold text-xs px-4 rounded-lg cursor-pointer"
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
                     >
-                      <Truck className="h-4 w-4 mr-1.5" />
+                      <Truck className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       Manage All Orders
                     </Button>
                   </div>
@@ -8363,7 +8381,7 @@ export function ProcurementDetailUnifiedView(
           )}
 
           {/* Header */}
-          <header className="rounded-xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-2xs">
+          <header className="rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-2xs">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -8460,7 +8478,7 @@ export function ProcurementDetailUnifiedView(
                     )
                   )}
                 </div>
-                <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 break-words leading-snug">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 break-words leading-snug">
                   {resolvedSubject}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500 tracking-normal">
@@ -8847,8 +8865,8 @@ export function ProcurementDetailUnifiedView(
               tabIndex={0}
               className="space-y-3.5 sm:space-y-4 focus:outline-none"
             >
-              {/* Procurement Awarded Banner for Buyer (when awarded) */}
-              {isBuyerOrAdmin && isBidAwarded && (
+              {/* Procurement Awarded Banner for Buyer (when awarded and before PO released) */}
+              {isBuyerOrAdmin && isBidAwarded && !effectiveActiveOrder && (
                 <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-start gap-2.5">
@@ -8871,19 +8889,6 @@ export function ProcurementDetailUnifiedView(
                           officially awarded and archived.
                         </p>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => router.push(`/bids/${targetId}/results`)}
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer"
-                      >
-                        <Award className="h-3.5 w-3.5" />
-                        <span>View Awarded Results &amp; Ranking</span>
-                        <ArrowRight className="h-3 w-3" />
-                      </Button>
                     </div>
                   </div>
                 </div>
