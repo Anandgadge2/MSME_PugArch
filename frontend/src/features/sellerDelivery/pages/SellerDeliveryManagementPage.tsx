@@ -13,9 +13,9 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
-    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
+    AlertCircle, ArrowLeft, ArrowRight, Boxes, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
     Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
-    List, MapPin, MoreVertical, Package, Paperclip, RefreshCw, Search,
+    List, MapPin, MoreVertical, Package, Paperclip, Receipt, RefreshCw, Search,
     Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -1048,6 +1048,11 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
                                     <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
                                         DLV-{delivery.id}
                                     </span>
+                                    {delivery.purchaseOrder?.poNumber && (
+                                        <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-slate-200">
+                                            {delivery.purchaseOrder.poNumber}
+                                        </span>
+                                    )}
                                 </div>
                                 <h2 className="mt-1 text-lg font-black tracking-tight text-white">
                                     {delivery.purchaseOrder?.title || 'Order Dispatch Fulfillment'}
@@ -1490,14 +1495,32 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
     return { doc, filename: `${invNumber}-TaxInvoice.pdf`, invNumber, grandTotal };
 };
 
+const POPULAR_CARRIERS = ['Blue Dart', 'Delhivery', 'DTDC', 'FedEx', 'India Post', 'Safexpress', 'TCI Express', 'Shadowfax'];
+
 function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
     const router = useRouter();
     const qc = useQueryClient();
+    const { data: freshDelivery } = useDelivery(delivery?.id);
+    const activeDelivery = freshDelivery || delivery;
+    const po = activeDelivery.purchaseOrder || delivery.purchaseOrder;
+
     const [trackingNumber, setTrackingNumber] = useState(delivery.trackingNumber || '');
     const [carrierName, setCarrierName] = useState(delivery.carrierName || '');
     const [eta, setEta] = useState((delivery.expectedDelivery || '').slice(0, 10));
     const [ewayBillNumber, setEwayBillNumber] = useState(delivery.ewayBillNumber || '');
     const [remarks, setRemarks] = useState(delivery.remarks || '');
+    const [itemsExpanded, setItemsExpanded] = useState(false);
+
+    // Synchronize state if fresh authoritative delivery record loads
+    useEffect(() => {
+        if (freshDelivery) {
+            if (!trackingNumber && freshDelivery.trackingNumber) setTrackingNumber(freshDelivery.trackingNumber);
+            if (!carrierName && freshDelivery.carrierName) setCarrierName(freshDelivery.carrierName);
+            if (!eta && freshDelivery.expectedDelivery) setEta(freshDelivery.expectedDelivery.slice(0, 10));
+            if (!ewayBillNumber && freshDelivery.ewayBillNumber) setEwayBillNumber(freshDelivery.ewayBillNumber);
+            if (!remarks && freshDelivery.remarks) setRemarks(freshDelivery.remarks);
+        }
+    }, [freshDelivery]);
 
     // Invoice Copy Type & View Modal State
     const [copyType, setCopyType] = useState('Original Copy');
@@ -1564,12 +1587,12 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     const addDocMut = useAddDeliveryDocument();
 
     const existingChallanDoc = useMemo(() => {
-        return (delivery.documents || []).find(d => d.documentType === 'DELIVERY_CHALLAN');
-    }, [delivery.documents]);
+        return (activeDelivery.documents || delivery.documents || []).find(d => d.documentType === 'DELIVERY_CHALLAN');
+    }, [activeDelivery.documents, delivery.documents]);
 
     const existingInvoiceDoc = useMemo(() => {
-        return (delivery.documents || []).find(d => d.documentType === 'TAX_INVOICE');
-    }, [delivery.documents]);
+        return (activeDelivery.documents || delivery.documents || []).find(d => d.documentType === 'TAX_INVOICE');
+    }, [activeDelivery.documents, delivery.documents]);
 
     // Fetch created invoice from API or purchaseOrder.invoices array
     useEffect(() => {
@@ -1609,7 +1632,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
     // Construct invoice data for TaxInvoiceCard & PDF engine from fetched invoice
     const invData = useMemo<TaxInvoiceData>(() => {
-        const po = delivery.purchaseOrder;
+        const po = activeDelivery.purchaseOrder || delivery.purchaseOrder;
 
         // Invoice Number from fetched invoice or fallback
         const invNo = fetchedInvoice?.invoiceNumber || po?.invoices?.[0]?.invoiceNumber || existingInvoiceDoc?.description || `INV-${po?.poNumber || delivery.id}`;
@@ -1724,7 +1747,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                 accountName: sellerName
             }
         };
-    }, [delivery, copyType, logoUrl, stampUrl, signatureUrl, existingInvoiceDoc, fetchedInvoice]);
+    }, [delivery, activeDelivery, copyType, logoUrl, stampUrl, signatureUrl, existingInvoiceDoc, fetchedInvoice]);
 
     // PDF generation & automatic delivery attachment
     const handleGenerateAndAttachPdf = async (targetCopyType: string = copyType, mode: 'download' | 'print' = 'download') => {
@@ -1921,58 +1944,312 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
         onDone();
     };
 
+    const rawItems: any[] = (po as any)?.items || [];
+    const totalUnits = rawItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+    const orderTotal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || (po as any)?.amount || invData.totalAmount || 0);
+    const consigneeOrgName = (po as any)?.buyer?.organization?.organizationName || (po as any)?.buyer?.name || 'Registered Consignee';
+    const consigneeContact = (po as any)?.buyer?.name;
+    const consigneeAddress = (po as any)?.deliveryAddress || (po as any)?.buyer?.organization?.address || activeDelivery.currentLocation || 'Direct Buyer Delivery Address';
+    const promisedEta = (po as any)?.deliveryDate ? formatDate((po as any).deliveryDate) : (activeDelivery.expectedDelivery ? formatDate(activeDelivery.expectedDelivery) : 'Standard Transit Schedule');
+
     const isSubmitting = updateDispatchMut.isPending || markDispatchedMut.isPending || addDocMut.isPending || isGeneratingInvoice || isUploadingChallan;
 
     return (
         <div className="space-y-6 text-left">
+            {/* A. Top Commercial, Consignee & Package Profile Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {/* 1. PO Commercials */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Receipt className="h-3.5 w-3.5 text-blue-600" />
+                            PO Commercials
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-800 border border-blue-100">
+                            {po?.poNumber || `PO-${activeDelivery.purchaseOrderId}`}
+                        </span>
+                    </div>
+                    <div>
+                        <h5 className="text-xs font-bold text-slate-900 line-clamp-1" title={po?.title || 'Purchase Order'}>
+                            {po?.title || 'Purchase Order Fulfillment'}
+                        </h5>
+                        <div className="mt-1 flex items-baseline gap-1.5">
+                            <span className="text-base font-black text-slate-900">
+                                {formatCurrency(orderTotal)}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold">Total Order Value</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+                        <span>Current Stage:</span>
+                        <span className={cn("px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] border", STATUS_TONE[String(activeDelivery.status)] || 'bg-slate-100 text-slate-700 border-slate-200')}>
+                            {readableStatus(String(activeDelivery.status))}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 2. Consignee & Delivery Destination */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-indigo-600" />
+                            Consignee Destination
+                        </span>
+                        <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                            Buyer
+                        </span>
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-900 line-clamp-1" title={consigneeOrgName}>
+                            {consigneeOrgName}
+                        </p>
+                        {consigneeContact && (
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Contact: {consigneeContact}</p>
+                        )}
+                    </div>
+                    <div className="flex items-start gap-1 pt-1 border-t border-slate-100 text-[10px] text-slate-600">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2" title={consigneeAddress}>
+                            {consigneeAddress}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 3. Consignment Units & SLA Target */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Boxes className="h-3.5 w-3.5 text-emerald-600" />
+                            Consignment Profile
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                            {rawItems.length > 0 ? `${rawItems.length} Item${rawItems.length > 1 ? 's' : ''}` : '1 Package'}
+                        </span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                        <div>
+                            <span className="text-base font-black text-slate-900">{totalUnits}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold ml-1">Total Unit{totalUnits !== 1 ? 's' : ''}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            ✓ Inspected & Staged
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+                        <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-slate-400" />
+                            Promised SLA:
+                        </span>
+                        <span className="font-bold text-slate-800">
+                            {promisedEta}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* B. Consignment Items Checklist (Manifest) */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setItemsExpanded(!itemsExpanded)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/70 hover:bg-slate-100/70 text-left transition cursor-pointer"
+                    aria-expanded={itemsExpanded}
+                >
+                    <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-[#12335f]" />
+                        <div>
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+                                Consignment Manifest & Line Items Checklist
+                            </span>
+                            <span className="ml-2 text-[10px] font-bold text-slate-500">
+                                ({rawItems.length || 1} line item{rawItems.length > 1 ? 's' : ''} staged for handover)
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-bold text-[#12335f]">
+                        <span>{itemsExpanded ? 'Hide items' : 'Review items'}</span>
+                        {itemsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
+                </button>
+
+                {itemsExpanded && (
+                    <div className="p-4 border-t border-slate-200 animate-in fade-in duration-150">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                        <th className="py-2 px-3 w-10">#</th>
+                                        <th className="py-2 px-3">Item Description</th>
+                                        <th className="py-2 px-3 text-right">Quantity</th>
+                                        <th className="py-2 px-3 text-right">Unit Rate</th>
+                                        <th className="py-2 px-3 text-right">Total</th>
+                                        <th className="py-2 px-3 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                                    {rawItems.length > 0 ? (
+                                        rawItems.map((item: any, idx: number) => {
+                                            const qty = Number(item.quantity) || 1;
+                                            const rate = Number(item.unitPrice) || 0;
+                                            const amt = Number(item.totalAmount) || (qty * rate);
+                                            return (
+                                                <tr key={item.id || idx} className="hover:bg-slate-50/60">
+                                                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="font-bold text-slate-900">{item.itemName || 'Consignment Item'}</div>
+                                                        {item.description && (
+                                                            <div className="text-[10px] text-slate-500 font-normal line-clamp-1">{item.description}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono">
+                                                        {qty} {item.uom || 'units'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                                                        {rate > 0 ? formatCurrency(rate) : '—'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                                        {formatCurrency(amt)}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-center">
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                            <Check className="h-2.5 w-2.5" /> Packed
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">1</td>
+                                            <td className="py-2.5 px-3">
+                                                <div className="font-bold text-slate-900">{po?.title || `Order #${delivery.purchaseOrderId}`}</div>
+                                                <div className="text-[10px] text-slate-500 font-normal">Primary Order Package</div>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono">1 pkg</td>
+                                            <td className="py-2.5 px-3 text-right font-mono text-slate-600">{formatCurrency(orderTotal)}</td>
+                                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(orderTotal)}</td>
+                                            <td className="py-2.5 px-3 text-center">
+                                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                    <Check className="h-2.5 w-2.5" /> Packed
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* C. Statutory Logistics & E-Way Bill Advisory Alert */}
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
+                    <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div className="space-y-1 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-amber-950">Statutory Transit Compliance & Logistics Advisory</span>
+                        {orderTotal >= 50000 ? (
+                            <span className="bg-amber-200/80 text-amber-950 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-300">
+                                E-Way Bill Mandatory (≥ ₹50,000)
+                            </span>
+                        ) : (
+                            <span className="bg-emerald-100 text-emerald-900 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-emerald-200">
+                                Under ₹50,000 Threshold
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-amber-800 text-[11px] leading-relaxed">
+                        {orderTotal >= 50000 ? (
+                            <>Under Rule 138 of CGST Rules, consignments exceeding <strong>₹50,000</strong> require an active 12-digit E-Way Bill prior to carrier handover. Ensure the carrier is provided a physical or digital copy of the E-Way bill.</>
+                        ) : (
+                            <>Consignment value is under the standard ₹50,000 statutory inter-state E-Way Bill threshold. Carrier transport can proceed with Delivery Challan / Tax Invoice unless specific state tax rules mandate otherwise.</>
+                        )}
+                        {' '}Saving dispatch details will automatically advance order status and broadcast live tracking coordinates to the buyer's dashboard.
+                    </p>
+                </div>
+            </div>
+
             {/* 1. Shipment Details & Delivery Challan Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Logistics Info Card */}
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                        <Truck className="h-4 w-4 text-[#12335f]" />
-                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Shipment & Logistics Details</h4>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-[#12335f]" />
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Shipment & Logistics Details</h4>
+                        </div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                            Transit Waybill
+                        </span>
                     </div>
 
-                    <Field label="Tracking Number">
-                        <input
-                            type="text"
-                            value={trackingNumber}
-                            onChange={e => setTrackingNumber(e.target.value)}
-                            placeholder="e.g. AWB-98765432"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
-                        />
-                    </Field>
+                    <div>
+                        <Field label="Tracking / AWB / LR Number *">
+                            <input
+                                type="text"
+                                value={trackingNumber}
+                                onChange={e => setTrackingNumber(e.target.value)}
+                                placeholder="e.g. AWB-98765432 or LR-88219"
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            />
+                        </Field>
+                        <p className="text-[10px] text-slate-400 mt-1">Air Waybill (AWB) or Lorry Receipt (LR) tracking reference provided by your carrier.</p>
+                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
                         <Field label="Carrier Name">
                             <input
                                 type="text"
                                 value={carrierName}
                                 onChange={e => setCarrierName(e.target.value)}
-                                placeholder="e.g. BlueDart / Delhivery"
+                                placeholder="e.g. Blue Dart / Delhivery"
                                 className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
                             />
                         </Field>
-                        <Field label="Expected Delivery Date">
-                            <input
-                                type="date"
-                                value={eta}
-                                onChange={e => setEta(e.target.value)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
-                            />
-                        </Field>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Select:</span>
+                            {POPULAR_CARRIERS.map(c => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setCarrierName(c)}
+                                    className={cn(
+                                        "rounded-md px-2 py-0.5 text-[10px] font-bold border transition cursor-pointer",
+                                        carrierName.toLowerCase() === c.toLowerCase()
+                                            ? "bg-[#12335f] text-white border-[#12335f] shadow-2xs"
+                                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                                    )}
+                                >
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <Field label="E-Way Bill Number (Optional)">
+                    <Field label="Expected Delivery Date (ETA)">
                         <input
-                            type="text"
-                            value={ewayBillNumber}
-                            onChange={e => setEwayBillNumber(e.target.value)}
-                            placeholder="e.g. 121009876543"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            type="date"
+                            value={eta}
+                            onChange={e => setEta(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
                         />
                     </Field>
+
+                    <div>
+                        <Field label="E-Way Bill Number (Optional)">
+                            <input
+                                type="text"
+                                value={ewayBillNumber}
+                                onChange={e => setEwayBillNumber(e.target.value)}
+                                placeholder="e.g. 121009876543 (12 digits)"
+                                maxLength={16}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            />
+                        </Field>
+                        <p className="text-[10px] text-slate-400 mt-1">12-digit statutory number from ewaybillgst.gov.in (mandated if value &ge; ₹50,000).</p>
+                    </div>
                 </div>
 
                 {/* Delivery Challan Card */}
@@ -1983,9 +2260,12 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Delivery Challan (DC)</h4>
                         </div>
                         <span className="text-[9px] font-bold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                            Dispatch Doc
+                            Rule 55 Transit Doc
                         </span>
                     </div>
+                    <p className="text-[10px] text-slate-500 font-medium -mt-1">
+                        Mandatory accompaniment under Rule 55 of CGST Rules for transportation of goods.
+                    </p>
 
                     {existingChallanDoc ? (
                         <div className="flex items-center justify-between rounded-lg border border-purple-200 bg-purple-50/80 p-2.5">
@@ -2361,35 +2641,40 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* Dispatch Remarks */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-                <Field label="Dispatch Remarks (Optional)">
+                <Field label="Dispatch & Handling Remarks (Optional)">
                     <textarea
                         value={remarks}
                         onChange={e => setRemarks(e.target.value)}
                         rows={2}
-                        placeholder="Add dispatch notes or carrier instruction…"
+                        placeholder="e.g. 2 cartons packed, fragile electronic goods — handle with care. Staged at Bay 3 for carrier pickup…"
                         className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15 resize-none"
                     />
                 </Field>
             </div>
 
             {/* Bottom Action Footer */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200 bg-white">
-                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="h-10 px-5 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200 bg-white">
+                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="w-full sm:w-auto h-10 px-5 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                     <ArrowLeft className="h-4 w-4" />
                     Back to Deliveries
                 </Button>
-                <Button
-                    onClick={handleSave}
-                    disabled={isSubmitting}
-                    className="h-10 bg-[#12335f] hover:bg-[#0b1f3a] text-white px-7 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md"
-                >
-                    {isSubmitting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                        <Truck className="mr-2 h-4 w-4" />
-                    )}
-                    Save Dispatch Details & Confirm Order
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    <span className="text-[11px] text-slate-500 font-medium text-center sm:text-right">
+                        Tracking status will advance to <strong>DISPATCHED</strong> & update buyer
+                    </span>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSubmitting}
+                        className="w-full sm:w-auto h-10 bg-[#12335f] hover:bg-[#0b1f3a] text-white px-7 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer transition-all hover:shadow-lg"
+                    >
+                        {isSubmitting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Truck className="mr-2 h-4 w-4" />
+                        )}
+                        Confirm Dispatch & Save Tracking
+                    </Button>
+                </div>
             </div>
 
             {/* Stamp & Signature Branding Modal */}

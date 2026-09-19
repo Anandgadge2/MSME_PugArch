@@ -122,6 +122,7 @@ const loadDelivery = async (id: number) => {
         include: {
           buyer: true,
           seller: true,
+          items: true,
           invoices: {
             orderBy: { createdAt: 'desc' },
             include: {
@@ -153,6 +154,7 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
         include: {
           buyer: true,
           seller: true,
+          items: true,
           invoices: {
             orderBy: { createdAt: 'desc' },
             include: {
