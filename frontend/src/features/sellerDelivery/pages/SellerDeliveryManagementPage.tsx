@@ -15,7 +15,7 @@ import { useRouter } from 'next/navigation';
 import {
     AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
     Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
-    List, MapPin, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search,
+    List, MapPin, MoreVertical, Package, Paperclip, RefreshCw, Search,
     Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -2170,16 +2170,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             {isGeneratingInvoice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                             Download PDF
                         </Button>
-
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void handleGenerateAndAttachPdf(copyType, 'print')}
-                            disabled={isGeneratingInvoice}
-                            className="h-9 px-3.5 bg-white border-blue-300 text-blue-900 hover:bg-blue-100 text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer"
-                        >
-                            <Printer className="h-3.5 w-3.5" /> Print
-                        </Button>
                     </div>
                 </div>
             </div>
@@ -2276,17 +2266,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                     >
                                         <Stamp className="h-3.5 w-3.5 text-indigo-600" />
                                         STAMP & SIGNATURE
-                                    </Button>
-
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => void handleGenerateAndAttachPdf(copyType, 'print')}
-                                        disabled={isGeneratingInvoice}
-                                        className="h-9 rounded-xl border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
-                                    >
-                                        <Printer className="h-3.5 w-3.5 text-slate-600" />
-                                        PRINT
                                     </Button>
 
                                     <div className="relative inline-flex rounded-xl shadow-xs">

@@ -8,7 +8,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { 
   ArrowLeft, ShieldAlert, Award, Star, Info,
   CheckCircle2, AlertTriangle, FileText, BadgePercent, IndianRupee,
-  Activity, Users, ChevronRight, HelpCircle, Eye, Download, Printer, X,
+  Activity, Users, ChevronRight, HelpCircle, Eye, Download, X,
   Flame, BarChart3, Zap, Trophy, Scale, Layers, Filter, RotateCcw
 } from 'lucide-react';
 import { PageShell, StatusBadge, ProcurementHero, ProcurementLoadingState, ProcurementErrorState } from '../components';

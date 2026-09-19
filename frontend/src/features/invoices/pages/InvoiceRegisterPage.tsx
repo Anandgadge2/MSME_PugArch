@@ -27,7 +27,7 @@ import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
 import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
-import { Stamp, Printer, Download, ChevronDown, Truck } from 'lucide-react';
+import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
 
 type InvoiceRow = {
   id: number;
@@ -1805,17 +1805,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           <Stamp className="h-3.5 w-3.5 text-indigo-600" />
                           <span className="hidden sm:inline">Stamp & Signature</span>
                           <span className="sm:hidden">Stamp</span>
-                        </Button>
-
-                        {/* Print Invoice Button */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => void handleDownloadPdf('print')}
-                          className="h-9 px-3 rounded-xl border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap"
-                        >
-                          <Printer className="h-3.5 w-3.5 text-slate-600" />
-                          Print
                         </Button>
 
                         {/* Download PDF with Dropdown */}

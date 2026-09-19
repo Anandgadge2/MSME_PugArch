@@ -20,7 +20,6 @@ import {
   ChevronDown,
   IndianRupee,
   Download,
-  Printer,
   Upload,
   FileCheck,
   RotateCcw,
@@ -1164,7 +1163,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
               onClick={handleDownloadReceipt}
               className="h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm"
             >
-              <Download className="mr-1.5 h-4 w-4" /> Download / Print PDF
+              <Download className="mr-1.5 h-4 w-4" /> Download Receipt
             </Button>
             <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase text-emerald-700">
               {status}
@@ -1210,9 +1209,6 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> View Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={handleDownloadReceipt} className="bg-white hover:bg-slate-50 border-slate-300 font-bold text-slate-800 shadow-2xs cursor-pointer">
-                  <Printer className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> Print
-                </Button>
                 <Button variant={activeTab === 'receipt' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('receipt')}>
                   <Receipt className="mr-1 h-3.5 w-3.5" />Receipt
                 </Button>
