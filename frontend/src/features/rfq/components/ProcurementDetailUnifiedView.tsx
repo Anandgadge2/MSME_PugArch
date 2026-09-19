@@ -1112,7 +1112,7 @@ function DataCard({
   return (
     <section
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-xs space-y-3.5",
+        "rounded-xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-2xs space-y-3",
         className,
       )}
     >
@@ -1690,33 +1690,34 @@ function MetricCard({
   return (
     <article
       className={cn(
-        "flex flex-col rounded-xl border p-2.5 sm:p-3 justify-between min-h-[82px] shadow-2xs transition-all hover:shadow-xs",
+        "flex flex-col rounded-lg border p-2 sm:px-2.5 sm:py-2 justify-between min-h-[62px] sm:min-h-[66px] shadow-2xs transition-all hover:shadow-xs",
         styles.card,
       )}
     >
-      <div className="flex items-center justify-between gap-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 line-clamp-1 flex-1">
+      <div className="flex items-center justify-between gap-1">
+        <p className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 truncate flex-1">
           {label}
         </p>
         <span
           className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-md shadow-2xs",
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded shadow-2xs",
             styles.icon,
           )}
+          aria-hidden="true"
         >
-          <Icon className="h-3.5 w-3.5" />
+          <Icon className="h-3 w-3" />
         </span>
       </div>
       <div className="min-w-0 mt-0.5">
         <div
-          className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate"
+          className="text-xs sm:text-[13.5px] font-extrabold text-slate-900 leading-snug truncate"
           title={typeof value === "string" ? value : undefined}
         >
           {value}
         </div>
-        <p className="mt-0.5 flex items-center gap-1 text-[10px] font-medium text-slate-500 truncate">
-          <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" />
-          {subtext || "Procurement details"}
+        <p className="mt-0.5 flex items-center gap-1 text-[9px] sm:text-[9.5px] font-medium text-slate-500 truncate">
+          <span className="h-1 w-1 shrink-0 rounded-full bg-slate-300" aria-hidden="true" />
+          <span className="truncate">{subtext || "Procurement details"}</span>
         </p>
       </div>
     </article>
@@ -1949,11 +1950,11 @@ function AuctionWorkflowStepper({
 
   if (isTwoStage) {
     return (
-      <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-white p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-purple-100 pb-3.5">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-600 text-white shadow-xs">
-              <Layers className="h-4 w-4" />
+      <div className="rounded-xl border border-purple-200/80 bg-gradient-to-r from-purple-50/70 via-indigo-50/40 to-white p-3 sm:p-3.5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-purple-600 text-white shadow-2xs">
+              <Layers className="h-3.5 w-3.5" />
             </span>
             <div>
               <div className="flex items-center gap-2">
@@ -2082,11 +2083,11 @@ function AuctionWorkflowStepper({
 
   // Standalone Direct Reverse Auction Stepper
   return (
-    <div className="rounded-2xl border border-rose-200/80 bg-gradient-to-r from-rose-50/60 via-amber-50/30 to-white p-4 sm:p-5 shadow-xs">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-rose-100 pb-3.5">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-xs">
-            <Gavel className="h-4 w-4" />
+    <div className="rounded-xl border border-rose-200/80 bg-gradient-to-r from-rose-50/60 via-amber-50/30 to-white p-3 sm:p-3.5 shadow-2xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 pb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-600 text-white shadow-2xs">
+            <Gavel className="h-3.5 w-3.5" />
           </span>
           <div>
             <div className="flex items-center gap-2">
@@ -7117,22 +7118,22 @@ export function ProcurementDetailUnifiedView(
       }}
     >
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-7xl space-y-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl space-y-2.5 px-3 py-2 sm:px-6 sm:py-3 lg:px-8">
           {/* Navigation Breadcrumb & Back Button */}
           <div className="flex flex-wrap items-center gap-3">
-          
-
-            <nav className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+            <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   if (props.onBack) props.onBack();
                   else router.push(props.backRoute || "/seller/opportunities");
                 }}
-                className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+                className="h-7 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
               >
-                {props.backRouteLabel ||
-                  `${procurementTypeLabel} Opportunities`}
+                <ArrowLeft className="h-3 w-3 text-slate-400" aria-hidden="true" />
+                <span>
+                  {props.backRouteLabel || `${procurementTypeLabel} Opportunities`}
+                </span>
               </button>
             </nav>
           </div>
@@ -7148,6 +7149,7 @@ export function ProcurementDetailUnifiedView(
             hasApprovedGrn={Boolean(effectiveActiveOrder?.grns?.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED'))}
             invoices={effectiveActiveOrder?.invoices || props.rawBid?.invoices || []}
             isBuyer={isBuyerSide}
+            isStandby={!isBuyerSide && currentUser?.role === 'seller' && !isAwardedToMe && Boolean(activeAward && !effectiveActiveOrder)}
           />
 
           {!currentUser && (
@@ -7227,17 +7229,17 @@ export function ProcurementDetailUnifiedView(
 
           {/* Buyer: Award Offered to Seller, Waiting for Acceptance */}
           {isBuyerSide && activeAward && activeAward.awardStatus === "OFFERED" && activeAward.counterOfferStatus !== "PENDING" && (
-            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-600 via-orange-600 to-slate-900 p-5 text-white shadow-xl animate-fadeIn">
-              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 border border-white/20 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-200">
-                    <Clock className="h-3.5 w-3.5 text-amber-300" />
+            <div className="relative overflow-hidden rounded-xl border border-amber-400 bg-gradient-to-r from-amber-600 via-orange-600 to-slate-900 p-3 sm:p-4 text-white shadow-md animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 border border-white/20 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-amber-200">
+                    <Clock className="h-3 w-3 text-amber-300" />
                     Contract Award Offered — Awaiting Vendor Acceptance
                   </div>
-                  <h3 className="text-xl font-black tracking-tight text-white">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
                     Award Offered to {activeAward.sellerName || activeAward.seller?.name || activeAward.awardedSellerName || activeAward.sellerOrganization?.name || "Selected Supplier"}
                   </h3>
-                  <p className="text-sm font-medium text-amber-100 max-w-2xl">
+                  <p className="text-xs font-medium text-amber-100 max-w-2xl">
                     The formal contract award has been offered for ₹{Number(activeAward.finalAmount || activeAward.awardAmount || activeAward.originalBidAmount || 0).toLocaleString("en-IN")}. Waiting for supplier acceptance before Purchase Order generation can be unlocked. Participating bidders remain safely under review on standby.
                   </p>
                 </div>
@@ -7246,7 +7248,7 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     size="sm"
                     onClick={() => setActiveTab("evaluation")}
-                    className="h-10 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-4 border border-white/30 cursor-pointer"
+                    className="h-8.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-3.5 border border-white/30 cursor-pointer rounded-lg"
                   >
                     View Evaluation Details
                   </Button>
@@ -7362,32 +7364,32 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller: Award Offered (Ready for Acceptance) */}
           {!isBuyerSide && isAwardedToMe && activeAward?.awardStatus === "OFFERED" && activeAward?.counterOfferStatus !== "PENDING" && (
-            <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-5 text-white shadow-xl animate-fadeIn">
-              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/20 px-3 py-1 text-xs font-black uppercase tracking-wider backdrop-blur-xs">
-                    <Trophy className="h-3.5 w-3.5 text-amber-300" />
+            <div className="relative overflow-hidden rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-3 sm:p-4 text-white shadow-md animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/20 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider backdrop-blur-xs">
+                    <Trophy className="h-3 w-3 text-amber-300" />
                     Bid Award Offered
                   </div>
-                  <h3 className="text-xl font-black tracking-tight text-white">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
                     Congratulations! Your Organization has been Awarded the Contract
                   </h3>
-                  <p className="text-sm font-medium text-emerald-100 max-w-2xl">
+                  <p className="text-xs font-medium text-emerald-100 max-w-2xl">
                     The Buyer has recommended and awarded this tender to your organization. Please formally accept the award to initiate official Purchase Order issuance.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                   <Button
                     type="button"
                     disabled={isAcceptingAction}
                     onClick={() => handleAcceptAward(String(activeAward?.id || ""))}
-                    className="h-11 bg-white hover:bg-emerald-50 text-emerald-900 font-black text-sm px-6 shadow-lg gap-2 cursor-pointer transition-transform active:scale-95"
+                    className="h-9 bg-white hover:bg-emerald-50 text-emerald-900 font-bold text-xs px-4 shadow-sm gap-1.5 rounded-lg cursor-pointer transition-transform active:scale-95"
                     aria-label="Formally accept contract award"
                   >
                     {isAcceptingAction ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-emerald-600" aria-hidden="true" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" aria-hidden="true" />
                     ) : (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
                     )}
                     Formally Accept Award
                   </Button>
@@ -7403,10 +7405,10 @@ export function ProcurementDetailUnifiedView(
                         submitting: false,
                       })
                     }
-                    className="h-11 bg-black/30 hover:bg-black/50 text-white font-bold text-sm px-5 border border-white/30 gap-2 cursor-pointer"
+                    className="h-9 bg-black/30 hover:bg-black/50 text-white font-bold text-xs px-3.5 border border-white/30 gap-1.5 rounded-lg cursor-pointer"
                     aria-label="Decline contract award"
                   >
-                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                    <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                     Decline Award
                   </Button>
                 </div>
@@ -7416,16 +7418,16 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller: Award Accepted, Waiting for PO */}
           {!isBuyerSide && isAwardedToMe && activeAward?.awardStatus === "ACCEPTED" && !activeAward?.order && (
-            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/90 p-4 shadow-sm animate-fadeIn">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
-                  <CheckCircle2 className="h-5 w-5" />
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                  <CheckCircle2 className="h-4 w-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-indigo-950">
+                  <h4 className="text-xs sm:text-[13px] font-extrabold text-indigo-950 leading-tight">
                     Award Acceptance Confirmed — Awaiting Purchase Order Issuance
                   </h4>
-                  <p className="text-xs font-semibold text-indigo-800">
+                  <p className="text-[11px] sm:text-xs font-medium text-indigo-800/90 mt-0.5 leading-snug">
                     You have accepted the award. The buyer is now finalizing and issuing the official Purchase Order. You will receive an immediate notification upon issuance.
                   </p>
                 </div>
@@ -7435,16 +7437,16 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller: Participating Bidder on Standby */}
           {!isBuyerSide && myParticipation && !isAwardedToMe && activeAward && (activeAward.counterOfferStatus === "PENDING" || activeAward.awardStatus === "OFFERED") && (
-            <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 shadow-sm animate-fadeIn">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
-                  <Clock className="h-5 w-5" />
+            <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                  <Clock className="h-4 w-4" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-black text-blue-950">
+                  <h4 className="text-xs sm:text-[13px] font-extrabold text-blue-950 leading-tight">
                     Tender Under Final Award Evaluation (Backup Supplier Standby)
                   </h4>
-                  <p className="text-xs font-semibold text-blue-800">
+                  <p className="text-[11px] sm:text-xs font-medium text-blue-800/90 mt-0.5 leading-snug">
                     The buyer is actively finalizing award formalities. Your proposal remains valid, responsive, and safely on standby under evaluation. Final tender status will be updated upon PO issuance.
                   </p>
                 </div>
@@ -7454,17 +7456,17 @@ export function ProcurementDetailUnifiedView(
 
           {/* Buyer: Award Accepted — Ready to Issue PO */}
           {isBuyerSide && activeAward && activeAward.awardStatus === "ACCEPTED" && !activeAward.order && (
-            <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-5 text-white shadow-xl animate-fadeIn">
-              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1.5">
-                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-200">
-                    <Award className="h-3.5 w-3.5 text-emerald-300" />
+            <div className="relative overflow-hidden rounded-xl border border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-3 sm:p-4 text-white shadow-md animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-emerald-200">
+                    <Award className="h-3 w-3 text-emerald-300" />
                     Supplier Accepted Bid Award
                   </div>
-                  <h3 className="text-xl font-black tracking-tight text-white">
+                  <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
                     Contract Ready for Purchase Order Generation
                   </h3>
-                  <p className="text-sm font-medium text-slate-200 max-w-2xl">
+                  <p className="text-xs font-medium text-slate-200 max-w-2xl">
                     The awarded supplier has formally accepted the award terms. Generate and issue the Purchase Order to bind the contract and automatically notify all participating suppliers.
                   </p>
                 </div>
@@ -7473,14 +7475,14 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     disabled={isIssuingPOFromBanner}
                     onClick={() => handleGeneratePOFromBanner(activeAward.id)}
-                    className="h-12 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm px-6 shadow-xl border border-emerald-300 gap-2 cursor-pointer transition-transform active:scale-95"
+                    className="h-9 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 shadow-md border border-emerald-300 gap-1.5 cursor-pointer rounded-lg transition-transform active:scale-95"
                   >
                     {isIssuingPOFromBanner ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <FileText className="h-4 w-4" />
+                      <FileText className="h-3.5 w-3.5" />
                     )}
-                    Generate & Issue Purchase Order
+                    Generate &amp; Issue Purchase Order
                   </Button>
                 </div>
               </div>
@@ -7489,17 +7491,17 @@ export function ProcurementDetailUnifiedView(
 
           {/* Buyer: Price Match Counter-Offer Pending */}
           {isBuyerSide && activeAward && activeAward.counterOfferStatus === "PENDING" && (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm animate-fadeIn">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
-                    <Clock className="h-5 w-5" />
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-2xs">
+                    <Clock className="h-4 w-4" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-amber-950">
+                    <h4 className="text-xs sm:text-[13px] font-extrabold text-amber-950 leading-tight">
                       Price-Match Counter-Offer Pending Supplier Response
                     </h4>
-                    <p className="text-xs font-semibold text-amber-800">
+                    <p className="text-[11px] sm:text-xs font-medium text-amber-800 mt-0.5 leading-snug">
                       Target Price:{" "}
                       <strong className="text-amber-950">
                         ₹{Number(activeAward.priceMatchTargetPrice || 0).toLocaleString("en-IN")}
@@ -7518,7 +7520,7 @@ export function ProcurementDetailUnifiedView(
                   type="button"
                   size="sm"
                   onClick={() => router.push(`/bids/${targetId}/results`)}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0"
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 h-8 rounded-lg px-3"
                 >
                   View Bid Evaluation
                 </Button>
@@ -7756,27 +7758,21 @@ export function ProcurementDetailUnifiedView(
           )}
 
           {/* Header */}
-          <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0 flex-1 space-y-2">
+          <header className="rounded-xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-2xs">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={statusLabel} />
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
-                      <Layers className="h-3 w-3" />
+                      <Layers className="h-3 w-3" aria-hidden="true" />
                       Two-Stage Tender + Reverse Auction
                     </span>
                   )}
                   {isDirectReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
-                      <Gavel className="h-3 w-3" />
+                      <Gavel className="h-3 w-3" aria-hidden="true" />
                       Direct Reverse Auction
-                    </span>
-                  )}
-                  {buyerOrgName && buyerOrgName !== "N/A" && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
-                      <Building2 className="h-3 w-3" />
-                      {formatPrimitiveValue(buyerOrgName, "organization")}
                     </span>
                   )}
                   {(props.deadlineDate || closingDateValue) && (
@@ -7795,42 +7791,42 @@ export function ProcurementDetailUnifiedView(
                     isSellerParticipated ? (
                       isAwardedToMe ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
-                          <Award className="h-3 w-3 text-emerald-600" />
+                          <Award className="h-3 w-3 text-emerald-600" aria-hidden="true" />
                           Contract Awarded to You
                         </span>
                       ) : activeAward && !effectiveActiveOrder ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 shadow-2xs">
-                          <Clock className="h-3 w-3 text-sky-600" />
-                          Standby • Under Evaluation
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-900 shadow-2xs">
+                          <Clock className="h-3 w-3 text-sky-700" aria-hidden="true" />
+                          Standby Vendor • Reserve List
                         </span>
                       ) : (isBiddingClosed || isDeadlinePassed) ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
-                          <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                          <ShieldCheck className="h-3 w-3 text-emerald-600" aria-hidden="true" />
                           Submitted • Under Evaluation
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 shadow-2xs">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800 shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" />
                           {props.procurementType === "RFQ" ? "Quotation Submitted" : "Proposal Submitted"}
                         </span>
                       )
                     ) : (
                       (isBiddingClosed || isDeadlinePassed) ? (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700 shadow-2xs">
-                          <Lock className="h-3 w-3 text-rose-500" />
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-800 shadow-2xs">
+                          <Lock className="h-3 w-3 text-rose-600" aria-hidden="true" />
                           Submission Window Closed (Missed Deadline)
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 shadow-2xs">
-                          <Clock className="h-3 w-3 text-amber-600" />
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
+                          <Clock className="h-3 w-3 text-amber-600" aria-hidden="true" />
                           Awaiting Your Quotation
                         </span>
                       )
                     )
                   ) : (
                     props.hasSubmittedProposal && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                        <ShieldCheck className="h-3 w-3" />
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                        <ShieldCheck className="h-3 w-3 text-emerald-600" aria-hidden="true" />
                         {props.procurementType === "RFQ"
                           ? "Quotation Submitted"
                           : "Proposal Submitted"}
@@ -7865,6 +7861,15 @@ export function ProcurementDetailUnifiedView(
                       <span>{formatPrimitiveValue(category, "category")}</span>
                     </>
                   )}
+                  {buyerOrgName && buyerOrgName !== "N/A" && (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 text-slate-600">
+                        <Building2 className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                        <span>Published by <strong className="font-semibold text-slate-800">{formatPrimitiveValue(buyerOrgName, "organization")}</strong></span>
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -7882,7 +7887,7 @@ export function ProcurementDetailUnifiedView(
                   }}
                   className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
                 >
-                  <Download className="h-3.5 w-3.5 text-slate-600" />
+                  <Download className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
                   Download
                 </Button>
                 {props.invoiceStatus &&
@@ -7896,7 +7901,7 @@ export function ProcurementDetailUnifiedView(
                       }
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                     >
-                      <Eye className="h-3.5 w-3.5 mr-0.5" />
+                      <Eye className="h-3.5 w-3.5 mr-0.5" aria-hidden="true" />
                       View Invoice
                     </Button>
                   ) : props.invoiceStatus.canConvertToInvoice && props.onConvertToInvoiceClick ? (
@@ -7909,9 +7914,9 @@ export function ProcurementDetailUnifiedView(
                       className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 h-8 rounded-lg shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                     >
                       {props.isConvertingInvoice ? (
-                        <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 mr-0.5 animate-spin" aria-hidden="true" />
                       ) : (
-                        <FileText className="h-3.5 w-3.5 mr-0.5" />
+                        <FileText className="h-3.5 w-3.5 mr-0.5" aria-hidden="true" />
                       )}
                       {props.isConvertingInvoice
                         ? "Converting..."
@@ -7926,7 +7931,7 @@ export function ProcurementDetailUnifiedView(
                     onClick={props.onDiscardClick}
                     className="h-8 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-semibold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
                   >
-                    <Trash2 className="h-3 w-3 text-rose-600" />
+                    <Trash2 className="h-3 w-3 text-rose-600" aria-hidden="true" />
                     Discard Draft
                   </Button>
                 )}
@@ -7939,7 +7944,7 @@ export function ProcurementDetailUnifiedView(
                     onClick={props.onCancelClick}
                     className="h-9 px-3.5 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
                   >
-                    <Ban className="h-3.5 w-3.5 text-rose-600" />
+                    <Ban className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" />
                     {props.cancelButtonLabel || "Cancel Procurement"}
                   </Button>
                 )}
@@ -7950,12 +7955,13 @@ export function ProcurementDetailUnifiedView(
                         type="button"
                         variant="outline"
                         size="sm"
+                        aria-label="View your submitted quotation"
                         onClick={
                           props.onViewQuotationClick || props.onSubmitClick
                         }
                         className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
                       >
-                        <Eye className="h-3.5 w-3.5 text-slate-600" />
+                        <Eye className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
                         <span>
                           {isRfqType
                             ? "View My Quotation"
@@ -7967,48 +7973,6 @@ export function ProcurementDetailUnifiedView(
                         </span>
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      aria-disabled="true"
-                      className={cn(
-                        "h-8 px-3.5 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs",
-                        isAwardedToMe
-                          ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
-                          : (activeAward && !effectiveActiveOrder)
-                            ? "bg-sky-50 text-sky-800 border border-sky-300"
-                            : (isBiddingClosed || isDeadlinePassed)
-                              ? "bg-sky-50 text-sky-800 border border-sky-300"
-                              : "bg-emerald-50 text-emerald-800 border border-emerald-300"
-                      )}
-                    >
-                      {isAwardedToMe ? (
-                        <Award className="h-3.5 w-3.5 text-emerald-600" />
-                      ) : (isBiddingClosed || isDeadlinePassed) ? (
-                        <ShieldCheck className="h-3.5 w-3.5 text-sky-600" />
-                      ) : (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                      )}
-                      <span>
-                        {isAwardedToMe
-                          ? "Contract Awarded"
-                          : (activeAward && !effectiveActiveOrder)
-                            ? "Standby (Under Evaluation)"
-                            : (isBiddingClosed || isDeadlinePassed)
-                              ? "Submitted • Under Evaluation"
-                              : (props.submitButtonLabel &&
-                                 props.submitButtonLabel.toLowerCase().includes("submitted")
-                                  ? props.submitButtonLabel
-                                  : isRfqType
-                                    ? "Quotation Submitted"
-                                    : isRateContractType
-                                      ? "Rate Quotation Submitted"
-                                      : isReverseAuctionType
-                                        ? "Joined & Qualified"
-                                        : "Proposal Submitted")}
-                      </span>
-                    </Button>
                   </>
                 )}
                 {!isBuyerOrAdmin && !isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && (
@@ -8117,8 +8081,9 @@ export function ProcurementDetailUnifiedView(
 
           {/* Summary Metrics */}
           <section
+            aria-label="Procurement Key Metrics"
             className={cn(
-              "grid gap-2.5 sm:gap-3",
+              "grid gap-1.5 sm:gap-2",
               summaryCards.length === 6
                 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
                 : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5",
@@ -8129,24 +8094,54 @@ export function ProcurementDetailUnifiedView(
             ))}
           </section>
 
-          {/* Tab Navigation Bar */}
-          <nav aria-label="Procurement sections" className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
-            {tabs.map((tab) => {
+          {/* Tab Navigation Bar (WAI-ARIA Compliant) */}
+          <div
+            role="tablist"
+            aria-label="Procurement details navigation"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
+          >
+            {tabs.map((tab, idx) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
+                  id={`tab-${tab.id}`}
+                  role="tab"
                   type="button"
+                  aria-selected={isActive}
+                  aria-controls={`tabpanel-${tab.id}`}
+                  tabIndex={isActive ? 0 : -1}
                   onClick={() => setActiveTab(tab.id as any)}
+                  onKeyDown={(e) => {
+                    if (e.key === "ArrowRight") {
+                      e.preventDefault();
+                      const nextIdx = (idx + 1) % tabs.length;
+                      setActiveTab(tabs[nextIdx].id as any);
+                      document.getElementById(`tab-${tabs[nextIdx].id}`)?.focus();
+                    } else if (e.key === "ArrowLeft") {
+                      e.preventDefault();
+                      const prevIdx = (idx - 1 + tabs.length) % tabs.length;
+                      setActiveTab(tabs[prevIdx].id as any);
+                      document.getElementById(`tab-${tabs[prevIdx].id}`)?.focus();
+                    } else if (e.key === "Home") {
+                      e.preventDefault();
+                      setActiveTab(tabs[0].id as any);
+                      document.getElementById(`tab-${tabs[0].id}`)?.focus();
+                    } else if (e.key === "End") {
+                      e.preventDefault();
+                      setActiveTab(tabs[tabs.length - 1].id as any);
+                      document.getElementById(`tab-${tabs[tabs.length - 1].id}`)?.focus();
+                    }
+                  }}
                   className={cn(
-                    "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all",
+                    "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1",
                     isActive
                       ? "bg-slate-950 text-white shadow-2xs"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" />
+                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{tab.label}</span>
                   {tab.count !== undefined && tab.count > 0 && (
                     <span
@@ -8163,26 +8158,32 @@ export function ProcurementDetailUnifiedView(
                 </button>
               );
             })}
-          </nav>
+          </div>
 
           {/* Tab 1: Overview & Dates */}
           {activeTab === "overview" && (
-            <div className="space-y-5">
+            <div
+              role="tabpanel"
+              id="tabpanel-overview"
+              aria-labelledby="tab-overview"
+              tabIndex={0}
+              className="space-y-3.5 sm:space-y-4 focus:outline-none"
+            >
               {/* Procurement Awarded Banner for Buyer (when awarded) */}
               {isBuyerOrAdmin && isBidAwarded && (
-                <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-4 sm:p-5 shadow-xs transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-md shadow-emerald-600/20">
-                        <Award className="h-6 w-6" />
+                <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                        <Award className="h-4 w-4" />
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10.5px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <CheckCircle2 className="h-3 w-3" /> Procurement Awarded &amp; Finalized
                           </span>
                         </div>
-                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                        <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
                           Contract Awarded to {awardedVendorName}
                         </h3>
                         <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
@@ -8196,11 +8197,11 @@ export function ProcurementDetailUnifiedView(
                         type="button"
                         size="sm"
                         onClick={() => router.push(`/bids/${targetId}/results`)}
-                        className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs rounded-xl cursor-pointer"
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer"
                       >
-                        <Award className="h-4 w-4" />
+                        <Award className="h-3.5 w-3.5" />
                         <span>View Awarded Results &amp; Ranking</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
@@ -8219,29 +8220,29 @@ export function ProcurementDetailUnifiedView(
                     "AWARD_RECOMMENDED",
                   ].includes(statusUpper)) &&
                 submittedParticipations.length > 0 && (
-                  <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-4 sm:p-5 shadow-xs transition-all">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="flex items-start gap-3.5">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-600/20">
-                          <ShieldCheck className="h-6 w-6" />
+                  <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                          <ShieldCheck className="h-4 w-4" />
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[10.5px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
                               Two-Packet Evaluation Workflow
                             </span>
                             {techEvaluationStats.pending === 0 &&
                             techEvaluationStats.qualified > 0 ? (
-                              <span className="text-[10.5px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                                 <CheckCircle2 className="h-3 w-3" /> Technical Scrutiny Completed
                               </span>
                             ) : (
-                              <span className="text-[10.5px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
                                 <Clock className="h-3 w-3" /> {techEvaluationStats.pending} Pending Review
                               </span>
                             )}
                           </div>
-                          <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                          <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
                             {techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0
                               ? "Stage 1 Technical Evaluation Complete — Ready for Stage 2"
                               : "Stage 1 Technical Scrutiny & Seller Qualification Required"}
@@ -8254,7 +8255,7 @@ export function ProcurementDetailUnifiedView(
                         </div>
                       </div>
 
-                      <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
+                      <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
                         <Button
                           type="button"
                           size="sm"
@@ -8265,17 +8266,17 @@ export function ProcurementDetailUnifiedView(
                               if (el) el.scrollIntoView({ behavior: "smooth" });
                             }, 50);
                           }}
-                          className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs rounded-xl cursor-pointer"
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs rounded-lg cursor-pointer"
                         >
-                          <ShieldCheck className="h-4 w-4" />
+                          <ShieldCheck className="h-3.5 w-3.5" />
                           <span>
                             {techEvaluationStats.pending > 0
                               ? "Start Technical Scrutiny"
                               : "View Evaluation & Results"}
                           </span>
-                          <ArrowRight className="h-3.5 w-3.5" />
+                          <ArrowRight className="h-3 w-3" />
                         </Button>
-                        <span className="text-[10.5px] font-semibold text-slate-500">
+                        <span className="text-[10px] font-semibold text-slate-500">
                           {techEvaluationStats.qualified} of {submittedParticipations.length} qualified
                         </span>
                       </div>
@@ -8285,29 +8286,36 @@ export function ProcurementDetailUnifiedView(
 
               {/* Seller Reassurance Banner: Submitted Quotation Under Evaluation */}
               {!isBuyerOrAdmin && isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && !isAwardedToMe && (
-                <div className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50/90 via-indigo-50/30 to-white p-4 sm:p-5 shadow-xs transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-md shadow-sky-600/20">
-                        <ShieldCheck className="h-6 w-6" />
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/90 via-indigo-50/30 to-white p-3 sm:p-3.5 shadow-2xs transition-all"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
+                        <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10.5px] font-black uppercase tracking-wider text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Quotation Successfully Recorded
+                      <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-sky-900 bg-sky-100/90 border border-sky-300 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                            <CheckCircle2 className="h-3 w-3 text-sky-700" aria-hidden="true" />
+                            {activeAward && !effectiveActiveOrder
+                              ? "Standby Vendor • Reserve Pool Active"
+                              : "Quotation Successfully Recorded"}
                           </span>
-                          <span className="text-[10.5px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
                             Submission Cutoff Elapsed
                           </span>
                         </div>
-                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                        <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
                           {activeAward && !effectiveActiveOrder
-                            ? "Provisional Evaluation in Progress (Standby Vendor)"
+                            ? "Provisional Award Processing with Primary Bidder (You: Standby Vendor)"
                             : "Under Official Procurement Evaluation"}
                         </h3>
-                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                        <p className="text-xs text-slate-700 max-w-2xl leading-relaxed">
                           {activeAward && !effectiveActiveOrder
-                            ? "A provisional award is currently being processed with the primary bidder. You remain on Standby; should the primary bidder decline or fail compliance, the award may revert to standby vendors."
+                            ? "A provisional award is currently being processed with the primary bidder. As a qualified bidder, you remain on the active standby reserve list; should the primary bidder decline or fail compliance, the award may revert to reserve vendors."
                             : "Your quotation was received on time before the deadline. The procurement authority is currently reviewing technical compliance and evaluating bids. In accordance with statutory sealed-bidding rules, all competitor prices remain confidential."}
                         </p>
                       </div>
@@ -8317,10 +8325,11 @@ export function ProcurementDetailUnifiedView(
                         <Button
                           type="button"
                           size="sm"
+                          aria-label="View your submitted quotation"
                           onClick={props.onViewQuotationClick || props.onSubmitClick}
-                          className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer"
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-2xs rounded-lg cursor-pointer"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
                           <span>View My Submitted Quotation</span>
                         </Button>
                       )}
@@ -8331,22 +8340,22 @@ export function ProcurementDetailUnifiedView(
 
               {/* Seller Notification Banner: Did Not Participate / Missed Deadline */}
               {!isBuyerOrAdmin && !isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && (
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs transition-all">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start gap-3.5">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-300 text-slate-700 shadow-xs">
-                        <Lock className="h-6 w-6" />
+                <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-3.5 shadow-2xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-300 text-slate-700 shadow-2xs">
+                        <Lock className="h-4 w-4" />
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-700 bg-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <div className="space-y-0.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 bg-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                             <Lock className="h-3 w-3" /> Submission Window Closed
                           </span>
-                          <span className="text-[10.5px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                          <span className="text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
                             Did Not Participate
                           </span>
                         </div>
-                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                        <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
                           Quotation Submission Deadline Has Expired
                         </h3>
                         <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
@@ -8357,16 +8366,16 @@ export function ProcurementDetailUnifiedView(
                     <div className="flex items-center gap-2 shrink-0">
                       <Link
                         href="/seller/opportunities"
-                        className="inline-flex h-8.5 px-3.5 items-center justify-center gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer"
+                        className="inline-flex h-8 px-3 items-center justify-center gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-2xs rounded-lg cursor-pointer"
                       >
                         <span>Browse Active Opportunities</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3 w-3" />
                       </Link>
                     </div>
                   </div>
                 </div>
               )}
-              <div className="grid gap-5 lg:grid-cols-2">
+              <div className="grid gap-3.5 sm:gap-4 lg:grid-cols-2">
                 <DataCard
                   title={
                     isBuyerSide
@@ -8486,7 +8495,13 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab 2: Scope & Documents */}
           {activeTab === "scope_docs" && (
-            <div className="space-y-5">
+            <div
+              role="tabpanel"
+              id="tabpanel-scope_docs"
+              aria-labelledby="tab-scope_docs"
+              tabIndex={0}
+              className="space-y-5 focus:outline-none"
+            >
               <DataCard
                 title={`${procurementTypeLabel} Scope & Sourcing Summary`}
                 icon={FileText}
@@ -8641,7 +8656,13 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab 3: Terms & Schedule */}
           {activeTab === "terms_schedule" && (
-            <div className="space-y-5">
+            <div
+              role="tabpanel"
+              id="tabpanel-terms_schedule"
+              aria-labelledby="tab-terms_schedule"
+              tabIndex={0}
+              className="space-y-5 focus:outline-none"
+            >
               <DataCard
                 title={`${procurementTypeLabel} Milestones & Schedule`}
                 icon={CalendarDays}
@@ -8862,7 +8883,13 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab 4: Evaluation & Controls */}
           {activeTab === "evaluation" && (
-            <div className="space-y-5">
+            <div
+              role="tabpanel"
+              id="tabpanel-evaluation"
+              aria-labelledby="tab-evaluation"
+              tabIndex={0}
+              className="space-y-5 focus:outline-none"
+            >
               {(isReverseAuctionType || linkedAuction) && (
                 <DataCard
                   title="Reverse Auction Sourcing Rules"
@@ -9083,7 +9110,13 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab 5: Clarifications & Proposals */}
           {activeTab === "clarifications" && (
-            <div className="space-y-4">
+            <div
+              role="tabpanel"
+              id="tabpanel-clarifications"
+              aria-labelledby="tab-clarifications"
+              tabIndex={0}
+              className="space-y-4 focus:outline-none"
+            >
               {/* Live Reverse Auction Leaderboard for Buyer */}
               {isBuyerOrAdmin &&
                 linkedAuction &&
@@ -9547,16 +9580,16 @@ export function ProcurementDetailUnifiedView(
                                 isAwardedToMe
                                   ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                                   : activeAward && !effectiveActiveOrder
-                                    ? "bg-sky-50 text-sky-800 border-sky-300"
+                                    ? "bg-sky-50 text-sky-900 border-sky-300"
                                     : (isBiddingClosed || isDeadlinePassed)
-                                      ? "bg-sky-50 text-sky-800 border-sky-300"
+                                      ? "bg-sky-50 text-sky-900 border-sky-300"
                                       : "bg-emerald-50 text-emerald-800 border-emerald-300",
                               )}
                             >
                               {isAwardedToMe
                                 ? "Contract Awarded"
                                 : activeAward && !effectiveActiveOrder
-                                  ? "Standby (Under Evaluation)"
+                                  ? "Standby Vendor • Reserve List"
                                   : (isBiddingClosed || isDeadlinePassed)
                                     ? "Submitted • Under Evaluation"
                                     : "Submitted"}
