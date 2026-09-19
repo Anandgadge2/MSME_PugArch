@@ -45,7 +45,7 @@ export default function BidDetailsPage() {
 
       // On /bids/:id routes, procurement bids are the primary resource. Prioritize bid API first!
       const [bidRes, mktRes, reqRes] = await Promise.allSettled([
-        procurementBidApi.detail(requestId),
+        procurementBidApi.detail(requestId, true),
         getApi<any>(`/api/marketplace/requirements/${requestId}`),
         getApi<any>(`/api/requirements/${requestId}`)
       ]);

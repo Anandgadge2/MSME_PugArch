@@ -13,11 +13,38 @@ import { getAccessTokenFromRequest } from '../../services/auth-cookie.service.js
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../config/logger.js';
 import { fulfillmentWorkflow } from '../../services/workflow/fulfillment-workflow.service.js';
-import { getCache, setCache, deleteCache, getOrSetCache } from '../../services/cache.service.js';
+import { getCache, setCache, deleteCache, getOrSetCache, invalidateByPattern } from '../../services/cache.service.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants, formatRequirementNumber } from '../../utils/refIdUtils.js';
 import { parseDateIST } from '../../utils/dateUtils.js';
 
 const router = Router();
+
+export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
+  try {
+    const keysToInvalidate = new Set<string>();
+    if (typeof bidOrId === 'string' || typeof bidOrId === 'number') {
+      keysToInvalidate.add(String(bidOrId));
+    } else if (bidOrId && typeof bidOrId === 'object') {
+      if (bidOrId.id) keysToInvalidate.add(String(bidOrId.id));
+      if (bidOrId.bidNumber) keysToInvalidate.add(String(bidOrId.bidNumber));
+      if (bidOrId.sourceId) keysToInvalidate.add(String(bidOrId.sourceId));
+      const sourceReqId = (bidOrId.technicalPacket as any)?.sourceRequirementId || (bidOrId.technicalPacket as any)?.requirementId;
+      if (sourceReqId) keysToInvalidate.add(String(sourceReqId));
+    }
+    if (token) {
+      keysToInvalidate.add(String(token));
+      for (const variant of getCanonicalLookupVariants(token)) {
+        keysToInvalidate.add(variant);
+      }
+    }
+    for (const key of keysToInvalidate) {
+      if (!key) continue;
+      await invalidateByPattern(`cache:proc_bid_${key}*`).catch(() => null);
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to invalidate bid cache');
+  }
+};
 
 const optionalActor = async (req: AuthRequest) => {
   const authHeader = req.headers.authorization || '';
@@ -242,8 +269,9 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   const originalToken = req.params.bidId;
   let token = originalToken;
 
+  const shouldSkipCache = req.query.skipCache === 'true' || req.headers['cache-control']?.includes('no-cache') || req.headers['pragma'] === 'no-cache';
   const cacheKey = `cache:proc_bid_${originalToken}_${actor?.id || 'anon'}_${actor?.role || 'guest'}`;
-  const cachedResponse = await getCache<any>(cacheKey);
+  const cachedResponse = shouldSkipCache ? null : await getCache<any>(cacheKey);
   if (cachedResponse) {
     return apiResponse.success(res, cachedResponse, 200, 'Procurement bid details fetched successfully');
   }
@@ -1261,30 +1289,80 @@ router.get('/seller/procurement-bids', authenticate, requireAccountType('seller'
 }));
 
 router.get('/seller/procurement-bids/:bidId/invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
-  const bidId = Number(req.params.bidId);
+  const bid = await service.resolveBid(req.params.bidId, {});
+  const bidId = bid.id;
   
   const award = await (prisma as any).procurementBidAward.findFirst({
-    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    where: { 
+      bidId, 
+      sellerId: req.user!.id, 
+      awardStatus: { in: ['ADMIN_APPROVED', 'ACCEPTED'] } 
+    },
     orderBy: { createdAt: 'desc' }
   });
   
-  if (!award) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  if (!award) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: false, 
+      hasPO: false, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
+  }
   
   const po = await (prisma as any).purchaseOrder.findFirst({
     where: { sourceType: 'procurement_bid_award', sourceId: award.id }
   });
   
-  if (!po) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  if (!po) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: true, 
+      hasPO: false, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
+  }
+
+  const isPoAccepted = ['accepted', 'ACCEPTED'].includes(String(po.status || po.poStatus || ''));
+  if (!isPoAccepted) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: true, 
+      hasPO: true, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false,
+      poId: po.id,
+      poNumber: po.poNumber 
+    }, 200, 'PO pending seller acceptance');
+  }
   
   const invoice = await (prisma as any).invoice.findFirst({
     where: { purchaseOrderId: po.id }
   });
   
   if (invoice) {
-    return apiResponse.success(res, { exists: true, invoiceId: invoice.id }, 200, 'Invoice status fetched');
+    return apiResponse.success(res, { 
+      exists: true, 
+      invoiceId: invoice.id, 
+      invoiceNumber: invoice.invoiceNumber, 
+      isAwarded: true, 
+      hasPO: true, 
+      hasAcceptedPO: true, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
   }
   
-  return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  return apiResponse.success(res, { 
+    exists: false, 
+    isAwarded: true, 
+    hasPO: true, 
+    hasAcceptedPO: true, 
+    canConvertToInvoice: true,
+    poId: po.id,
+    poNumber: po.poNumber 
+  }, 200, 'Invoice status fetched');
 }));
 
 router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -1292,17 +1370,26 @@ router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, 
   const bidId = bid.id;
   
   const award = await (prisma as any).procurementBidAward.findFirst({
-    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    where: { 
+      bidId, 
+      sellerId: req.user!.id, 
+      awardStatus: { in: ['ADMIN_APPROVED', 'ACCEPTED'] } 
+    },
     orderBy: { createdAt: 'desc' }
   });
   
-  if (!award) throw new ApiError(404, 'No approved award found for this bid.', 'AWARD_NOT_FOUND');
+  if (!award) throw new ApiError(403, 'You must be the awarded seller to generate an invoice for this procurement.', 'AWARD_NOT_FOUND');
   
   const po = await (prisma as any).purchaseOrder.findFirst({
     where: { sourceType: 'procurement_bid_award', sourceId: award.id }
   });
   
-  if (!po) throw new ApiError(404, 'Purchase order has not been generated for this award yet.', 'PO_NOT_FOUND');
+  if (!po) throw new ApiError(400, 'Purchase order has not been generated for this award yet.', 'PO_NOT_FOUND');
+
+  const isPoAccepted = ['accepted', 'ACCEPTED'].includes(String(po.status || po.poStatus || ''));
+  if (!isPoAccepted) {
+    throw new ApiError(400, 'You must accept the Purchase Order before converting it to an invoice.', 'PO_NOT_ACCEPTED');
+  }
   
   let invoice = await (prisma as any).invoice.findFirst({
     where: { purchaseOrderId: po.id }
@@ -1805,51 +1892,61 @@ router.post('/buyer/procurement-bids/:bidId/clarifications', authenticate, requi
 
 router.post('/buyer/procurement-bids/:bidId/technical-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.technical.evaluate'), validate({ params: idParamSchema, body: technicalEvaluationSchema }), asyncRoute(async (req, res) => {
   const data = await service.evaluateTechnical(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Technical evaluation saved');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/complete-technical-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.technical.evaluate'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const data = await service.completeTechnicalEvaluation(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Technical evaluation completed');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/open-financial-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.financial.evaluate'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const data = await service.openFinancialEvaluation(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Financial evaluation opened and L1/L2/L3/L4 ranking generated');
 }));
 
 router.post(['/buyer/procurement-bids/:bidId/award', '/buyer/procurement-bids/:bidId/recommend-award', '/buyer/bids/:bidId/recommend-award'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, remarks: z.string().trim().max(2000).optional(), adminOverrideReason: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional(), generatePoNow: z.boolean().optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.recommendAward(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.created(res, data, 'Award offer created');
 }));
 
 router.post(['/buyer/procurement-bids/:bidId/counter-offer', '/buyer/bids/:bidId/counter-offer'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, priceMatchTargetPrice: z.coerce.number().positive().optional(), deadlineHours: z.coerce.number().int().min(1).max(720).optional(), deadlineDate: z.string().optional(), counterOfferNotes: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.sendPriceMatchCounterOffer(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.created(res, data, 'Price match counter-offer sent to supplier');
 }));
 
-router.post(['/seller/procurement-bids/:bidId/counter-offer/accept', '/seller/bids/:bidId/counter-offer/accept'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/counter-offer/accept', '/seller/bids/:bidId/counter-offer/accept'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.acceptPriceMatchCounterOffer(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Price match counter-offer accepted successfully');
 }));
 
-router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.declinePriceMatchCounterOffer(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Price match counter-offer declined');
 }));
 
-router.post('/seller/procurement-bids/:bidId/accept-award', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/accept-award', '/seller/bids/:bidId/accept-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.acceptAward(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Award offer accepted successfully');
 }));
 
-router.post('/seller/procurement-bids/:bidId/decline-award', authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bidId/decline-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.declineAward(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Award offer declined successfully');
 }));
 
-router.post('/buyer/procurement-bids/:bidId/generate-po', authenticate, requireAccountType('buyer', 'admin'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+router.post('/buyer/procurement-bids/:bidId/generate-po', authenticate, requireAccountType('buyer', 'admin'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.generatePOForBid(req, req.params.bidId, req.body || {});
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.created(res, data, 'Purchase order generated and issued');
 }));
 

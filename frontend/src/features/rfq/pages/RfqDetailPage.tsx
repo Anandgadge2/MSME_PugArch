@@ -800,8 +800,23 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     (ownParticipation && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase()))
   );
   const statusUpper = String(status || 'OPEN').toUpperCase();
-  const isAwarded  = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||
-    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt));
+  const isBidAwarded = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||
+    (rawBid?.awards && Array.isArray(rawBid.awards) && rawBid.awards.length > 0);
+
+  const isCurrentSellerAwarded = Boolean(
+    (rawBid?.awards && Array.isArray(rawBid.awards) && rawBid.awards.some((a: any) => {
+      const matchesSeller = (user?.id && Number(a.sellerId) === Number(user.id)) ||
+        (user?.organizationId && Number(a.seller?.organizationId) === Number(user.organizationId));
+      const isApproved = ['ADMIN_APPROVED', 'ACCEPTED'].includes(String(a.awardStatus || '').toUpperCase()) || !!a.awardedAt;
+      return matchesSeller && isApproved;
+    })) ||
+    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => {
+      const isApproved = ['ADMIN_APPROVED', 'ACCEPTED'].includes(String(a?.awardStatus || '').toUpperCase()) || !!a?.awardedAt;
+      return isApproved;
+    })) ||
+    ['AWARDED', 'AWARD_ACCEPTED', 'ORDERED'].includes(String(ownParticipation?.finalStatus || '').toUpperCase())
+  );
+  const isAwarded  = isBuyerOrAdmin ? isBidAwarded : isCurrentSellerAwarded;
   const canCancel  = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   /* ── Line Items ── */
@@ -1069,17 +1084,17 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   };
 
   const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({
-    queryKey: ['rfq-invoice-status', requestId],
+    queryKey: ['rfq-invoice-status', requestId, user?.id],
     queryFn: async () => {
-      if (!requestId) return { exists: false };
+      if (!requestId) return { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
       try {
         const res = await getApi<any>(`/api/seller/procurement-bids/${requestId}/invoice`);
-        return res?.data || res || { exists: false };
+        return res?.data || res || { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
       } catch (err) {
-        return { exists: false };
+        return { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
       }
     },
-    enabled: !!requestId && user?.role === 'seller' && isAwarded,
+    enabled: !!requestId && user?.role === 'seller' && isCurrentSellerAwarded,
     staleTime: 0,
   });
 
@@ -1266,13 +1281,15 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
       onViewQuotationClick={submitted ? handleSubmitQuotation : undefined}
       onDownloadClick={handleDownloadPdf}
-      invoiceStatus={user?.role === 'seller' && isAwarded ? { 
+      invoiceStatus={user?.role === 'seller' && isCurrentSellerAwarded ? { 
         exists: Boolean(invoiceStatusData?.exists), 
-        invoiceId: invoiceStatusData?.invoiceId, 
+        invoiceId: invoiceStatusData?.invoiceId,
+        canConvertToInvoice: Boolean(invoiceStatusData?.canConvertToInvoice),
+        hasAcceptedPO: Boolean(invoiceStatusData?.hasAcceptedPO),
         loading: invoiceStatusLoading 
       } : null}
       isConvertingInvoice={isConvertingInvoice}
-      onConvertToInvoiceClick={handleConvertToInvoice}
+      onConvertToInvoiceClick={invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoice : undefined}
       onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
       cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFQ'}
       clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}

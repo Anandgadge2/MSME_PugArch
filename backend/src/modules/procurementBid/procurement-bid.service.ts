@@ -20,8 +20,8 @@ const activeUserStatuses = ['ACTIVE'];
 const verifiedOrganizationStatuses = ['VERIFIED'];
 const editableBidStatuses = ['DRAFT'];
 const editableApprovalStatuses = ['DRAFT', 'REJECTED'];
-const technicalEvaluationStatuses = ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION'];
-const financialEvaluationReadyStatuses = ['TECHNICAL_EVALUATION_COMPLETED'];
+const technicalEvaluationStatuses = ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION', 'UNDER_EVALUATION'];
+const financialEvaluationReadyStatuses = ['TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'];
 const restrictedProcurementMethods = ['LIMITED_TENDER', 'REPEAT_ORDER'];
 
 const bidTransitions: Record<string, string[]> = {
@@ -48,7 +48,7 @@ const bidTransitions: Record<string, string[]> = {
   GRN_COMPLETED: ['INVOICE_SUBMITTED', 'CANCELLED'],
   INVOICE_SUBMITTED: ['PAYMENT_COMPLETED', 'CANCELLED'],
   PAYMENT_COMPLETED: ['COMPLETED', 'CLOSED', 'CANCELLED'],
-  UNDER_EVALUATION: ['AWARD_OFFERED', 'AWARDED', 'NEGOTIATION', 'CANCELLED'],
+  UNDER_EVALUATION: ['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_OFFERED', 'AWARDED', 'NEGOTIATION', 'CANCELLED'],
   NEGOTIATION: ['AWARD_OFFERED', 'AWARDED', 'CANCELLED'],
   CANCELLED: []
 };
@@ -2556,18 +2556,37 @@ export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: strin
   ) {
     return bid;
   }
-  if (!['TECHNICAL_EVALUATION', 'CLOSED', 'EXPIRED'].includes(bid.status)) {
+  if (!['TECHNICAL_EVALUATION', 'CLOSED', 'EXPIRED', 'UNDER_EVALUATION'].includes(bid.status)) {
     throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
   }
-  const qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
+  let qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
+  let pending = await db.procurementBidParticipation.count({ where: { bidId: bid.id, submissionStatus: 'SUBMITTED', technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] } } });
+
+  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
+  if (!qualified && sourceReqId > 0) {
+    qualified = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['SHORTLISTED', 'ACCEPTED', 'QUALIFIED'] } } });
+    pending = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['PENDING', 'UNDER_REVIEW', 'SUBMITTED'] } } });
+  }
+
   if (!qualified) throw new ApiError(400, 'At least one seller must be technically qualified.', 'TECHNICAL_EVALUATION_PENDING');
-  const pending = await db.procurementBidParticipation.count({ where: { bidId: bid.id, submissionStatus: 'SUBMITTED', technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] } } });
   if (pending) throw new ApiError(400, 'Every submitted participant must be technically qualified or disqualified before completion.', 'TECHNICAL_EVALUATION_PENDING');
   if (bid.status !== 'TECHNICAL_EVALUATION') {
     assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
   }
   assertBidTransition('TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED');
   const updated = await db.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION_COMPLETED', lifecycleStage: 'TECHNICAL_EVALUATION_COMPLETED' } });
+
+  if (sourceReqId > 0) {
+    await db.buyerRequirement.updateMany({
+      where: { id: sourceReqId },
+      data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+    }).catch(() => null);
+    await db.requirement.updateMany({
+      where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+      data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+    }).catch(() => null);
+  }
+
   await procurementAudit(req, 'TECHNICAL_EVALUATION_COMPLETED', 'ProcurementBid', bid.id, updated);
   return updated;
 };
@@ -2585,6 +2604,8 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
     throw new ApiError(400, 'Technical evaluation must be completed before opening financial bids.', 'TECHNICAL_EVALUATION_PENDING');
   }
   assertBidTransition(bid.status, 'FINANCIAL_EVALUATION');
+
+  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
 
   const ranked = await db.$transaction(async (tx: any) => {
     const qualified = await tx.procurementBidParticipation.findMany({
@@ -2616,6 +2637,16 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
       where: { id: bid.id },
       data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED', financialOpeningDate: now() }
     });
+    if (sourceReqId > 0) {
+      await tx.buyerRequirement.updateMany({
+        where: { id: sourceReqId },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+      await tx.requirement.updateMany({
+        where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+    }
     await tx.procurementBidParticipation.updateMany({
       where: { bidId: bid.id, technicalStatus: { not: 'QUALIFIED' } },
       data: { financialStatus: 'LOCKED' }
@@ -2951,17 +2982,53 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
   logger.info({ bidId, user: req.user?.id }, '[ACCEPT_AWARD] Seller accepting award');
   const bid = await resolveBid(bidId, {});
   const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = req.body?.awardId ? Number(req.body.awardId) : undefined;
 
-  const award = await db.procurementBidAward.findFirst({
+  let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
-      sellerId: { in: sellerUserIds },
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
       awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
     },
     include: { participation: true }
   });
 
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+          award = specificAward;
+        } else if (specificAward.awardStatus === 'ACCEPTED') {
+          return { award: specificAward, status: 'AWARD_ACCEPTED', message: 'Award offer has already been accepted.' };
+        }
+      }
+    }
+  }
+
+  // Idempotent recovery: If award is already accepted for this bid and seller, return success rather than 404
   if (!award) {
+    const alreadyAccepted = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        awardStatus: 'ACCEPTED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyAccepted) {
+      return { award: alreadyAccepted, status: 'AWARD_ACCEPTED', message: 'Award offer has already been accepted.' };
+    }
     throw new ApiError(404, 'No pending award offer found for your account on this bid.', 'AWARD_NOT_FOUND');
   }
 
@@ -3012,17 +3079,52 @@ export const declineAward = async (req: AuthRequest, bidId: string, body: any = 
   logger.info({ bidId, user: req.user?.id, reason }, '[DECLINE_AWARD] Seller declining award');
   const bid = await resolveBid(bidId, {});
   const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = body?.awardId ? Number(body.awardId) : undefined;
 
-  const award = await db.procurementBidAward.findFirst({
+  let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
-      sellerId: { in: sellerUserIds },
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
       awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
     },
     include: { participation: true }
   });
 
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+          award = specificAward;
+        } else if (specificAward.awardStatus === 'DECLINED') {
+          return { award: specificAward, status: 'AWARD_DECLINED', message: 'Award offer has already been declined.' };
+        }
+      }
+    }
+  }
+
   if (!award) {
+    const alreadyDeclined = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        awardStatus: 'DECLINED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyDeclined) {
+      return { award: alreadyDeclined, status: 'AWARD_DECLINED', message: 'Award offer has already been declined.' };
+    }
     throw new ApiError(404, 'No pending award offer found for your account on this bid.', 'AWARD_NOT_FOUND');
   }
 
@@ -3339,14 +3441,28 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
 
-  let award = await db.procurementBidAward.findFirst({
-    where: {
-      bidId: bid.id,
-      awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
-    },
-    include: { participation: true },
-    orderBy: { updatedAt: 'desc' }
-  });
+  let award = body?.awardId
+    ? await db.procurementBidAward.findFirst({
+        where: {
+          bidId: bid.id,
+          id: Number(body.awardId),
+          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+        },
+        include: { participation: true },
+        orderBy: { updatedAt: 'desc' }
+      })
+    : null;
+
+  if (!award) {
+    award = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+      },
+      include: { participation: true },
+      orderBy: { updatedAt: 'desc' }
+    });
+  }
 
   if (!award) {
     throw new ApiError(400, 'Cannot generate Purchase Order: No award found for this bid.', 'AWARD_NOT_FOUND');

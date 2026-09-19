@@ -228,6 +228,15 @@ const isAwarded = (p: any) =>
     String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt
   ));
 
+const isAwardedAndPoAccepted = (p: any) =>
+  isAwarded(p) && (
+    Boolean(p?.hasAcceptedPO) ||
+    Boolean(p?.canConvertToInvoice) ||
+    ['ACCEPTED', 'accepted'].includes(String(p?.poStatus || '')) ||
+    finalStatusOf(p) === 'ORDERED' ||
+    (Array.isArray(p?.awards) && p.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ACCEPTED'))
+  );
+
 // Draft = still being prepared by the seller and not yet awarded/withdrawn/rejected.
 const isDraft = (p: any) => {
   if (isAwarded(p)) return false;
@@ -1002,7 +1011,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         const pType = getParticipationType(item);
         return (
           <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
-            {isAwarded(item) && (
+            {isAwardedAndPoAccepted(item) && (
               <Button 
                 onClick={(e) => handleConvertToInvoice(e, item)}
                 disabled={convertingInvoiceId === item.id}
@@ -1679,7 +1688,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                         )}
 
                         <div className="flex items-center gap-2">
-                          {isAwarded(item) && (
+                          {isAwardedAndPoAccepted(item) && (
                             <Button 
                               onClick={(e) => handleConvertToInvoice(e, item)} 
                               disabled={convertingInvoiceId === item.id}

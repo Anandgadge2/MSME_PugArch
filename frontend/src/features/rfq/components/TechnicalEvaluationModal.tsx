@@ -99,6 +99,34 @@ export function TechnicalEvaluationModal({
     participation.acknowledgement?.model ||
     '—';
 
+  const techSpecs =
+    participation.technicalSpecifications ||
+    participation.specifications ||
+    participation.responseData?.technicalSpecifications ||
+    participation.responseData?.specifications ||
+    participation.acknowledgement?.technicalSpecifications ||
+    participation.acknowledgement?.specifications ||
+    (participation.offeredItemDescription && participation.offeredItemDescription !== participation.message ? participation.offeredItemDescription : '') ||
+    (participation.responseData?.offeredItemDescription && participation.responseData?.offeredItemDescription !== participation.responseData?.message ? participation.responseData?.offeredItemDescription : '') ||
+    '';
+
+  const complianceStatement =
+    participation.complianceStatement ||
+    participation.responseData?.complianceStatement ||
+    participation.acknowledgement?.complianceStatement ||
+    '';
+
+  const lineItems: any[] =
+    Array.isArray(participation.lineItems) && participation.lineItems.length
+      ? participation.lineItems
+      : Array.isArray(participation.responseData?.lineItems) && participation.responseData.lineItems.length
+        ? participation.responseData.lineItems
+        : Array.isArray(participation.acknowledgement?.lineItems) && participation.acknowledgement.lineItems.length
+          ? participation.acknowledgement.lineItems
+          : Array.isArray(participation.acknowledgement?.responseData?.lineItems) && participation.acknowledgement.responseData.lineItems.length
+            ? participation.acknowledgement.responseData.lineItems
+            : [];
+
   const deliveryTimeline =
     participation.deliveryTimeline ||
     participation.responseData?.deliveryTimeline ||
@@ -339,14 +367,20 @@ export function TechnicalEvaluationModal({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 pt-1 text-xs">
                 <div>
                   <span className="text-slate-400 font-bold block text-[10.5px]">Make / Brand:</span>
                   <span className="font-semibold text-slate-800">{makeBrand}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 font-bold block text-[10.5px]">Model / Specs:</span>
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Model / Ref:</span>
                   <span className="font-semibold text-slate-800">{model}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Compliance:</span>
+                  <span className="font-bold text-emerald-800">
+                    {complianceStatement === 'DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative' : '✓ Fully Compliant'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 font-bold block text-[10.5px]">Offered Qty:</span>
@@ -358,10 +392,60 @@ export function TechnicalEvaluationModal({
                 </div>
               </div>
 
-              {message && (
+              {techSpecs && (
+                <div className="mt-2.5 rounded-lg bg-white/90 border border-slate-200 p-2.5 text-xs text-slate-800">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase mb-0.5">
+                    Offered Technical Specifications / Parameters:
+                  </span>
+                  <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">{techSpecs}</p>
+                </div>
+              )}
+
+              {lineItems.length > 0 && (
+                <div className="mt-2.5 space-y-1.5">
+                  <span className="font-bold text-slate-500 block text-[10px] uppercase">
+                    Quoted Line Items Technical Specifications ({lineItems.length}):
+                  </span>
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-lg bg-white divide-y divide-slate-100">
+                    {lineItems.map((item: any, i: number) => (
+                      <div key={i} className="p-2 text-xs space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-slate-900">
+                            {item.itemName || item.name || `Item #${i + 1}`}
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {(item.makeBrand || item.brand) && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                                {item.makeBrand || item.brand}
+                              </span>
+                            )}
+                            {item.model && (
+                              <span className="px-1.5 py-0.2 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 border border-slate-200">
+                                Model: {item.model}
+                              </span>
+                            )}
+                            {item.complianceStatus && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                                {item.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : item.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {item.specifications && (
+                          <p className="text-[11px] text-slate-600 font-normal bg-slate-50 border border-slate-100 rounded p-1.5 whitespace-pre-wrap">
+                            {item.specifications}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {message && message !== techSpecs && (
                 <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
                   <span className="font-bold text-slate-500 block text-[10px] uppercase">
-                    Supplier Proposal Remarks:
+                    Supplier Proposal Remarks / Cover Note:
                   </span>
                   <p className="mt-0.5 font-medium text-slate-700">"{message}"</p>
                 </div>

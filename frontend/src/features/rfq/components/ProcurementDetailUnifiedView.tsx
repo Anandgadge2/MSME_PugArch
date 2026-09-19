@@ -157,42 +157,42 @@ const formatMoney = (val: any) => {
 };
 
 const noisyDetailKeys = new Set([
-  "_id",
-  "id",
-  "createdAt",
-  "updatedAt",
-  "deletedAt",
-  "createdBy",
-  "updatedBy",
-  "tenantId",
-  "organizationId",
-  "buyerId",
-  "sellerId",
-  "bidId",
-  "requirementId",
-  "authUserId",
-  "userId",
-  "creatorId",
-  "internalId",
-  "sourceId",
-  "sourceModel",
-  "linkedProcurementBidId",
-  "isDeleted",
-  "originalPayload",
-  "password",
-  "token",
-  "sourcePayload",
-  "rawPayload",
-  "technicalPacket",
-  "fileAssetId",
-  "assetId",
-  "draftMeta",
-  "draftStep",
-  "__v",
-  "statusEnum",
-  "metadata",
-  "hash",
-  "signature",
+  '_id',
+  'id',
+  'createdAt',
+  'updatedAt',
+  'deletedAt',
+  'createdBy',
+  'updatedBy',
+  'tenantId',
+  'organizationId',
+  'buyerId',
+  'sellerId',
+  'bidId',
+  'requirementId',
+  'authUserId',
+  'userId',
+  'creatorId',
+  'internalId',
+  'sourceId',
+  'sourceModel',
+  'linkedProcurementBidId',
+  'isDeleted',
+  'originalPayload',
+  'password',
+  'token',
+  'sourcePayload',
+  'rawPayload',
+  'technicalPacket',
+  'fileAssetId',
+  'assetId',
+  'draftMeta',
+  'draftStep',
+  '__v',
+  'statusEnum',
+  'metadata',
+  'hash',
+  'signature',
   "emdRequired",
   "emdAmount",
   "isEmdRequired",
@@ -3878,6 +3878,8 @@ export interface ProcurementDetailUnifiedViewProps {
   invoiceStatus?: {
     exists: boolean;
     invoiceId?: number;
+    canConvertToInvoice?: boolean;
+    hasAcceptedPO?: boolean;
     loading?: boolean;
   } | null;
   isConvertingInvoice?: boolean;
@@ -4119,8 +4121,10 @@ export function ProcurementDetailUnifiedView(
       setIsAcceptingAction(true);
       await procurementBidApi.acceptAward(targetId, awardId);
       toast.success("Bid award accepted! Buyer will now issue the Purchase Order.");
-      queryClient.invalidateQueries();
-      if (typeof window !== "undefined") window.location.reload();
+      await queryClient.invalidateQueries();
+      setTimeout(() => {
+        if (typeof window !== "undefined") window.location.reload();
+      }, 700);
     } catch (err: any) {
       toast.error(err.message || "Failed to accept award.");
     } finally {
@@ -4143,8 +4147,10 @@ export function ProcurementDetailUnifiedView(
       );
       toast.success("Award declined. Tender returned to evaluation.");
       setDeclineModal({ show: false, awardId: "", type: "award", reason: "", submitting: false });
-      queryClient.invalidateQueries();
-      if (typeof window !== "undefined") window.location.reload();
+      await queryClient.invalidateQueries();
+      setTimeout(() => {
+        if (typeof window !== "undefined") window.location.reload();
+      }, 700);
     } catch (err: any) {
       toast.error(err.message || "Failed to decline award.");
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
@@ -4154,7 +4160,7 @@ export function ProcurementDetailUnifiedView(
   const handleGeneratePOFromBanner = async (awardId: string) => {
     try {
       setIsIssuingPOFromBanner(true);
-      await procurementBidApi.generatePO(targetId, awardId);
+      await procurementBidApi.generatePO(targetId, { awardId });
       toast.success("Purchase Order issued successfully! Non-selected bidders notified.");
       queryClient.invalidateQueries();
       router.push("/buyer/purchase-orders");
@@ -4574,7 +4580,6 @@ export function ProcurementDetailUnifiedView(
         "AWARD_RECOMMENDED",
         "AWARDED",
         "PO_GENERATED",
-        "CLOSED",
         "COMPLETED",
       ].includes(statusUpper) ||
       [
@@ -6373,6 +6378,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "supplier",
         header: "Supplier Organization",
+        width: "w-[18%]",
         cell: (participation, idx) => {
           const sellerOrgName =
             participation.sellerOrgName ||
@@ -6396,12 +6402,12 @@ export function ProcurementDetailUnifiedView(
             participation.sellerUser?.name ||
             "";
           return (
-            <div>
-              <p className="font-bold text-slate-950 text-xs">
+            <div className="min-w-0 pr-2">
+              <p className="font-bold text-slate-950 text-xs truncate" title={sellerOrgName}>
                 {sellerOrgName}
               </p>
               {contactName && contactName !== sellerOrgName && (
-                <p className="text-[10px] font-normal text-slate-400">
+                <p className="text-[10px] font-normal text-slate-400 truncate mt-0.5" title={`Contact: ${contactName}`}>
                   Contact: {contactName}
                 </p>
               )}
@@ -6412,19 +6418,20 @@ export function ProcurementDetailUnifiedView(
       {
         key: "amount",
         header: "Quoted Amount (INR)",
+        width: "w-[12%]",
         cell: (participation) => {
           if (!isEvaluationReady) {
             return (
-              <span className="inline-flex items-center gap-1 font-semibold text-slate-500 text-xs">
-                <Lock className="h-3 w-3 text-slate-400" />
+              <span className="inline-flex items-center gap-1 font-semibold text-slate-500 text-xs whitespace-nowrap">
+                <Lock className="h-3 w-3 text-slate-400 shrink-0" />
                 Sealed until closing
               </span>
             );
           }
           if (isTwoPacketMode && !isTechEvalCompleted) {
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700">
-                <Lock className="h-3 w-3 text-indigo-500" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-[10.5px] font-bold text-indigo-700 whitespace-nowrap">
+                <Lock className="h-3 w-3 text-indigo-500 shrink-0" />
                 Sealed (Stage 2)
               </span>
             );
@@ -6436,7 +6443,7 @@ export function ProcurementDetailUnifiedView(
               0,
           );
           return (
-            <span className="font-bold text-slate-900 text-xs">
+            <span className="font-extrabold text-slate-900 text-xs whitespace-nowrap">
               {amount > 0
                 ? `₹${amount.toLocaleString("en-IN")}`
                 : "Sealed / Rates On File"}
@@ -6447,6 +6454,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "qtyDelivery",
         header: "Offered Qty & Delivery",
+        width: "w-[12%]",
         cell: (participation) => {
           const rawQty = Number(
             participation.offeredQuantity ??
@@ -6471,13 +6479,29 @@ export function ProcurementDetailUnifiedView(
             rawDelivery && rawDelivery.toLowerCase() !== "standard";
           const deliveryText = hasCustomDelivery
             ? rawDelivery
-            : defaultProcurementDeliverySchedule;
+            : (defaultProcurementDeliverySchedule || "Standard");
+
+          const formatDelivery = (val: string) => {
+            if (!val || val === "—" || val.toLowerCase() === "standard") {
+              return "Standard Schedule";
+            }
+            const trimmed = val.trim();
+            if (/^\d+$/.test(trimmed)) {
+              const n = Number(trimmed);
+              return `${n} ${n === 1 ? "Day" : "Days"} Delivery`;
+            }
+            if (/^\d+\s*(d|day|days)$/i.test(trimmed)) {
+              return `${trimmed} Delivery`;
+            }
+            return trimmed;
+          };
 
           return (
-            <div className="text-slate-600">
-              <p className="font-semibold text-xs text-slate-900">{qtyText}</p>
-              <p className="text-[10.5px] font-normal text-slate-500">
-                {deliveryText}
+            <div className="text-slate-600 min-w-0 pr-1">
+              <p className="font-semibold text-xs text-slate-900 truncate">{qtyText}</p>
+              <p className="text-[10.5px] font-medium text-slate-500 flex items-center gap-1 mt-0.5 whitespace-nowrap">
+                <Truck className="h-3 w-3 text-slate-400 shrink-0" />
+                <span>{formatDelivery(deliveryText)}</span>
               </p>
             </div>
           );
@@ -6486,6 +6510,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "submittedAt",
         header: "Submitted At",
+        width: "w-[11%]",
         cell: (participation) => {
           const dateStr = formatDateString(
             participation.submittedAt ||
@@ -6493,17 +6518,18 @@ export function ProcurementDetailUnifiedView(
               participation.createdAt,
             true,
           );
-          return <span className="text-slate-500 font-normal">{dateStr}</span>;
+          return <span className="text-slate-500 font-medium text-xs whitespace-nowrap">{dateStr}</span>;
         },
       },
       {
         key: "technicalStatus",
         header: "Technical Evaluation",
+        width: "w-[11%]",
         cell: (participation) => {
           if (!isEvaluationReady) {
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600">
-                <Lock className="h-3 w-3 text-slate-400" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600 whitespace-nowrap">
+                <Lock className="h-3 w-3 text-slate-400 shrink-0" />
                 Sealed Proposal
               </span>
             );
@@ -6512,20 +6538,20 @@ export function ProcurementDetailUnifiedView(
           const isQual = ts === "QUALIFIED";
           const isDisq = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || participation.isDisqualified;
           return (
-            <div>
+            <div className="whitespace-nowrap">
               {isQual ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[9.5px] font-extrabold text-emerald-800">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-emerald-800 shadow-2xs">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                   Qualified
                 </span>
               ) : isDisq ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-0.5 text-[9.5px] font-extrabold text-rose-800">
-                  <XCircle className="h-3 w-3 text-rose-600" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-rose-800 shadow-2xs">
+                  <XCircle className="h-3 w-3 text-rose-600 shrink-0" />
                   Disqualified
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9.5px] font-extrabold text-amber-800">
-                  <Clock className="h-3 w-3 text-amber-600" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-amber-800 shadow-2xs">
+                  <Clock className="h-3 w-3 text-amber-600 shrink-0" />
                   Pending Review
                 </span>
               )}
@@ -6542,6 +6568,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "status",
         header: "Lifecycle & Award Status",
+        width: "w-[12%]",
         cell: (participation) => {
           const isAwardWinner = Boolean(
             activeAward &&
@@ -6562,23 +6589,23 @@ export function ProcurementDetailUnifiedView(
           if (isAwardWinner) {
             if (effectiveActiveOrder) {
               return (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-emerald-800 shadow-2xs">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-emerald-800 shadow-2xs whitespace-nowrap">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
                   Ordered & Active
                 </span>
               );
             }
             if (activeAward.awardStatus === "ACCEPTED") {
               return (
-                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-indigo-800 shadow-2xs">
-                  <Award className="h-3 w-3 text-indigo-600" />
+                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-indigo-800 shadow-2xs whitespace-nowrap">
+                  <Award className="h-3 w-3 text-indigo-600 shrink-0" />
                   Award Accepted
                 </span>
               );
             }
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-amber-800 shadow-2xs">
-                <Clock className="h-3 w-3 text-amber-600" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-amber-800 shadow-2xs whitespace-nowrap">
+                <Clock className="h-3 w-3 text-amber-600 shrink-0" />
                 Award Offered (Pending)
               </span>
             );
@@ -6586,7 +6613,7 @@ export function ProcurementDetailUnifiedView(
 
           if (isPOAccepted || String(participation.finalStatus || '').toUpperCase() === 'NOT_SELECTED') {
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-slate-500">
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-slate-500 whitespace-nowrap">
                 Not Selected
               </span>
             );
@@ -6594,8 +6621,8 @@ export function ProcurementDetailUnifiedView(
 
           if (activeAward || isEvaluationReady) {
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-sky-700 shadow-2xs">
-                <Clock className="h-3 w-3 text-sky-500" />
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-sky-700 shadow-2xs whitespace-nowrap">
+                <Clock className="h-3 w-3 text-sky-500 shrink-0" />
                 Under Review / Standby
               </span>
             );
@@ -6606,7 +6633,7 @@ export function ProcurementDetailUnifiedView(
             participation.status ||
             "Submitted";
           return (
-            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold uppercase text-slate-700">
+            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold uppercase text-slate-700 whitespace-nowrap">
               {statusLabel}
             </span>
           );
@@ -6616,6 +6643,7 @@ export function ProcurementDetailUnifiedView(
         key: "action",
         header: "Action",
         align: "right",
+        width: "w-[24%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
           const isDisq = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || participation.isDisqualified;
@@ -6629,7 +6657,7 @@ export function ProcurementDetailUnifiedView(
           );
 
           return (
-            <div className="flex items-center justify-end gap-1.5">
+            <div className="flex items-center justify-end gap-1.5 flex-nowrap">
               {canAward && (
                 <Button
                   type="button"
@@ -6639,11 +6667,11 @@ export function ProcurementDetailUnifiedView(
                     setAwardJustification("");
                     setAwardRemarks("");
                   }}
-                  className="h-7.5 px-2.5 gap-1 text-[11px] font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer rounded-lg"
+                  className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer rounded-lg shrink-0 whitespace-nowrap"
                   title="Award contract to this qualified vendor"
                 >
-                  <Award className="h-3.5 w-3.5" />
-                  Award Contract
+                  <Award className="h-3.5 w-3.5 shrink-0" />
+                  <span>Award<span className="hidden xl:inline"> Contract</span></span>
                 </Button>
               )}
               {isBuyerOrAdmin && (
@@ -6653,7 +6681,7 @@ export function ProcurementDetailUnifiedView(
                   disabled={!isEvaluationReady}
                   onClick={isEvaluationReady ? () => setSelectedForTechnicalEval(participation) : undefined}
                   className={cn(
-                    "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs",
+                    "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
                     isEvaluationReady
                       ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                       : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
@@ -6667,11 +6695,19 @@ export function ProcurementDetailUnifiedView(
                   }
                 >
                   {isEvaluationReady ? (
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   ) : (
-                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                    <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   )}
-                  {isTechEvalCompleted ? "View Evaluation" : "Evaluate Bid"}
+                  <span>
+                    {isTechEvalCompleted ? (
+                      <>
+                        <span className="hidden xl:inline">View </span>Evaluation
+                      </>
+                    ) : (
+                      "Evaluate Bid"
+                    )}
+                  </span>
                 </Button>
               )}
               <Button
@@ -6680,15 +6716,15 @@ export function ProcurementDetailUnifiedView(
                 disabled={!isEvaluationReady}
                 onClick={isEvaluationReady ? () => setSelectedQuotationForReview(participation) : undefined}
                 className={cn(
-                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs",
+                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
                   isEvaluationReady
                     ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
                     : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
                 )}
                 title={isEvaluationReady ? "Review quotation details" : "Quotation remains sealed until bidding closes"}
               >
-                <Eye className="h-3 w-3" />
-                Review Quotation
+                <Eye className="h-3 w-3 shrink-0" />
+                <span>Review<span className="hidden xl:inline"> Quotation</span></span>
               </Button>
             </div>
           );
@@ -7344,13 +7380,14 @@ export function ProcurementDetailUnifiedView(
                   <Button
                     type="button"
                     disabled={isAcceptingAction}
-                    onClick={() => handleAcceptAward(activeAward.id)}
+                    onClick={() => handleAcceptAward(String(activeAward?.id || ""))}
                     className="h-11 bg-white hover:bg-emerald-50 text-emerald-900 font-black text-sm px-6 shadow-lg gap-2 cursor-pointer transition-transform active:scale-95"
+                    aria-label="Formally accept contract award"
                   >
                     {isAcceptingAction ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                      <Loader2 className="h-4 w-4 animate-spin text-emerald-600" aria-hidden="true" />
                     ) : (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                     )}
                     Formally Accept Award
                   </Button>
@@ -7360,15 +7397,16 @@ export function ProcurementDetailUnifiedView(
                     onClick={() =>
                       setDeclineModal({
                         show: true,
-                        awardId: activeAward.id,
+                        awardId: String(activeAward?.id || ""),
                         type: "award",
                         reason: "",
                         submitting: false,
                       })
                     }
                     className="h-11 bg-black/30 hover:bg-black/50 text-white font-bold text-sm px-5 border border-white/30 gap-2 cursor-pointer"
+                    aria-label="Decline contract award"
                   >
-                    <XCircle className="h-4 w-4" />
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
                     Decline Award
                   </Button>
                 </div>
@@ -7490,11 +7528,17 @@ export function ProcurementDetailUnifiedView(
 
           {/* Decline Price Match or Award Modal */}
           {declineModal.show && (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="decline-modal-title"
+              aria-describedby="decline-modal-desc"
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 animate-fadeIn"
+            >
               <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-rose-600" />
+                  <h3 id="decline-modal-title" className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-rose-600" aria-hidden="true" />
                     {declineModal.type === "price_match"
                       ? "Decline Price-Match Counter-Offer"
                       : "Decline Contract Award"}
@@ -7510,21 +7554,23 @@ export function ProcurementDetailUnifiedView(
                         submitting: false,
                       })
                     }
-                    className="text-slate-400 hover:text-slate-600"
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                    aria-label="Close dialog"
                   >
-                    <X className="h-5 w-5" />
+                    <X className="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
-                <p className="text-xs font-semibold text-slate-600 mt-3">
+                <p id="decline-modal-desc" className="text-xs font-semibold text-slate-600 mt-3">
                   {declineModal.type === "price_match"
                     ? "Please provide an explanation for declining this price-match counter-offer. The buyer will be notified and can award L1 or another vendor."
                     : "Please provide a reason for declining this contract award. The tender will be returned to the buyer for re-evaluation."}
                 </p>
                 <div className="mt-3">
-                  <label className="text-xs font-black text-slate-700 block mb-1">
+                  <label htmlFor="decline-modal-reason-input" className="text-xs font-black text-slate-700 block mb-1">
                     Reason for Declining <span className="text-rose-500">*</span>
                   </label>
                   <textarea
+                    id="decline-modal-reason-input"
                     rows={3}
                     value={declineModal.reason}
                     onChange={(e) =>
@@ -7532,6 +7578,7 @@ export function ProcurementDetailUnifiedView(
                     }
                     placeholder="e.g. Cannot meet target price due to raw material cost escalation..."
                     className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none"
+                    aria-required="true"
                   />
                 </div>
                 <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
@@ -7562,9 +7609,9 @@ export function ProcurementDetailUnifiedView(
                     className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black gap-1.5 cursor-pointer"
                   >
                     {declineModal.submitting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                     ) : (
-                      <XCircle className="h-3.5 w-3.5" />
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
                     Confirm Decline
                   </Button>
@@ -7839,7 +7886,6 @@ export function ProcurementDetailUnifiedView(
                   Download
                 </Button>
                 {props.invoiceStatus &&
-                  props.onConvertToInvoiceClick &&
                   (props.invoiceStatus.exists ? (
                     <Button
                       type="button"
@@ -7853,7 +7899,7 @@ export function ProcurementDetailUnifiedView(
                       <Eye className="h-3.5 w-3.5 mr-0.5" />
                       View Invoice
                     </Button>
-                  ) : (
+                  ) : props.invoiceStatus.canConvertToInvoice && props.onConvertToInvoiceClick ? (
                     <Button
                       type="button"
                       disabled={
@@ -7871,7 +7917,7 @@ export function ProcurementDetailUnifiedView(
                         ? "Converting..."
                         : "Convert to Invoice"}
                     </Button>
-                  ))}
+                  ) : null)}
                 {props.onDiscardClick && (
                   <Button
                     type="button"
@@ -8084,7 +8130,7 @@ export function ProcurementDetailUnifiedView(
           </section>
 
           {/* Tab Navigation Bar */}
-          <nav className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
+          <nav aria-label="Procurement sections" className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -9316,7 +9362,7 @@ export function ProcurementDetailUnifiedView(
                         )
                       }
                       showSrNo={false}
-                      minWidth="min-w-[760px]"
+                      minWidth="min-w-[1150px]"
                       emptyTitle={
                         isRfqType
                           ? "No seller quotations submitted yet"
@@ -9726,16 +9772,38 @@ export function SellerQuotationReviewModal({
     () => [
       {
         key: "itemName",
-        header: "Line Item",
+        header: "Line Item & Specifications",
         cell: (item, idx) => (
-          <div>
-            <span className="font-bold text-slate-900">
-              {item.itemName || item.name || item.description || `Item #${idx + 1}`}
-            </span>
-            {item.remarks && (
-              <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
-                {item.remarks}
-              </p>
+          <div className="space-y-1">
+            <div>
+              <span className="font-bold text-slate-900">
+                {item.itemName || item.name || item.description || `Item #${idx + 1}`}
+              </span>
+              {item.remarks && (
+                <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
+                  {item.remarks}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {item.model && (
+                <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">
+                  Model: {item.model}
+                </span>
+              )}
+              {item.complianceStatus && (
+                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                  {item.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : item.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ 100% Compliant'}
+                </span>
+              )}
+            </div>
+
+            {item.specifications && (
+              <div className="rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                <span className="text-[9.5px] font-bold uppercase text-slate-400 block">Offered Specifications:</span>
+                {item.specifications}
+              </div>
             )}
           </div>
         ),
@@ -9980,6 +10048,21 @@ export function SellerQuotationReviewModal({
     participation.responseData?.model ||
     participation.acknowledgement?.model ||
     "—";
+  const techSpecs =
+    participation.technicalSpecifications ||
+    participation.specifications ||
+    participation.responseData?.technicalSpecifications ||
+    participation.responseData?.specifications ||
+    participation.acknowledgement?.technicalSpecifications ||
+    participation.acknowledgement?.specifications ||
+    (participation.offeredItemDescription && participation.offeredItemDescription !== participation.message ? participation.offeredItemDescription : '') ||
+    (participation.responseData?.offeredItemDescription && participation.responseData?.offeredItemDescription !== participation.responseData?.message ? participation.responseData?.offeredItemDescription : '') ||
+    "";
+  const complianceStatement =
+    participation.complianceStatement ||
+    participation.responseData?.complianceStatement ||
+    participation.acknowledgement?.complianceStatement ||
+    "";
   const submittedAt =
     participation.submittedAt ||
     participation.createdAt ||
@@ -10437,6 +10520,51 @@ export function SellerQuotationReviewModal({
               </div>
             </div>
           </div>
+
+          {/* Offered Technical Specifications & Compliance Summary */}
+          {(techSpecs || model !== "—" || makeBrand !== "—" || complianceStatement || message) && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-slate-500" /> Offered Technical Specifications &amp; Parameters
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Offered Make / Brand:</span>
+                  <span className="font-bold text-slate-800">{makeBrand}</span>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Offered Model / Cat. No.:</span>
+                  <span className="font-bold text-slate-800">{model}</span>
+                </div>
+                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
+                  <span className="text-slate-400 font-bold block text-[10.5px]">Compliance Declaration:</span>
+                  <span className="font-bold text-emerald-800 inline-flex items-center gap-1">
+                    {complianceStatement === "WITH_DEVIATION"
+                      ? "⚠ Minor Deviation"
+                      : complianceStatement === "ALTERNATIVE_OFFERED"
+                        ? "✦ Alternative Product"
+                        : "✓ 100% Fully Compliant"}
+                  </span>
+                </div>
+              </div>
+              {techSpecs && (
+                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                    Offered Technical Specifications Description:
+                  </span>
+                  <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">{techSpecs}</p>
+                </div>
+              )}
+              {message && message !== techSpecs && (
+                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                    Quotation Message / Cover Note:
+                  </span>
+                  <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">{message}</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Line Items Table (if any) */}
           {lineItems.length > 0 && (

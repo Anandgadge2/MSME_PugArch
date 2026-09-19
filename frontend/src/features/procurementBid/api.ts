@@ -614,7 +614,8 @@ export const procurementBidApi = {
     return { ...data, items: (data.items || []).map(normalizeBid) };
   },
   async detail(id: string, skipCache = false) {
-    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}`, { headers: authHeaders(), skipCache });
+    const qs = skipCache ? '?skipCache=true' : '';
+    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}${qs}`, { headers: authHeaders(), skipCache });
     const body = await readJsonResponse(res);
     return normalizeBid(unwrapApiData(body));
   },
@@ -784,7 +785,11 @@ export const procurementBidApi = {
     return readApiBody(res);
   },
   async generatePO(bidId: string, data: any = {}) {
-    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, data, { headers: authHeaders() });
+    const payload =
+      typeof data === 'object' && data !== null && !Array.isArray(data)
+        ? data
+        : (data !== undefined && data !== null && data !== '' ? { awardId: data } : {});
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, payload, { headers: authHeaders() });
     return readApiBody(res);
   },
   async acceptPO(poId: number | string, data: any = {}) {

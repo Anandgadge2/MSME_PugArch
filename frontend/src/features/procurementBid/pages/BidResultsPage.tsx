@@ -106,7 +106,9 @@ export default function BidResultsPage() {
   // Technical Evaluation state
   const [selectedForTechEval, setSelectedForTechEval] = useState<any | null>(null);
   const [isCompletingTechEval, setIsCompletingTechEval] = useState(false);
+  const [isCompletingTechEvalSuccess, setIsCompletingTechEvalSuccess] = useState(false);
   const [isOpeningFinancialEval, setIsOpeningFinancialEval] = useState(false);
+  const [isOpeningFinancialEvalSuccess, setIsOpeningFinancialEvalSuccess] = useState(false);
 
   const isTwoPacketMode = React.useMemo(() => {
     if (!bid) return false;
@@ -128,6 +130,7 @@ export default function BidResultsPage() {
   }, [bid]);
 
   const isTechEvalCompleted = React.useMemo(() => {
+    if (isCompletingTechEvalSuccess) return true;
     if (!bid) return false;
     const rawStatus = String((bid as any).status || '').toUpperCase();
     const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
@@ -140,28 +143,48 @@ export default function BidResultsPage() {
         'AWARD_RECOMMENDED',
         'AWARDED',
         'PO_GENERATED',
-      ].includes(rawStatus)
+      ].includes(rawStatus) ||
+      [
+        'FINANCIAL_EVALUATION',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARDED',
+        'PO_GENERATED',
+      ].includes(rawStage)
     );
-  }, [bid]);
+  }, [bid, isCompletingTechEvalSuccess]);
+
+  const isFinancialEvalOpened = React.useMemo(() => {
+    if (isOpeningFinancialEvalSuccess) return true;
+    if (!bid) return false;
+    const rawStatus = String((bid as any).status || '').toUpperCase();
+    const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
+    return (
+      [
+        'FINANCIAL_EVALUATION',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARDED',
+        'PO_GENERATED',
+      ].includes(rawStatus) ||
+      [
+        'FINANCIAL_EVALUATION',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARDED',
+        'PO_GENERATED',
+      ].includes(rawStage)
+    );
+  }, [bid, isOpeningFinancialEvalSuccess]);
 
   const isFinancialEvalReady = React.useMemo(() => {
+    if (isFinancialEvalOpened) return false;
+    if (isCompletingTechEvalSuccess) return true;
     if (!bid) return false;
     const rawStatus = String((bid as any).status || '').toUpperCase();
     const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
     return rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' || rawStage === 'TECHNICAL_EVALUATION_COMPLETED';
-  }, [bid]);
-
-  const isFinancialEvalOpened = React.useMemo(() => {
-    if (!bid) return false;
-    const rawStatus = String((bid as any).status || '').toUpperCase();
-    return [
-      'FINANCIAL_EVALUATION',
-      'L1_GENERATED',
-      'AWARD_RECOMMENDED',
-      'AWARDED',
-      'PO_GENERATED',
-    ].includes(rawStatus);
-  }, [bid]);
+  }, [bid, isCompletingTechEvalSuccess, isFinancialEvalOpened]);
 
   const activeAward = React.useMemo(() => {
     if (Array.isArray(bid?.awards) && bid.awards.length > 0) return bid.awards[0];
@@ -249,10 +272,20 @@ export default function BidResultsPage() {
     }
     setIsCompletingTechEval(true);
     try {
-      await postApi(
+      const res: any = await postApi(
         `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/complete-technical-evaluation`,
         {},
       );
+      setIsCompletingTechEvalSuccess(true);
+      setBid((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'TECHNICAL_EVALUATION_COMPLETED',
+          lifecycleStage: 'TECHNICAL_EVALUATION_COMPLETED',
+          ...(res?.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : {}),
+        };
+      });
       toast.success(
         'Stage 1 Technical Evaluation completed successfully! You can now open Stage 2 financial ranking.',
       );
@@ -271,10 +304,20 @@ export default function BidResultsPage() {
   const handleOpenFinancialEvaluation = async () => {
     setIsOpeningFinancialEval(true);
     try {
-      await postApi(
+      const res: any = await postApi(
         `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`,
         {},
       );
+      setIsOpeningFinancialEvalSuccess(true);
+      setBid((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: 'L1_GENERATED',
+          lifecycleStage: 'L1_GENERATED',
+          ...(res?.data && typeof res.data === 'object' && !Array.isArray(res.data) ? res.data : {}),
+        };
+      });
       toast.success(
         'Stage 2 Financial Evaluation opened successfully! L1/L2/L3 commercial ranking generated.',
       );
@@ -614,6 +657,21 @@ export default function BidResultsPage() {
         setError('Unable to load bid evaluation result.');
         setLoading(false);
         return;
+      }
+
+      if (isCompletingTechEvalSuccess && data) {
+        const upper = String(data.status || '').toUpperCase();
+        if (!['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(upper)) {
+          data.status = 'TECHNICAL_EVALUATION_COMPLETED';
+          data.lifecycleStage = 'TECHNICAL_EVALUATION_COMPLETED';
+        }
+      }
+      if (isOpeningFinancialEvalSuccess && data) {
+        const upper = String(data.status || '').toUpperCase();
+        if (!['AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(upper)) {
+          data.status = 'L1_GENERATED';
+          data.lifecycleStage = 'L1_GENERATED';
+        }
       }
 
       setBid(data);

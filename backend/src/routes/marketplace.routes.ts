@@ -3360,19 +3360,31 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                         quotedAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
                         totalAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
                         submissionStatus: body.status || 'SUBMITTED',
-                        technicalStatus: 'QUALIFIED' as any,
-                        financialStatus: 'OPENED' as any,
+                        technicalStatus: 'PENDING' as any,
+                        financialStatus: 'LOCKED' as any,
                         finalStatus: 'PENDING' as any,
                         submittedAt: new Date(),
                         technicalSubmittedAt: new Date(),
                         financialSubmittedAt: new Date(),
-                        offeredItemDescription: body.message || 'Quotation submitted via marketplace'
+                        makeBrand: (body as any).makeBrand || (body.responseData as any)?.makeBrand || null,
+                        model: (body as any).model || (body.responseData as any)?.model || null,
+                        offeredItemDescription: (body as any).technicalSpecifications || (body.responseData as any)?.technicalSpecifications || body.message || 'Quotation submitted via marketplace',
+                        acknowledgement: body.responseData ? body.responseData : undefined
                     };
 
                     if (existingPart) {
                         await tx.procurementBidParticipation.update({
                             where: { id: existingPart.id },
-                            data: partData
+                            data: {
+                                quotedAmount: partData.quotedAmount,
+                                totalAmount: partData.totalAmount,
+                                submissionStatus: partData.submissionStatus,
+                                makeBrand: partData.makeBrand,
+                                model: partData.model,
+                                offeredItemDescription: partData.offeredItemDescription,
+                                ...(partData.acknowledgement ? { acknowledgement: partData.acknowledgement } : {}),
+                                ...(existingPart.technicalStatus === 'PENDING' ? { technicalStatus: 'PENDING' as any } : {})
+                            }
                         });
                     } else {
                         const count = await tx.procurementBidParticipation.count({ where: { bidId: matchingBid.id } });

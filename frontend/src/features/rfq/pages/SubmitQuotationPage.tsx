@@ -146,6 +146,9 @@ type LineQuote = {
   gstPercent: string;
   makeBrand: string;
   remarks: string;
+  model?: string;
+  specifications?: string;
+  complianceStatus?: string;
 };
 
 const parseResponseData = (value: any) => {
@@ -378,6 +381,11 @@ export default function SubmitQuotationPage() {
   const [deliveryTimeline, setDeliveryTimeline] = useState('');
   const [message, setMessage] = useState('');
   const [terms, setTerms] = useState('');
+  const [offeredMakeBrand, setOfferedMakeBrand] = useState('');
+  const [offeredModel, setOfferedModel] = useState('');
+  const [technicalSpecifications, setTechnicalSpecifications] = useState('');
+  const [complianceStatement, setComplianceStatement] = useState<'FULL_COMPLIANCE' | 'WITH_DEVIATION' | 'ALTERNATIVE_OFFERED' | ''>('FULL_COMPLIANCE');
+  const [expandedLineSpecs, setExpandedLineSpecs] = useState<Record<number, boolean>>({});
   const [declared, setDeclared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -869,12 +877,20 @@ export default function SubmitQuotationPage() {
     const targetTerms = ownResponse.terms || ownResponse.responseData?.terms;
     const targetMessage = ownResponse.message || ownResponse.responseData?.message || ownResponse.coverNote || ownResponse.responseData?.coverNote;
     const targetAttachment = ownResponse.attachmentUrl || ownResponse.responseData?.attachmentUrl;
+    const targetMakeBrand = ownResponse.makeBrand || ownResponse.responseData?.makeBrand || ownResponse.acknowledgement?.makeBrand || '';
+    const targetModel = ownResponse.model || ownResponse.responseData?.model || ownResponse.acknowledgement?.model || '';
+    const targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
+    const targetCompliance = ownResponse.complianceStatement || ownResponse.responseData?.complianceStatement || ownResponse.acknowledgement?.complianceStatement || 'FULL_COMPLIANCE';
 
     setOfferedPrice(targetPrice != null ? String(targetPrice) : '');
     setOfferedQuantity(targetQty != null ? String(targetQty) : '');
     setDeliveryTimeline(targetTimeline != null ? String(targetTimeline) : '');
     setTerms(targetTerms != null ? String(targetTerms) : '');
     setMessage(targetMessage != null ? String(targetMessage) : '');
+    setOfferedMakeBrand(String(targetMakeBrand || ''));
+    setOfferedModel(String(targetModel || ''));
+    setTechnicalSpecifications(String(targetTechSpecs || ''));
+    setComplianceStatement((targetCompliance as any) || 'FULL_COMPLIANCE');
     if (targetAttachment) {
       setUploadState({
         fileName: ownResponse.attachmentFileName || fileNameFromUrl(String(targetAttachment)) || 'Attachment',
@@ -955,6 +971,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim() || undefined,
         message: message.trim() || 'Draft quotation response', // default placeholder
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'DRAFT'
       };
       if (uploadState?.url) {
@@ -980,7 +1000,7 @@ export default function SubmitQuotationPage() {
     } finally {
       setSavingDraft(false);
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, offeredMakeBrand, offeredModel, technicalSpecifications, complianceStatement, uploadState, docUploads, lineQuotes]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -1504,6 +1524,9 @@ export default function SubmitQuotationPage() {
           unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
           gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
           makeBrand: line?.makeBrand || line?.brand || '',
+          model: line?.model || line?.modelNumber || line?.partNumber || '',
+          specifications: line?.specifications || line?.technicalSpecs || line?.itemDescription || '',
+          complianceStatus: line?.complianceStatus || line?.compliance || '',
           remarks: line?.remarks || ''
         };
       });
@@ -1520,6 +1543,9 @@ export default function SubmitQuotationPage() {
               unitPrice: '',
               gstPercent: '18',
               makeBrand: '',
+              model: '',
+              specifications: '',
+              complianceStatus: '',
               remarks: ''
             });
           }
@@ -1535,6 +1561,9 @@ export default function SubmitQuotationPage() {
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
         remarks: ''
       })));
     }
@@ -1608,13 +1637,24 @@ export default function SubmitQuotationPage() {
           unitRate: unitPrice,
           gstPercent,
           makeBrand: line.makeBrand.trim() || null,
+          model: (line.model || '').trim() || null,
+          specifications: (line.specifications || '').trim() || null,
+          complianceStatus: line.complianceStatus || null,
           remarks: line.remarks.trim() || null,
           lineTotal: Math.round(lineTotal * 100) / 100,
           totalAmount: Math.round(lineTotal * 100) / 100,
         };
       });
-    if (!docs.length && !lines.length) return undefined;
-    return { documents: docs, lineItems: lines };
+    const hasAnyContent = docs.length > 0 || lines.length > 0 || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim();
+    if (!hasAnyContent) return undefined;
+    return {
+      documents: docs,
+      lineItems: lines,
+      makeBrand: offeredMakeBrand.trim() || undefined,
+      model: offeredModel.trim() || undefined,
+      technicalSpecifications: technicalSpecifications.trim() || undefined,
+      complianceStatement: complianceStatement || undefined,
+    };
   }
 
   const handleUploadFiles = useCallback(async (files: FileList | File[], targetTag?: string) => {
@@ -1724,6 +1764,9 @@ export default function SubmitQuotationPage() {
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
         remarks: ''
       }
     ]);
@@ -1910,6 +1953,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim(),
         message: message.trim(),
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'SUBMITTED',
       };
       if (uploadState?.url) {
@@ -1949,6 +1996,10 @@ export default function SubmitQuotationPage() {
           deliveryTimeline: payload.deliveryTimeline,
           message: payload.message,
           terms: payload.terms,
+          makeBrand: payload.makeBrand,
+          model: payload.model,
+          technicalSpecifications: payload.technicalSpecifications,
+          complianceStatement: payload.complianceStatement,
           attachmentUrl: payload.attachmentUrl,
           responseData: payload.responseData
         };
@@ -2525,6 +2576,93 @@ export default function SubmitQuotationPage() {
               {fieldError('deliveryTimeline')}
             </div>
 
+            {/* Technical Specifications & Brand/Model Details */}
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#12335f]/10 text-[#12335f]">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Technical Specifications &amp; Compliance Details
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Specify your offered technical parameters, make/brand, model number, and compliance status.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Offered Make / Brand */}
+                <div>
+                  <label htmlFor="quotation-make-brand" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                    Offered Make / Brand
+                  </label>
+                  <input
+                    id="quotation-make-brand"
+                    type="text"
+                    value={offeredMakeBrand}
+                    onChange={e => setOfferedMakeBrand(e.target.value)}
+                    disabled={isReadOnly}
+                    placeholder="e.g. Tata, Havells, Schneider Electric, Custom"
+                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                {/* Offered Model / Part Number */}
+                <div>
+                  <label htmlFor="quotation-model" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                    Model / Catalog / Part Number
+                  </label>
+                  <input
+                    id="quotation-model"
+                    type="text"
+                    value={offeredModel}
+                    onChange={e => setOfferedModel(e.target.value)}
+                    disabled={isReadOnly}
+                    placeholder="e.g. MOD-500X / Series 3B / Standard"
+                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Technical Compliance Declaration */}
+              <div>
+                <label htmlFor="quotation-compliance" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                  Technical Compliance Declaration
+                </label>
+                <select
+                  id="quotation-compliance"
+                  value={complianceStatement}
+                  onChange={e => setComplianceStatement(e.target.value as any)}
+                  disabled={isReadOnly}
+                  className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                >
+                  <option value="FULL_COMPLIANCE">✓ 100% Fully Compliant with Buyer Technical Specifications</option>
+                  <option value="WITH_DEVIATION">⚠ Compliant with Minor Commercial/Technical Deviations</option>
+                  <option value="ALTERNATIVE_OFFERED">✦ Equivalent or Superior Alternative Product Offered</option>
+                </select>
+              </div>
+
+              {/* Offered Technical Specifications & Scope of Work */}
+              <div>
+                <label htmlFor="quotation-tech-specs" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                  Offered Technical Specifications &amp; Parameters
+                </label>
+                <textarea
+                  id="quotation-tech-specs"
+                  value={technicalSpecifications}
+                  onChange={e => setTechnicalSpecifications(e.target.value)}
+                  disabled={isReadOnly}
+                  placeholder="Detail your offered specifications: capacity, material grade, dimensions, voltage/power, standards compliance (ISO/BIS/CE), operating tolerances, warranty term, and any deviations or special highlights."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 p-3.5 text-xs font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+            </div>
+
             {/* Terms & Conditions */}
             <div>
               <label htmlFor="quotation-terms" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
@@ -2851,6 +2989,29 @@ export default function SubmitQuotationPage() {
                     )}
                   </>
                 )}
+                {lineQuotes.length > 0 && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const anyOpen = Object.values(expandedLineSpecs).some(Boolean);
+                      if (anyOpen) {
+                        setExpandedLineSpecs({});
+                      } else {
+                        const allOpen: Record<number, boolean> = {};
+                        lineQuotes.forEach((_, i) => { allOpen[i] = true; });
+                        setExpandedLineSpecs(allOpen);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-slate-200 text-slate-700 bg-white px-3 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    <span>
+                      {Object.values(expandedLineSpecs).some(Boolean) ? 'Collapse Specs' : 'Item Specifications'}
+                    </span>
+                  </Button>
+                )}
                 {!isReadOnly && (
                   <Button
                     type="button"
@@ -2911,162 +3072,293 @@ export default function SubmitQuotationPage() {
                       const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
                       const cleanUom = sanitizeUom(line.unitOfMeasure);
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
-                            {idx + 1}
-                          </td>
-                          <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle max-w-md">
-                            {isReadOnly ? (
-                              <div className="space-y-0.5 min-w-0">
-                                <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName || `Item #${idx + 1}`}>
-                                  {line.itemName || `Item #${idx + 1}`}
-                                </span>
-                                {(() => {
-                                  const subDesc = line.remarks || (idx < itemsList.length ? itemsList[idx]?.description : '');
-                                  const isDupe = subDesc && line.itemName && (
-                                    subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
-                                    line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
-                                  );
-                                  return subDesc && !isDupe ? (
-                                    <p className="text-[10.5px] font-normal text-slate-500 leading-tight line-clamp-2 break-words" title={subDesc}>
-                                      {subDesc}
-                                    </p>
-                                  ) : null;
-                                })()}
-                              </div>
-                            ) : idx < itemsList.length ? (
-                              <div className="space-y-0.5 min-w-0">
-                                <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName}>
-                                  {line.itemName}
-                                </span>
-                                {(() => {
-                                  const subDesc = itemsList[idx]?.description;
-                                  const isDupe = subDesc && line.itemName && (
-                                    subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
-                                    line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
-                                  );
-                                  return subDesc && !isDupe ? (
-                                    <p className="text-[10px] font-medium text-slate-500 line-clamp-1 break-words" title={subDesc}>
-                                      {subDesc}
-                                    </p>
-                                  ) : null;
-                                })()}
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={line.itemName}
-                                  onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
-                                  aria-label={`Item description for item ${idx + 1}`}
-                                  placeholder="Item Name / Service"
-                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                                />
+                        <React.Fragment key={idx}>
+                          <tr className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle max-w-md">
+                              {isReadOnly ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName || `Item #${idx + 1}`}>
+                                    {line.itemName || `Item #${idx + 1}`}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = line.remarks || (idx < itemsList.length ? itemsList[idx]?.description : '');
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10.5px] font-normal text-slate-500 leading-tight line-clamp-2 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : idx < itemsList.length ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName}>
+                                    {line.itemName}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = itemsList[idx]?.description;
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={line.itemName}
+                                    onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
+                                    aria-label={`Item description for item ${idx + 1}`}
+                                    placeholder="Item Name / Service"
+                                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomLine(idx)}
+                                    className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
+                                    title="Remove item"
+                                    aria-label={`Remove item ${idx + 1}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Item Specifications & Model Action Toggler */}
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveCustomLine(idx)}
-                                  className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
-                                  title="Remove item"
-                                  aria-label={`Remove item ${idx + 1}`}
+                                  onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition cursor-pointer border",
+                                    (line.model || line.specifications)
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                      : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                  )}
+                                  title="Add or view offered model number and technical specifications for this item"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <FileText className="h-3 w-3" />
+                                  <span>
+                                    {(line.model || line.specifications) ? 'Specs & Model' : '+ Specs & Model'}
+                                    {' '}{expandedLineSpecs[idx] ? '▲' : '▼'}
+                                  </span>
                                 </button>
+                                {line.model && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                    Model: {line.model}
+                                  </span>
+                                )}
+                                {line.complianceStatus && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    {line.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              <div className="flex items-center justify-end gap-1.5 min-w-0">
-                                <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                  {Number(line.quantity || 0).toLocaleString('en-IN')}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
-                                  {cleanUom}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1.5 min-w-0">
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    {Number(line.quantity || 0).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={line.quantity}
+                                    onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
+                                    aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
+                                    placeholder="1"
+                                    className="h-8 w-20 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[65px] text-left shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                hasPrice ? (
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-medium text-slate-400">—</span>
+                                )
+                              ) : (
                                 <input
                                   type="number"
                                   min="0"
-                                  step="any"
-                                  value={line.quantity}
-                                  onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
-                                  aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
-                                  placeholder="1"
-                                  className="h-8 w-20 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  step="0.01"
+                                  value={line.unitPrice}
+                                  onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
+                                  aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="0.00"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
                                 />
-                                <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[65px] text-left shrink" title={line.unitOfMeasure || 'Nos'}>
-                                  {cleanUom}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              hasPrice ? (
-                                <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                  ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
+                                  {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
                                 </span>
                               ) : (
-                                <span className="text-xs font-medium text-slate-400">—</span>
-                              )
-                            ) : (
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={line.unitPrice}
-                                onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
-                                aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="0.00"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
-                                {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
-                              </span>
-                            ) : (
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.1"
-                                value={line.gstPercent}
-                                onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
-                                aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="18"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-left align-middle">
-                            {isReadOnly ? (
-                              line.makeBrand ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
-                                  {line.makeBrand}
-                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={line.gstPercent}
+                                  onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
+                                  aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="18"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-left align-middle">
+                              {isReadOnly ? (
+                                line.makeBrand ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
+                                    {line.makeBrand}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-normal italic">—</span>
+                                )
                               ) : (
-                                <span className="text-xs text-slate-400 font-normal italic">—</span>
-                              )
-                            ) : (
-                              <input
-                                type="text"
-                                value={line.makeBrand}
-                                onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
-                                aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="Optional"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
-                            {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                          </td>
-                        </tr>
+                                <input
+                                  type="text"
+                                  value={line.makeBrand}
+                                  onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+                                  aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="Optional"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
+                              {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                          </tr>
+
+                          {/* Expandable Specifications Sub-Row */}
+                          {expandedLineSpecs[idx] && (
+                            <tr key={`specs-${idx}`} className="bg-slate-50/80 border-b border-slate-200">
+                              <td colSpan={7} className="px-5 py-3.5">
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldCheck className="h-4 w-4 text-blue-600" />
+                                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                                        Specifications &amp; Compliance for Item #{idx + 1}: {line.itemName}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: false }))}
+                                      className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                                    >
+                                      Close Specs ▲
+                                    </button>
+                                  </div>
+
+                                  {idx < itemsList.length && itemsList[idx]?.description && (
+                                    <div className="rounded-lg bg-blue-50/70 border border-blue-100 p-2.5 text-xs text-blue-900">
+                                      <span className="font-bold uppercase text-[10px] text-blue-700 block mb-0.5">
+                                        Buyer Required Specification:
+                                      </span>
+                                      <p className="font-medium text-slate-800 leading-relaxed">{itemsList[idx].description}</p>
+                                    </div>
+                                  )}
+
+                                  {isReadOnly ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                      <div>
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Offered Model / Part No.:</span>
+                                        <span className="font-bold text-slate-800">{line.model || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Technical Compliance:</span>
+                                        <span className="font-bold text-emerald-800">
+                                          {line.complianceStatus === 'DEVIATION' ? '⚠ Minor Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative Offered' : line.complianceStatus === 'COMPLIANT' ? '✓ 100% Fully Compliant' : '—'}
+                                        </span>
+                                      </div>
+                                      <div className="sm:col-span-2">
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block mb-1">Offered Technical Specifications:</span>
+                                        <p className="font-medium text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2.5">{line.specifications || 'No detailed specifications entered.'}</p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                            Offered Model / Catalog / Part Number
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={line.model || ''}
+                                            onChange={e => updateLineQuote(idx, { model: e.target.value })}
+                                            placeholder="e.g. MOD-2026-X, Part #7842"
+                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                          />
+                                        </div>
+
+                                        <div>
+                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                            Technical Compliance Status
+                                          </label>
+                                          <select
+                                            value={line.complianceStatus || 'COMPLIANT'}
+                                            onChange={e => updateLineQuote(idx, { complianceStatus: e.target.value })}
+                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                          >
+                                            <option value="COMPLIANT">✓ 100% Fully Compliant</option>
+                                            <option value="DEVIATION">⚠ Minor Technical Deviation</option>
+                                            <option value="ALTERNATIVE">✦ Equivalent Alternative Offered</option>
+                                          </select>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                          Detailed Technical Specifications &amp; Compliance Notes
+                                        </label>
+                                        <textarea
+                                          value={line.specifications || ''}
+                                          onChange={e => updateLineQuote(idx, { specifications: e.target.value })}
+                                          rows={2}
+                                          placeholder="Detail technical parameters, dimensions, materials, tolerances, certifications, or deviations for this specific item..."
+                                          className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
@@ -3498,6 +3790,23 @@ export default function SubmitQuotationPage() {
                   </p>
                 </div>
               </div>
+              {(offeredMakeBrand || offeredModel || technicalSpecifications) && (
+                <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-700 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Technical Specifications &amp; Compliance</span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {complianceStatement === 'WITH_DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative Offered' : '✓ 100% Fully Compliant'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
+                    {offeredMakeBrand && <div><span className="text-slate-400 font-normal">Make: </span><span className="text-slate-800 font-bold">{offeredMakeBrand}</span></div>}
+                    {offeredModel && <div><span className="text-slate-400 font-normal">Model: </span><span className="text-slate-800 font-bold">{offeredModel}</span></div>}
+                  </div>
+                  {technicalSpecifications && (
+                    <p className="line-clamp-2 text-slate-600 font-medium whitespace-pre-wrap">{technicalSpecifications}</p>
+                  )}
+                </div>
+              )}
               {message && (
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-600 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cover Note Preview</span>
