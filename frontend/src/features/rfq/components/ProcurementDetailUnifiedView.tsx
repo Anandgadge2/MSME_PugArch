@@ -80,7 +80,6 @@ import StartReverseAuctionModal, {
 } from "../../reverseAuctions/components/StartReverseAuctionModal";
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
-import SellerAuctionPlannedBanner from "../../reverseAuctions/components/SellerAuctionPlannedBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
 import {
   formatDate,
@@ -5270,14 +5269,18 @@ export function ProcurementDetailUnifiedView(
       payload.packetType,
       tender.packetType,
       rules.packetType,
-      candidateFinDate ? "Two" : "Single",
-    ),
+    ) || (candidateFinDate ? "Two" : "Single"),
   ).toUpperCase();
 
+  const isExplicitSingle =
+    rawPacketType.includes("SINGLE") ||
+    rawPacketType === "1";
+
   const isTwoPacket =
-    rawPacketType.includes("TWO") ||
-    rawPacketType === "2" ||
-    Boolean(candidateFinDate);
+    !isExplicitSingle &&
+    (rawPacketType.includes("TWO") ||
+      rawPacketType === "2" ||
+      Boolean(candidateFinDate));
 
   const isTechnicalEvaluationNeeded = Boolean(
     basics.isTechnicalEvaluationNeeded ||
@@ -6429,27 +6432,8 @@ export function ProcurementDetailUnifiedView(
   };
 
   const isTwoPacketMode = useMemo(() => {
-    const rawPacket = String(
-      props.packetType ||
-        payload.packetType ||
-        (props as any).technicalPacket?.packetType ||
-        "",
-    ).toUpperCase();
-    const rawMethod = String(
-      props.procurementMethod || props.procurementType || "",
-    ).toUpperCase();
-    const methodSlug = String(props.procurementLabel || "").toLowerCase();
-    return (
-      rawPacket === "TWO_PACKET" ||
-      rawPacket.includes("TWO") ||
-      rawMethod.includes("TWO_PACKET") ||
-      methodSlug.includes("two") ||
-      props.procurementType === "OPEN_TENDER" ||
-      props.procurementType === "LIMITED_TENDER" ||
-      props.procurementType === "RFP" ||
-      isRfqType
-    );
-  }, [props, payload, isRfqType]);
+    return isTwoPacket;
+  }, [isTwoPacket]);
 
   const techEvaluationStats = useMemo(() => {
     let qualified = 0;
@@ -6918,7 +6902,7 @@ export function ProcurementDetailUnifiedView(
                   </span>
                 </Button>
               )}
-              {isBuyerOrAdmin && (
+              {isBuyerOrAdmin && isTwoPacketMode && (
                 <Button
                   type="button"
                   size="sm"
@@ -6970,19 +6954,27 @@ export function ProcurementDetailUnifiedView(
                 }
                 className={cn(
                   "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
-                  isEvaluationReady
+                  !isTwoPacketMode
                     ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
+                    : isEvaluationReady
+                      ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
                 )}
                 title={
                   isEvaluationReady
-                    ? "Review quotation details"
+                    ? "Review full quotation details, line item rates and compliance"
                     : "Quotation remains sealed until bidding closes"
                 }
               >
-                <Eye className="h-3 w-3 shrink-0" />
+                <Eye className="h-3.5 w-3.5 shrink-0" />
                 <span>
-                  Review<span className="hidden xl:inline"> Quotation</span>
+                  {isTwoPacketMode ? (
+                    <>
+                      Review<span className="hidden xl:inline"> Quotation</span>
+                    </>
+                  ) : (
+                    "Review Quotation"
+                  )}
                 </span>
               </Button>
             </div>
@@ -7501,27 +7493,6 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller Auction Actions / Status Notices */}
           {!isBuyerSide && props.sellerAuctionActions}
-
-          {/* Planned (Not Yet Created) Reverse Auction Info Banner for Sellers */}
-          {!isBuyerSide &&
-            !isRateContractType &&
-            allowsReverseAuction &&
-            (!linkedAuction ||
-              (linkedAuction as any).auctionPlanned === true) && (
-              <SellerAuctionPlannedBanner
-                startPrice={linkedAuction?.startPrice ?? undefined}
-                minDecrementAmount={
-                  linkedAuction?.minDecrementAmount != null
-                    ? Number(linkedAuction.minDecrementAmount)
-                    : undefined
-                }
-                rankVisibility={
-                  linkedAuction?.rankVisibility != null
-                    ? String(linkedAuction.rankVisibility)
-                    : undefined
-                }
-              />
-            )}
 
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* ENTERPRISE BID LIFECYCLE HERO ACTION BANNER                     */}
@@ -8921,7 +8892,7 @@ export function ProcurementDetailUnifiedView(
                 </div>
               )}
 
-              {/* Stage 1 Technical Evaluation Quick-Action Shortcut Banner for Buyer */}
+              {/* Technical / Quotation Evaluation Quick-Action Shortcut Banner for Buyer */}
               {isBuyerOrAdmin &&
                 !isBidAwarded &&
                 (isDeadlinePassed ||
@@ -8933,73 +8904,121 @@ export function ProcurementDetailUnifiedView(
                     "AWARD_RECOMMENDED",
                   ].includes(statusUpper)) &&
                 submittedParticipations.length > 0 && (
-                  <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-start gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                          <ShieldCheck className="h-4 w-4" />
-                        </div>
-                        <div className="space-y-0.5">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
-                              Two-Packet Evaluation Workflow
-                            </span>
-                            {techEvaluationStats.pending === 0 &&
-                            techEvaluationStats.qualified > 0 ? (
-                              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <CheckCircle2 className="h-3 w-3" /> Technical
-                                Scrutiny Completed
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <Clock className="h-3 w-3" />{" "}
-                                {techEvaluationStats.pending} Pending Review
-                              </span>
-                            )}
+                  isTwoPacketMode ? (
+                    <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                            <ShieldCheck className="h-4 w-4" />
                           </div>
-                          <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
-                            {techEvaluationStats.pending === 0 &&
-                            techEvaluationStats.qualified > 0
-                              ? "Stage 1 Technical Evaluation Complete — Ready for Stage 2"
-                              : "Stage 1 Technical Scrutiny & Seller Qualification Required"}
-                          </h3>
-                          <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
-                            {techEvaluationStats.pending > 0
-                              ? `${submittedParticipations.length} supplier quotation(s) received. Review technical specifications, compliance attachments, and qualify suppliers before opening financial bids.`
-                              : `All ${submittedParticipations.length} supplier(s) evaluated (${techEvaluationStats.qualified} qualified, ${techEvaluationStats.disqualified} disqualified). Proceed to Stage 2 financial opening or launch Reverse Auction.`}
-                          </p>
+                          <div className="space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
+                                Two-Packet Evaluation Workflow
+                              </span>
+                              {techEvaluationStats.pending === 0 &&
+                              techEvaluationStats.qualified > 0 ? (
+                                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <CheckCircle2 className="h-3 w-3" /> Technical
+                                  Scrutiny Completed
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />{" "}
+                                  {techEvaluationStats.pending} Pending Review
+                                </span>
+                              )}
+                            </div>
+                            <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                              {techEvaluationStats.pending === 0 &&
+                              techEvaluationStats.qualified > 0
+                                ? "Stage 1 Technical Evaluation Complete — Ready for Stage 2"
+                                : "Stage 1 Technical Scrutiny & Seller Qualification Required"}
+                            </h3>
+                            <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                              {techEvaluationStats.pending > 0
+                                ? `${submittedParticipations.length} supplier quotation(s) received. Review technical specifications, compliance attachments, and qualify suppliers before opening financial bids.`
+                                : `All ${submittedParticipations.length} supplier(s) evaluated (${techEvaluationStats.qualified} qualified, ${techEvaluationStats.disqualified} disqualified). Proceed to Stage 2 financial opening or launch Reverse Auction.`}
+                            </p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            setActiveTab("clarifications");
-                            setTimeout(() => {
-                              const el =
-                                document.getElementById("proposals-section");
-                              if (el) el.scrollIntoView({ behavior: "smooth" });
-                            }, 50);
-                          }}
-                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs rounded-lg cursor-pointer"
-                        >
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                          <span>
-                            {techEvaluationStats.pending > 0
-                              ? "Start Technical Scrutiny"
-                              : "View Evaluation & Results"}
+                        <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setActiveTab("clarifications");
+                              setTimeout(() => {
+                                const el =
+                                  document.getElementById("proposals-section");
+                                if (el) el.scrollIntoView({ behavior: "smooth" });
+                              }, 50);
+                            }}
+                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs rounded-lg cursor-pointer"
+                          >
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            <span>Start Technical Scrutiny</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                          <span className="text-[10.5px] font-semibold text-slate-600 whitespace-nowrap">
+                            {techEvaluationStats.qualified} of{" "}
+                            {submittedParticipations.length} qualified
                           </span>
-                          <ArrowRight className="h-3 w-3" />
-                        </Button>
-                        <span className="text-[10px] font-semibold text-slate-500">
-                          {techEvaluationStats.qualified} of{" "}
-                          {submittedParticipations.length} qualified
-                        </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="rounded-xl border border-blue-150 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-2.5">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                            <ClipboardCheck className="h-4 w-4" />
+                          </div>
+                          <div className="space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-md">
+                                Single-Packet Quotation Evaluation
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Users className="h-3 w-3 text-slate-500" />
+                                {submittedParticipations.length} Quotation{submittedParticipations.length === 1 ? "" : "s"} Received
+                              </span>
+                            </div>
+                            <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                              Supplier Quotations Received — Ready for Evaluation
+                            </h3>
+                            <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                              {submittedParticipations.length} supplier quotation(s) received. All commercial rates, GST breakdowns, and technical specifications are unsealed for unified review, comparison, and contract award.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-blue-100">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setActiveTab("clarifications");
+                              setTimeout(() => {
+                                const el =
+                                  document.getElementById("proposals-section");
+                                if (el) el.scrollIntoView({ behavior: "smooth" });
+                              }, 50);
+                            }}
+                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-lg cursor-pointer"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            <span>Review Quotations</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                          <span className="text-[10.5px] font-semibold text-slate-600 whitespace-nowrap">
+                            Unified Commercial Review
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
                 )}
 
               {/* Seller Reassurance Banner: Submitted Quotation Under Evaluation */}
@@ -9985,7 +10004,7 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
 
-                  {/* Two-Packet Stage 1 Technical Evaluation Progress Banner */}
+                  {/* Two-Packet Stage 1 Technical Evaluation Progress Banner OR Single-Packet Header */}
                   {isTwoPacketMode &&
                     submittedParticipations.length > 0 &&
                     isEvaluationReady && (
@@ -10213,6 +10232,19 @@ export function ProcurementDetailUnifiedView(
                   isTwoPacketMode={isTwoPacketMode}
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isBidAwarded={isBidAwarded}
+                  canAward={Boolean(
+                    isBuyerOrAdmin &&
+                    isEvaluationReady &&
+                    !isBidAwarded &&
+                    (!activeAward || activeAward.awardStatus === "DECLINED") &&
+                    !effectiveActiveOrder,
+                  )}
+                  onAwardVendor={(p) => {
+                    setSelectedQuotationForReview(null);
+                    setAwardingParticipation(p);
+                    setAwardJustification("");
+                    setAwardRemarks("");
+                  }}
                   onOpenCompare={() => {
                     setSelectedQuotationForReview(null);
                     setSelectedCompareIds(
@@ -10607,6 +10639,8 @@ interface SellerQuotationReviewModalProps {
   isTwoPacketMode?: boolean;
   isFinancialStageOpened?: boolean;
   isBidAwarded?: boolean;
+  canAward?: boolean;
+  onAwardVendor?: (participation: any) => void;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
 }
@@ -10621,6 +10655,8 @@ export function SellerQuotationReviewModal({
   isTwoPacketMode,
   isFinancialStageOpened,
   isBidAwarded,
+  canAward,
+  onAwardVendor,
   onOpenCompare,
   onOpenTechnicalEvaluation,
 }: SellerQuotationReviewModalProps) {
@@ -11027,30 +11063,30 @@ export function SellerQuotationReviewModal({
     participation.responseData?.technicalScore ??
     participation.score;
 
-  const lineItems: any[] =
-    Array.isArray(participation.lineItems) && participation.lineItems.length
-      ? participation.lineItems
-      : Array.isArray(participation.responseData?.lineItems) &&
-          participation.responseData.lineItems.length
-        ? participation.responseData.lineItems
-        : Array.isArray(participation.responseData?.lineQuotes) &&
-            participation.responseData.lineQuotes.length
-          ? participation.responseData.lineQuotes
-          : Array.isArray(participation.lineQuotes) &&
-              participation.lineQuotes.length
-            ? participation.lineQuotes
-            : Array.isArray(
-                  participation.acknowledgement?.responseData?.lineItems,
-                ) && participation.acknowledgement.responseData.lineItems.length
-              ? participation.acknowledgement.responseData.lineItems
-              : Array.isArray(
-                    participation.acknowledgement?.responseData?.lineQuotes,
-                  ) &&
-                  participation.acknowledgement.responseData.lineQuotes.length
-                ? participation.acknowledgement.responseData.lineQuotes
-                : Array.isArray(participation.acknowledgement?.lineItems)
-                  ? participation.acknowledgement.lineItems
-                  : [];
+  const candList = [
+    participation.lineItems,
+    participation.items,
+    participation.lineQuotes,
+    participation.responseData?.lineItems,
+    participation.responseData?.items,
+    participation.responseData?.lineQuotes,
+    participation.responseData?.boqTable,
+    participation.details?.lineItems,
+    participation.details?.items,
+    participation.quotation?.lineItems,
+    participation.quotation?.items,
+    participation.acknowledgement?.responseData?.lineItems,
+    participation.acknowledgement?.responseData?.lineQuotes,
+    participation.acknowledgement?.lineItems,
+    participation.acknowledgement?.items,
+    participation.boqTable,
+  ];
+  let lineItems: any[] = [];
+  for (const arr of candList) {
+    if (Array.isArray(arr) && arr.length > lineItems.length) {
+      lineItems = arr;
+    }
+  }
   const docs: any[] =
     Array.isArray(participation.documents) && participation.documents.length
       ? participation.documents
@@ -11194,649 +11230,610 @@ export function SellerQuotationReviewModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="seller-quote-review-title"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+      aria-labelledby="quotation-review-modal-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn overflow-y-auto"
     >
-      <FocusTrap onEscape={onClose} className="w-full max-w-4xl">
-        <div className="flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
-                  {statusStr}
-                </span>
-                {isFinancialSealed ? (
-                  <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-indigo-800 inline-flex items-center gap-1">
-                    <Lock className="h-2.5 w-2.5" /> Stage 1: Technical Scrutiny
-                    (Financial Sealed)
+      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-4xl my-auto">
+        <div className="flex max-h-[92vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+          {/* Enhanced Header */}
+          <div className="relative border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="rounded bg-emerald-400/20 border border-emerald-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-emerald-200">
+                    {statusStr}
                   </span>
-                ) : (
-                  <span className="text-xs font-bold text-slate-400">
-                    Submitted Seller Quotation
-                  </span>
+                  {isFinancialSealed ? (
+                    <span className="rounded bg-indigo-400/20 border border-indigo-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-indigo-200 inline-flex items-center gap-1">
+                      <Lock className="h-3 w-3 text-indigo-300" /> Stage 1: Technical Scrutiny (Financials Sealed)
+                    </span>
+                  ) : isTwoPacketMode ? (
+                    <span className="rounded bg-emerald-400/20 border border-emerald-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-emerald-200 inline-flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-emerald-300" /> Stage 2: Financials Unsealed
+                    </span>
+                  ) : (
+                    <span className="rounded bg-sky-400/20 border border-sky-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-sky-200 inline-flex items-center gap-1">
+                      <FileText className="h-3 w-3 text-sky-300" /> Single-Packet Commercial Quotation
+                    </span>
+                  )}
+                </div>
+                <h2 id="quotation-review-modal-title" className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                  {sellerOrg}
+                </h2>
+                {procurementTitle && (
+                  <p className="text-xs font-medium text-blue-200/90 truncate max-w-lg mt-0.5">
+                    For: {procurementTitle}
+                  </p>
                 )}
               </div>
-              <h2 id="seller-quote-review-title" className="text-lg font-black text-slate-900 mt-0.5">
-                {sellerOrg}
-              </h2>
-              {procurementTitle && (
-                <p className="text-xs font-semibold text-slate-500 truncate max-w-md">
-                  For: {procurementTitle}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {!isFinancialSealed && (
-                <Button
+              <div className="flex items-center gap-2 shrink-0">
+                {!isFinancialSealed && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleDownloadQuotationPdf}
+                    className="flex items-center gap-1.5 border-white/20 bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer shadow-2xs"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Download PDF</span>
+                  </Button>
+                )}
+                <button
                   type="button"
-                  variant="outline"
-                  onClick={handleDownloadQuotationPdf}
-                  className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+                  onClick={onClose}
+                  className="rounded-lg p-2 text-blue-200 hover:bg-white/15 hover:text-white transition-all cursor-pointer border border-transparent hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
+                  aria-label="Close quotation review modal"
                 >
-                  <Download className="h-3.5 w-3.5" />
-                  Download PDF
-                </Button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
-                aria-label="Close quotation review dialog"
-              >
-                <X className="h-5 w-5" />
-              </button>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
           </div>
 
-        {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
-          {/* Supplier Technical Specifications & Offer Overview */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
-                  <Tag className="h-3.5 w-3.5" />
+          {/* Scrollable Body */}
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5 custom-scrollbar">
+            {/* Top Highlights KPI Metric Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 shadow-2xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                  Total Quoted Value
+                </span>
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate">
+                  {isFinancialSealed ? (
+                    <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-indigo-700">
+                      <Lock className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                      Sealed (Stage 2)
+                    </span>
+                  ) : quotedAmount > 0 ? (
+                    `₹${quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+                  ) : (
+                    "Rates On File"
+                  )}
                 </div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                  Supplier Technical Offer &amp; Specifications
-                </h4>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                  {isFinancialSealed ? "Unlocks upon technical qualification" : "Total quoted value (incl. GST)"}
+                </p>
               </div>
-              {isFinancialSealed && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-[10.5px] font-bold text-indigo-700">
-                  <Lock className="h-3 w-3 text-indigo-500" />
-                  Commercial Proposal Sealed (Stage 2)
-                </span>
-              )}
-            </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="space-y-0.5">
-                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
-                  Make / Brand
-                </span>
-                <p className="font-bold text-slate-900">{makeBrand}</p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
-                  Model / Specifications
-                </span>
-                <p className="font-bold text-slate-900">{model}</p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
-                  Offered Quantity
-                </span>
-                <p className="font-bold text-slate-900">{offeredQty}</p>
-              </div>
-              <div className="space-y-0.5">
-                <span className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wide">
+              <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 shadow-2xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Delivery Timeline SLA
                 </span>
-                <p className="font-bold text-slate-900">{deliveryTimeline}</p>
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                  <Truck className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span className="truncate">{deliveryTimeline}</span>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                  Promised fulfillment window
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 shadow-2xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                  Quoted Scope &amp; Qty
+                </span>
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span className="truncate">{offeredQty}</span>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                  {lineItems.length > 0 ? `${lineItems.length} line item(s) quoted` : "Offered delivery scope"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 shadow-2xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                  Technical Compliance
+                </span>
+                <div className="mt-1 text-base sm:text-lg font-black truncate">
+                  <span className={cn(
+                    "inline-flex items-center gap-1 text-xs sm:text-sm font-bold",
+                    complianceStatement === "WITH_DEVIATION"
+                      ? "text-amber-700"
+                      : complianceStatement === "ALTERNATIVE_OFFERED"
+                        ? "text-purple-700"
+                        : "text-emerald-700"
+                  )}>
+                    {complianceStatement === "WITH_DEVIATION" ? (
+                      "⚠ Minor Deviation"
+                    ) : complianceStatement === "ALTERNATIVE_OFFERED" ? (
+                      "✦ Alternative Offered"
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span>100% Compliant</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                  Seller declaration status
+                </p>
               </div>
             </div>
 
-            {message && (
-              <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 text-xs text-slate-700">
-                <span className="font-bold text-slate-500 uppercase text-[10px] block mb-0.5">
-                  Supplier Remarks / Item Description:
-                </span>
-                <p className="font-medium text-slate-800">"{message}"</p>
-              </div>
-            )}
-          </div>
-
-          {/* Stage 1: Technical Packet Evaluation Summary Card */}
-          <div
-            className={`rounded-xl border p-4 transition-all ${
-              techStatus === "QUALIFIED"
-                ? "border-emerald-200 bg-emerald-50/60"
-                : techStatus === "DISQUALIFIED"
-                  ? "border-rose-200 bg-rose-50/60"
-                  : "border-amber-200 bg-amber-50/60"
-            }`}
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${
-                    techStatus === "QUALIFIED"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : techStatus === "DISQUALIFIED"
-                        ? "bg-rose-100 text-rose-700"
-                        : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  <FileText className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-500">
-                      Stage 1 Evaluation:
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${
+            {/* TWO-PACKET ONLY: Stage 1 Technical Packet Evaluation Summary Card */}
+            {isTwoPacketMode && (
+              <div
+                className={`rounded-xl border p-4 transition-all ${
+                  techStatus === "QUALIFIED"
+                    ? "border-emerald-200 bg-emerald-50/60"
+                    : techStatus === "DISQUALIFIED"
+                      ? "border-rose-200 bg-rose-50/60"
+                      : "border-amber-200 bg-amber-50/60"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
                         techStatus === "QUALIFIED"
-                          ? "bg-emerald-100 border border-emerald-300 text-emerald-800"
+                          ? "bg-emerald-100 text-emerald-700"
                           : techStatus === "DISQUALIFIED"
-                            ? "bg-rose-100 border border-rose-300 text-rose-800"
-                            : "bg-amber-100 border border-amber-300 text-amber-800"
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-amber-100 text-amber-700"
                       }`}
                     >
-                      {techStatus === "QUALIFIED" && (
-                        <CheckCircle2 className="h-3 w-3" />
-                      )}
-                      {techStatus === "DISQUALIFIED" && (
-                        <XCircle className="h-3 w-3" />
-                      )}
-                      {techStatus === "PENDING" && (
-                        <Clock className="h-3 w-3" />
-                      )}
-                      {techStatus === "QUALIFIED"
-                        ? "Technically Qualified"
-                        : techStatus === "DISQUALIFIED"
-                          ? "Disqualified (Failed Tech Packet)"
-                          : "Pending Technical Review"}
-                    </span>
-                    {techScore != null && (
-                      <span className="rounded-md bg-white/80 border border-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">
-                        Score: {techScore}/100
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    {techStatus === "QUALIFIED"
-                      ? "This vendor has passed technical packet scrutiny and is eligible for Stage 2 commercial opening / reverse auction."
-                      : techStatus === "DISQUALIFIED"
-                        ? "This vendor has been rejected at Stage 1 and will NOT be admitted to Stage 2 financial opening or reverse auction."
-                        : "Technical packet must be evaluated and qualified before this vendor can participate in Stage 2 commercial opening."}
-                  </p>
-                  {techRemarks && (
-                    <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
-                      <span className="font-bold text-slate-500">
-                        Evaluation Remarks:{" "}
-                      </span>
-                      {techRemarks}
+                      <ShieldCheck className="h-5 w-5" />
                     </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                          Stage 1 Evaluation:
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide ${
+                            techStatus === "QUALIFIED"
+                              ? "bg-emerald-100 border border-emerald-300 text-emerald-800"
+                              : techStatus === "DISQUALIFIED"
+                                ? "bg-rose-100 border border-rose-300 text-rose-800"
+                                : "bg-amber-100 border border-amber-300 text-amber-800"
+                          }`}
+                        >
+                          {techStatus === "QUALIFIED" && (
+                            <CheckCircle2 className="h-3 w-3" />
+                          )}
+                          {techStatus === "DISQUALIFIED" && (
+                            <XCircle className="h-3 w-3" />
+                          )}
+                          {techStatus === "PENDING" && (
+                            <Clock className="h-3 w-3" />
+                          )}
+                          {techStatus === "QUALIFIED"
+                            ? "Technically Qualified"
+                            : techStatus === "DISQUALIFIED"
+                              ? "Disqualified (Failed Tech Packet)"
+                              : "Pending Technical Review"}
+                        </span>
+                        {techScore != null && (
+                          <span className="rounded-md bg-white/80 border border-slate-200 px-2 py-0.5 text-xs font-bold text-slate-700">
+                            Score: {techScore}/100
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        {techStatus === "QUALIFIED"
+                          ? "This vendor has passed technical scrutiny and is eligible for Stage 2 commercial opening / reverse auction."
+                          : techStatus === "DISQUALIFIED"
+                            ? "This vendor has been disqualified at Stage 1 and will NOT be admitted to Stage 2 financial opening."
+                            : "Technical packet must be evaluated and qualified before this vendor can participate in Stage 2 commercial opening."}
+                      </p>
+                      {techRemarks && (
+                        <div className="mt-2 rounded-lg bg-white/90 border border-slate-200 p-2 text-xs text-slate-800">
+                          <span className="font-bold text-slate-500">
+                            Evaluation Remarks:{" "}
+                          </span>
+                          {techRemarks}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {onOpenTechnicalEvaluation && !isBidAwarded && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        onOpenTechnicalEvaluation(participation);
+                      }}
+                      className={`font-bold text-xs shadow-xs cursor-pointer ${
+                        techStatus === "QUALIFIED"
+                          ? "border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
+                          : techStatus === "DISQUALIFIED"
+                            ? "border border-rose-300 bg-white text-rose-800 hover:bg-rose-50"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+                      {techStatus === "PENDING"
+                        ? "Evaluate Technical Packet"
+                        : "Update Technical Evaluation"}
+                    </Button>
                   )}
                 </div>
               </div>
-              {onOpenTechnicalEvaluation && (
+            )}
+
+            {/* Supplier Profile & Commercial Terms Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 space-y-2.5 shadow-2xs">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-50 text-blue-700">
+                    <Building2 className="h-3.5 w-3.5" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Supplier Organization &amp; Representative
+                  </h4>
+                </div>
+                <div className="text-xs space-y-1.5 text-slate-700 font-medium">
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Company:</span>
+                    <span className="font-bold text-slate-900 text-right">{sellerOrg}</span>
+                  </p>
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Representative:</span>
+                    <span className="font-bold text-slate-800 text-right">{contactPerson}</span>
+                  </p>
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Email:</span>
+                    <span className="text-blue-600 font-medium text-right">{email}</span>
+                  </p>
+                  <p className="flex justify-between items-center py-0.5">
+                    <span className="text-slate-400 font-bold">Contact Phone:</span>
+                    <span className="font-bold text-slate-800 text-right">{phone}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 space-y-2.5 shadow-2xs">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-emerald-50 text-emerald-700">
+                    <IndianRupee className="h-3.5 w-3.5" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Commercial &amp; Submission Terms
+                  </h4>
+                </div>
+                <div className="text-xs space-y-1.5 text-slate-700 font-medium">
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Total Quoted:</span>
+                    {isFinancialSealed ? (
+                      <span className="font-bold text-indigo-700 inline-flex items-center gap-1">
+                        <Lock className="h-3 w-3 text-indigo-500" /> Sealed (Stage 2)
+                      </span>
+                    ) : quotedAmount > 0 ? (
+                      <span className="font-black text-emerald-700">
+                        ₹{quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">Rates On File</span>
+                    )}
+                  </p>
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Payment Terms:</span>
+                    <span className="font-bold text-slate-800 text-right">{paymentTerms}</span>
+                  </p>
+                  <p className="flex justify-between items-center py-0.5 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold">Delivery Terms:</span>
+                    <span className="font-bold text-slate-800 text-right">{deliveryTimeline}</span>
+                  </p>
+                  <p className="flex justify-between items-center py-0.5">
+                    <span className="text-slate-400 font-bold">Submission Time:</span>
+                    <span className="font-semibold text-slate-600 text-right">
+                      {submittedAt ? formatDateTime(submittedAt) : "—"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Technical Specifications, Model & Remarks */}
+            {(makeBrand !== "—" || model !== "—" || techSpecs || message) && (
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-50 text-purple-700">
+                    <Tag className="h-3.5 w-3.5" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Offered Product Specifications &amp; Parameters
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Make / Brand
+                    </span>
+                    <p className="font-bold text-slate-900 truncate">{makeBrand}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Model / Ref No
+                    </span>
+                    <p className="font-bold text-slate-900 truncate">{model}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Offered Quantity
+                    </span>
+                    <p className="font-bold text-slate-900 truncate">{offeredQty}</p>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                      Delivery Window
+                    </span>
+                    <p className="font-bold text-slate-900 truncate">{deliveryTimeline}</p>
+                  </div>
+                </div>
+
+                {techSpecs && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                      Technical Specifications:
+                    </span>
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">
+                      {techSpecs}
+                    </p>
+                  </div>
+                )}
+
+                {message && message !== techSpecs && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                      Supplier Remarks / Cover Note:
+                    </span>
+                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">
+                      "{message}"
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quoted Line Items Breakdown Table */}
+            {lineItems.length > 0 && (
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                    <Package className="h-4 w-4 text-slate-500" /> Quoted Line Items Breakdown ({lineItems.length})
+                  </h4>
+                  {isFinancialSealed && (
+                    <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                      <Lock className="h-2.5 w-2.5 text-indigo-500" /> Rates sealed under Stage 2
+                    </span>
+                  )}
+                </div>
+                <DataTable<any>
+                  data={lineItems}
+                  columns={reviewLineItemsColumns}
+                  keyExtractor={(item, idx) => String(item.id || idx)}
+                  showSrNo={false}
+                  minWidth="min-w-[650px]"
+                  emptyTitle="No line items"
+                  emptyDescription="No line items attached."
+                  footer={
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider"
+                      >
+                        Total Quoted Value (incl. GST)
+                      </td>
+                      <td className="px-3 py-2 text-right text-sm font-black tabular-nums">
+                        {isFinancialSealed ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
+                            <Lock className="h-3 w-3 text-indigo-500" /> Commercial Bid Sealed (Stage 2)
+                          </span>
+                        ) : quotedAmount > 0 ? (
+                          <span className="text-emerald-700 font-black">
+                            ₹{quotedAmount.toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    </tr>
+                  }
+                />
+              </div>
+            )}
+
+            {/* Proposal Files & Attachments */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <FileText className="h-4 w-4 text-slate-500" /> Supplier Proposal Files &amp; Attachments
+              </h4>
+              {docs.length === 0 ? (
+                <p className="text-xs text-slate-400 font-semibold italic bg-slate-50 p-3 rounded-lg border border-dashed border-slate-200">
+                  No file attachments uploaded with this quotation.
+                </p>
+              ) : (
+                (() => {
+                  const techDocs = docs.filter((d: any) => {
+                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                    const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
+                    return c.includes("tech") || c.includes("spec") || c.includes("compliance") || n.includes("tech") || n.includes("spec");
+                  });
+                  const finDocs = docs.filter((d: any) => {
+                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                    const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
+                    return c.includes("finan") || c.includes("quote") || c.includes("price") || n.includes("price") || n.includes("quote") || n.includes("cost");
+                  });
+                  const boqDocs = docs.filter((d: any) => {
+                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                    const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
+                    return c.includes("boq") || c.includes("schedule") || n.includes("boq") || n.includes("sheet") || n.includes("excel");
+                  });
+                  const otherDocs = docs.filter((d: any) => !techDocs.includes(d) && !finDocs.includes(d) && !boqDocs.includes(d));
+
+                  const renderDocItem = (doc: any, idx: number, iconColor: string) => {
+                    const docName = doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
+                    const isCurrentlyLoading = previewLoadingId === (doc.id || docName);
+                    return (
+                      <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className={`h-4 w-4 ${iconColor} shrink-0`} />
+                          <div className="min-w-0">
+                            <p className="text-xs font-extrabold text-slate-900 truncate" title={docName}>{docName}</p>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">{doc.documentCategory || doc.documentType || "Proposal Document"}</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={isCurrentlyLoading}
+                          onClick={(e) => { e.stopPropagation(); handleViewAttachment(doc, docName); }}
+                          className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          {isCurrentlyLoading ? <Loader2 className="h-3 w-3 animate-spin text-blue-600" /> : <Eye className="h-3 w-3 text-blue-600" />}
+                          View
+                        </button>
+                      </div>
+                    );
+                  };
+
+                  return (
+                    <div className="space-y-3">
+                      {techDocs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider">
+                            Technical Specifications &amp; Datasheets ({techDocs.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {techDocs.map((d: any, i: number) => renderDocItem(d, i, "text-blue-600"))}
+                          </div>
+                        </div>
+                      )}
+                      {finDocs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
+                            Financial Proposals &amp; Detailed Quotations ({finDocs.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {finDocs.map((d: any, i: number) => renderDocItem(d, i, "text-emerald-600"))}
+                          </div>
+                        </div>
+                      )}
+                      {boqDocs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">
+                            BOQ &amp; Rate Schedules ({boqDocs.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {boqDocs.map((d: any, i: number) => renderDocItem(d, i, "text-purple-600"))}
+                          </div>
+                        </div>
+                      )}
+                      {otherDocs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
+                            Statutory &amp; Compliance Attachments ({otherDocs.length})
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {otherDocs.map((d: any, i: number) => renderDocItem(d, i, "text-slate-600"))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+            </div>
+          </div>
+
+          {/* Modal Footer Actions */}
+          <div className="flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+            >
+              Close
+            </Button>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {onOpenCompare && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onOpenCompare();
+                  }}
+                  className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+                >
+                  <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                  Compare Quotations
+                </Button>
+              )}
+
+              {/* In Two-Packet mode ONLY: Stage 1 Evaluate Technical Packet button if pending/not awarded */}
+              {isTwoPacketMode && onOpenTechnicalEvaluation && !isBidAwarded && (
                 <Button
                   type="button"
                   size="sm"
                   onClick={() => {
                     onOpenTechnicalEvaluation(participation);
                   }}
-                  className={`font-bold text-xs shadow-xs ${
-                    techStatus === "QUALIFIED"
-                      ? "border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
-                      : techStatus === "DISQUALIFIED"
-                        ? "border border-rose-300 bg-white text-rose-800 hover:bg-rose-50"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                  }`}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
                 >
-                  {isBidAwarded ? (
-                    <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  ) : (
-                    <FileText className="h-3.5 w-3.5 mr-1.5" />
-                  )}
+                  <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
                   {techStatus === "PENDING"
                     ? "Evaluate Technical Packet"
-                    : isBidAwarded
-                      ? "View Technical Evaluation"
-                      : "Update Technical Evaluation"}
+                    : "Update Technical Review"}
+                </Button>
+              )}
+
+              {/* In Single-Packet mode: Allow direct awarding when eligible */}
+              {!isTwoPacketMode && canAward && onAwardVendor && !isBidAwarded && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    onClose();
+                    onAwardVendor(participation);
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs cursor-pointer"
+                >
+                  <Award className="h-3.5 w-3.5 mr-1.5" />
+                  Award Quotation
                 </Button>
               )}
             </div>
           </div>
-
-          {/* Supplier & Commercial Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-slate-500" /> Supplier
-                Information
-              </h4>
-              <div className="text-xs space-y-1 text-slate-700 font-medium">
-                <p>
-                  <span className="text-slate-400 font-bold">Company:</span>{" "}
-                  {sellerOrg}
-                </p>
-                <p>
-                  <span className="text-slate-400 font-bold">
-                    Contact Person:
-                  </span>{" "}
-                  {contactPerson}
-                </p>
-                <p>
-                  <span className="text-slate-400 font-bold">Email:</span>{" "}
-                  {email}
-                </p>
-                <p>
-                  <span className="text-slate-400 font-bold">Phone:</span>{" "}
-                  {phone}
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-2">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <IndianRupee className="h-4 w-4 text-slate-500" /> Commercial
-                &amp; Submission Terms
-              </h4>
-              <div className="text-xs space-y-1 text-slate-700 font-medium">
-                <p>
-                  <span className="text-slate-400 font-bold">
-                    Total Quoted Value:
-                  </span>{" "}
-                  {isFinancialSealed ? (
-                    <span className="font-bold text-indigo-700 inline-flex items-center gap-1">
-                      <Lock className="h-3 w-3 text-indigo-500" /> Sealed (Stage
-                      2 Financial Opening)
-                    </span>
-                  ) : quotedAmount > 0 ? (
-                    <span className="font-black text-slate-900">
-                      ₹
-                      {quotedAmount.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  ) : (
-                    "Sealed / Rates On File"
-                  )}
-                </p>
-                <p>
-                  <span className="text-slate-400 font-bold">
-                    Payment Terms:
-                  </span>{" "}
-                  {paymentTerms}
-                </p>
-                <p>
-                  <span className="text-slate-400 font-bold">
-                    Submitted At:
-                  </span>{" "}
-                  {submittedAt ? formatDateTime(submittedAt) : "—"}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Offered Technical Specifications & Compliance Summary */}
-          {(techSpecs ||
-            model !== "—" ||
-            makeBrand !== "—" ||
-            complianceStatement ||
-            message) && (
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-slate-500" /> Offered
-                Technical Specifications &amp; Parameters
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                  <span className="text-slate-400 font-bold block text-[10.5px]">
-                    Offered Make / Brand:
-                  </span>
-                  <span className="font-bold text-slate-800">{makeBrand}</span>
-                </div>
-                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                  <span className="text-slate-400 font-bold block text-[10.5px]">
-                    Offered Model / Cat. No.:
-                  </span>
-                  <span className="font-bold text-slate-800">{model}</span>
-                </div>
-                <div className="rounded-lg bg-white border border-slate-200 p-2.5">
-                  <span className="text-slate-400 font-bold block text-[10.5px]">
-                    Compliance Declaration:
-                  </span>
-                  <span className="font-bold text-emerald-800 inline-flex items-center gap-1">
-                    {complianceStatement === "WITH_DEVIATION"
-                      ? "⚠ Minor Deviation"
-                      : complianceStatement === "ALTERNATIVE_OFFERED"
-                        ? "✦ Alternative Product"
-                        : "✓ 100% Fully Compliant"}
-                  </span>
-                </div>
-              </div>
-              {techSpecs && (
-                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                    Offered Technical Specifications Description:
-                  </span>
-                  <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">
-                    {techSpecs}
-                  </p>
-                </div>
-              )}
-              {message && message !== techSpecs && (
-                <div className="rounded-lg bg-white border border-slate-200 p-3 text-xs text-slate-800">
-                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                    Quotation Message / Cover Note:
-                  </span>
-                  <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">
-                    {message}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Line Items Table (if any) */}
-          {lineItems.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <Package className="h-4 w-4 text-slate-500" /> Quoted Line Items
-                Breakdown
-              </h4>
-              <DataTable<any>
-                data={lineItems}
-                columns={reviewLineItemsColumns}
-                keyExtractor={(item, idx) => String(item.id || idx)}
-                showSrNo={false}
-                minWidth="min-w-[650px]"
-                emptyTitle="No line items"
-                emptyDescription="No line items attached."
-                footer={
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider"
-                    >
-                      Total Quoted Value (incl. GST)
-                    </td>
-                    <td className="px-3 py-2 text-right text-sm font-black tabular-nums">
-                      {isFinancialSealed ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
-                          <Lock className="h-3 w-3 text-indigo-500" />{" "}
-                          Commercial Bid Sealed (Stage 2)
-                        </span>
-                      ) : quotedAmount > 0 ? (
-                        <span className="text-emerald-700 font-black">
-                          ₹
-                          {quotedAmount.toLocaleString("en-IN", {
-                            minimumFractionDigits: 2,
-                          })}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                }
-              />
-            </div>
-          )}
-
-          {/* Attached Files & Proposals (Separated into Technical, Financial, BOQ, Compliance) */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-              <FileText className="h-4 w-4 text-slate-500" /> Supplier Proposal
-              Files & Attachments
-            </h4>
-            {docs.length === 0 ? (
-              <p className="text-xs text-slate-400 font-semibold italic">
-                No file attachments uploaded with this quotation.
-              </p>
-            ) : (
-              (() => {
-                const techDocs = docs.filter((d: any) => {
-                  const c = String(
-                    d.documentCategory || d.documentType || "",
-                  ).toLowerCase();
-                  const n = String(
-                    d.documentName || d.fileName || d.name || "",
-                  ).toLowerCase();
-                  return (
-                    c.includes("tech") ||
-                    c.includes("spec") ||
-                    c.includes("compliance") ||
-                    n.includes("tech") ||
-                    n.includes("spec")
-                  );
-                });
-                const finDocs = docs.filter((d: any) => {
-                  const c = String(
-                    d.documentCategory || d.documentType || "",
-                  ).toLowerCase();
-                  const n = String(
-                    d.documentName || d.fileName || d.name || "",
-                  ).toLowerCase();
-                  return (
-                    c.includes("finan") ||
-                    c.includes("quote") ||
-                    c.includes("price") ||
-                    n.includes("price") ||
-                    n.includes("quote") ||
-                    n.includes("cost")
-                  );
-                });
-                const boqDocs = docs.filter((d: any) => {
-                  const c = String(
-                    d.documentCategory || d.documentType || "",
-                  ).toLowerCase();
-                  const n = String(
-                    d.documentName || d.fileName || d.name || "",
-                  ).toLowerCase();
-                  return (
-                    c.includes("boq") ||
-                    c.includes("schedule") ||
-                    n.includes("boq") ||
-                    n.includes("sheet") ||
-                    n.includes("excel")
-                  );
-                });
-                const otherDocs = docs.filter(
-                  (d: any) =>
-                    !techDocs.includes(d) &&
-                    !finDocs.includes(d) &&
-                    !boqDocs.includes(d),
-                );
-
-                const renderDocItem = (
-                  doc: any,
-                  idx: number,
-                  iconColor: string,
-                ) => {
-                  const docName =
-                    doc.documentName ||
-                    doc.name ||
-                    doc.fileName ||
-                    `Attachment #${idx + 1}`;
-                  const isCurrentlyLoading =
-                    previewLoadingId === (doc.id || docName);
-
-                  return (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-3"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <FileText className={`h-4 w-4 ${iconColor} shrink-0`} />
-                        <div className="min-w-0">
-                          <p
-                            className="text-xs font-extrabold text-slate-900 truncate"
-                            title={docName}
-                          >
-                            {docName}
-                          </p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">
-                            {doc.documentCategory ||
-                              doc.documentType ||
-                              "Proposal File"}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={isCurrentlyLoading}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleViewAttachment(doc, docName);
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-[11px] font-bold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 cursor-pointer shadow-2xs disabled:opacity-50"
-                      >
-                        {isCurrentlyLoading ? (
-                          <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
-                        ) : (
-                          <Eye className="h-3 w-3 text-blue-600" />
-                        )}
-                        View
-                      </button>
-                    </div>
-                  );
-                };
-
-                return (
-                  <div className="space-y-3">
-                    {techDocs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider">
-                          Technical Proposals & Specifications (
-                          {techDocs.length})
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {techDocs.map((d: any, i: number) =>
-                            renderDocItem(d, i, "text-blue-600"),
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {finDocs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
-                          Financial Quotes & Commercial Bids ({finDocs.length})
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {finDocs.map((d: any, i: number) =>
-                            renderDocItem(d, i, "text-emerald-600"),
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {boqDocs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">
-                          BOQ & Rate Schedules ({boqDocs.length})
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {boqDocs.map((d: any, i: number) =>
-                            renderDocItem(d, i, "text-purple-600"),
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {otherDocs.length > 0 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
-                          Statutory & Compliance Attachments ({otherDocs.length}
-                          )
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {otherDocs.map((d: any, i: number) =>
-                            renderDocItem(d, i, "text-slate-600"),
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()
-            )}
-          </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="font-bold"
-          >
-            Close
-          </Button>
-          <div className="flex items-center gap-2">
-            {onOpenTechnicalEvaluation && (
-              <Button
-                type="button"
-                onClick={() => {
-                  onOpenTechnicalEvaluation(participation);
-                }}
-                className={`font-bold text-xs shadow-xs ${
-                  techStatus === "PENDING"
-                    ? "bg-amber-600 hover:bg-amber-700 text-white"
-                    : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-                }`}
-              >
-                <FileText className="h-4 w-4 mr-1.5" />
-                {techStatus === "PENDING"
-                  ? "Evaluate Technical Packet"
-                  : "Edit Tech Evaluation"}
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                onClose();
-                if (onOpenCompare) {
-                  onOpenCompare();
-                } else {
-                  router.push(`/bids/${targetId}/compare`);
-                }
-              }}
-              className="font-bold text-slate-700"
-            >
-              Compare Bids
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                onClose();
-                router.push(`/bids/${targetId}/results`);
-              }}
-              className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm"
-            >
-              Evaluation & Awarding
-              <ArrowRight className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Document Preview Modal */}
-        {previewDocument && (
-          <DocumentPreviewModal
-            previewDocument={previewDocument}
-            onClose={() => setPreviewDocument(null)}
-          />
-        )}
-      </div>
       </FocusTrap>
+
+      {/* Document Preview Modal */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          previewDocument={previewDocument}
+          onClose={() => setPreviewDocument(null)}
+        />
+      )}
     </div>
   );
 }

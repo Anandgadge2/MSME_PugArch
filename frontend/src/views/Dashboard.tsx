@@ -18,7 +18,7 @@ import { resolveMarketplaceImage } from '../features/marketplace/utils/marketpla
 import { AIInsightBox } from '../features/dashboard/components/AIInsightBox';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 import { LiveOpportunityRadar } from '../features/dashboard/components/LiveOpportunityRadar';
-import { BiddingPerformanceChart } from '../features/dashboard/components/BiddingPerformanceChart';
+import { SellerCreativeAnalytics } from '../features/dashboard/components/SellerCreativeAnalytics';
 import { UrgentActionsInbox } from '../features/dashboard/components/UrgentActionsInbox';
 import { RecentOrdersSnapshot } from '../features/dashboard/components/RecentOrdersSnapshot';
 import { BuyerProcurementMonitor } from '../features/dashboard/components/BuyerProcurementMonitor';
@@ -920,13 +920,16 @@ export default function Dashboard() {
             <div className="lg:col-span-4 space-y-3.5">
               <UrgentActionsInbox />
               
-              <BiddingPerformanceChart 
-                stats={analyticsData?.conversion ?? {
-                  submitted: Number(summaryData?.sellerSubmittedBidsCount || summaryData?.sellerQuotationsCount || 0),
-                  won: Number(summaryData?.sellerActivePOsCount || 0),
-                  underEval: Number(summaryData?.sellerOpportunitiesCount || 0),
-                  pipelineValue: 0
+              <SellerCreativeAnalytics 
+                cashflowLifecycle={analyticsData?.cashflowLifecycle}
+                conversion={analyticsData?.conversion}
+                opportunityCounts={{
+                  total: Number(summaryData?.sellerOpportunitiesCount || 0),
+                  tenders: Number(summaryData?.sellerOpenTendersCount || 0),
+                  rfqs: Number(summaryData?.sellerRfqsCount ?? summaryData?.sellerReceivedRfqsCount ?? 0),
+                  auctions: Number(summaryData?.reverseAuctionsLive || summaryData?.reverseAuctionInvites || 0),
                 }}
+                isLoading={isAnalyticsLoading}
               />
 
               {/* Compact Verification & Support Cards */}

@@ -7019,7 +7019,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         sellerId: null,
         deadlineDate: req.lastDate,
         submissionStartDate: sched?.submissionStartDate || sched?.startDate || req.startDate || null,
-        allowClarification: sched?.clarificationAllowed !== false && (req as any).allowClarification !== false
+        allowClarification: sched?.clarificationAllowed !== false && (req as any).allowClarification !== false,
+        status: (req as any).status || 'PUBLISHED'
       };
     }
 
@@ -7034,7 +7035,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         sellerId: null,
         deadlineDate: bid.endDate,
         submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
-        allowClarification: bid.allowClarification !== false
+        allowClarification: bid.allowClarification !== false,
+        status: bid.status || 'PUBLISHED'
       };
     }
 
@@ -7051,7 +7053,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         sellerId: null,
         deadlineDate: rawEnd || null,
         submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacyReq.payload as any)?.tender?.bidStartDate || legacyReq.startDate || null,
-        allowClarification: sched?.clarificationAllowed !== false
+        allowClarification: sched?.clarificationAllowed !== false,
+        status: 'PUBLISHED'
       };
     }
   }
@@ -7082,7 +7085,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       sellerId: null,
       deadlineDate: bidMatch.endDate,
       submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bidMatch.technicalPacket as any)?.tender?.bidStartDate || bidMatch.startDate || null,
-      allowClarification: bidMatch.allowClarification !== false
+      allowClarification: bidMatch.allowClarification !== false,
+      status: bidMatch.status || 'PUBLISHED'
     };
   }
   if (reqMatch) {
@@ -7096,7 +7100,8 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       sellerId: null,
       deadlineDate: rawEnd || null,
       submissionStartDate: sched?.submissionStartDate || sched?.startDate || (reqMatch.payload as any)?.tender?.bidStartDate || reqMatch.startDate || null,
-      allowClarification: sched?.clarificationAllowed !== false
+      allowClarification: sched?.clarificationAllowed !== false,
+      status: 'PUBLISHED'
     };
   }
 
@@ -7116,14 +7121,19 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     throw new ApiError(400, 'Clarifications are not enabled for this procurement.', 'CLARIFICATIONS_DISABLED');
   }
 
-  const rawSubmissionStart = (quote as any).submissionStartDate;
-  if (rawSubmissionStart) {
-    let startD = new Date(rawSubmissionStart);
-    if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
-      startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
-    }
-    if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
-      throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+  // Only enforce submission-start-date gate if the quote is NOT already in an active/open status.
+  const quoteActiveStatuses = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'];
+  const quoteStatus = String((quote as any).status || '').toUpperCase();
+  if (!quoteActiveStatuses.includes(quoteStatus)) {
+    const rawSubmissionStart = (quote as any).submissionStartDate;
+    if (rawSubmissionStart) {
+      let startD = new Date(rawSubmissionStart);
+      if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+        startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+      }
+      if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+        throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+      }
     }
   }
 
