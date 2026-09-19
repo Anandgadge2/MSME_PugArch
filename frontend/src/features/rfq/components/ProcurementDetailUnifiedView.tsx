@@ -537,45 +537,45 @@ function getEvaluationMethodDetails(
   }
 
   // 2. Item-wise L1
-  // if (lower.includes("item-wise") || lower.includes("item wise")) {
-  //   return {
-  //     title: "Item-wise L1 Evaluation",
-  //     badge: "Split Line-by-Line",
-  //     basisLabel: "Lowest Landed Cost Per Item",
-  //     shortSummary:
-  //       "Each line item is evaluated independently for lowest landed cost.",
-  //     description:
-  //       "Line items are evaluated independently on their landed price. Contracts or Purchase Orders may be awarded separately to the lowest responsive bidder (L1) for each individual line item, allowing split awards across multiple vendors.",
-  //     keyPoints: [
-  //       "Independent Line Item Evaluation",
-  //       "Lowest Landed Cost (L1) Per Item",
-  //       "Multiple Supplier Awards Permitted",
-  //     ],
-  //   };
-  // }
+  if (lower.includes("item-wise") || lower.includes("item wise")) {
+    return {
+      title: "Item-wise L1 Evaluation",
+      badge: "Split Line-by-Line",
+      basisLabel: "Lowest Landed Cost Per Item",
+      shortSummary:
+        "Each line item is evaluated independently for lowest landed cost.",
+      description:
+        "Line items are evaluated independently on their landed price. Contracts or Purchase Orders may be awarded separately to the lowest responsive bidder (L1) for each individual line item, allowing split awards across multiple vendors.",
+      keyPoints: [
+        "Independent Line Item Evaluation",
+        "Lowest Landed Cost (L1) Per Item",
+        "Multiple Supplier Awards Permitted",
+      ],
+    };
+  }
 
   // 3. Package-wise L1
-  // if (
-  //   lower.includes("package-wise") ||
-  //   lower.includes("package wise") ||
-  //   lower.includes("schedule-wise") ||
-  //   lower.includes("schedule wise")
-  // ) {
-  //   return {
-  //     title: "Package-wise / Schedule L1",
-  //     badge: "Package / Lot Award",
-  //     basisLabel: "Package Aggregate L1",
-  //     shortSummary:
-  //       "Evaluation is based on aggregate lowest landed cost per bundled package.",
-  //     description:
-  //       "Items are grouped into cohesive packages or schedules. Evaluation is conducted on the aggregate lowest landed price (L1) of all items within each package. Bidders must quote for all items in a package.",
-  //     keyPoints: [
-  //       "Package / Lot Aggregate Cost",
-  //       "All Items in Package Required",
-  //       "Award to Package L1 Lowest Bidder",
-  //     ],
-  //   };
-  // }
+  if (
+    lower.includes("package-wise") ||
+    lower.includes("package wise") ||
+    lower.includes("schedule-wise") ||
+    lower.includes("schedule wise")
+  ) {
+    return {
+      title: "Package-wise / Schedule L1",
+      badge: "Package / Lot Award",
+      basisLabel: "Package Aggregate L1",
+      shortSummary:
+        "Evaluation is based on aggregate lowest landed cost per bundled package.",
+      description:
+        "Items are grouped into cohesive packages or schedules. Evaluation is conducted on the aggregate lowest landed price (L1) of all items within each package. Bidders must quote for all items in a package.",
+      keyPoints: [
+        "Package / Lot Aggregate Cost",
+        "All Items in Package Required",
+        "Award to Package L1 Lowest Bidder",
+      ],
+    };
+  }
 
   // 4. Technical Qualification then L1
   if (
@@ -3206,73 +3206,81 @@ function LineItemsTable({
       />
 
       {viewingItemFiles && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-indigo-600" />
-                  Item Attachments
-                </h4>
-                <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
-                  {viewingItemFiles.title}
-                </p>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-attachments-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+        >
+          <FocusTrap onEscape={() => setViewingItemFiles(null)} className="w-full max-w-md">
+            <div className="w-full rounded-2xl border border-slate-200 bg-white p-5 shadow-xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div>
+                  <h4 id="item-attachments-title" className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-indigo-600" />
+                    Item Attachments
+                  </h4>
+                  <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                    {viewingItemFiles.title}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingItemFiles(null)}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+                  aria-label="Close attachments dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setViewingItemFiles(null)}
-                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
-              {viewingItemFiles.files.map((file: any, fIdx: number) => {
-                const fName =
-                  file.fileName ||
-                  file.name ||
-                  file.originalName ||
-                  `Attachment #${fIdx + 1}`;
-                return (
-                  <div
-                    key={fIdx}
-                    className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-2.5"
-                  >
-                    <span
-                      className="text-xs font-semibold text-slate-800 truncate max-w-[220px]"
-                      title={fName}
+              <div className="mt-4 space-y-2 max-h-60 overflow-y-auto">
+                {viewingItemFiles.files.map((file: any, fIdx: number) => {
+                  const fName =
+                    file.fileName ||
+                    file.name ||
+                    file.originalName ||
+                    `Attachment #${fIdx + 1}`;
+                  return (
+                    <div
+                      key={file.id || fIdx}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-slate-100/60 transition-colors"
                     >
-                      {fName}
-                    </span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        openFileAsset(
-                          {
-                            fileAssetId:
-                              file.fileAssetId ||
-                              file.id ||
-                              (typeof file === "number" ? file : undefined),
-                            url:
-                              file.url ||
-                              file.fileUrl ||
-                              (typeof file === "string" ? file : undefined),
-                            originalName: fName,
-                          },
-                          fName,
-                        );
-                      }}
-                      className="h-7 text-[11px] gap-1 bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <Eye className="h-3 w-3" />
-                      View
-                    </Button>
-                  </div>
-                );
-              })}
+                      <span
+                        className="text-xs font-semibold text-slate-800 truncate max-w-[220px]"
+                        title={fName}
+                      >
+                        {fName}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          openFileAsset(
+                            {
+                              fileAssetId:
+                                file.fileAssetId ||
+                                file.id ||
+                                (typeof file === "number" ? file : undefined),
+                              url:
+                                file.url ||
+                                file.fileUrl ||
+                                (typeof file === "string" ? file : undefined),
+                              originalName: fName,
+                            },
+                            fName,
+                          );
+                        }}
+                        className="h-7 text-[11px] gap-1 bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        <Eye className="h-3 w-3" />
+                        View
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          </FocusTrap>
         </div>
       )}
     </div>
@@ -11109,56 +11117,63 @@ export function SellerQuotationReviewModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
-                {statusStr}
-              </span>
-              {isFinancialSealed ? (
-                <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-indigo-800 inline-flex items-center gap-1">
-                  <Lock className="h-2.5 w-2.5" /> Stage 1: Technical Scrutiny
-                  (Financial Sealed)
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="seller-quote-review-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+    >
+      <FocusTrap onEscape={onClose} className="w-full max-w-4xl">
+        <div className="flex max-h-[90vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                  {statusStr}
                 </span>
-              ) : (
-                <span className="text-xs font-bold text-slate-400">
-                  Submitted Seller Quotation
-                </span>
+                {isFinancialSealed ? (
+                  <span className="rounded-full bg-indigo-100 border border-indigo-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-indigo-800 inline-flex items-center gap-1">
+                    <Lock className="h-2.5 w-2.5" /> Stage 1: Technical Scrutiny
+                    (Financial Sealed)
+                  </span>
+                ) : (
+                  <span className="text-xs font-bold text-slate-400">
+                    Submitted Seller Quotation
+                  </span>
+                )}
+              </div>
+              <h2 id="seller-quote-review-title" className="text-lg font-black text-slate-900 mt-0.5">
+                {sellerOrg}
+              </h2>
+              {procurementTitle && (
+                <p className="text-xs font-semibold text-slate-500 truncate max-w-md">
+                  For: {procurementTitle}
+                </p>
               )}
             </div>
-            <h2 className="text-lg font-black text-slate-900 mt-0.5">
-              {sellerOrg}
-            </h2>
-            {procurementTitle && (
-              <p className="text-xs font-semibold text-slate-500 truncate max-w-md">
-                For: {procurementTitle}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {!isFinancialSealed && (
-              <Button
+            <div className="flex items-center gap-2">
+              {!isFinancialSealed && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadQuotationPdf}
+                  className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download PDF
+                </Button>
+              )}
+              <button
                 type="button"
-                variant="outline"
-                onClick={handleDownloadQuotationPdf}
-                className="flex items-center gap-1.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold text-xs"
+                onClick={onClose}
+                className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+                aria-label="Close quotation review dialog"
               >
-                <Download className="h-3.5 w-3.5" />
-                Download PDF
-              </Button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
-            >
-              <X className="h-5 w-5" />
-            </button>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
@@ -11747,6 +11762,7 @@ export function SellerQuotationReviewModal({
           />
         )}
       </div>
+      </FocusTrap>
     </div>
   );
 }
@@ -11828,36 +11844,43 @@ export function QuotationComparisonModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
-                <Layers className="h-3 w-3" /> L1 Commercial Comparison Matrix
-              </span>
-              <span className="text-xs font-bold text-slate-400">
-                {sorted.length} Proposals Submitted
-              </span>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quotation-comparison-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+    >
+      <FocusTrap onEscape={onClose} className="w-full max-w-5xl">
+        <div className="flex max-h-[92vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
+                  <Layers className="h-3 w-3" /> L1 Commercial Comparison Matrix
+                </span>
+                <span className="text-xs font-bold text-slate-400">
+                  {sorted.length} Proposals Submitted
+                </span>
+              </div>
+              <h2 id="quotation-comparison-title" className="text-lg font-black text-slate-900 mt-0.5">
+                Supplier Quotations Side-by-Side Comparison
+              </h2>
+              {procurementTitle && (
+                <p className="text-xs font-semibold text-slate-500 truncate max-w-lg">
+                  Procurement: {procurementTitle}
+                </p>
+              )}
             </div>
-            <h2 className="text-lg font-black text-slate-900 mt-0.5">
-              Supplier Quotations Side-by-Side Comparison
-            </h2>
-            {procurementTitle && (
-              <p className="text-xs font-semibold text-slate-500 truncate max-w-lg">
-                Procurement: {procurementTitle}
-              </p>
-            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+              aria-label="Close comparison modal"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
@@ -12116,6 +12139,7 @@ export function QuotationComparisonModal({
           </Button>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }
@@ -12139,12 +12163,12 @@ export function SelectQuotationsToCompareModal({
   );
 
   useEffect(() => {
-    if (list.length > 0) {
+    if (isOpen && list.length > 0) {
       setSelectedIds(
         list.map((p) => String(p.id || p.sellerId || p.sellerUserId)),
       );
     }
-  }, [participations, isOpen]);
+  }, [isOpen]);
 
   if (!isOpen || !participations || participations.length === 0) return null;
 
@@ -12155,7 +12179,7 @@ export function SelectQuotationsToCompareModal({
   };
 
   const toggleSelectAll = () => {
-    const allIds = participations.map((p) =>
+    const allIds = list.map((p) =>
       String(p.id || p.sellerId || p.sellerUserId),
     );
     if (selectedIds.length === allIds.length) {
@@ -12174,131 +12198,155 @@ export function SelectQuotationsToCompareModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
-                <Layers className="h-3 w-3" /> Select Bids
-              </span>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="select-compare-title"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+    >
+      <FocusTrap onEscape={onClose} className="w-full max-w-lg">
+        <div className="flex max-h-[85vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
+                  <Layers className="h-3 w-3" /> Select Bids
+                </span>
+              </div>
+              <h2 id="select-compare-title" className="text-base font-black text-slate-900 mt-0.5">
+                Select Quotations to Compare
+              </h2>
+              <p className="text-xs font-medium text-slate-500">
+                Choose 2 or more seller quotations to compare side-by-side.
+              </p>
             </div>
-            <h2 className="text-base font-black text-slate-900 mt-0.5">
-              Select Quotations to Compare
-            </h2>
-            <p className="text-xs font-medium text-slate-500">
-              Choose 2 or more seller quotations to compare side-by-side.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* List of Sellers with Checkboxes */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-          <div className="flex items-center justify-between px-2 py-1 text-xs">
-            <span className="font-extrabold text-slate-700">
-              {selectedIds.length} of {participations.length} Selected
-            </span>
             <button
               type="button"
-              onClick={toggleSelectAll}
-              className="font-bold text-blue-600 hover:underline"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+              aria-label="Close dialog"
             >
-              {selectedIds.length === participations.length
-                ? "Deselect All"
-                : "Select All"}
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="space-y-2">
-            {participations.map((p) => {
-              const pId = String(p.id || p.sellerId || p.sellerUserId);
-              const isChecked = selectedIds.includes(pId);
-              const sellerOrg =
-                p.seller?.sellerProfile?.organizationName ||
-                p.seller?.organization?.organizationName ||
-                p.sellerOrganization?.organizationName ||
-                p.seller?.name ||
-                p.sellerUser?.name ||
-                `Supplier #${pId}`;
-              const contactName = p.seller?.name || p.sellerUser?.name || "";
-              const amount = Number(
-                p.totalAmount || p.quotedAmount || p.offeredPrice || 0,
-              );
+          {/* List of Sellers with Checkboxes */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            <div className="flex items-center justify-between px-2 py-1 text-xs">
+              <span className="font-extrabold text-slate-700">
+                {selectedIds.length} of {participations.length} Selected
+              </span>
+              <button
+                type="button"
+                onClick={toggleSelectAll}
+                className="font-bold text-blue-600 hover:underline cursor-pointer"
+              >
+                {selectedIds.length === participations.length
+                  ? "Deselect All"
+                  : "Select All"}
+              </button>
+            </div>
 
-              return (
-                <div
-                  key={pId}
-                  onClick={() => toggleSelect(pId)}
-                  className={cn(
-                    "flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-all",
-                    isChecked
-                      ? "border-blue-500 bg-blue-50/60 shadow-2xs"
-                      : "border-slate-200 bg-white hover:border-slate-300",
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={isChecked}
-                      onChange={() => {}}
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
-                    />
-                    <div>
-                      <p className="text-xs font-black text-slate-900">
-                        {sellerOrg}
-                      </p>
-                      {contactName && contactName !== sellerOrg && (
-                        <p className="text-[10px] font-medium text-slate-400">
-                          Contact: {contactName}
+            <div className="space-y-2">
+              {participations.map((p) => {
+                const pId = String(p.id || p.sellerId || p.sellerUserId);
+                const isChecked = selectedIds.includes(pId);
+                const sellerOrg =
+                  p.seller?.sellerProfile?.organizationName ||
+                  p.seller?.organization?.organizationName ||
+                  p.sellerOrganization?.organizationName ||
+                  p.seller?.name ||
+                  p.sellerUser?.name ||
+                  `Supplier #${pId}`;
+                const contactName = p.seller?.name || p.sellerUser?.name || "";
+                const amount = Number(
+                  p.totalAmount || p.quotedAmount || p.offeredPrice || 0,
+                );
+
+                return (
+                  <div
+                    key={pId}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isChecked}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleSelect(pId);
+                      }
+                    }}
+                    onClick={() => toggleSelect(pId)}
+                    className={cn(
+                      "flex items-center justify-between rounded-xl border p-3 cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+                      isChecked
+                        ? "border-blue-500 bg-blue-50/60 shadow-2xs"
+                        : "border-slate-200 bg-white hover:border-slate-300",
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id={`compare-seller-${pId}`}
+                        checked={isChecked}
+                        onChange={() => toggleSelect(pId)}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select ${sellerOrg} for comparison`}
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label
+                        htmlFor={`compare-seller-${pId}`}
+                        className="cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <p className="text-xs font-black text-slate-900">
+                          {sellerOrg}
                         </p>
-                      )}
+                        {contactName && contactName !== sellerOrg && (
+                          <p className="text-[10px] font-medium text-slate-400">
+                            Contact: {contactName}
+                          </p>
+                        )}
+                      </label>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-black text-slate-900">
+                        {amount > 0
+                          ? `₹${amount.toLocaleString("en-IN")}`
+                          : "Sealed Rate"}
+                      </p>
+                      <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
+                        {p.submissionStatus || p.status || "Submitted"}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-black text-slate-900">
-                      {amount > 0
-                        ? `₹${amount.toLocaleString("en-IN")}`
-                        : "Sealed Rate"}
-                    </p>
-                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
-                      {p.submissionStatus || p.status || "Submitted"}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="font-bold text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleStartCompare}
+              disabled={selectedIds.length < 2}
+              className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-xs text-white shadow-sm disabled:opacity-50"
+            >
+              Compare Selected ({selectedIds.length})
+              <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="font-bold text-xs"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleStartCompare}
-            disabled={selectedIds.length < 2}
-            className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-xs text-white shadow-sm disabled:opacity-50"
-          >
-            Compare Selected ({selectedIds.length})
-            <ArrowRight className="h-3.5 w-3.5 ml-1" />
-          </Button>
-        </div>
-      </div>
+      </FocusTrap>
     </div>
   );
 }
