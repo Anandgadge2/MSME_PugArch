@@ -145,7 +145,19 @@ const nested = (source: any, paths: string[]) => {
   return '';
 };
 
-const compact = (...values: unknown[]) => values.map(clean).filter(Boolean);
+const compact = (...values: unknown[]) => {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const val of values) {
+    const s = clean(val);
+    if (!s || /^unknown$/i.test(s)) continue;
+    const lower = s.toLowerCase();
+    if (seen.has(lower)) continue;
+    seen.add(lower);
+    list.push(s);
+  }
+  return list;
+};
 
 const providerPayload = (raw: any) => {
   // API Setu v2 returns [] when no data — treat empty arrays as empty.
@@ -340,7 +352,7 @@ const normalizeProviderData = (raw: any, requestedGstin: string, source: GstData
   const district = pick(addressSource?.dst, addressSource?.district, addressSource?.dist, addressSource?.districtName);
   const city = pick(addressSource?.city, addressSource?.town, addressSource?.village, addressSource?.loc, addressSource?.location, district);
   const pincode = pick(addressSource?.pncd, addressSource?.pinCode, addressSource?.pincode, addressSource?.pin, addressSource?.zip);
-  const structuredAddress = compact(
+  const rawAddressParts = compact(
     addressSource?.bno,
     addressSource?.buildingNumber,
     addressSource?.bnm,
@@ -359,7 +371,10 @@ const normalizeProviderData = (raw: any, requestedGstin: string, source: GstData
     district,
     state,
     pincode
-  ).join(', ');
+  );
+  // If the only part present is the state name, it is not a complete street address
+  const isOnlyState = rawAddressParts.length === 1 && rawAddressParts[0].toLowerCase() === state.toLowerCase();
+  const structuredAddress = isOnlyState ? '' : rawAddressParts.join(', ');
   const address = structuredAddress || pick(payload?.addressString, payload?.businessAddress, payload?.address, principal?.adr, principal?.addressString, addressSource?.adr);
   const legalName = pick(payload?.legalNameOfBusiness, payload?.lgnm, payload?.legalName, payload?.legal_name, payload?.legalNam, payload?.legal_name_of_business, payload?.name);
   const tradeName = pick(payload?.tradeNam, payload?.tradeName, payload?.trade_name, payload?.trade_name_of_business, payload?.businessName);
@@ -405,6 +420,19 @@ const normalizeProviderData = (raw: any, requestedGstin: string, source: GstData
   return normalized;
 };
 
+const isInvalidOrIncompleteCache = (cached: any) => {
+  if (!cached) return true;
+  const addr = clean(cached.businessAddress);
+  const state = clean(cached.state);
+  const isLegacy = addr === LEGACY_PLACEHOLDER_ADDRESS || clean(cached.legalBusinessName) === `GST Business (${cached.gstNumber})`;
+  if (isLegacy) return true;
+  // If address is missing, or is literally just the state name, or contains "Unknown"
+  if (!addr || addr.toLowerCase() === state.toLowerCase() || /unknown/i.test(addr)) {
+    return true;
+  }
+  return false;
+};
+
 const normalizeCacheData = (cached: any, gstin: string): GstData => {
   let city = '';
   let district = '';
@@ -412,34 +440,55 @@ const normalizeCacheData = (cached: any, gstin: string): GstData => {
     const parts = cached.businessAddress.split(',').map((p: string) => p.trim()).filter(Boolean);
     const stateIndex = parts.findIndex((p: string) => p.toLowerCase() === (cached.state || '').toLowerCase());
     if (stateIndex > 0) {
-      city = parts[stateIndex - 1];
       district = parts[stateIndex - 1];
-      if (stateIndex > 1) {
-        district = parts[stateIndex - 2];
-      }
-    } else if (parts.length > 2) {
+      city = stateIndex > 1 ? parts[stateIndex - 2] : parts[stateIndex - 1];
+    } else if (parts.length > 1) {
       // Fallback if state name is not exactly found in parts
-      city = parts[parts.length - 2];
-      district = parts[parts.length - 3] || parts[parts.length - 2];
+      district = parts[parts.length - 2];
+      city = parts.length > 2 ? parts[parts.length - 3] : parts[parts.length - 2];
     }
   }
 
-  return normalizeProviderData({
+  const cleanVal = (val: unknown) => {
+    const s = clean(val);
+    return /^unknown$/i.test(s) ? '' : s;
+  };
+
+  const finalCity = cleanVal(city);
+  const finalDistrict = cleanVal(district);
+  const finalAddress = cleanVal(cached.businessAddress);
+  const finalState = clean(cached.state) || stateByCode[gstin.slice(0, 2)] || '';
+  const finalPincode = clean(cached.pincode);
+
+  return {
+    gstNumber: gstin,
     gstin,
-    legalName: cached.legalBusinessName,
-    tradeName: cached.tradeName,
-    constitutionOfBusiness: cached.constitutionOfBusiness,
-    dateOfRegistration: cached.registrationDate ? cached.registrationDate.toISOString().slice(0, 10) : '',
-    taxpayerType: cached.taxpayerType,
-    addressString: cached.businessAddress,
-    address: { 
-      state: cached.state, 
-      pincode: cached.pincode,
-      city: city || 'Unknown',
-      district: district || 'Unknown'
-    },
-    status: 'Active'
-  }, gstin, 'cache');
+    requestedGstin: gstin,
+    responseGstin: gstin,
+    legalBusinessName: clean(cached.legalBusinessName),
+    legalName: clean(cached.legalBusinessName),
+    tradeName: clean(cached.tradeName),
+    organizationName: clean(cached.legalBusinessName || cached.tradeName),
+    constitutionOfBusiness: clean(cached.constitutionOfBusiness),
+    registrationDate: cached.registrationDate ? (cached.registrationDate instanceof Date ? cached.registrationDate.toISOString().slice(0, 10) : String(cached.registrationDate).slice(0, 10)) : '',
+    taxpayerType: clean(cached.taxpayerType),
+    businessAddress: finalAddress,
+    address: finalAddress,
+    registeredOfficeAddress: finalAddress,
+    country: 'India',
+    state: finalState,
+    city: finalCity,
+    district: finalDistrict || finalCity,
+    pincode: finalPincode,
+    pinCode: finalPincode,
+    pan: gstin.slice(2, 12),
+    status: 'Active',
+    isRegisteredDealer: true,
+    source: 'cache',
+    raw: cached,
+    partial: !finalAddress || !finalPincode,
+    message: finalAddress ? undefined : 'Address not available from GST API. Please enter manually.'
+  };
 };
 
 const cacheResult = async (data: GstData) => {
@@ -496,11 +545,7 @@ export class GstService {
   static async verifyGstin(rawGstin: string): Promise<GstData> {
     const gstin = this.normalize(rawGstin);
     const cached = await prisma.gstCache.findUnique({ where: { gstNumber: gstin } }).catch(() => null);
-    const isLegacyPlaceholder = cached && (
-      cached.businessAddress === LEGACY_PLACEHOLDER_ADDRESS ||
-      cached.legalBusinessName === `GST Business (${gstin})`
-    );
-    if (cached && !isLegacyPlaceholder) return normalizeCacheData(cached, gstin);
+    if (cached && !isInvalidOrIncompleteCache(cached)) return normalizeCacheData(cached, gstin);
 
     const { apiKey, clientId, contactEmail, contactMobile, configured } = config();
     if (!configured) {
@@ -604,14 +649,35 @@ export class GstService {
       if (response && response.ok && !isAllNullResponse(response.body)) {
         const normalized = normalizeProviderData(response.body, gstin, 'live_apisetu');
         hasReceivedValidResponse = true;
-        // Merge fields
+        // Merge fields defensively: do not overwrite richer multi-part address with empty/single-token address
         for (const [key, val] of Object.entries(normalized)) {
-          if (val !== null && val !== undefined && val !== '' && val !== 'Unknown') {
-            (mergedGstData as any)[key] = val;
+          if (val === null || val === undefined || val === '' || val === 'Unknown') continue;
+
+          if (key === 'address' || key === 'businessAddress' || key === 'registeredOfficeAddress') {
+            const currentStr = clean((mergedGstData as any)[key]);
+            const newStr = clean(val);
+            if (!currentStr || (newStr.length > currentStr.length && newStr.includes(','))) {
+              (mergedGstData as any)[key] = newStr;
+            }
+          } else if (key === 'city' || key === 'district' || key === 'pincode' || key === 'pinCode') {
+            const currentStr = clean((mergedGstData as any)[key]);
+            if (!currentStr || currentStr === 'Unknown') {
+              (mergedGstData as any)[key] = val;
+            }
+          } else {
+            const currentVal = (mergedGstData as any)[key];
+            if (!currentVal || currentVal === 'Unknown') {
+              (mergedGstData as any)[key] = val;
+            }
           }
         }
         if (response.body) {
           (mergedGstData.raw as any)[`attempt_${attemptIndex}`] = response.body;
+        }
+
+        // If this attempt returned complete data (name, address, city, pincode), no need for further attempts
+        if (!isIncompleteGstData(mergedGstData)) {
+          break;
         }
       }
     }

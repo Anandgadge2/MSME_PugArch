@@ -135,29 +135,32 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
-  doc.text(data.seller.name || 'PugArch Technology Pvt Ltd', marginX + 3.5, currentY + 6.5);
+  doc.text(data.seller.name || 'N/A', marginX + 3.5, currentY + 6.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.2);
-  const sellerAddressLines = doc.splitTextToSize(data.seller.address || 'L-18,Laxman Nagar,Manewada,Nagpur,440034', (contentWidth / 2) + 10);
+  const sellerAddressLines = doc.splitTextToSize(data.seller.address || 'N/A', (contentWidth / 2) + 10);
   doc.text(sellerAddressLines, marginX + 3.5, currentY + 11.5);
 
   const addressOffset = Math.min(sellerAddressLines.length * 3.6, 7.5);
   let detailY = currentY + 11.5 + addressOffset + 1;
 
-  const sellerGstin = data.seller.gstin || '27AAOCP3437H1Z4';
-  doc.setFont('helvetica', 'bold');
-  doc.text(`GST NO: ${sellerGstin}`, marginX + 3.5, detailY);
-  detailY += 4.2;
+  if (data.seller.gstin) {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`GST NO: ${data.seller.gstin}`, marginX + 3.5, detailY);
+    detailY += 4.2;
+  }
 
-  const sellerPhone = data.seller.phone || '7887858594';
-  doc.setFont('helvetica', 'normal');
-  doc.text(sellerPhone, marginX + 3.5, detailY);
-  detailY += 4.2;
+  if (data.seller.phone && data.seller.phone !== 'N/A') {
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Phone: ${data.seller.phone}`, marginX + 3.5, detailY);
+    detailY += 4.2;
+  }
 
-  const sellerEmail = data.seller.email || 'Info@pugarch.in';
-  doc.setFont('helvetica', 'normal');
-  doc.text(sellerEmail, marginX + 3.5, detailY);
+  if (data.seller.email && data.seller.email !== 'N/A') {
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Email: ${data.seller.email}`, marginX + 3.5, detailY);
+  }
 
   // Right Side: Dynamic Logo and CIN as per respective company
   const logoBoxWidth = 46;
@@ -171,7 +174,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(12.5);
       doc.setTextColor(30, 58, 138);
-      doc.text(data.seller.name || 'PugArch Technology Pvt Ltd', rightX - 3.5, currentY + 12, { align: 'right' });
+      doc.text(data.seller.name || 'N/A', rightX - 3.5, currentY + 12, { align: 'right' });
     }
   } else if (data.seller.name) {
     // Elegant seller brand title if no logo uploaded
@@ -182,11 +185,13 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   }
 
   // CIN Text below Logo
-  const sellerCin = data.seller.cin || 'U62013MH2023PTC416118';
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.text(`CIN : ${sellerCin}`, rightX - 3.5, currentY + 28, { align: 'right' });
+  const sellerCin = data.seller.cin;
+  if (sellerCin && sellerCin !== 'N/A') {
+    doc.setTextColor(15, 23, 42);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.text(`CIN : ${sellerCin}`, rightX - 3.5, currentY + 28, { align: 'right' });
+  }
 
   currentY += headerBoxHeight;
 
@@ -214,12 +219,14 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // Left Meta: Invoice No & Date
   doc.setFontSize(8.2);
   doc.setFont('helvetica', 'bold');
-  doc.text(`INV No:${data.invoiceNumber || 'PUG2026I1404001'}`, marginX + 3.5, currentY + 4.5);
-  doc.text(`Date: ${data.dateStr || '14-04-2026'}`, marginX + 3.5, currentY + 9);
+  doc.text(`INV No: ${data.invoiceNumber || 'N/A'}`, marginX + 3.5, currentY + 4.5);
+  doc.text(`Date: ${data.dateStr || 'N/A'}`, marginX + 3.5, currentY + 9);
 
   // Right Meta: Place Of Supply
-  const posText = `Place Of Supply : ${data.placeOfSupply || 'Maharashtra(27)'}`;
-  doc.text(posText, midX - 6.5, currentY + 6.5);
+  if (data.placeOfSupply) {
+    const posText = `Place Of Supply : ${data.placeOfSupply}`;
+    doc.text(posText, midX - 6.5, currentY + 6.5);
+  }
 
   currentY += metaBoxHeight;
 
@@ -236,26 +243,30 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   doc.setFontSize(8.5);
   doc.text('Bill To', marginX + 3.5, bY);
   bY += 4;
-  doc.text(data.billTo.name || 'Rattan India Power Limited', marginX + 3.5, bY);
+  doc.text(data.billTo.name || 'N/A', marginX + 3.5, bY);
   bY += 3.8;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.8);
   const billAddressLines = doc.splitTextToSize(
-    data.billTo.address || 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra',
+    data.billTo.address || 'N/A',
     (contentWidth / 2) - 18
   );
   doc.text(billAddressLines, marginX + 3.5, bY);
   bY += (billAddressLines.length * 3.4) + 1.2;
 
-  const billPan = data.billTo.pan || 'AALCS2063D';
-  doc.setFont('helvetica', 'bold');
-  doc.text(`PAN No: ${billPan}`, marginX + 3.5, bY);
-  bY += 3.8;
+  const billPan = data.billTo.pan;
+  if (billPan && billPan !== 'N/A') {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`PAN No: ${billPan}`, marginX + 3.5, bY);
+    bY += 3.8;
+  }
 
-  const billGst = data.billTo.gstin || '27AALCS2063D1ZG';
-  doc.setFont('helvetica', 'bold');
-  doc.text(`GST No: ${billGst}`, marginX + 3.5, bY);
+  const billGst = data.billTo.gstin;
+  if (billGst && billGst !== 'N/A') {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`GST No: ${billGst}`, marginX + 3.5, bY);
+  }
 
   // Right Column: Ship To
   let sY = currentY + 4.5;
@@ -263,14 +274,14 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   doc.setFontSize(8.5);
   doc.text('Ship To', midX - 6.5, sY);
   sY += 4;
-  doc.text(data.shipTo.name || data.billTo.name || 'RattanIndia Power Limited', midX - 6.5, sY);
+  doc.text(data.shipTo.name || data.billTo.name || 'N/A', midX - 6.5, sY);
   sY += 3.8;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.8);
   const effectiveShipAddress = data.shipTo.address && data.shipTo.address.trim() !== 'INDIA'
     ? data.shipTo.address
-    : (data.billTo.address || 'Amravati O&M Phase1, Amravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC, Nandgaon peth, Amravati 444901 AMRAVATI INDIA');
+    : (data.billTo.address || 'N/A');
 
   const shipAddressLines = doc.splitTextToSize(
     effectiveShipAddress,

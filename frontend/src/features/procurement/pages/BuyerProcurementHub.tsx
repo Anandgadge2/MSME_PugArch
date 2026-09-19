@@ -172,15 +172,30 @@ export default function BuyerProcurementHub() {
     return listResponse?.procurements || [];
   }, [listResponse]);
 
-  // Dynamic available categories & departments extracted from data
+  // Fetch dynamic categories from database
+  const { data: dbCategories } = useQuery({
+    queryKey: ['portal-db-categories'],
+    queryFn: async () => {
+      const res = await api.get('/api/categories');
+      const json = await res.json();
+      return unwrapApiData<any[]>(json);
+    },
+    staleTime: 10 * 60 * 1000
+  });
+
+  // Dynamic available categories & departments extracted from data & DB
   const availableCategories = useMemo(() => {
     const set = new Set<string>();
     allProcurements.forEach(p => {
       if (p.category && p.category.trim()) set.add(p.category.trim());
     });
-    ['Office Supplies & Stationery', 'IT Hardware & Software', 'Raw Materials', 'Consultancy & AMC Services', 'Industrial Machinery', 'Electrical & Electronics'].forEach(c => set.add(c));
+    if (Array.isArray(dbCategories)) {
+      dbCategories.forEach(c => {
+        if (c.name && c.name.trim()) set.add(c.name.trim());
+      });
+    }
     return Array.from(set).sort();
-  }, [allProcurements]);
+  }, [allProcurements, dbCategories]);
 
   const availableDepartments = useMemo(() => {
     const set = new Set<string>();
@@ -602,12 +617,19 @@ export default function BuyerProcurementHub() {
       cards: [
         {
           title: 'Create Procurement',
-          description: 'Unified guided flow for RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, Rate Contract, or Repeat Order.',
+          description: 'Unified guided flow for RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, or Rate Contract.',
           href: '/buyer/procurement/create',
           cta: 'Create Sourcing Event',
           icon: PlusCircle,
           badge: 'Start Here',
           badgeColor: 'bg-[#12335f] text-white',
+        },
+        {
+          title: 'Repeat Orders',
+          description: 'Quickly reorder from previous purchase orders with locked original contract terms.',
+          href: '/buyer/repeat-orders',
+          cta: 'Repeat Order',
+          icon: RefreshCw,
         },
         {
           title: 'My Procurements',
@@ -648,9 +670,9 @@ export default function BuyerProcurementHub() {
           icon: Globe,
         },
         {
-          title: 'Supplier Responses',
+          title: 'My Procurements',
           description: 'Review quotes, clarifying queries, and files submitted by sellers.',
-          href: '/buyer/procurement/responses',
+          href: '/buyer/my-procurements',
           cta: 'Analyze Responses',
           icon: MessageSquare,
           count: summary?.myRfqsCount || 0,
@@ -826,7 +848,6 @@ export default function BuyerProcurementHub() {
                 <option value="limited-tender">Limited Tender</option>
                 <option value="reverse-auction">Reverse Auction</option>
                 <option value="rate-contract">Rate Contract</option>
-                <option value="repeat-order">Repeat Order</option>
                 <option value="direct-purchase">Direct Purchase</option>
               </select>
             </div>

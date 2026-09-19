@@ -1504,6 +1504,53 @@ router.put('/master-admin/organizations/:id', ...masterOnly, requirePermission(P
   try {
     const data = organizationPayload(req.body || {}, true);
     const organization: any = await prisma.organization.update({ where: { id }, data, select: organizationSelect as any });
+
+    // Synchronize changes to linked BuyerProfile records
+    const buyerSyncData: any = {};
+    if (data.organizationName) buyerSyncData.organizationName = data.organizationName;
+    if (data.organizationType) {
+      buyerSyncData.organizationType = data.organizationType;
+      buyerSyncData.businessType = data.organizationType.replace(/_/g, ' ');
+    }
+    if (data.gstin) { buyerSyncData.gstNumber = data.gstin; buyerSyncData.gst = data.gstin; }
+    if (data.panNumber) { buyerSyncData.panNumber = data.panNumber; buyerSyncData.pan = data.panNumber; }
+    if (data.cinNumber) { buyerSyncData.registrationNumber = data.cinNumber; buyerSyncData.cin = data.cinNumber; }
+    if (data.addressLine1) { buyerSyncData.address = data.addressLine1; buyerSyncData.registeredAddress = data.addressLine1; }
+    if (data.city !== undefined) buyerSyncData.city = data.city;
+    if (data.state !== undefined) buyerSyncData.state = data.state;
+    if (data.district !== undefined) buyerSyncData.district = data.district;
+    if (data.pincode !== undefined) buyerSyncData.pincode = data.pincode;
+    if (data.website !== undefined) buyerSyncData.website = data.website;
+
+    if (Object.keys(buyerSyncData).length > 0) {
+      await (prisma as any).buyerProfile.updateMany({
+        where: { organizationId: id },
+        data: buyerSyncData
+      }).catch((syncErr: any) => console.error('[BuyerProfile Sync Failed]', syncErr));
+    }
+
+    // Synchronize changes to linked SellerProfile records
+    const sellerSyncData: any = {};
+    if (data.organizationName) sellerSyncData.businessName = data.organizationName;
+    if (data.organizationType) sellerSyncData.organizationType = data.organizationType;
+    if (data.panNumber) sellerSyncData.pan = data.panNumber;
+
+    if (Object.keys(sellerSyncData).length > 0) {
+      await (prisma as any).sellerProfile.updateMany({
+        where: { organizationId: id },
+        data: sellerSyncData
+      }).catch((syncErr: any) => console.error('[SellerProfile Sync Failed]', syncErr));
+    }
+
+    // Invalidate marketplace homepage caches
+    try {
+      const { invalidateByPattern } = await import('../services/cache.service.js');
+      await invalidateByPattern('cache:marketplace:home:v2');
+      await invalidateByPattern('cache:marketplace:home-layout:v2:*');
+    } catch {
+      // ignore
+    }
+
     await createAuditLog(req, { action: 'organization.update', entityType: 'organization', entityId: id, metadata: { name: organization.organizationName, reason } });
     jsonOk(res, organization, 'Organization updated successfully');
   } catch (error: any) {

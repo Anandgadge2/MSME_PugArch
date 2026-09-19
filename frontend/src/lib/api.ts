@@ -47,10 +47,10 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
     return trimmed;
   }
   const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  if (cleanPath.startsWith('/banners/') || cleanPath.startsWith('/categories/')) {
+  if (cleanPath.startsWith('/categories/')) {
     return `${BASE_URL}/api/files/raw${cleanPath}`;
   }
-  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/products/')) {
+  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/banners/') || cleanPath.startsWith('/products/')) {
     return cleanPath;
   }
   return `${BASE_URL}${cleanPath}`;
@@ -164,11 +164,19 @@ export const api = {
     const method = (options.method || 'GET').toUpperCase();
     const headers = normalizeHeaders(options.headers, options.body as BodyInit | null);
 
-    const sendRequest = (requestHeaders: Record<string, string>) => fetch(url, {
-      credentials: 'include',
-      ...options,
-      headers: requestHeaders,
-    });
+    const sendRequest = (requestHeaders: Record<string, string>) => {
+      const fetchOptions: RequestInit = {
+        credentials: 'include',
+        ...options,
+        headers: requestHeaders,
+      };
+      if (options.skipCache) {
+        fetchOptions.cache = 'no-store';
+        requestHeaders['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+        requestHeaders['Pragma'] = 'no-cache';
+      }
+      return fetch(url, fetchOptions);
+    };
 
     const request = sendRequest(headers).then(async (response) => {
       if (isUnsafeMethod(method) && await isCsrfFailure(response)) {

@@ -86,7 +86,7 @@ export function BuyerProcurementMonitor() {
       let actionLabel = 'View Details';
       let actionHref = bid.type === 'reverse_auction' 
         ? `/buyer/my-procurements?type=Reverse+Auction` 
-        : `/buyer/procurement/responses`;
+        : `/buyer/my-procurements`;
 
       const rawStatus = String(bid.status || bid.stage || bid.statusGroup || '').toUpperCase();
       if (rawStatus.includes('EVAL') || rawStatus.includes('TECHNICAL')) {

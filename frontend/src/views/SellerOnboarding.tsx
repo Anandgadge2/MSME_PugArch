@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { api } from '../lib/api';
+import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
-import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
+import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { isShgBusinessType, isShgUser } from '../lib/shg';
@@ -51,9 +51,8 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 
 const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
-  if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified', 'under_compliance_review', 'resubmission_required', 'rejected'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -281,6 +280,35 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const [additionalErrors, setAdditionalErrors] = useState<Record<string, string>>({});
   const [panErrors, setPanErrors] = useState<Record<string, string>>({});
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({});
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const valid = cats
+            .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+            .filter(c => Boolean(c.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCategoriesList(valid);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const addCustomCategory = async () => {
@@ -1546,6 +1574,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         />
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
+          {user?.adminFeedback && (
+            <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-amber-900">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">
+                  Registration Scrutiny Desk Remark / Feedback
+                </h4>
+              </div>
+              <p className="mt-1.5 text-xs font-medium text-slate-800 leading-relaxed pl-6">
+                {user.adminFeedback}
+              </p>
+            </div>
+          )}
+
           <Card className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
               <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">
@@ -1845,10 +1887,10 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           }}
                           className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
-                          <option value="">Select Categories</option>
-                          {PRODUCT_CATEGORIES
-                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat))
-                            .map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          <option value="">{loadingCategories ? 'Loading categories...' : 'Select Categories'}</option>
+                          {categoriesList
+                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat.name))
+                            .map(cat => <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>)}
                           <option value={PRODUCT_CATEGORY_OTHER}>Other (type your own)</option>
                         </select>
 
@@ -2448,7 +2490,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   )}
 
                                   {/* Upload Action */}
-                                  {(!isProfileLocked || currentSection === 'documents' || isHerShg) && (
+                                  {(!isProfileLocked || status === 'REJECTED' || Boolean(remarks)) ? (
                                     <label className="relative cursor-pointer">
                                       <input
                                         type="file"
@@ -2474,16 +2516,25 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                         )}
                                       </span>
                                     </label>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                      <Lock className="h-3.5 w-3.5 text-slate-400" /> Locked & Verified
+                                    </span>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Rejection Remarks */}
-                              {status === 'REJECTED' && remarks && (
-                                <div className="mt-3 p-3 bg-red-50/50 border border-red-100 rounded-lg flex items-start gap-2 text-xs text-red-800 animate-in fade-in duration-200">
-                                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              {/* Correction / Rejection Remarks */}
+                              {Boolean(remarks) && (
+                                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                                   <div>
-                                    <span className="font-bold">Rejection Reason:</span> {remarks}
+                                    <span className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800 block">
+                                      Correction Requested by Admin
+                                    </span>
+                                    <span className="text-xs font-semibold text-amber-950 mt-0.5 block">
+                                      {remarks}
+                                    </span>
                                   </div>
                                 </div>
                               )}

@@ -44,23 +44,37 @@ export default function BidDetailsPage() {
         } catch {}
       }
 
-      const [mktRes, bidRes, reqRes] = await Promise.allSettled([
+      // On /bids/:id routes, procurement bids are the primary resource. Prioritize bid API first!
+      const [bidRes, mktRes, reqRes] = await Promise.allSettled([
+        procurementBidApi.detail(requestId, true),
         getApi<any>(`/api/marketplace/requirements/${requestId}`),
-        procurementBidApi.detail(requestId),
         getApi<any>(`/api/requirements/${requestId}`)
       ]);
 
+      if (bidRes.status === 'fulfilled' && bidRes.value) {
+        const val: any = bidRes.value;
+        if (val && (val.id || val.bidNumber || val.title)) {
+          return val;
+        }
+      }
       if (mktRes.status === 'fulfilled' && mktRes.value) {
         const val: any = mktRes.value;
         const item = val?.requirement || val?.data || val;
-        if (item && (item.id || item.title || item.requirementNumber)) return item;
-      }
-      if (bidRes.status === 'fulfilled' && bidRes.value) {
-        return bidRes.value;
+        if (item && (item.id || item.title || item.requirementNumber)) {
+          const matches =
+            !requestId ||
+            String(item.id) === String(requestId) ||
+            String(item.requirementNumber || '').toLowerCase() === String(requestId).toLowerCase() ||
+            String(item.bidNumber || '').toLowerCase() === String(requestId).toLowerCase();
+          if (matches) return item;
+        }
       }
       if (reqRes.status === 'fulfilled' && reqRes.value) {
         const val: any = reqRes.value;
-        return val?.data || val;
+        const item = val?.data || val;
+        if (item && (item.id || item.title || item.requirementNumber)) {
+          return item;
+        }
       }
       return null;
     },
@@ -73,6 +87,7 @@ export default function BidDetailsPage() {
   }
 
   const bidObj: any = bidData || {};
+  const validInitialData = bidData && (bidData.id || bidData.bidNumber || bidData.requirementNumber || bidData.title) ? bidData : undefined;
   const queryType = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
   const rawMethod = String(
     bidObj.canonicalMethod ||
@@ -133,13 +148,14 @@ export default function BidDetailsPage() {
 
   // 2. Open Tender
   if (rawMethod.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
-    return <OpenTenderDetailPage initialData={bidObj} />;
+    return <OpenTenderDetailPage initialData={validInitialData} />;
   }
 
   // 3. Limited Tender
   if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
-    return <LimitedTenderDetailPage initialData={bidObj} />;
+    return <LimitedTenderDetailPage initialData={validInitialData} />;
   }
+
 
   const isRfq =
     queryType.includes('RFQ') ||
@@ -152,7 +168,7 @@ export default function BidDetailsPage() {
     reqNum.startsWith('RFQ-');
 
   if (isRfq) {
-    return <RfqDetailPage initialData={bidObj} />;
+    return <RfqDetailPage initialData={validInitialData} />;
   }
 
   const isExplicitRfp =
@@ -166,9 +182,9 @@ export default function BidDetailsPage() {
     !rawMethod.includes('RFQ');
 
   if (isExplicitRfp) {
-    return <RfpDetailPage initialData={bidObj} />;
+    return <RfpDetailPage initialData={validInitialData} />;
   }
 
   // Default for standard procurement requirement/bid is Request for Quotation
-  return <RfqDetailPage initialData={bidObj} />;
+  return <RfqDetailPage initialData={validInitialData} />;
 }

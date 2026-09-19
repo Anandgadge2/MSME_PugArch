@@ -1,11 +1,14 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
 import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
+import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
+import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/RecordOrderPaymentModal';
+import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -14,7 +17,7 @@ const moneyPdf = (val: any, currency = 'INR') => {
 };
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
-import { api } from '../lib/api';
+import { api, readJsonResponse, resolveMediaUrl } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
@@ -31,11 +34,11 @@ import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
 import { PageTableSkeleton, TableSkeleton, GridCardSkeleton } from '../components/ui/skeleton';
-import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 import { DataTable, type ColumnDef } from '../components/ui/data-table';
+import { FocusTrap } from '../components/ui/FocusTrap';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued'];
+const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval'];
 const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All') => {
   if (tab === 'Delivered') return 'delivered';
   if (tab === 'Cancelled') return 'cancelled';
@@ -116,7 +119,10 @@ const OrderActionsMenu = ({
   exportInvoicePdf,
   setConfirming,
   onUploadPaymentSlip,
-  onViewPaymentSlip
+  onViewPaymentSlip,
+  onViewReceipt,
+  onRecordPayment,
+  onConfirmSettlement
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -184,6 +190,18 @@ const OrderActionsMenu = ({
         <span>View</span>
       </button>
 
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
+          onViewReceipt?.(order);
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+      >
+        <Receipt className="h-3.5 w-3.5 text-blue-600" />
+        <span>View Official PO</span>
+      </button>
+
       {isSeller && isIssued && (
         <>
           <button
@@ -214,20 +232,38 @@ const OrderActionsMenu = ({
 
       {isSeller && (isAccepted || isDelivered) && (
         <>
-          {String(order.status || '').toLowerCase() === 'accepted' && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                const amountVal = order.amount || order.totalValue || 0;
-                router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-            >
-              <FileText className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Create Invoice</span>
-            </button>
-          )}
+          {(() => {
+            const hasApprovedGrn = Boolean(
+              (order as any).grns && (order as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+            );
+            if (hasApprovedGrn) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    const amountVal = order.amount || order.totalValue || 0;
+                    router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                >
+                  <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Create Invoice from PO (GRN Verified)</span>
+                </button>
+              );
+            }
+            return (
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 opacity-60 cursor-not-allowed text-left"
+                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+              >
+                <Lock className="h-3.5 w-3.5 text-slate-400" />
+                <span>Convert PO to Invoice (GRN Locked)</span>
+              </button>
+            );
+          })()}
           <button
             type="button"
             onClick={() => {
@@ -246,6 +282,18 @@ const OrderActionsMenu = ({
         type="button"
         onClick={() => {
           onClose();
+          exportInvoicePdf(order, 'download');
+        }}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#12335f] hover:bg-blue-50 transition-colors text-left"
+      >
+        <Download className="h-3.5 w-3.5 text-[#12335f]" />
+        <span>Download PO</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          onClose();
           exportInvoicePdf(order, 'print');
         }}
         className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
@@ -256,6 +304,17 @@ const OrderActionsMenu = ({
 
       {isBuyer && !isCancelled && (
         <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onRecordPayment?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Record Payment & Slip</span>
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -282,17 +341,30 @@ const OrderActionsMenu = ({
       )}
 
       {isSeller && !isCancelled && (
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            onViewPaymentSlip?.(order);
-          }}
-          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-        >
-          <Receipt className="h-3.5 w-3.5 text-indigo-600" />
-          <span>Payment Slip</span>
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onConfirmSettlement?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Confirm Settlement</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onViewPaymentSlip?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
+          >
+            <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Payment Slip</span>
+          </button>
+        </>
       )}
 
       {isBuyer && !isCancelled && !isDelivered && (
@@ -435,9 +507,15 @@ export default function PurchaseOrders() {
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [confirming, setConfirming] = useState<{ action: 'acknowledge' | 'cancel'; order: PurchaseOrderDto } | null>(null);
+  const [rejectingOrder, setRejectingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [receiptModalOrder, setReceiptModalOrder] = useState<PurchaseOrderDto | null>(null);
   const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
+  const [recordPaymentOrder, setRecordPaymentOrder] = useState<PurchaseOrderDto | null>(null);
+  const [confirmSettlementOrder, setConfirmSettlementOrder] = useState<PurchaseOrderDto | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -465,7 +543,7 @@ export default function PurchaseOrders() {
   const [repeatingOrder, setRepeatingOrder] = useState<PurchaseOrderDto | null>(null);
 
   const handleOpenRepeatModal = (order: PurchaseOrderDto) => {
-    setRepeatingOrder(order);
+    router.push(`/buyer/repeat-orders?selectPo=${order.id}`);
   };
   const viewerScope = `${user?.role || 'guest'}-${user?.id || 'none'}`;
 
@@ -660,6 +738,24 @@ export default function PurchaseOrders() {
     router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
   };
 
+  useEffect(() => {
+    if (!viewingOrder?.id) return;
+    let isMounted = true;
+    (async () => {
+      try {
+        const res = await api.get(`/api/purchase-orders/${viewingOrder.id}`);
+        const body = await readJsonResponse(res);
+        const fullData = (body as any)?.data || body;
+        if (fullData && fullData.id && isMounted) {
+          setViewingOrder(prev => ({ ...(prev || viewingOrder), ...fullData }));
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [viewingOrder?.id]);
+
   const formatTimestamp = (value?: string | Date | null) => {
     return formatDateTime(value);
   };
@@ -710,39 +806,48 @@ export default function PurchaseOrders() {
       if (viewingOrder && viewingOrder.id === order.id) {
         setViewingOrder({ ...viewingOrder, ...updated, status: 'accepted' });
       }
-      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully! Redirecting to generate Invoice before Delivery Management...`);
+      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED. Please prepare items for dispatch in Delivery Management.`);
       await refreshPurchaseOrders();
-      const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+      if (order.poNumber) {
+        router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+      } else {
+        router.push('/seller/delivery-management');
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Unable to accept purchase order');
     }
   };
 
-  const handleRejectOrder = async (order: PurchaseOrderDto) => {
-    if (!window.confirm(`Are you sure you want to REJECT purchase order ${order.poNumber || `PO-${order.id}`}?`)) return;
+  const handleRejectOrder = (order: PurchaseOrderDto) => {
+    setRejectingOrder(order);
+    setRejectionReason('');
+  };
+
+  const confirmRejectOrder = async () => {
+    if (!rejectingOrder) return;
+    setIsSubmittingReject(true);
     try {
-      const endpoint = `/api/purchase-orders/${order.id}/cancel`;
-      const updated = await postApi<PurchaseOrderDto>(endpoint, {});
-      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'cancelled' } : o));
-      if (viewingOrder && viewingOrder.id === order.id) {
-        setViewingOrder({ ...viewingOrder, ...updated, status: 'cancelled' });
+      const endpoint = `/api/purchase-orders/${rejectingOrder.id}/reject`;
+      const updated = await postApi<PurchaseOrderDto>(endpoint, {
+        reason: rejectionReason.trim() || undefined,
+        rejectionReason: rejectionReason.trim() || undefined
+      });
+      setPagedOrders(current => current.map(o => o.id === updated.id ? { ...o, ...updated, status: 'rejected' } : o));
+      if (viewingOrder && viewingOrder.id === rejectingOrder.id) {
+        setViewingOrder({ ...viewingOrder, ...updated, status: 'rejected' });
       }
-      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} REJECTED.`);
+      toast.success(`Purchase Order ${rejectingOrder.poNumber || `PO-${rejectingOrder.id}`} has been REJECTED.`);
+      setRejectingOrder(null);
+      setRejectionReason('');
       await refreshPurchaseOrders();
     } catch (err: any) {
       toast.error(err?.message || 'Unable to reject purchase order');
+    } finally {
+      setIsSubmittingReject(false);
     }
   };
 
   const handleOpenDelivery = (order: PurchaseOrderDto) => {
-    const hasInvoice = !!(order.invoices && order.invoices.length > 0);
-    if (!hasInvoice) {
-      toast.info(`Please generate the Tax Invoice for ${order.poNumber || `PO-${order.id}`} first before proceeding to Delivery Management.`);
-      const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
-      return;
-    }
     if (order.poNumber) {
       router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
     } else {
@@ -752,7 +857,7 @@ export default function PurchaseOrders() {
 
   const renderOrderActions = (order: PurchaseOrderDto) => {
     const statusLower = String(order.status || '').toLowerCase();
-    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed';
+    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed' || statusLower === 'pending_approval';
     const isAccepted = statusLower === 'accepted' || statusLower === 'in_fulfillment';
     const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
@@ -791,6 +896,9 @@ export default function PurchaseOrders() {
             setConfirming={setConfirming}
             onUploadPaymentSlip={setUploadProofOrder}
             onViewPaymentSlip={setViewProofOrder}
+            onViewReceipt={setReceiptModalOrder}
+            onRecordPayment={setRecordPaymentOrder}
+            onConfirmSettlement={setConfirmSettlementOrder}
           />
         )}
       </div>
@@ -804,11 +912,13 @@ export default function PurchaseOrders() {
     let order = baseOrder;
     try {
       const res = await api.get(`/api/purchase-orders/${baseOrder.id}`);
-      if ((res as any).data) {
-        order = { ...baseOrder, ...(res as any).data };
+      const body = await readJsonResponse(res);
+      const fullData = (body as any)?.data || body;
+      if (fullData && fullData.id) {
+        order = { ...baseOrder, ...fullData };
       }
     } catch (err) {
-      console.warn('Failed to fetch full PO details for PDF, using list data');
+      console.warn('Failed to fetch full PO details for PDF, using list data', err);
     }
 
     const totalValue = Number(order.amount || order.totalValue || 0);
@@ -836,48 +946,176 @@ export default function PurchaseOrders() {
 
     const subtotal = tableData.reduce((sum, row) => sum + Number(row[4] || 0), 0) || totalValue;
 
+    const seller = (order.seller as any) || {};
+    const buyer = (order.buyer as any) || {};
+    const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+    const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
+
+    const buyerOrgName =
+      buyer.organization?.organizationName ||
+      buyer.buyerProfile?.organizationName ||
+      buyer.buyerProfile?.companyName ||
+      buyerReg.companyName ||
+      buyerReg.businessName ||
+      buyerReg.legalName ||
+      buyerReg.tradeName ||
+      buyer.name ||
+      'N/A';
+
+    const sellerOrg =
+      seller.organization?.organizationName ||
+      sellerReg.tradeName ||
+      sellerReg.legalName ||
+      sellerReg.businessName ||
+      sellerReg.gstDetails?.tradeName ||
+      sellerReg.gstDetails?.legalName ||
+      sellerReg.gstDetails?.organizationName ||
+      seller.sellerProfile?.businessName ||
+      seller.sellerProfile?.companyName ||
+      sellerReg.companyName ||
+      seller.name ||
+      'N/A';
+
+    const sellerOrgAddress = seller.organization?.address ||
+      [seller.organization?.addressLine1, seller.organization?.addressLine2, seller.organization?.city, seller.organization?.state, seller.organization?.pincode].filter(Boolean).join(', ');
+
+    const sellerAddress =
+      sellerOrgAddress ||
+      seller.sellerProfile?.registeredAddress ||
+      seller.sellerProfile?.address ||
+      sellerReg.businessAddress ||
+      sellerReg.registeredAddress ||
+      sellerReg.address ||
+      sellerReg.gstDetails?.businessAddress ||
+      sellerReg.gstDetails?.registeredOfficeAddress ||
+      sellerReg.gstDetails?.address ||
+      'N/A';
+
+    const sellerGstin =
+      seller.organization?.gstin ||
+      seller.sellerProfile?.gst ||
+      sellerReg.gstin ||
+      sellerReg.gstDetails?.gstin ||
+      sellerReg.gstDetails?.gstNumber ||
+      sellerReg.gstDetails?.responseGstin ||
+      'N/A';
+
+    const buyerOrgAddress = buyer.organization?.address ||
+      [buyer.organization?.addressLine1, buyer.organization?.addressLine2, buyer.organization?.city, buyer.organization?.state, buyer.organization?.pincode].filter(Boolean).join(', ');
+
+    const buyerAddress =
+      order.deliveryAddress ||
+      buyerOrgAddress ||
+      buyer.buyerProfile?.registeredAddress ||
+      buyer.buyerProfile?.address ||
+      buyerReg.registeredAddress ||
+      buyerReg.address ||
+      'N/A';
+
+    const buyerGstin =
+      buyer.organization?.gstin ||
+      buyer.buyerProfile?.gstin ||
+      buyerReg.gstin ||
+      buyerReg.gstDetails?.gstin ||
+      buyerReg.gstDetails?.gstNumber ||
+      buyerReg.gstDetails?.responseGstin ||
+      'N/A';
+
+    const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+    const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+    const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+    const lsLogo = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null;
+
+    const sellerLogo =
+      seller.organization?.profile?.logoUrl ||
+      sellerReg.logoUrl ||
+      seller.organization?.logoFile?.url ||
+      seller.organization?.logoFile?.fileUrl ||
+      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/view` : null) ||
+      (seller.organization?.organizationLogoFileId ? `/api/files/${seller.organization.organizationLogoFileId}/download` : null) ||
+      (order.sellerId === user?.id || isSeller ? (currentUserReg.logoUrl || lsLogo) : null);
+
+    const buyerLogo =
+      buyer.organization?.profile?.logoUrl ||
+      buyerReg.logoUrl ||
+      buyer.organization?.logoFile?.url ||
+      buyer.organization?.logoFile?.fileUrl ||
+      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/view` : null) ||
+      (buyer.organization?.organizationLogoFileId ? `/api/files/${buyer.organization.organizationLogoFileId}/download` : null) ||
+      (order.buyerId === user?.id || isBuyer ? (currentUserReg.logoUrl || lsLogo) : null);
+
+    const effectiveSellerLogo = resolveMediaUrl(sellerLogo);
+    const effectiveBuyerLogo = resolveMediaUrl(buyerLogo);
+
+    const effectiveSellerSignature = resolveMediaUrl(
+      sellerReg.signatureUrl || (order.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null)
+    );
+    const effectiveSellerStamp = resolveMediaUrl(
+      sellerReg.stampUrl || (order.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null)
+    );
+    const effectiveBuyerSignature = resolveMediaUrl(
+      buyerReg.signatureUrl || (order.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null)
+    );
+    const effectiveBuyerStamp = resolveMediaUrl(
+      buyerReg.stampUrl || (order.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null)
+    );
+
     const config: DocumentConfig = {
-      documentTitle: 'Purchase Order / Supplier Invoice Copy',
+      documentTitle: 'PURCHASE ORDER',
       documentNumber: order.poNumber || `PO-${order.id}`,
       dateStr: formatTimestamp(new Date()),
       status: readableStatus(order.status),
+      issuerName: sellerOrg !== 'N/A' ? sellerOrg : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Enterprise Procurement'),
+      issuerSubtitle: 'Authorized Vendor & MSME Supplier',
+      issuerLogo: effectiveSellerLogo || effectiveBuyerLogo,
+      sellerSignatureUrl: effectiveSellerSignature,
+      sellerStampUrl: effectiveSellerStamp,
+      buyerSignatureUrl: effectiveBuyerSignature,
+      buyerStampUrl: effectiveBuyerStamp,
       parties: [
         {
-          title: 'Buyer / Requesting Organization',
-          name: order.buyer?.name || 'MSME Portal Buyer',
-          email: order.buyer?.email || undefined,
-          address: order.deliveryAddress || 'Ship To: As per purchase order',
+          title: 'Ship To / Buyer',
+          name: buyerOrgName,
+          email: buyer.email || buyerReg.email || 'N/A',
+          phone: buyer.mobile || buyerReg.mobile || 'N/A',
+          gstin: buyerGstin,
+          address: buyerAddress,
+          logoUrl: effectiveBuyerLogo,
         },
         {
-          title: 'Seller / Supplier Organization',
-          name: order.seller?.name || 'MSME Portal Seller',
-          email: order.seller?.email || undefined,
-          details: [`Seller ID: ${order.sellerId || '-'}`]
+          title: 'Vendor / Seller',
+          name: sellerOrg,
+          email: seller.email || sellerReg.email || 'N/A',
+          phone: seller.mobile || sellerReg.mobile || 'N/A',
+          gstin: sellerGstin,
+          address: sellerAddress,
+          logoUrl: effectiveSellerLogo,
+          details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
         }
       ],
       infoGrid: {
-        'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'As per portal workflow',
+        'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Pay on Invoice',
         'Delivery Type': order.deliveryType ? readableStatus(order.deliveryType) : 'Standard delivery',
         'Acknowledged At': order.acceptedAt ? formatTimestamp(order.acceptedAt) : 'Pending / Not recorded',
         'PO Reference': `ID ${order.id}`,
         'PO Title': order.title || 'N/A',
         'Expected Delivery': formatDate(order.expectedDelivery)
       },
-      tableHeaders: ['Sr.', 'Description of Goods / Services', 'Qty', 'Rate', 'Line Total'],
+      tableHeaders: ['#', 'Description of Goods / Services', 'Qty', 'Rate', 'Line Total'],
       tableData: tableData.map(row => [row[0], row[1], row[2], moneyPdf(row[3]), moneyPdf(row[4])]),
       financials: {
         subtotal: subtotal,
         grandTotal: totalValue || subtotal
       },
       notes: [
-        '1. This document is generated from the JSGSMILE MSME procurement workflow and must be read with linked GRN, invoice and payment records.',
+        '1. This document is generated from the MSME enterprise procurement workflow and must be read with linked GRN, invoice and payment records.',
         '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
         '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
       ]
     };
 
     const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
+    const doc = await engine.generate(config);
     
     const filename = `${order.poNumber || `PO-${order.id}`}-procurement-invoice.pdf`;
     if (mode === 'print') {
@@ -1266,31 +1504,996 @@ export default function PurchaseOrders() {
           </div>
         </div>
       )}
+
+
+      {rejectingOrder && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reject-po-title"
+          aria-describedby="reject-po-desc"
+        >
+          <FocusTrap onEscape={() => !isSubmittingReject && setRejectingOrder(null)} className="w-full max-w-md">
+            <div className="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 border border-rose-100">
+                    <XCircle className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 id="reject-po-title" className="text-base font-black text-slate-900">
+                      Reject Purchase Order
+                    </h3>
+                    <p id="reject-po-desc" className="text-[11px] font-semibold text-slate-500">
+                      {rejectingOrder.poNumber || `PO #${rejectingOrder.id}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRejectingOrder(null)}
+                  disabled={isSubmittingReject}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Are you sure you want to reject this purchase order? Once rejected, this order will be marked as rejected.
+              </p>
+
+              <div className="space-y-1.5">
+                <label htmlFor="po-rejection-reason" className="block text-xs font-bold text-slate-700">
+                  Reason for Rejection <span className="text-slate-400 font-normal">(optional)</span>
+                </label>
+                <textarea
+                  id="po-rejection-reason"
+                  rows={3}
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                  placeholder="e.g. Inability to meet delivery timeline, inventory stockout, pricing discrepancy..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-rose-400 focus:ring-2 focus:ring-rose-100 outline-none transition-all resize-none"
+                  disabled={isSubmittingReject}
+                />
+              </div>
+
+              <div className="flex justify-end items-center gap-2.5 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRejectingOrder(null)}
+                  disabled={isSubmittingReject}
+                  className="h-9 px-4 text-xs font-bold rounded-xl"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={confirmRejectOrder}
+                  disabled={isSubmittingReject}
+                  className="h-9 px-4 text-xs font-black uppercase tracking-wider bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs flex items-center gap-1.5"
+                >
+                  {isSubmittingReject ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Rejecting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-3.5 w-3.5" />
+                      <span>Reject PO</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </FocusTrap>
+        </div>
+      )}
+
       {viewingOrder && (
-        <PurchaseOrderReceiptModal
-          order={viewingOrder}
-          onClose={() => setViewingOrder(null)}
-          onPrint={() => exportInvoicePdf(viewingOrder, 'print')}
-          onDownloadPdf={() => exportInvoicePdf(viewingOrder, 'download')}
-          isBuyer={isBuyer}
-          isSeller={isSeller}
-          onAccept={handleAcceptOrder}
-          onReject={handleRejectOrder}
-          onCancel={(order) => setConfirming({ action: 'cancel', order: order as PurchaseOrderDto })}
-          onCreateInvoice={(order) => {
-            setViewingOrder(null);
-            const amountVal = order.amount || order.totalValue || 0;
-            router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
-          }}
-          onManageDispatch={(order) => {
-            setViewingOrder(null);
-            handleOpenDelivery(order as PurchaseOrderDto);
-          }}
-          onRepeatOrder={(order) => handleOpenRepeatModal(order as PurchaseOrderDto)}
-          onUploadPaymentSlip={(order) => setUploadProofOrder(order as PurchaseOrderDto)}
-          onViewPaymentSlip={(order) => setViewProofOrder(order as PurchaseOrderDto)}
-          activeDelivery={activeDelivery}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-[24px] border border-slate-200/80 bg-white shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
+            
+            {/* Top Gradient Header */}
+            <div className="relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#12335f] to-[#1e4b8a] text-white px-6 py-5 shrink-0">
+              {/* Background Glow Overlay */}
+              <div className="absolute -top-12 -right-12 h-40 w-40 rounded-full bg-blue-400/10 blur-2xl pointer-events-none" />
+              <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-indigo-400/10 blur-2xl pointer-events-none" />
+              
+              <div className="relative flex items-center justify-between gap-4">
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-0.5 text-[10px] font-black uppercase tracking-widest text-blue-200 border border-white/15 backdrop-blur-sm">
+                      <FileText className="h-3 w-3 text-blue-300" /> Purchase Order Details
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white drop-shadow-sm">
+                      {viewingOrder.poNumber}
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (viewingOrder.poNumber) {
+                          navigator.clipboard.writeText(viewingOrder.poNumber);
+                          toast.success('PO Number copied to clipboard');
+                        }
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-all border border-white/10"
+                      title="Copy PO Number"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Side: Total Amount & Close */}
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="hidden sm:flex flex-col items-end rounded-2xl bg-white/10 px-4 py-2 border border-white/15 backdrop-blur-md">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-blue-200">Grand Total Value</span>
+                    <span className="text-lg font-black text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
+                  <button
+                    onClick={() => setViewingOrder(null)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white/90 hover:bg-white/20 hover:text-white transition-all border border-white/15 shadow-sm"
+                    aria-label="Close PO Details"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto p-5 sm:p-6 space-y-6 flex-1 bg-slate-50/50">
+              
+              {/* Order Title & Badges Card */}
+              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1">Order Title & Reference</span>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">{viewingOrder.title}</h3>
+                  </div>
+                  <div className="sm:hidden text-right shrink-0">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Total</span>
+                    <span className="text-sm font-black text-[#12335f] font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-emerald-800 shadow-2xs">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    {readableStatus(viewingOrder.status)}
+                  </span>
+
+                  {viewingOrder.paymentTerms && (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-teal-800 shadow-2xs">
+                      <CreditCard className="h-3.5 w-3.5 text-teal-600" />
+                      Payment: {readableStatus(viewingOrder.paymentTerms)}
+                    </span>
+                  )}
+
+                  {viewingOrder.deliveryType && (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-black uppercase tracking-wide text-purple-800 shadow-2xs">
+                      <Truck className="h-3.5 w-3.5 text-purple-600" />
+                      Delivery: {readableStatus(viewingOrder.deliveryType)}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Fulfillment Parties & Settings Grid */}
+              <div className="grid gap-4 md:grid-cols-2">
+                
+                {/* Fulfillment Parties Card */}
+                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                    <User className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment Parties</h4>
+                  </div>
+
+                  <div className="space-y-3.5">
+                    {/* Buyer Info */}
+                    {(() => {
+                      const buyerObj = (viewingOrder.buyer as any) || {};
+                      const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || buyerObj.registrationDetails?.businessName || viewingOrder.buyer?.name || 'MSME Portal Buyer';
+                      const buyerLogoUrl = resolveMediaUrl(
+                        buyerObj.organization?.profile?.logoUrl ||
+                        buyerObj.registrationDetails?.logoUrl ||
+                        buyerObj.organization?.logoFile?.url ||
+                        (buyerObj.organization?.organizationLogoFileId ? `/api/files/${buyerObj.organization.organizationLogoFileId}/view` : null) ||
+                        (viewingOrder.buyerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                      );
+                      return (
+                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                          {buyerLogoUrl ? (
+                            <img src={buyerLogoUrl} alt="Buyer Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700 font-bold text-xs">
+                              BY
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {buyerOrgDisplay}
+                            </p>
+                            {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
+                              <p className="text-[10px] font-medium text-slate-500 truncate">Attn: {viewingOrder.buyer.name}</p>
+                            )}
+                            {viewingOrder.buyer?.email && (
+                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.buyer.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Seller Info */}
+                    {(() => {
+                      const sellerObj = (viewingOrder.seller as any) || {};
+                      const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sellerObj.registrationDetails?.businessName || viewingOrder.seller?.name || viewingOrder.seller?.email || 'MSME Portal Seller';
+                      const sellerLogoUrl = resolveMediaUrl(
+                        sellerObj.organization?.profile?.logoUrl ||
+                        sellerObj.registrationDetails?.logoUrl ||
+                        sellerObj.organization?.logoFile?.url ||
+                        (sellerObj.organization?.organizationLogoFileId ? `/api/files/${sellerObj.organization.organizationLogoFileId}/view` : null) ||
+                        (viewingOrder.sellerId === user?.id ? (user?.registrationDetails?.logoUrl || (typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_logo') : null)) : null)
+                      );
+                      return (
+                        <div className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                          {sellerLogoUrl ? (
+                            <img src={sellerLogoUrl} alt="Seller Logo" className="h-9 w-9 rounded-lg object-contain border border-slate-200 bg-white p-0.5 shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 font-bold text-xs">
+                              SL
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
+                            <p className="text-xs font-black text-slate-900 truncate">
+                              {sellerOrgDisplay}
+                            </p>
+                            {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
+                              <p className="text-[10px] font-medium text-slate-500 truncate">Contact: {viewingOrder.seller.name}</p>
+                            )}
+                            {viewingOrder.seller?.email && (
+                              <p className="text-[10px] font-semibold text-slate-500 font-mono truncate">{viewingOrder.seller.email}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* Fulfillment Settings Card */}
+                <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                    <Calendar className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Fulfillment & Schedule</h4>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2.5 rounded-xl bg-indigo-50/50 p-3 border border-indigo-100">
+                      <Clock className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-indigo-700 block">Expected Delivery Date</span>
+                        <p className="text-xs font-black text-slate-900">{formatDate(viewingOrder.expectedDelivery)}</p>
+                      </div>
+                    </div>
+
+                    {viewingOrder.deliveryAddress && (
+                      <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3 border border-slate-100">
+                        <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Delivery Address</span>
+                          <p title={viewingOrder.deliveryAddress} className="text-xs font-semibold text-slate-700 leading-relaxed line-clamp-2">
+                            {viewingOrder.deliveryAddress}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-1.5">Delivery Trackings</span>
+                        <div className="flex flex-wrap gap-2">
+                          {viewingOrder.deliveryTrackings.map((dt: any) => (
+                            <div key={dt.id} className="inline-flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1">
+                              <EntityIdLink
+                                label={dt.trackingNumber || `DLV-${dt.id}`}
+                                id={dt.id}
+                                size="sm"
+                                onClick={() => {
+                                  setViewingOrder(null);
+                                  router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || `DLV-${dt.id}`)}`);
+                                }}
+                              />
+                              <span className="text-[10px] font-bold text-slate-600 uppercase">({readableStatus(dt.status || 'pending')})</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Shipment Tracking & Delivery Progress Card */}
+              {(() => {
+                const deliveryStatusRaw = String(activeDelivery?.status || viewingOrder.status || 'pending').toLowerCase();
+                
+                // Determine milestone step (1 to 5)
+                let stepNumber = 1;
+                let stepStatusLabel = 'Order Placed';
+                let stepStatusTone = 'bg-blue-100 text-blue-800 border-blue-200';
+
+                if (['delivered', 'completed'].includes(deliveryStatusRaw)) {
+                  stepNumber = 5;
+                  stepStatusLabel = 'Delivered';
+                  stepStatusTone = 'bg-emerald-100 text-emerald-800 border-emerald-300';
+                } else if (['out_for_delivery'].includes(deliveryStatusRaw)) {
+                  stepNumber = 4;
+                  stepStatusLabel = 'Out for Delivery';
+                  stepStatusTone = 'bg-purple-100 text-purple-800 border-purple-300';
+                } else if (['in_transit', 'dispatched', 'picked_up', 'at_hub'].includes(deliveryStatusRaw)) {
+                  stepNumber = 3;
+                  stepStatusLabel = 'In Transit';
+                  stepStatusTone = 'bg-indigo-100 text-indigo-800 border-indigo-300';
+                } else if (['ready_for_pickup', 'packed', 'pickup_scheduled', 'accepted', 'in_fulfillment'].includes(deliveryStatusRaw)) {
+                  stepNumber = 2;
+                  stepStatusLabel = 'Ready / Packed';
+                  stepStatusTone = 'bg-sky-100 text-sky-800 border-sky-300';
+                } else if (['cancelled', 'rejected'].includes(deliveryStatusRaw)) {
+                  stepNumber = 1;
+                  stepStatusLabel = 'Cancelled';
+                  stepStatusTone = 'bg-rose-100 text-rose-800 border-rose-300';
+                } else {
+                  stepNumber = 1;
+                  stepStatusLabel = readableStatus(activeDelivery?.status || viewingOrder.status || 'pending');
+                  stepStatusTone = 'bg-blue-100 text-[#12335f] border-blue-200';
+                }
+
+                const milestones = [
+                  { step: 1, title: 'Order Placed', desc: formatDate(viewingOrder.createdAt) },
+                  { step: 2, title: 'Packed & Ready', desc: activeDelivery?.packedAt ? formatDate(activeDelivery.packedAt) : 'Warehouse' },
+                  { step: 3, title: 'In Transit', desc: activeDelivery?.pickedUpAt ? formatDate(activeDelivery.pickedUpAt) : 'Carrier dispatch' },
+                  { step: 4, title: 'Out for Delivery', desc: 'Last mile handover' },
+                  { step: 5, title: 'Delivered', desc: activeDelivery?.actualDelivery ? formatDate(activeDelivery.actualDelivery) : formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery) },
+                ];
+
+                const progressWidthPercent = Math.min(100, Math.max(0, ((stepNumber - 1) / 4) * 100));
+
+                const trackingNumber = activeDelivery?.trackingNumber || (viewingOrder.deliveryTrackings && viewingOrder.deliveryTrackings.length > 0 ? viewingOrder.deliveryTrackings[0]?.trackingNumber : null);
+                const carrierName = activeDelivery?.carrierName || activeDelivery?.logisticsPartnerName || (trackingNumber ? 'Standard Courier Partner' : 'Awaiting Seller Assignment');
+                const arrivalDate = formatDate(activeDelivery?.expectedDelivery || viewingOrder.expectedDelivery);
+                const locationText = activeDelivery?.currentLocation || (stepNumber === 5 ? 'Delivered to Consignee' : stepNumber >= 3 ? 'In Transit to Destination' : 'Seller Fulfillment Center');
+
+                return (
+                  <div className="rounded-2xl border border-blue-200/90 bg-gradient-to-b from-blue-50/70 via-indigo-50/30 to-white p-5 space-y-4 shadow-sm">
+                    {/* Header */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm">
+                          <Truck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-black text-[#12335f] uppercase tracking-wider">
+                              Shipment Tracking & Delivery Progress
+                            </h4>
+                          </div>
+                          <p className="text-[11px] font-semibold text-slate-500">Live dispatch and tracking status</p>
+                        </div>
+                      </div>
+                      <span className={cn("rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs", stepStatusTone)}>
+                        {stepStatusLabel}
+                      </span>
+                    </div>
+
+                    {/* Visual Progress Stepper */}
+                    <div className="bg-white rounded-xl p-4 border border-blue-100/90 shadow-2xs">
+                      <div className="relative">
+                        {/* Connecting Track Background */}
+                        <div className="absolute top-4 left-6 right-6 h-1 bg-slate-200 rounded-full" />
+                        {/* Active Progress Bar */}
+                        <div
+                          className="absolute top-4 left-6 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `calc(${progressWidthPercent}% * (100% - 48px) / 100)` }}
+                        />
+
+                        {/* Milestones Nodes */}
+                        <div className="relative flex justify-between items-start">
+                          {milestones.map((m) => {
+                            const isCompleted = m.step < stepNumber || (m.step === 5 && stepNumber === 5);
+                            const isCurrent = m.step === stepNumber && stepNumber !== 5;
+                            const isUpcoming = m.step > stepNumber;
+
+                            return (
+                              <div key={m.step} className="flex flex-col items-center text-center max-w-[70px] sm:max-w-[100px]">
+                                <div
+                                  className={cn(
+                                    "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold transition-all shadow-sm",
+                                    isCompleted && "bg-emerald-500 text-white ring-4 ring-emerald-50",
+                                    isCurrent && "bg-[#12335f] text-white ring-4 ring-blue-100 ring-offset-1 ring-offset-white",
+                                    isUpcoming && "bg-slate-100 text-slate-400 border border-slate-300"
+                                  )}
+                                >
+                                  {isCompleted ? (
+                                    <CheckCircle2 className="h-4 w-4" />
+                                  ) : isCurrent ? (
+                                    <Truck className="h-3.5 w-3.5 animate-pulse" />
+                                  ) : (
+                                    <span className="font-mono text-[11px]">{m.step}</span>
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    "mt-2 text-[10px] sm:text-[11px] font-bold leading-tight",
+                                    isCompleted ? "text-slate-800" : isCurrent ? "text-[#12335f] font-black" : "text-slate-400"
+                                  )}
+                                >
+                                  {m.title}
+                                </span>
+                                <span className="text-[9px] text-slate-400 hidden sm:block mt-0.5 font-medium truncate max-w-full">
+                                  {m.desc}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Consignment Meta Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-white/95 rounded-xl p-3.5 border border-blue-100/90 text-xs">
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Carrier Partner</span>
+                        <div className="flex items-center gap-1.5">
+                          <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <p className="font-bold text-slate-800 truncate" title={carrierName}>{carrierName}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Tracking Number / AWB</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("font-mono font-bold truncate", trackingNumber ? "text-slate-900" : "text-slate-500 italic")}>
+                            {trackingNumber || 'Pending Waybill'}
+                          </span>
+                          {trackingNumber && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(trackingNumber);
+                                toast.success('Tracking number copied to clipboard');
+                              }}
+                              className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer rounded hover:bg-slate-100 transition-colors"
+                              title="Copy Tracking Number"
+                              aria-label="Copy Tracking Number"
+                            >
+                              <Copy className="h-3 w-3" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Expected Arrival</span>
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <p className="font-bold text-slate-800">{arrivalDate}</p>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Current Location</span>
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                          <p className="font-bold text-slate-800 truncate" title={locationText}>{locationText}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Track Details Action Button */}
+                    <Button 
+                      size="sm"
+                      className="w-full bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-black uppercase tracking-wider h-10 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                      onClick={() => {
+                        setViewingOrder(null);
+                        if (isSeller) {
+                          router.push(`/seller/delivery-management?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
+                        } else {
+                          router.push(`/orders/tracking?search=${encodeURIComponent(viewingOrder.poNumber || '')}`);
+                        }
+                      }}
+                    >
+                      <Truck className="h-4 w-4" /> Track Shipment Details
+                    </Button>
+                  </div>
+                );
+              })()}
+
+              {/* Workflow Timeline Section */}
+              <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Workflow Tracking & Timestamps</h4>
+                  </div>
+                  <span className="text-[10px] font-semibold text-slate-400">Order Lifecycle Audit</span>
+                </div>
+
+                <div className="relative border-l-2 border-slate-200 pl-6 ml-3 space-y-5 py-1">
+                  {/* Step 1: PO Generated */}
+                  <div className="relative">
+                    <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                      <CheckCircle2 className="h-3 w-3" />
+                    </span>
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                      <span className="text-xs font-extrabold text-slate-900">Purchase Order Generated</span>
+                      <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">{formatTimestamp(viewingOrder.createdAt)}</span>
+                    </div>
+                    <p className="text-[11px] font-semibold text-slate-500 mt-1">PO record successfully created from procurement bidding workflow.</p>
+                  </div>
+
+                  {/* Step 2: PO Acknowledged */}
+                  {(() => {
+                    const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                    return viewingStatusLower !== 'generated' && viewingStatusLower !== 'order_placed' && viewingStatusLower !== 'cancelled' && (
+                      <div className="relative">
+                        <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3" />
+                        </span>
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <span className="text-xs font-extrabold text-slate-900">PO Acknowledged by Seller</span>
+                          <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {viewingOrder.acceptedAt ? formatTimestamp(viewingOrder.acceptedAt) : 'Acknowledged'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-semibold text-slate-500 mt-1">Seller acknowledged and committed to fulfilling this order.</p>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Step 3: Delivered */}
+                  {viewingOrder.status === 'delivered' && (
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 ring-4 ring-emerald-50 text-white shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3" />
+                      </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <span className="text-xs font-extrabold text-slate-900">Delivered & Completed</span>
+                        <span className="text-[10px] font-mono font-bold text-slate-500 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">Completed</span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-slate-500 mt-1">Consignment has been safely delivered and confirmed by buyer.</p>
+                    </div>
+                  )}
+
+                  {/* Step 4: Cancelled */}
+                  {viewingOrder.status === 'cancelled' && (
+                    <div className="relative">
+                      <span className="absolute -left-[31px] top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 ring-4 ring-rose-50 text-white shadow-2xs">
+                        <XCircle className="h-3 w-3" />
+                      </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                        <span className="text-xs font-extrabold text-rose-700">Order Cancelled</span>
+                        <span className="text-[10px] font-mono font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-md">Cancelled</span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-rose-500 mt-1">Fulfillment terminated by one of the parties.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Terms & Documents section */}
+              {(() => {
+                const terms = (viewingOrder.metadata as any)?.termsDocuments || {};
+                const docs = (Array.isArray(terms.documents) ? terms.documents : []) as Array<{
+                  documentType: string;
+                  fileAssetId: number;
+                  fileName: string;
+                  fileSize: number;
+                }>;
+                
+                const hasTerms = terms.deliveryTerms || terms.paymentTerms || terms.warrantyTerms || terms.inspectionTerms || terms.delayPenaltyDetails || terms.additionalTerms;
+                const hasDocs = docs.length > 0;
+
+                if (!hasTerms && !hasDocs) return null;
+
+                return (
+                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[#12335f]" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Procurement Terms & Documents</h4>
+                      </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2 text-xs">
+                      {hasTerms && (
+                        <div className="space-y-2.5">
+                          {terms.deliveryTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Delivery Terms</p><p className="font-semibold text-slate-700">{terms.deliveryTerms}</p></div>}
+                          {terms.paymentTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Payment Terms</p><p className="font-semibold text-slate-700">{terms.paymentTerms}</p></div>}
+                          {terms.warrantyTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Warranty Terms</p><p className="font-semibold text-slate-700">{terms.warrantyTerms}</p></div>}
+                          {terms.inspectionTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Inspection Terms</p><p className="font-semibold text-slate-700">{terms.inspectionTerms}</p></div>}
+                          {terms.delayPenaltyDetails && <div><p className="text-[9px] font-black uppercase text-slate-400">Delay Penalty Details</p><p className="font-semibold text-slate-700">{terms.delayPenaltyDetails}</p></div>}
+                          {terms.additionalTerms && <div><p className="text-[9px] font-black uppercase text-slate-400">Additional Terms</p><p className="font-semibold text-slate-700">{terms.additionalTerms}</p></div>}
+                        </div>
+                      )}
+                      {hasDocs && (
+                        <div className="space-y-2">
+                          <p className="text-[9px] font-black uppercase text-slate-400">Uploaded Procurement Documents</p>
+                          <div className="space-y-2">
+                            {docs.map((doc, dIdx) => (
+                              <div key={dIdx} className="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-200/80 p-3 hover:border-slate-300 transition-all">
+                                <FileText className="h-5 w-5 shrink-0 text-[#12335f]" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">{doc.documentType}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      openFileAsset({
+                                        id: doc.fileAssetId,
+                                        fileAssetId: doc.fileAssetId,
+                                        originalName: doc.fileName,
+                                      }, doc.fileName).catch(err => {
+                                        toast.error(err instanceof Error ? err.message : 'Unable to open document');
+                                      });
+                                    }}
+                                    title={doc.fileName}
+                                    className="block truncate text-xs font-bold text-[#12335f] hover:underline text-left w-full"
+                                  >
+                                    {doc.fileName}
+                                  </button>
+                                </div>
+                                <span className="text-[10px] font-bold text-slate-400 shrink-0 font-mono">({(doc.fileSize / 1024).toFixed(0)} KB)</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Line Items Table Section - Responsive with Zero Horizontal Scroll */}
+              <div className="rounded-2xl bg-white border border-slate-200/80 shadow-sm overflow-hidden space-y-0">
+                <div className="flex items-center justify-between bg-slate-50/80 px-5 py-3.5 border-b border-slate-200/80">
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-[#12335f]" />
+                    <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Line Items</h4>
+                  </div>
+                  <span className="rounded-full bg-slate-200/70 px-2.5 py-0.5 text-[10px] font-black text-slate-700">
+                    {(viewingOrder.items?.length || 1)} Item(s)
+                  </span>
+                </div>
+
+                {/* Table with fixed layout to prevent horizontal scroll */}
+                <div className="w-full">
+                  <table className="w-full text-left border-collapse table-fixed">
+                    <thead>
+                      <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        <th scope="col" className="py-3 px-3 text-center w-12 sm:w-14">#</th>
+                        <th scope="col" className="py-3 px-3 text-left">Item Description</th>
+                        <th scope="col" className="py-3 px-2 text-center w-16 sm:w-20">Qty</th>
+                        <th scope="col" className="py-3 px-3 text-right w-24 sm:w-28">Unit Price</th>
+                        <th scope="col" className="py-3 px-3 text-right w-28 sm:w-32">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs">
+                      {((viewingOrder.items && viewingOrder.items.length > 0)
+                        ? viewingOrder.items
+                        : [{ itemName: viewingOrder.title, quantity: 1, unitPrice: viewingOrder.amount || viewingOrder.totalValue, totalAmount: viewingOrder.amount || viewingOrder.totalValue }]
+                      ).map((item: any, idx: number) => {
+                        const qty = Number(item.quantity || 1);
+                        const unitPrice = Number(item.unitPrice || 0);
+                        const totalAmount = Number(item.totalAmount || (qty * unitPrice));
+                        return (
+                          <tr key={item.id || `po-item-${idx}`} className="hover:bg-blue-50/30 transition-colors">
+                            <td className="py-3.5 px-3 text-center font-mono font-bold text-slate-400 text-[11px] align-top">
+                              {String(idx + 1).padStart(2, '0')}
+                            </td>
+                            <td className="py-3.5 px-3 align-top">
+                              <p className="font-black text-slate-900 leading-snug break-words">
+                                {item.itemName || viewingOrder.title}
+                              </p>
+                              {item.description && (
+                                <p className="text-[11px] font-semibold text-slate-500 mt-1 leading-relaxed break-words">
+                                  {item.description}
+                                </p>
+                              )}
+                              {item.hsnCode && (
+                                <span className="inline-block mt-1 text-[9px] font-mono font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  HSN: {item.hsnCode}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-2 text-center align-top">
+                              <span className="inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800 font-mono">
+                                {qty}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-3 text-right font-mono font-semibold text-slate-600 align-top whitespace-nowrap">
+                              {formatCurrency(unitPrice)}
+                            </td>
+                            <td className="py-3.5 px-3 text-right font-mono font-black text-slate-900 align-top whitespace-nowrap">
+                              {formatCurrency(totalAmount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 bg-slate-50/70 border-t border-slate-200/80">
+                  <div className="text-xs text-slate-500 font-medium">
+                    Showing <span className="font-bold text-slate-800">{(viewingOrder.items?.length || 1)}</span> line item(s)
+                  </div>
+                  <div className="bg-[#12335f] text-white rounded-xl px-5 py-2.5 text-right shadow-sm flex items-center gap-4">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-200">Grand Total Amount</span>
+                    <span className="text-lg font-black text-white font-mono">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatures & Stamps Card */}
+              {(() => {
+                const buyerObj = (viewingOrder.buyer as any) || {};
+                const sellerObj = (viewingOrder.seller as any) || {};
+                const bReg = (buyerObj.registrationDetails as Record<string, any>) || {};
+                const sReg = (sellerObj.registrationDetails as Record<string, any>) || {};
+                const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
+                const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
+                const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
+
+                const bStamp = resolveMediaUrl(bReg.stampUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null));
+                const bSig = resolveMediaUrl(bReg.signatureUrl || (viewingOrder.buyerId === user?.id || isBuyer ? (currentUserReg.signatureUrl || lsSig) : null));
+                const sStamp = resolveMediaUrl(sReg.stampUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.stampUrl || lsStamp) : null));
+                const sSig = resolveMediaUrl(sReg.signatureUrl || (viewingOrder.sellerId === user?.id || isSeller ? (currentUserReg.signatureUrl || lsSig) : null));
+
+                const buyerOrgDisplay = buyerObj.organization?.organizationName || buyerObj.buyerProfile?.companyName || bReg.businessName || viewingOrder.buyer?.name || 'Buyer';
+                const sellerOrgDisplay = sellerObj.organization?.organizationName || sellerObj.sellerProfile?.businessName || sReg.businessName || viewingOrder.seller?.name || 'Seller';
+
+                return (
+                  <div className="rounded-2xl bg-white p-5 border border-slate-200/80 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-[#12335f]" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-[#12335f]">Signatures & Official Authorization</h4>
+                      </div>
+                      <span className="text-[10px] font-semibold text-slate-400">Verified MSME Seals</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Buyer Authorization */}
+                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Buyer Authorization</span>
+                          <p className="text-xs font-black text-slate-900 truncate">For {buyerOrgDisplay}</p>
+                        </div>
+                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
+                          {bStamp ? (
+                            <img src={bStamp} alt="Buyer Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                          ) : (
+                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
+                              Stamp
+                            </div>
+                          )}
+                          {bSig ? (
+                            <img src={bSig} alt="Buyer Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Buyer Signatory</span>
+                      </div>
+
+                      {/* Seller Authorization */}
+                      <div className="rounded-xl bg-slate-50 p-4 border border-slate-100 flex flex-col justify-between space-y-3">
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">Supplier Authorization</span>
+                          <p className="text-xs font-black text-slate-900 truncate">For {sellerOrgDisplay}</p>
+                        </div>
+                        <div className="flex items-center gap-3 h-14 bg-white p-2 rounded-lg border border-slate-200/60">
+                          {sStamp ? (
+                            <img src={sStamp} alt="Seller Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                          ) : (
+                            <div className="h-10 w-10 rounded border border-dashed border-slate-300 flex items-center justify-center text-[8px] font-black text-slate-400 shrink-0 uppercase">
+                              Stamp
+                            </div>
+                          )}
+                          {sSig ? (
+                            <img src={sSig} alt="Seller Signature" className="h-10 w-auto object-contain mix-blend-multiply" />
+                          ) : (
+                            <span className="text-[10px] font-semibold text-slate-400 italic">Signature on file</span>
+                          )}
+                        </div>
+                        <span className="text-[9px] text-slate-500 font-semibold border-t border-slate-200 pt-1 text-center block">Authorized Supplier Signatory</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            </div>
+
+            {/* Modal Sticky Action Footer - Single Row */}
+            <div className="flex items-center justify-between gap-2.5 border-t border-slate-200 bg-white px-5 py-3 shrink-0 shadow-lg overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-2 shrink-0">
+                {(() => {
+                  const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
+                  const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
+                  const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
+                  return (
+                    <>
+                      {isSeller && isIssuedModal && (
+                        <>
+                          <Button
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleAcceptOrder(viewingOrder);
+                            }}
+                            className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept PO
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleRejectOrder(viewingOrder);
+                            }}
+                            className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Reject PO
+                          </Button>
+                        </>
+                      )}
+                      {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
+                        <>
+                          {(() => {
+                            const hasApprovedGrn = Boolean(
+                              (viewingOrder as any)?.grns && (viewingOrder as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+                            );
+                            if (hasApprovedGrn) {
+                              return (
+                                <Button
+                                  onClick={() => {
+                                    setViewingOrder(null);
+                                    const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
+                                    router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
+                                  }}
+                                  className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                                >
+                                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice from PO (GRN Verified)
+                                </Button>
+                              );
+                            }
+                            return (
+                              <Button
+                                disabled
+                                className="h-9 bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap opacity-60 cursor-not-allowed"
+                                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+                              >
+                                <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Convert PO to Invoice (GRN Locked)
+                              </Button>
+                            );
+                          })()}
+                          <Button
+                            onClick={() => {
+                              setViewingOrder(null);
+                              handleOpenDelivery(viewingOrder);
+                            }}
+                            className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <Truck className="mr-1.5 h-3.5 w-3.5" /> Delivery / Manage Dispatch
+                          </Button>
+                        </>
+                      )}
+                      {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
+                          className="h-9 border-rose-200 text-xs font-black uppercase tracking-wider text-rose-600 hover:bg-rose-50 rounded-xl px-3.5 whitespace-nowrap"
+                        >
+                          <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
+                        </Button>
+                      )}
+                      {isBuyer && viewingStatusLower !== 'cancelled' && (
+                        <>
+                          <Button
+                            onClick={() => {
+                              const target = viewingOrder;
+                              setViewingOrder(null);
+                              setRecordPaymentOrder(target);
+                            }}
+                            className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                          </Button>
+                          <Button
+                            onClick={() => setUploadProofOrder(viewingOrder)}
+                            className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setViewProofOrder(viewingOrder)}
+                            className="h-9 border-slate-300 text-xs font-black uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Payment Slip
+                          </Button>
+                        </>
+                      )}
+                      {isSeller && viewingStatusLower !== 'cancelled' && (
+                        <Button
+                          onClick={() => {
+                            const target = viewingOrder;
+                            setViewingOrder(null);
+                            setConfirmSettlementOrder(target);
+                          }}
+                          className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                        >
+                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
+                        </Button>
+                      )}
+                      {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setViewProofOrder(viewingOrder)}
+                          className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap"
+                        >
+                          <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Slip
+                        </Button>
+                      )}
+                      {isBuyer && viewingStatusLower === 'delivered' && (
+                        <Button
+                          onClick={() => handleOpenRepeatModal(viewingOrder)}
+                          className="h-9 bg-[#12335f] text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2445] shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                        >
+                          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
+                        </Button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button 
+                  variant="outline" 
+                  onClick={() => setReceiptModalOrder(viewingOrder)} 
+                  className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-blue-200 bg-blue-50/60 text-[#12335f] hover:bg-blue-100/60 px-3.5 whitespace-nowrap"
+                >
+                  <Receipt className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> View Official PO
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
+                  className="h-9 text-xs font-black uppercase tracking-wider rounded-xl border-slate-300 hover:bg-slate-50 px-3.5 whitespace-nowrap"
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Download PO
+                </Button>
+                <Button 
+                  onClick={() => setViewingOrder(null)} 
+                  className="h-9 bg-slate-900 text-xs font-black uppercase tracking-wider text-white hover:bg-slate-800 rounded-xl px-4 shadow-sm whitespace-nowrap"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+
+          </div>
+        </div>
       )}
 
       {repeatingOrder && (
@@ -1301,6 +2504,23 @@ export default function PurchaseOrders() {
             setViewingOrder(null);
             reload();
           }}
+        />
+      )}
+
+      {receiptModalOrder && (
+        <PurchaseOrderReceiptModal
+          order={receiptModalOrder}
+          onClose={() => setReceiptModalOrder(null)}
+          isSeller={isSeller}
+          isBuyer={isBuyer}
+          onAccept={(o) => handleAcceptOrder(o as any)}
+          onReject={(o) => handleRejectOrder(o as any)}
+          onCreateInvoice={(o) => handleConvertToInvoice(o as any)}
+          onManageDispatch={(o) => handleOpenDelivery(o as any)}
+          onRepeatOrder={(o) => handleOpenRepeatModal(o as any)}
+          onUploadPaymentSlip={(o) => setUploadProofOrder(o as any)}
+          onViewPaymentSlip={(o) => setViewProofOrder(o as any)}
+          activeDelivery={activeDelivery}
         />
       )}
 
@@ -1334,6 +2554,32 @@ export default function PurchaseOrders() {
           }}
         />
       )}
+
+      {recordPaymentOrder && (
+        <RecordOrderPaymentModal
+          isOpen={!!recordPaymentOrder}
+          onClose={() => setRecordPaymentOrder(null)}
+          order={recordPaymentOrder}
+          onSuccess={() => {
+            setRecordPaymentOrder(null);
+            toast.success('Payment recorded and bank slip uploaded successfully.');
+            reload();
+          }}
+        />
+      )}
+
+      {confirmSettlementOrder && (
+        <ConfirmOrderSettlementModal
+          isOpen={!!confirmSettlementOrder}
+          onClose={() => setConfirmSettlementOrder(null)}
+          order={confirmSettlementOrder}
+          onSuccess={() => {
+            setConfirmSettlementOrder(null);
+            toast.success('Settlement confirmed and order closed successfully.');
+            reload();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1352,9 +2598,11 @@ function InfoTile({ label, value }: { label: string; value: string }) {
 function StatusPill({ status }: { status?: string }) {
   const value = String(status || 'generated').toLowerCase();
   const isAccepted = value === 'accepted';
-  const isCancelled = value === 'cancelled' || value === 'rejected';
+  const isCancelled = value === 'cancelled';
+  const isRejected = value === 'rejected';
   const isDelivered = value === 'delivered';
   const isIssued = value === 'issued' || value === 'generated' || value === 'order_placed';
+  const isPendingApproval = value === 'pending_approval';
   const isPaidOffline = value === 'paid_offline_verified';
   const isPaid = value === 'paid' || isPaidOffline;
 
@@ -1366,12 +2614,13 @@ function StatusPill({ status }: { status?: string }) {
         isPaid && !isPaidOffline && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
         !isPaid && isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
         !isPaid && isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
-        !isPaid && isCancelled && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
+        !isPaid && (isCancelled || isRejected) && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
         !isPaid && isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
-        !isAccepted && !isDelivered && !isCancelled && !isIssued && !isPaid && 'border-slate-200 bg-slate-50 text-slate-700'
+        !isPaid && isPendingApproval && 'border-amber-300 bg-amber-50 text-amber-900 shadow-2xs',
+        !isAccepted && !isDelivered && !isCancelled && !isRejected && !isIssued && !isPaid && !isPendingApproval && 'border-slate-200 bg-slate-50 text-slate-700'
       )}
     >
-      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
+      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isRejected ? 'REJECTED' : isCancelled ? 'CANCELLED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
     </span>
   );
 }

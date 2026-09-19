@@ -12,6 +12,7 @@ import { getGCSBucket, getGCSBucketName } from '../config/gcs.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
+import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
 import { upload } from '../config/storage.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { onUserLinkedToOrganization } from '../services/org-membership.service.js';
@@ -19,6 +20,7 @@ import { approveOnboardingAndEnsureOrganization, createOrUpdatePendingOrganizati
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
+import { invalidateUserAuthCache } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
@@ -28,7 +30,7 @@ import { maskSensitive } from '../utils/maskSensitive.js';
 import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
-import { formatRequirementNumber, formatRefId } from '../utils/refIdUtils.js';
+import { formatRequirementNumber, formatRefId, CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
 import { bankVerificationService } from '../services/verification/bank.service.js';
 import { GstService, hasValidGstinChecksum } from '../services/gstService.js';
 import {
@@ -42,6 +44,7 @@ import {
 import { idempotencyKeyFromRequest, withIdempotency } from '../services/idempotency.service.js';
 import { catalogueWorkflow } from '../services/workflow/catalogue-workflow.service.js';
 import { procurementWorkflow } from '../services/workflow/procurement-workflow.service.js';
+import { numberSeries } from '../services/workflow/workflow-common.js';
 import { tenderWorkflow } from '../services/workflow/tender-workflow.service.js';
 import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.service.js';
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
@@ -53,6 +56,8 @@ import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations, extractInvitedSellerIds } from '../modules/procurementBid/procurement-bid.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
+import { createApprovalChain } from '../services/approval-chain.service.js';
+import { parseDateIST } from '../utils/dateUtils.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -65,11 +70,11 @@ const safeCoercedDate = z.preprocess((val) => {
     const parts = val.split('-');
     if (parts.length === 3 && parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
       const isoStr = `${parts[2]}-${parts[1]}-${parts[0]}`;
-      const d = new Date(isoStr);
-      if (!isNaN(d.getTime())) return d;
+      const d = parseDateIST(isoStr);
+      if (d && !isNaN(d.getTime())) return d;
     }
-    const d = new Date(val);
-    if (!isNaN(d.getTime())) return d;
+    const d = parseDateIST(val);
+    if (d && !isNaN(d.getTime())) return d;
   }
   return val;
 }, z.any().refine(val => {
@@ -199,7 +204,6 @@ const procurementMethodDefinitions = [
   { slug: 'open-tender', code: 'OPEN_TENDER', name: 'Open Tender', route: '/buyer/procurement/create?method=OPEN_TENDER', handoffRoute: '/buyer/publish-bid?method=open-tender', badge: 'Compliance Required', valueHint: 'Formal bids and higher-value procurement' },
   { slug: 'limited-tender', code: 'LIMITED_TENDER', name: 'Limited Tender', route: '/buyer/procurement/create?method=LIMITED_TENDER', handoffRoute: '/buyer/publish-bid?method=limited-tender', badge: 'Restricted Pool', valueHint: 'Bids invited from a selected list of suppliers' },
   { slug: 'reverse-auction', code: 'REVERSE_AUCTION', name: 'Reverse Auction', route: '/buyer/procurement/create?method=REVERSE_AUCTION', handoffRoute: '/reverse-auctions/create', badge: 'Advanced', valueHint: 'Use after technical qualification' },
-  { slug: 'repeat-order', code: 'REPEAT_ORDER', name: 'Repeat Order', route: '/buyer/procurement/create?method=REPEAT_ORDER', handoffRoute: '/buyer/procurement/create?method=REPEAT_ORDER', badge: 'Quick Reorder', valueHint: 'Use with prior order reference' },
   // Legacy alias entries kept for backward compatibility with old records
   { slug: 'tender', code: 'OPEN_TENDER', name: 'Tender (Legacy)', route: '/buyer/procurement/create', handoffRoute: '/buyer/publish-bid?method=tender', badge: 'Legacy', valueHint: 'Migrated to Open Tender' },
 ];
@@ -445,6 +449,8 @@ const paged = (records: unknown[], total: number, query: Record<string, unknown>
 
 const profileStatus = (user?: any, profile?: any) =>
   profile?.verificationStatusEnum ||
+  (profile?.verificationStatus === 'VERIFIED' ? 'VERIFIED' : null) ||
+  (user?.organization?.verificationStatus === 'VERIFIED' ? 'VERIFIED' : null) ||
   (approvedProcurementStatuses.has(String(user?.onboardingStatus)) ? 'VERIFIED' : 'PENDING');
 
 const assertBuyerProcurementApproved = async (req: AuthRequest) => {
@@ -459,6 +465,7 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
       mobile: true,
       role: true,
       onboardingStatus: true,
+      sectionStatus: true,
       accountStatus: true,
       isDualRole: true,
       organizationId: true,
@@ -468,9 +475,37 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
   });
   if (!user) throw new ApiError(404, 'User not found');
 
-  const isApproved = user.isDualRole
-    ? (user.buyerProfile?.verificationStatusEnum === 'VERIFIED' || user.buyerProfile?.verificationStatus === 'VERIFIED')
-    : approvedProcurementStatuses.has(String(user.onboardingStatus));
+  const buyerProfileVerified = Boolean(
+    user.buyerProfile?.verificationStatusEnum === 'VERIFIED' ||
+    user.buyerProfile?.verificationStatus === 'VERIFIED'
+  );
+
+  const organizationVerified = Boolean(
+    user.organization?.verificationStatus === 'VERIFIED' ||
+    user.organization?.organizationOnboardingStatus === 'approved_for_procurement'
+  );
+
+  const allSectionsApproved = Boolean(
+    user.sectionStatus &&
+    typeof user.sectionStatus === 'object' &&
+    Object.keys(user.sectionStatus).length > 0 &&
+    Object.values(user.sectionStatus).every((s: any) => s === 'approved')
+  );
+
+  const isApproved =
+    approvedProcurementStatuses.has(String(user.onboardingStatus)) ||
+    buyerProfileVerified ||
+    organizationVerified ||
+    allSectionsApproved;
+
+  if (isApproved && !approvedProcurementStatuses.has(String(user.onboardingStatus))) {
+    // Harmonize user onboarding status to approved_for_procurement so downstream systems match
+    await db.user.update({
+      where: { id: user.id },
+      data: { onboardingStatus: 'approved_for_procurement' }
+    }).catch((err: any) => console.error('[HarmonizeBuyerOnboardingStatus]', err));
+    user.onboardingStatus = 'approved_for_procurement';
+  }
 
   if (!isApproved) {
     throw new ApiError(
@@ -767,6 +802,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         bid.visibility === 'LIMITED' ||
         bid.visibility === 'PRIVATE';
 
+      const payload = (typeof bid.technicalPacket === 'object' && bid.technicalPacket ? (bid.technicalPacket as any) : {}) as any;
+      const terms = payload.terms || {};
       tender = {
         ...bid,
         id: bid.id,
@@ -778,7 +815,6 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         procurementMethod: isLimited ? 'Limited Tender' : 'Open Tender',
         procurementType: isLimited ? 'LIMITED_TENDER' : 'OPEN_TENDER',
         category: bid.category,
-        subCategory: bid.subCategory,
         budget: Number(bid.estimatedValue || 0),
         description: bid.description,
         status: bid.status === 'PUBLISHED' ? 'published' : bid.status.toLowerCase(),
@@ -787,8 +823,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         closesAt: bid.endDate,
         createdAt: bid.createdAt,
         updatedAt: bid.updatedAt,
-        paymentTerms: bid.packetType,
-        deliveryType: bid.unit,
+        paymentTerms: terms.paymentTerms || (bid as any).paymentTerms || null,
+        deliveryType: terms.deliveryTerms || terms.deliveryType || (bid as any).deliveryType || null,
         itemCondition: bid.deliveryLocation,
         bidValidityDays: bid.bidValidityDate ? undefined : 90,
         bidValidityDate: bid.bidValidityDate,
@@ -859,9 +895,13 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
             warranty: it.warranty,
             deliverySchedule: it.deliverySchedule,
             technicalSpecification: it.technicalSpecification || it.specification || '',
+            specification: it.specification || it.technicalSpecification || it.description || '',
             gst: it.gst || (it.specifications && it.specifications.gst),
             alternateBrandAllowed: it.alternateBrandAllowed ?? (it.brand_flexible === 'Yes' || (it.specifications && it.specifications.brand_flexible === 'Yes')),
-            uploadedSpecificationFiles: it.uploadedSpecificationFiles || it.specificationFileName || (it.specifications && it.specifications.specificationFileName)
+            uploadedSpecificationFiles: it.uploadedSpecificationFiles || it.specificationFileName || (it.specifications && it.specifications.specificationFileName),
+            specificationFileName: it.specificationFileName || (it.specifications && it.specifications.specificationFileName) || '',
+            fileAssetId: it.fileAssetId || (it.specifications && it.specifications.fileAssetId) || null,
+            attachments: it.attachments || (it.specifications && it.specifications.attachments) || []
           }));
         }
       }
@@ -908,7 +948,7 @@ const productBody = z.object({
   hsnCode: z.string().trim().max(30).nullable().optional(),
   brand: z.string().trim().max(120).nullable().optional(),
   modelNumber: z.string().trim().max(120).nullable().optional(),
-  unitOfMeasure: z.string().trim().max(40).nullable().optional(),
+  unitOfMeasure: z.string().trim().max(120).nullable().optional(),
   price: z.coerce.number().nonnegative().nullable().optional(),
   taxRate: z.coerce.number().min(0).max(100).nullable().optional(),
   discount: z.coerce.number().min(0).max(100).nullable().optional(),
@@ -930,7 +970,7 @@ const productBody = z.object({
   specifications: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
-    unit: z.string().trim().max(40).nullable().optional()
+    unit: z.string().trim().max(120).nullable().optional()
   })).optional()
 });
 
@@ -965,7 +1005,7 @@ const serviceBody = z.object({
   specifications: z.array(z.object({
     name: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
-    unit: z.string().trim().max(40).nullable().optional()
+    unit: z.string().trim().max(120).nullable().optional()
   })).optional()
 });
 
@@ -981,7 +1021,7 @@ const requirementBody = z.object({
     itemName: z.string().trim().min(2).max(200),
     description: z.string().trim().max(2000).optional(),
     quantity: z.coerce.number().positive(),
-    unitOfMeasure: z.string().trim().min(1).max(40),
+    unitOfMeasure: z.string().trim().min(1).max(120),
     estimatedUnitPrice: z.coerce.number().nonnegative().optional(),
     specifications: z.record(z.string(), z.unknown()).optional()
   })).optional()
@@ -1087,7 +1127,7 @@ const procurementDraftBody = z.object({
     itemName: z.string().trim().max(200).optional().or(z.literal('')),
     description: z.string().trim().max(2000).optional(),
     quantity: z.coerce.number().optional(),
-    unitOfMeasure: z.string().trim().max(40).optional().or(z.literal('')),
+    unitOfMeasure: z.string().trim().max(120).optional().or(z.literal('')),
     estimatedUnitPrice: z.coerce.number().nonnegative().optional(),
     specifications: z.record(z.string(), z.unknown()).optional()
   })).optional()
@@ -1297,7 +1337,6 @@ const auctionConfigSchema = z.object({
   auctionDescription: z.string().trim().max(3000).optional(),
   procurementMethod: z.enum(['REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION']),
   category: z.string().trim().max(160).optional(),
-  subCategory: z.string().trim().max(160).optional(),
   currency: z.string().trim().length(3).default('INR'),
   buyerOrganization: z.string().trim().max(180).optional(),
   department: z.string().trim().max(160).optional(),
@@ -1344,7 +1383,6 @@ const normalizeAuctionConfigForDraft = (draft: any) => {
     auctionDescription: raw.auctionDescription || draft.description || payload.basics?.description,
     procurementMethod: raw.procurementMethod || payload.fullProcurementMethod || draft.canonicalMethod || draft.method || draft.procurementMethod,
     category: raw.auctionCategory || raw.category || payload.basics?.category || payload.category,
-    subCategory: raw.auctionSubCategory || raw.subCategory || payload.basics?.subCategory,
     currency: raw.currency || payload.currency || payload.basics?.currency || draft.currency || 'INR',
     buyerOrganization: raw.buyerOrganization || payload.internal?.orgName,
     department: raw.department || payload.internal?.department,
@@ -1431,7 +1469,7 @@ const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, met
 const rateContractItemSchema = z.object({
   itemName: z.string().trim().min(2).max(240),
   specification: z.string().trim().max(2000).optional().default(''),
-  uom: z.string().trim().min(1).max(40),
+  uom: z.string().trim().min(1).max(120),
   estimatedAnnualQuantity: z.coerce.number().positive(),
   baseRate: z.coerce.number().positive(),
   gst: z.coerce.number().min(0).max(100).default(0),
@@ -1459,7 +1497,7 @@ const rateContractConfigSchema = z.object({
     supplierName: z.string().trim().max(180).optional().nullable()
   })).min(1),
   itemRateSchedule: z.array(rateContractItemSchema).min(1),
-  priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']),
+  priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']).optional().default('FIXED_PRICE'),
   callOffOrderAllowed: z.coerce.boolean(),
   maximumOrderQuantityPerCallOff: z.coerce.number().positive().optional().nullable(),
   minimumOrderQuantity: z.coerce.number().nonnegative().default(0),
@@ -1469,7 +1507,7 @@ const rateContractConfigSchema = z.object({
   securityDepositAmount: z.coerce.number().nonnegative().default(0),
   pbgRequired: z.coerce.boolean().default(false),
   pbgAmount: z.coerce.number().nonnegative().default(0),
-  approvalWorkflow: z.string().trim().min(2).max(200),
+  approvalWorkflow: z.string().trim().max(200).optional().default('Finance + Procurement'),
   contractDocument: z.object({
     fileAssetId: z.coerce.number().int().positive().optional().nullable(),
     fileName: z.string().trim().max(2000).optional().nullable()
@@ -1502,7 +1540,7 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     contractTitle: raw.contractTitle || payload.basics?.title || draft.title,
     contractDescription: raw.contractDescription || payload.basics?.description || draft.description || '',
     contractCategory: raw.contractCategory || payload.basics?.category || payload.category || '',
-    contractSubCategory: raw.contractSubCategory || payload.basics?.subCategory || '',
+    contractSubCategory: raw.contractSubCategory || '',
     periodStartDate: raw.periodStartDate || raw.startDate || payload.tender?.bidStartDate,
     periodEndDate: raw.periodEndDate || raw.endDate || payload.tender?.bidClosingDate || draft.requiredBy,
     rateValidityPeriod: raw.rateValidityPeriod || 'Contract period',
@@ -1650,8 +1688,8 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
   return (saved as any)?.items ? saved : db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
-const nextProcurementAuctionCode = () => `REQ-${Math.floor(10000 + Math.random() * 90000)}`;
-const nextRateContractCode = () => `RC-${Math.floor(10000 + Math.random() * 90000)}`;
+const nextProcurementAuctionCode = () => numberSeries('RA');
+const nextRateContractCode = () => numberSeries('RC');
 
 const createAuctionForSubmittedProcurement = async (req: AuthRequest, requirement: any, draftBody: z.infer<typeof procurementDraftBody>) => {
   const methodSlug = methodSlugForDraft(draftBody);
@@ -1694,7 +1732,6 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
       description: config.auctionDescription || null,
       procurementMethod: config.procurementMethod,
       category: config.category || null,
-      subCategory: config.subCategory || null,
       auctionType: config.auctionType,
       auctionMode: config.auctionMode,
       auctionDurationMinutes: config.auctionDurationMinutes,
@@ -1753,6 +1790,19 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     procurementMethod: config.procurementMethod,
     qualifiedVendorCount: config.qualifiedVendors.length
   });
+
+  void notificationService.notifySellersAndShgsOfProcurement({
+    id: auction.id,
+    title: auction.title,
+    bidNumber: auction.auctionNumber,
+    procurementType: 'REVERSE_AUCTION',
+    canonicalMethod: 'REVERSE_AUCTION',
+    buyerOrganizationName: auction.buyerOrganization,
+    estimatedValue: auction.estimatedValue,
+    endDate: auction.endDateTime,
+    visibility: 'PUBLIC'
+  });
+
   return auction;
 };
 
@@ -1846,10 +1896,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
   const creationTime = requirement.createdAt ? new Date(requirement.createdAt) : new Date();
   const rawPublishCandidate = schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || null;
-  const parsedStartDate = rateContractConfig.periodStartDate ? new Date(rateContractConfig.periodStartDate) : (rawPublishCandidate ? new Date(rawPublishCandidate) : null);
+  const parsedStartDate = rateContractConfig.periodStartDate ? parseDateIST(rateContractConfig.periodStartDate) : (rawPublishCandidate ? parseDateIST(rawPublishCandidate) : null);
   const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
   const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
-  const endDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const rawEndDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const effectiveEndDate = parseDateIST(rawEndDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {
@@ -1874,7 +1925,6 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     buyerOrganizationName: internal.orgName || buyer?.organization?.organizationName || buyer?.buyerProfile?.organizationName || buyer?.name || 'Buyer organization',
     buyerType: basics.buyerType || buyer?.organization?.organizationType || 'Buyer',
     category: basics.category || requirement.category?.name || 'General procurement',
-    subCategory: basics.subCategory || null,
     bidType,
     procurementType: canonicalMethod,
     canonicalMethod,
@@ -1886,10 +1936,10 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     district: buyer?.organization?.district || null,
     pincode: buyer?.organization?.pincode || null,
     startDate: effectiveStartDate,
-    endDate: new Date(endDate),
-    technicalOpeningDate: tender.technicalEvaluationDate ? new Date(tender.technicalEvaluationDate) : null,
-    financialOpeningDate: tender.financialEvaluationDate ? new Date(tender.financialEvaluationDate) : null,
-    bidValidityDate: tender.bidValidityDate ? new Date(tender.bidValidityDate) : null,
+    endDate: effectiveEndDate,
+    technicalOpeningDate: (tender.technicalEvaluationDate || schedule.technicalOpeningDate || payload.technicalOpeningDate) ? parseDateIST(tender.technicalEvaluationDate || schedule.technicalOpeningDate || payload.technicalOpeningDate) : null,
+    financialOpeningDate: (tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate) ? parseDateIST(tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate) : null,
+    bidValidityDate: (tender.bidValidityDate || schedule.bidValidityDate) ? parseDateIST(tender.bidValidityDate || schedule.bidValidityDate) : null,
     status: 'OPEN',
     approvalStatus: 'APPROVED',
     approvedAt: creationTime,
@@ -1901,13 +1951,20 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
     allowReverseAuction: ['bid-with-reverse-auction', 'reverse-auction'].includes(methodSlug) || payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false),
     allowBoq: methodSlug === 'boq-based-bid',
-    packetType: String(schedule.packetType || '').toLowerCase().includes('two') || methodSlug === 'two-packet-bid' ? 'TWO_PACKET' : 'SINGLE_PACKET',
+    packetType: (
+      String(schedule.packetType || payload.packetType || payload.rules?.packetType || '').toLowerCase().includes('two') ||
+      String(schedule.packetType || payload.packetType || payload.rules?.packetType || '') === '2' ||
+      methodSlug === 'two-packet-bid' ||
+      Boolean(tender.financialEvaluationDate || schedule.financialOpeningDate || payload.financialOpeningDate)
+    ) ? 'TWO_PACKET' : 'SINGLE_PACKET',
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
     technicalPacket: {
       ...payload,
+      urgency: payload.urgency || payload.priority || basics.priority || basics.urgency || (draftBody as any).urgency || (draftBody as any).priority || String(requirement.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal',
+      priority: payload.priority || payload.urgency || basics.priority || basics.urgency || (draftBody as any).priority || (draftBody as any).urgency || String(requirement.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal',
       schedule: {
         ...schedule,
-        publishDate: effectiveStartDate.toISOString(),
+        publishDate: isFutureScheduled ? effectiveStartDate.toISOString() : (schedule.publishDate || effectiveStartDate.toISOString()),
       },
       sourceRequirementId: requirement.id,
       requirementId: requirement.id,
@@ -2040,6 +2097,19 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     methodSlug,
     canonicalMethod
   });
+
+  void notificationService.notifySellersAndShgsOfProcurement({
+    id: bid.id,
+    title: bid.title,
+    bidNumber: bid.bidNumber,
+    procurementType: bid.procurementType,
+    canonicalMethod: bid.canonicalMethod,
+    buyerOrganizationName: bid.buyerOrganizationName,
+    estimatedValue: bid.estimatedValue,
+    endDate: bid.endDate,
+    visibility: bid.visibility
+  });
+
   return bid;
 };
 
@@ -2052,7 +2122,7 @@ const tenderBody = z.object({
   description: z.string().trim().min(5).max(5000),
   documentUrl: z.string().trim().max(1000).optional(),
   closesAt: safeCoercedDate.optional(),
-  quantityUnit: z.string().trim().max(40).optional(),
+  quantityUnit: z.string().trim().max(120).optional(),
   paymentTerms: z.string().trim().max(80).optional(),
   deliveryType: z.string().trim().max(80).optional()
 });
@@ -2365,6 +2435,63 @@ router.post('/buyer/settings/change-email', authenticate, authorize('buyer'), as
   ok(res, { success: true, message: 'Email updated successfully' });
 }));
 
+router.post('/buyer/settings/change-password/send-otp', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+  const { sendOtpEmail } = await import('../services/mail.service.js');
+
+  const user = await db.user.findUnique({ where: { id: userId(req) }, select: { id: true, email: true } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'User email not registered');
+
+  const otp = generateOtp();
+  await storeOtp('forgot_password', user.email, otp, { userId: user.id, channel: 'email' }, 'email');
+  const deliveryConfigured = await sendOtpEmail(user.email, otp, '[SECURE AUTH] Buyer password change authorization code');
+
+  await auditWrite(req, 'buyer.change_password_otp.sent', 'user', user.id, {
+    channel: 'email',
+    deliveryConfigured
+  });
+
+  ok(res, { success: true, channel: 'email', deliveryConfigured });
+}));
+
+router.post('/buyer/settings/change-password', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+  const { hashPassword, validatePasswordStrength } = await import('../services/password.service.js');
+
+  const { newPassword, otp } = req.body || {};
+  if (!newPassword || !otp) throw new ApiError(400, 'New password and OTP are required');
+
+  const user = await db.user.findUnique({ where: { id: userId(req) } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (!user.email) throw new ApiError(400, 'User email not found');
+
+  const cleanOtp = String(otp).trim();
+  const result = await verifyOtp('forgot_password', user.email, cleanOtp);
+  if (!result.ok) throw new ApiError(400, 'Invalid or expired OTP');
+
+  const passwordValidation = validatePasswordStrength(newPassword);
+  if (!passwordValidation.ok) {
+    throw new ApiError(400, 'Password does not meet security requirements: ' + passwordValidation.errors.join(', '));
+  }
+
+  const hashedPassword = await hashPassword(newPassword);
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      passwordResetVersion: { increment: 1 },
+      sessionVersion: { increment: 1 },
+      lastPasswordChangeAt: new Date()
+    }
+  });
+
+  await consumeOtp('forgot_password', user.email);
+  await auditWrite(req, 'buyer.password_changed', 'user', user.id, {});
+
+  ok(res, { success: true, message: 'Password updated successfully' });
+}));
+
 router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const data = req.body || {};
 
@@ -2654,7 +2781,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
 
   const finalSectionStatus = { ...sectionStatus };
   for (const sec of sections) {
-    if (!finalSectionStatus[sec]) {
+    if (!finalSectionStatus[sec] || finalSectionStatus[sec] === 'resubmission_required') {
       finalSectionStatus[sec] = 'pending';
     }
   }
@@ -2685,6 +2812,17 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       where: { userId: user.id },
       data: { verificationStatusEnum: 'UNDER_REVIEW' }
     });
+    if (user.sellerProfile?.id) {
+      await db.sellerDocument.updateMany({
+        where: {
+          sellerProfileId: user.sellerProfile.id,
+          verificationStatus: 'REJECTED'
+        },
+        data: {
+          verificationStatus: 'PENDING'
+        }
+      });
+    }
   }
 
   const updated = await db.user.update({
@@ -2695,7 +2833,9 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       sectionStatus: {
         ...finalSectionStatus,
         submitted: true
-      }
+      },
+      sectionRejectionReasons: {},
+      adminFeedback: null
     }
   });
 
@@ -2704,8 +2844,10 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     console.error('[Onboarding Submit] Failed to create pending organization:', err);
   });
 
+  await invalidateUserAuthCache(updated.id).catch(() => undefined);
   deleteCache('/api/auth/me').catch(() => undefined);
   deleteCache('/api/org/status').catch(() => undefined);
+  deleteCache(`/api/admin/onboarding/${updated.id}`).catch(() => undefined);
 
   await auditWrite(req, 'onboarding.submitted', 'user', updated.id);
 
@@ -2823,6 +2965,44 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   }).catch(() => null);
   if (procurementDoc?.bid?.buyerId) return { id: Number(procurementDoc.bid.buyerId), role: 'buyer' };
 
+  // Delivery Document check
+  const deliveryDoc = await db.deliveryDocument.findFirst({
+    where: { fileAssetId: fileId },
+    include: { deliveryTracking: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+  if (deliveryDoc) {
+    const po = deliveryDoc.deliveryTracking?.purchaseOrder;
+    const actorId = deliveryDoc.uploadedById || po?.sellerId || po?.buyerId;
+    if (actorId) {
+      return { id: Number(actorId), role: deliveryDoc.uploaderRole || 'seller' };
+    }
+  }
+
+  // Invoice check
+  const invDoc = await db.invoice.findFirst({
+    where: { OR: [{ invoiceFileId: fileId }, { fileAssetId: fileId }] },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+  if (invDoc) {
+    const actorId = invDoc.sellerId || invDoc.buyerId || invDoc.purchaseOrder?.sellerId || invDoc.purchaseOrder?.buyerId;
+    if (actorId) {
+      return { id: Number(actorId), role: 'seller' };
+    }
+  }
+
+  // GRN Document check
+  const grnDoc = await db.grnDocument.findFirst({
+    where: { fileAssetId: fileId },
+    include: { grn: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+  if (grnDoc) {
+    const po = (grnDoc as any).grn?.purchaseOrder;
+    const actorId = grnDoc.uploadedById || po?.buyerId || po?.sellerId;
+    if (actorId) {
+      return { id: Number(actorId), role: 'buyer' };
+    }
+  }
+
   // Check if file is an organization profile branding asset (logo or banner)
   const orgProfile = await db.organizationProfile.findFirst({
     where: {
@@ -2841,6 +3021,26 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
       select: { ownerId: true, ownerRole: true }
     });
     if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'seller') };
+  }
+
+  // Check if file is a buyer profile branding asset (logo or banner)
+  const buyerProfile = await db.buyerProfile.findFirst({
+    where: {
+      OR: [
+        { logoUrl: { contains: `/files/${fileId}/` } },
+        { bannerUrl: { contains: `/files/${fileId}/` } },
+        { logoUrl: { endsWith: `/files/${fileId}/view` } },
+        { bannerUrl: { endsWith: `/files/${fileId}/view` } }
+      ]
+    },
+    select: { userId: true }
+  }).catch(() => null);
+  if (buyerProfile) {
+    const asset = await db.fileAsset.findUnique({
+      where: { id: fileId },
+      select: { ownerId: true, ownerRole: true }
+    });
+    if (asset) return { id: Number(asset.ownerId), role: String(asset.ownerRole || 'buyer') };
   }
 
   // Check if file is referenced as organization logo
@@ -2893,6 +3093,37 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
   const sellerId = certification?.product?.sellerId || certification?.service?.sellerId;
   if (sellerId) return { id: Number(sellerId), role: 'seller' };
 
+  // Offline Payment Proof check
+  const offlineProof = await (db as any).offlinePaymentProof.findFirst({
+    where: {
+      OR: [
+        { receiptFileId: fileId },
+        { receiptFileUrl: { contains: `/files/${fileId}/` } }
+      ]
+    },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+  if (offlineProof) {
+    const actorId = offlineProof.uploadedByUserId || offlineProof.purchaseOrder?.buyerId || offlineProof.purchaseOrder?.sellerId;
+    if (actorId) return { id: Number(actorId), role: 'buyer' };
+  }
+
+  // Branding / Image asset fallback (stamps, signatures, onboarding images)
+  const brandingAsset = await db.fileAsset.findFirst({
+    where: {
+      id: fileId,
+      status: 'active',
+      OR: [
+        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding'] } },
+        { entityType: { in: ['general', 'onboarding', 'registration', 'procurement_draft', 'seller_profile', 'buyer_profile'] }, mimeType: { startsWith: 'image/' } }
+      ]
+    },
+    select: { ownerId: true, ownerRole: true }
+  }).catch(() => null);
+  if (brandingAsset?.ownerId) {
+    return { id: Number(brandingAsset.ownerId), role: String(brandingAsset.ownerRole || 'seller') };
+  }
+
   return null;
 };
 
@@ -2912,6 +3143,7 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
 
   if (req.headers['if-none-match'] === etag) {
@@ -3017,12 +3249,68 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     }
   } catch {}
 
+  // 4. Try FileAsset lookup by key or filename
+  try {
+    const cleanKey = decodeURIComponent(rawKey);
+    const baseName = path.basename(cleanKey);
+    const asset = await db.fileAsset.findFirst({
+      where: {
+        status: 'active',
+        OR: [
+          { key: rawKey },
+          { key: cleanKey },
+          { url: { endsWith: rawKey } },
+          { url: { endsWith: cleanKey } },
+          { originalName: baseName }
+        ]
+      }
+    });
+
+    if (asset) {
+      const publicActor = (await getPublicFileActor(asset.id)) || { id: asset.ownerId, role: asset.ownerRole || 'seller' };
+      const file = await getFileContent(asset.id, publicActor, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+      if (file?.buffer) {
+        res.setHeader('Content-Type', file.contentType || contentType);
+        res.setHeader('Content-Length', file.buffer.length);
+        res.setHeader('Cache-Control', cacheControl);
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.end(file.buffer);
+      }
+    }
+  } catch {}
+
   throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));
 
 router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const { id } = parse(idParams, req.params);
   let actor: any = req.user;
+  if (!actor && typeof req.query.token === 'string' && req.query.token.trim()) {
+    try {
+      const decoded = verifyAccessToken(req.query.token.trim());
+      if (decoded?.id) {
+        const u = await db.user.findUnique({
+          where: { id: Number(decoded.id) },
+          select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
+        });
+        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+          actor = {
+            id: u.id,
+            role: u.role,
+            sessionVersion: u.sessionVersion,
+            permissions: [],
+            organizationId: u.organizationId,
+            enabledFeatures: []
+          };
+        }
+      }
+    } catch {
+      // ignore invalid query token
+    }
+  }
   if (!actor) {
     actor = (await getPublicFileActor(id)) || undefined;
   }
@@ -3040,6 +3328,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
 
   if (req.headers['if-none-match'] === etag) {
@@ -3729,6 +4018,95 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
   ok(res, user);
 }));
 
+router.post('/admin/onboarding/:id/document-request', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    documentType: z.string().trim().min(1).max(100),
+    reason: z.string().trim().min(3).max(1000)
+  }), req.body);
+
+  const existing = await db.user.findUnique({
+    where: { id },
+    include: {
+      sellerProfile: {
+        include: {
+          sellerDocuments: true
+        }
+      },
+      buyerProfile: true
+    }
+  });
+  if (!existing) throw new ApiError(404, 'User not found');
+
+  const cleanReason = body.reason.replace(/\0/g, '').trim();
+  const docType = body.documentType.trim();
+
+  // If seller, update the specific SellerDocument if it exists
+  if (existing.role === 'seller' && existing.sellerProfile) {
+    const existingSellerDoc = existing.sellerProfile.sellerDocuments.find(
+      (d: any) => d.documentType.toLowerCase() === docType.toLowerCase()
+    );
+    if (existingSellerDoc) {
+      await db.sellerDocument.update({
+        where: { id: existingSellerDoc.id },
+        data: {
+          verificationStatus: 'REJECTED',
+          remarks: cleanReason,
+          verifiedById: Number(req.user?.id) || null,
+          verifiedAt: new Date()
+        }
+      });
+    }
+  }
+
+  // Update section status and rejection reasons on user
+  const currentSectionStatus = (existing.sectionStatus as Record<string, unknown>) || {};
+  const currentReasons = (existing.sectionRejectionReasons as Record<string, unknown>) || {};
+
+  const docSectionKey = existing.role === 'buyer' ? 'docs' : 'documents';
+  const updatedSectionStatus = {
+    ...currentSectionStatus,
+    [docSectionKey]: 'resubmission_required'
+  };
+
+  const updatedReasons = {
+    ...currentReasons,
+    [docType]: cleanReason
+  };
+
+  const updatedUser = await db.user.update({
+    where: { id },
+    data: {
+      onboardingStatus: 'resubmission_required',
+      sectionStatus: updatedSectionStatus,
+      sectionRejectionReasons: updatedReasons,
+      adminFeedback: cleanReason
+    }
+  });
+
+  // Invalidate caches
+  await invalidateUserAuthCache(id).catch(() => undefined);
+  await deleteCache('/api/auth/me').catch(() => undefined);
+  await deleteCache(`/api/admin/onboarding/${id}`).catch(() => undefined);
+
+  // Send notification & email
+  const displayDocName = docType.replace(/_/g, ' ').toUpperCase();
+  await notificationService.notifyWithEmail(id, {
+    title: `Document Correction Required: ${displayDocName}`,
+    message: `The verification team has requested a re-upload of your ${displayDocName}: "${cleanReason}"`,
+    type: 'document_correction_requested',
+    priority: 'high',
+    redirectUrl: existing.role === 'buyer' ? `/buyer/onboarding?section=docs` : `/seller/onboarding?section=documents`
+  }).catch((err) => console.error('[Document Request Notification Error]:', err));
+
+  await auditWrite(req, 'admin.onboarding.document_requested', 'user', id, {
+    documentType: docType,
+    reason: cleanReason
+  });
+
+  ok(res, { success: true, documentType: docType, reason: cleanReason, user: updatedUser });
+}));
+
 router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({ onboardingStatus: z.string().trim().min(2), adminFeedback: z.string().trim().max(2000).optional() }), req.body);
@@ -3850,9 +4228,11 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
   const normalizedGstin = gstin.toUpperCase();
   const fingerprint = sha256(normalizedGstin);
   const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
+  const [scheme, headerToken] = authHeader.split(' ');
+  const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
+  const token = canUseHeaderToken ? headerToken : getAccessTokenFromRequest(req);
   let requesterUserId: number | null = null;
-  if (scheme === 'Bearer' && token) {
+  if (token) {
     try {
       const decoded = verifyAccessToken(token);
       requesterUserId = decoded.id ? Number(decoded.id) : null;
@@ -3860,6 +4240,19 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
       requesterUserId = null;
     }
   }
+
+  const requestingUser = requesterUserId ? await db.user.findUnique({
+    where: { id: requesterUserId },
+    select: {
+      id: true,
+      organizationId: true,
+      registrationDetails: true,
+      buyerProfile: { select: { id: true, organizationId: true, gst: true } },
+      sellerProfile: { select: { id: true } },
+      organization: { select: { id: true, gstin: true } }
+    }
+  }) : null;
+
   const [sellerOffice, buyerProfile, organization] = await Promise.all([
     db.sellerOffice.findFirst({
       where: { gstFingerprint: fingerprint },
@@ -3875,7 +4268,16 @@ router.get('/utils/gst-verify/:gstin', verificationRateLimit, asyncRoute(async (
     })
   ]);
 
+  const userRegGstin = String((requestingUser?.registrationDetails as any)?.gstin || '').trim().toUpperCase();
+  const userOrgGstin = String(requestingUser?.organization?.gstin || '').trim().toUpperCase();
+  const userBuyerGstin = String(requestingUser?.buyerProfile?.gst || '').trim().toUpperCase();
+
+  const isOwnGstin = Boolean(normalizedGstin && (normalizedGstin === userRegGstin || normalizedGstin === userOrgGstin || normalizedGstin === userBuyerGstin));
+  const isOwnOrg = Boolean(organization && requestingUser?.organizationId && organization.id === requestingUser.organizationId);
+
   const ownedByRequester = Boolean(requesterUserId && (
+    isOwnGstin ||
+    isOwnOrg ||
     sellerOffice?.sellerProfile?.userId === requesterUserId ||
     buyerProfile?.userId === requesterUserId ||
     organization?.users?.some((user: any) => user.id === requesterUserId)
@@ -4332,29 +4734,26 @@ router.post('/catalogue/upload', authenticate, authorize('seller'), upload.singl
 // General file upload endpoint (all authenticated users)
 router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   if (!req.file) throw new ApiError(400, 'File is required', 'FILE_REQUIRED');
+  const rawEntityType = req.body?.entityType;
+  const entityType = typeof rawEntityType === 'string' && rawEntityType.trim() ? rawEntityType.trim() : 'general';
   const context = {
     ownerId: userId(req),
     ownerRole: String(req.user?.role),
-    entityType: 'general',
+    entityType,
     ipAddress: req.ip,
     userAgent: req.headers['user-agent']
   };
   const asset = await uploadFile(req.file, context, env.STORAGE_PROVIDER);
   const viewUrl = `/api/files/${asset.id}/view`;
-  // For image assets, return the direct CDN/storage URL so <img> tags can render
-  // without needing an Authorization header. For non-image files, fall back to the
-  // auth-gated view endpoint.
-  const isImage = (asset.mimeType || '').startsWith('image/');
-  const publicUrl = isImage && asset.url && /^https?:\/\//.test(asset.url)
-    ? asset.url
-    : viewUrl;
+  // Return viewUrl as primary URL so all file assets (including images) are served
+  // reliably through the authenticated/public proxy rather than raw private bucket URLs.
   ok(res, {
-    url: publicUrl,
+    url: viewUrl,
     signedUrl: viewUrl,
     fileId: asset.id,
     file: {
       id: asset.id,
-      url: publicUrl,
+      url: viewUrl,
       documentUrl: viewUrl,
       originalName: asset.originalName,
       mimeType: asset.mimeType,
@@ -5165,7 +5564,11 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     parsed = procurementDraftBody.extend({ id: z.coerce.number().int().positive().optional() }).parse(req.body);
   } catch (zodError: any) {
     console.error('[SubmitProcurement] Zod parse failed:', JSON.stringify(zodError.issues || zodError.message, null, 2));
-    throw new ApiError(400, zodError.issues?.[0]?.message || 'Invalid procurement data', 'PROCUREMENT_VALIDATION_FAILED');
+    const firstIssue = zodError.issues?.[0];
+    const fieldPath = firstIssue?.path ? firstIssue.path.filter((p: any) => typeof p === 'string' || typeof p === 'number').join('.') : '';
+    const fieldMsg = firstIssue?.message || 'Invalid procurement data';
+    const errorMsg = fieldPath ? `${fieldPath}: ${fieldMsg}` : fieldMsg;
+    throw new ApiError(400, errorMsg, 'PROCUREMENT_VALIDATION_FAILED');
   }
   try {
     validateProcurementDraftForSubmit(parsed);
@@ -5288,7 +5691,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
     items: z.array(z.object({
       itemName: z.string().trim().min(2).max(240),
       quantity: z.coerce.number().positive(),
-      unitOfMeasure: z.string().trim().min(1).max(40),
+      unitOfMeasure: z.string().trim().min(1).max(120),
       unitPrice: z.coerce.number().positive(),
       taxRate: z.coerce.number().min(0).max(100).optional().default(0)
     })).min(1)
@@ -5355,7 +5758,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
   ok(res, po, 201);
 }, 'Unable to create rate contract call-off order'));
 
-router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const contract = await db.contract.findUnique({
     where: { id },
@@ -5371,7 +5774,21 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
     throw new ApiError(404, 'Rate contract not found', 'RATE_CONTRACT_NOT_FOUND');
   }
   const isOwner = isAdmin(req) || req.user?.role === 'master_admin' || Number((contract.metadata as any)?.buyerId || 0) === userId(req);
-  if (!isOwner) throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+  if (!isOwner) {
+    if (req.user?.role === 'seller') {
+      const meta = (contract.metadata || {}) as any;
+      const selectedSuppliers = Array.isArray(meta.selectedSuppliers) ? meta.selectedSuppliers : [];
+      const isSelectedSeller = selectedSuppliers.some((s: any) =>
+        Number(s.supplierUserId) === userId(req) || (req.user?.organizationId && Number(s.supplierOrgId) === req.user.organizationId)
+      );
+      const isPublicOrActive = contract.status === 'ACTIVE' || contract.status === 'PUBLISHED' || contract.status === 'OPEN' || !contract.endDate || contract.endDate >= new Date();
+      if (!isSelectedSeller && !isPublicOrActive) {
+        throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+      }
+    } else {
+      throw new ApiError(403, 'Access denied', 'FORBIDDEN');
+    }
+  }
   ok(res, contract);
 }, 'Unable to load rate contract details'));
 
@@ -5447,24 +5864,30 @@ router.get('/api/public/procurement-opportunities', asyncRoute(async (_req, res)
 router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const q = String(req.query.q || '').trim();
   const buyerUser = await db.user.findUnique({ where: { id: userId(req) }, select: { organizationId: true } });
-  if (!buyerUser?.organizationId) return ok(res, { results: [] });
+  const buyerClause = buyerUser?.organizationId
+    ? { OR: [{ buyerId: userId(req) }, { buyer: { organizationId: buyerUser.organizationId } }] }
+    : { buyerId: userId(req) };
 
   const where: any = {
-    buyer: { organizationId: buyerUser.organizationId },
+    ...buyerClause,
     status: { notIn: ['cancelled', 'rejected', 'CANCELLED', 'REJECTED'] },
   };
   if (q) {
-    where.OR = [
-      { poNumber: { contains: q, mode: 'insensitive' } },
-      { title: { contains: q, mode: 'insensitive' } },
-      { seller: { name: { contains: q, mode: 'insensitive' } } },
-      { items: { some: { itemName: { contains: q, mode: 'insensitive' } } } },
+    where.AND = [
+      {
+        OR: [
+          { poNumber: { contains: q, mode: 'insensitive' } },
+          { title: { contains: q, mode: 'insensitive' } },
+          { seller: { name: { contains: q, mode: 'insensitive' } } },
+          { items: { some: { itemName: { contains: q, mode: 'insensitive' } } } },
+        ]
+      }
     ];
   }
 
   const pos = await db.purchaseOrder.findMany({
     where,
-    take: 20,
+    take: 100,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,
@@ -5477,11 +5900,108 @@ router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('bu
       poStatus: true,
       createdAt: true,
       expectedDelivery: true,
-      buyer: { select: { id: true, name: true, organizationId: true } },
-      seller: { select: { id: true, name: true, email: true, mobile: true, accountStatus: true } },
-      items: { select: { id: true, itemName: true, description: true, quantity: true, unitOfMeasure: true, unitPrice: true, totalAmount: true } },
+      deliveryAddress: true,
+      deliveryType: true,
+      paymentTerms: true,
+      tenderId: true,
+      contractId: true,
+      metadata: true,
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+            }
+          }
+        }
+      },
+      seller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          mobile: true,
+          accountStatus: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+            }
+          }
+        }
+      },
+      items: {
+        select: {
+          id: true,
+          productId: true,
+          itemName: true,
+          description: true,
+          quantity: true,
+          unitOfMeasure: true,
+          unitPrice: true,
+          taxRate: true,
+          totalAmount: true,
+          product: {
+            select: {
+              id: true,
+              name: true,
+              hsnCode: true,
+              sku: true,
+              unitOfMeasure: true,
+              taxRate: true
+            }
+          }
+        }
+      },
       cracs: { select: { acceptedQuantity: true } },
-      tender: { select: { id: true, tenderId: true, requirement: { select: { id: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true } } } },
+      tender: {
+        select: {
+          id: true,
+          tenderId: true,
+          title: true,
+          category: true,
+          paymentTerms: true,
+          deliveryType: true,
+          documentUrl: true,
+          requirement: {
+            select: {
+              id: true,
+              requirementNumber: true,
+              title: true,
+              procurementMethod: true,
+              canonicalMethod: true,
+              payload: true,
+              items: {
+                select: {
+                  itemName: true,
+                  specifications: true
+                }
+              }
+            }
+          }
+        }
+      }
     }
   });
 
@@ -5489,38 +6009,104 @@ router.get('/procurement/repeat-order/previous-pos', authenticate, authorize('bu
     const orderedQty = po.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const deliveredQty = po.cracs.reduce((sum, crac) => sum + Number(crac.acceptedQuantity || 0), 0);
     const pendingQty = Math.max(0, orderedQty - deliveredQty);
-    const originalMethod = po.tender?.requirement?.canonicalMethod || po.tender?.requirement?.procurementMethod || 'UNKNOWN';
-    const prNumber = po.tender?.requirement?.requirementNumber || null;
+    const originalMethod = po.tender?.requirement?.canonicalMethod || po.tender?.requirement?.procurementMethod || 'DIRECT_PURCHASE';
+    const prNumber = po.tender?.requirement?.requirementNumber || (po.tender?.tenderId ? `TND-${po.tender.tenderId}` : `PR-${po.id}`);
+    const reqPayload = (po.tender?.requirement?.payload as any) || {};
+
+    const buyerOrg = po.buyer?.organization;
+    const sellerOrg = po.seller?.organization;
+
+    const buyerAddress = [buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.state, buyerOrg?.pincode].filter(Boolean).join(', ') || po.deliveryAddress || 'Central Warehouse / Site Location';
+    const sellerAddress = [sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.state, sellerOrg?.pincode].filter(Boolean).join(', ') || '-';
+
+    const itemsMapped = po.items.map((item, idx) => {
+      const tenderReqItem = po.tender?.requirement?.items?.find(ri => ri.itemName?.toLowerCase() === item.itemName?.toLowerCase()) || po.tender?.requirement?.items?.[idx];
+      const specs = (tenderReqItem?.specifications as any) || (item.description ? { description: item.description } : null) || null;
+      const hsnSac = item.product?.hsnCode || (item as any).hsnCode || '8471';
+      const gstRate = Number(item.taxRate ?? item.product?.taxRate ?? 18);
+      return {
+        id: item.id,
+        productId: item.productId,
+        itemName: item.itemName,
+        description: item.description || item.itemName,
+        quantity: Number(item.quantity),
+        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        unitPrice: Number(item.unitPrice),
+        taxRate: gstRate,
+        gstRate,
+        hsnSac,
+        hsnCode: hsnSac,
+        specifications: specs,
+        totalAmount: Number(item.totalAmount),
+      };
+    });
+
+    const deliveryLocation = po.deliveryAddress || buyerAddress;
+    const paymentTerms = po.paymentTerms || po.tender?.paymentTerms || reqPayload?.paymentTerms || '100% payment within 30 days against Consignee Receipt and Acceptance Certificate (CRAC)';
+    const deliveryTerms = po.deliveryType || po.tender?.deliveryType || reqPayload?.deliveryTerms || 'Free Delivery at Site / Consignee Location (F.O.R)';
+    const commercialTerms = reqPayload?.commercialTerms || 'Original contract terms, SLA and warranty conditions shall govern this repeat order.';
+    const requiredDocs = reqPayload?.requiredDocs || reqPayload?.documents || [
+      { name: 'Tax Invoice (GST compliant)', mandatory: true },
+      { name: 'Delivery Challan / Proof of Dispatch', mandatory: true },
+      { name: 'Warranty & Guarantee Certificate', mandatory: false },
+      { name: 'Consignee Receipt Acceptance Certificate (CRAC)', mandatory: true }
+    ];
+
     return {
       id: po.id,
       poNumber: po.poNumber,
       title: po.title,
       amount: Number(po.amount),
-      totalValue: po.totalValue,
-      currency: po.currency,
+      totalValue: Number(po.totalValue || po.amount),
+      currency: po.currency || 'INR',
       status: po.status,
       poStatus: po.poStatus,
       poDate: po.createdAt,
       expectedDelivery: po.expectedDelivery,
-      sellerId: po.seller.id,
-      sellerName: po.seller.name,
-      sellerEmail: po.seller.email || '',
-      sellerMobile: po.seller.mobile || '',
-      isSupplierActive: po.seller.accountStatus === 'ACTIVE',
-      items: po.items.map(item => ({
-        id: item.id,
-        itemName: item.itemName,
-        description: item.description,
-        quantity: Number(item.quantity),
-        unitOfMeasure: item.unitOfMeasure,
-        unitPrice: Number(item.unitPrice),
-        totalAmount: Number(item.totalAmount),
-      })),
+      tenderId: po.tenderId,
+      contractId: po.contractId,
+      procurementId: prNumber,
+      procurementTitle: po.title || po.tender?.title || 'Procurement Order',
+      supplierName: sellerOrg?.organizationName || po.seller.name,
+      procurementDetails: {
+        procurementId: prNumber,
+        procurementTitle: po.title || po.tender?.title || 'Procurement Order',
+        category: po.tender?.category || 'Goods / Products',
+        procurementMethod: originalMethod,
+        tenderId: po.tender?.tenderId || null,
+      },
+      buyerDetails: {
+        id: po.buyer.id,
+        name: po.buyer.name,
+        email: po.buyer.email,
+        mobile: po.buyer.mobile,
+        organizationName: buyerOrg?.organizationName || po.buyer.name,
+        gstin: buyerOrg?.gstin || '-',
+        panNumber: buyerOrg?.panNumber || '-',
+        address: buyerAddress
+      },
+      supplierDetails: {
+        id: po.seller.id,
+        name: po.seller.name,
+        organizationName: sellerOrg?.organizationName || po.seller.name,
+        email: po.seller.email || '',
+        mobile: po.seller.mobile || '',
+        gstin: sellerOrg?.gstin || '-',
+        panNumber: sellerOrg?.panNumber || '-',
+        address: sellerAddress,
+        isSupplierActive: po.seller.accountStatus === 'ACTIVE'
+      },
+      items: itemsMapped,
       orderedQuantity: orderedQty,
       deliveredQuantity: deliveredQty,
       pendingQuantity: pendingQty,
+      deliveryLocation,
+      paymentTerms,
+      deliveryTerms,
+      commercialTerms,
+      requiredDocs,
       originalProcurementMethod: originalMethod,
-      prNumber,
+      prNumber
     };
   });
 
@@ -6428,6 +7014,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: req.title,
         requirementNumber: `REQ-${req.id}`,
         buyerId: req.createdById,
+        buyerOrganizationId: (req as any).buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: req.lastDate,
         clarificationDeadline: null
@@ -6441,8 +7028,10 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: bid.title,
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
+        buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
@@ -6455,22 +7044,20 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: legacyReq.title,
         requirementNumber: legacyReq.requirementNumber,
         buyerId: legacyReq.createdById,
+        buyerOrganizationId: null,
         sellerId: null,
         deadlineDate: null,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (legacyReq.payload as any)?.tender?.bidStartDate || legacyReq.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
   }
 
-  const isBidToken = token.startsWith('TND-') || token.startsWith('BID-') || token.startsWith('RA-') || token.startsWith('RFQ-');
+  const isBidToken = CANONICAL_METHOD_PREFIXES.some(p => token.startsWith(`${p}-`));
   if (isBidToken) {
     const bid = await db.procurementBid.findFirst({
       where: {
-        OR: [
-          { bidNumber: token },
-          { bidNumber: token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : token },
-          { bidNumber: token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token }
-        ]
+        OR: getCanonicalLookupVariants(token).map(t => ({ bidNumber: t }))
       }
     });
     if (bid) {
@@ -6480,35 +7067,26 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
         subject: bid.title,
         requirementNumber: bid.bidNumber,
         buyerId: bid.buyerId,
+        buyerOrganizationId: bid.buyerOrganizationId || null,
         sellerId: null,
         deadlineDate: bid.endDate,
+        submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
         clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
       };
     }
   }
 
-  const tokenVariants = [
-    token,
-    token.startsWith('RFQ-') ? token.replace(/^RFQ-/, 'REQ-') : (token.startsWith('REQ-') ? token.replace(/^REQ-/, 'RFQ-') : token)
-  ];
+  const tokenVariants = getCanonicalLookupVariants(token);
 
   const [bidMatch, reqMatch] = await Promise.all([
     db.procurementBid.findFirst({
       where: {
-        OR: tokenVariants.flatMap(t => [
-          { bidNumber: t },
-          { bidNumber: `REQ-${t}` },
-          { bidNumber: `RFQ-${t}` }
-        ])
+        OR: tokenVariants.map(t => ({ bidNumber: t }))
       }
     }).catch(() => null),
     db.requirement.findFirst({
       where: {
-        OR: tokenVariants.flatMap(t => [
-          { requirementNumber: t },
-          { requirementNumber: `REQ-${t}` },
-          { requirementNumber: `RFQ-${t}` }
-        ])
+        OR: tokenVariants.map(t => ({ requirementNumber: t }))
       }
     }).catch(() => null)
   ]);
@@ -6520,8 +7098,10 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       subject: bidMatch.title,
       requirementNumber: bidMatch.bidNumber,
       buyerId: bidMatch.buyerId,
+      buyerOrganizationId: bidMatch.buyerOrganizationId || null,
       sellerId: null,
       deadlineDate: bidMatch.endDate,
+      submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bidMatch.technicalPacket as any)?.tender?.bidStartDate || bidMatch.startDate || null,
       clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
     };
   }
@@ -6534,6 +7114,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       buyerId: reqMatch.createdById,
       sellerId: null,
       deadlineDate: null,
+      submissionStartDate: sched?.submissionStartDate || sched?.startDate || (reqMatch.payload as any)?.tender?.bidStartDate || reqMatch.startDate || null,
       clarificationDeadline: sched?.clarificationDeadline || sched?.clarificationEndDate || null
     };
   }
@@ -6550,25 +7131,40 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     throw new ApiError(403, 'Access denied', 'ACCESS_DENIED');
   }
 
+  const rawSubmissionStart = (quote as any).submissionStartDate;
+  if (rawSubmissionStart) {
+    let startD = new Date(rawSubmissionStart);
+    if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+      startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+    }
+    if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+      throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+    }
+  }
+
   const rawClarDeadline = (quote as any).clarificationDeadline;
   const rawSubmissionDeadline = quote.deadlineDate;
   let effectiveClarDeadline: Date | null = null;
   if (rawClarDeadline && rawSubmissionDeadline) {
-    const d1 = new Date(rawClarDeadline);
+    let d1 = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    }
     const d2 = new Date(rawSubmissionDeadline);
     const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
     const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-    effectiveClarDeadline = new Date(Math.max(t1, t2));
+    effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
   } else if (rawClarDeadline) {
-    effectiveClarDeadline = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    } else {
+      effectiveClarDeadline = new Date(rawClarDeadline);
+    }
   } else if (rawSubmissionDeadline) {
     effectiveClarDeadline = new Date(rawSubmissionDeadline);
   }
 
   if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    }
     if (effectiveClarDeadline.getTime() < Date.now()) {
       throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
     }
@@ -6652,39 +7248,61 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
       where: { id: clarId, entityId: quote.id }
     }).catch(() => null);
 
-    if (!clar2) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+    if (clar2) {
+      updated = await db.requirementClarification.update({
+        where: { id: clar2.id },
+        data: {
+          response: body.response,
+          answeredById: userId(req),
+          answeredAt: new Date()
+        }
+      });
+    } else {
+      const clar3 = await db.procurementBidClarification.findFirst({
+        where: { id: clarId, bidId: quote.id }
+      }).catch(() => null);
 
-    updated = await db.requirementClarification.update({
-      where: { id: clar2.id },
-      data: {
-        response: body.response,
-        answeredById: userId(req),
-        answeredAt: new Date()
-      }
+      if (!clar3) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
+
+      updated = await db.procurementBidClarification.update({
+        where: { id: clar3.id },
+        data: {
+          response: body.response,
+          status: 'RESOLVED',
+          respondedById: userId(req),
+          respondedAt: new Date()
+        }
+      });
+    }
+  }
+
+  const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
+  if (targetId) {
+    // Non-blocking background notification for fast HTTP response
+    setImmediate(() => {
+      notifySafe(
+        targetId,
+        'Clarification Answered',
+        `Buyer answered your question regarding "${quote.subject}"`,
+        'quote_request_clarification',
+        `/quotations`
+      );
     });
   }
 
-  const askedById = (updated as any).askedById;
-  if (askedById) {
-    await notifySafe(
-      askedById,
-      'Clarification Response Received',
-      `Regarding "${quote.subject}": ${body.response.substring(0, 100)}${body.response.length > 100 ? '...' : ''}`,
-      'quote_request_clarification',
-      `/quotations`
-    );
-  }
-
-  await auditWrite(req, 'quote_request.clarification_replied', 'quoteRequestClarification', updated.id);
+  // Non-blocking audit write
+  setImmediate(() => {
+    void auditWrite(req, 'quote_request.clarification_answered', 'quoteRequestClarification', updated.id);
+  });
   ok(res, updated);
 }));
 
-router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async (req, res) => {
+router.get('/quote-requests/:id/clarifications', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const quote = await findQuoteRequestRecord(req.params.id);
   if (!quote) throw new ApiError(404, 'RFQ not found', 'QUOTE_REQUEST_NOT_FOUND');
   const id = quote.id;
 
-  const [qrClarifications, reqClarifications] = await Promise.all([
+  const [qrClarifications, reqClarifications, procClarifications] = await Promise.all([
     db.quoteRequestClarification.findMany({
       where: { quoteRequestId: id },
       orderBy: { askedAt: 'asc' }
@@ -6692,16 +7310,51 @@ router.get('/quote-requests/:id/clarifications', authenticate, asyncRoute(async 
     db.requirementClarification.findMany({
       where: { entityType: 'REQUIREMENT', entityId: id },
       orderBy: { askedAt: 'asc' }
+    }).catch(() => []),
+    db.procurementBidClarification.findMany({
+      where: { bidId: id },
+      orderBy: { createdAt: 'asc' }
     }).catch(() => [])
   ]);
 
-  const allClarifications = [...qrClarifications, ...reqClarifications].sort((a: any, b: any) =>
+  const normalizedProcClarifications = procClarifications.map((c: any) => ({
+    id: c.id,
+    quoteRequestId: c.bidId,
+    question: c.question,
+    response: c.response,
+    visibility: c.isPublic ? 'PUBLIC' : 'PRIVATE',
+    askedById: c.sellerId || c.requestedById,
+    answeredById: c.respondedById,
+    askedAt: c.createdAt,
+    answeredAt: c.respondedAt,
+  }));
+
+  const allClarifications = [...qrClarifications, ...reqClarifications, ...normalizedProcClarifications].sort((a: any, b: any) =>
     new Date(a.askedAt || a.createdAt).getTime() - new Date(b.askedAt || b.createdAt).getTime()
   );
 
-  const filtered = userId(req) === quote.buyerId
+  const currentUserId = req.user?.id ? Number(req.user.id) : null;
+  const isPrivilegedBuyerOrAdmin = Boolean(
+    req.user && (
+      req.user.role === 'admin' ||
+      req.user.role === 'master_admin' ||
+      (currentUserId && quote.buyerId && currentUserId === Number(quote.buyerId)) ||
+      (req.user.organizationId && (quote as any).buyerOrganizationId && req.user.organizationId === (quote as any).buyerOrganizationId)
+    )
+  );
+
+  // Private clarifications must NOT be shown to the public or other sellers/bidders.
+  // They must be visible to the asking seller and the buyer only.
+  const filtered = isPrivilegedBuyerOrAdmin
     ? allClarifications
-    : allClarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === userId(req) || c.answeredById === userId(req));
+    : allClarifications.filter((c: any) => {
+        const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+        if (vis === 'PUBLIC') return true;
+        // If PRIVATE:
+        // Must be authenticated and must be the specific seller who asked it
+        if (!currentUserId) return false;
+        return Number(c.askedById) === currentUserId;
+      });
 
   ok(res, filtered);
 }));
@@ -6906,6 +7559,8 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
     ...procurementBids.map((b: any) => {
       const doc = b.documents?.[0];
       const docUrl = doc ? `/api/files/${doc.fileAssetId}/view` : null;
+      const bPayload = (typeof b.technicalPacket === 'object' && b.technicalPacket ? (b.technicalPacket as any) : {}) as any;
+      const bTerms = bPayload.terms || {};
 
       return {
         id: b.id,
@@ -6921,8 +7576,8 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
         updatedAt: b.updatedAt ? b.updatedAt.toISOString() : null,
         documentUrl: docUrl,
         quantityUnit: b.unit || null,
-        paymentTerms: b.termsAndConditions?.join(', ') || null,
-        deliveryType: b.deliveryLocation || null,
+        paymentTerms: bTerms.paymentTerms || b.termsAndConditions?.join(', ') || null,
+        deliveryType: bTerms.deliveryTerms || bTerms.deliveryType || null,
         isV2: true,
         v2Status: b.status,
         documents: (b.documents || []).map((doc: any) => ({
@@ -7534,61 +8189,181 @@ router.post('/purchase-orders/generate', authenticate, requirePermission('purcha
 router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), paymentRateLimit, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({
-    quantity: z.coerce.number().positive(),
-    deliveryAddress: z.string().trim().min(3).max(1000),
-    expectedDelivery: safeCoercedDate
+    quantity: z.coerce.number().positive().optional(),
+    deliveryAddress: z.string().trim().min(3).max(1000).optional(),
+    expectedDelivery: safeCoercedDate,
+    repeatOrderDate: safeCoercedDate.optional(),
+    requiredByDate: safeCoercedDate.optional(),
+    remarks: z.string().trim().max(1000).optional()
   }), req.body);
+
+  const buyerUser = await db.user.findUnique({
+    where: { id: userId(req) },
+    select: { organizationId: true, name: true, email: true }
+  });
 
   const existing = await db.purchaseOrder.findUnique({
     where: { id },
-    include: { items: true }
+    include: {
+      items: { include: { product: true } },
+      buyer: { include: { organization: true } },
+      seller: { include: { organization: true } },
+      tender: { include: { requirement: true } }
+    }
   });
 
   if (!existing) throw new ApiError(404, 'Purchase order not found');
 
+  const isOwner = existing.buyerId === userId(req) || (buyerUser?.organizationId && existing.buyer?.organizationId === buyerUser.organizationId);
+  if (!isOwner && !isAdmin(req)) {
+    throw new ApiError(403, 'You are not authorized to repeat this purchase order', 'FORBIDDEN');
+  }
+
+  const repeatOrderDate = body.repeatOrderDate ? new Date(body.repeatOrderDate) : new Date();
+  const newDeliveryDate = new Date(body.expectedDelivery);
+  const requiredByDate = body.requiredByDate ? new Date(body.requiredByDate) : newDeliveryDate;
+
   const poNumber = `PO-REP-${Date.now().toString().slice(-6)}`;
-  const unitPrice = existing.items[0]?.unitPrice || existing.amount;
-  const newAmount = Number(unitPrice) * body.quantity;
+  
+  let newTotalAmount = 0;
+  const itemsToCreate = existing.items.map(item => {
+    const itemQty = (body.quantity && existing.items.length === 1) ? Number(body.quantity) : Number(item.quantity);
+    const itemPrice = Number(item.unitPrice);
+    const itemTotal = itemPrice * itemQty;
+    newTotalAmount += itemTotal;
+    return {
+      productId: item.productId,
+      itemName: item.itemName,
+      description: item.description,
+      quantity: itemQty,
+      unitOfMeasure: item.unitOfMeasure,
+      unitPrice: item.unitPrice,
+      taxRate: item.taxRate,
+      totalAmount: itemTotal
+    };
+  });
+
+  if (newTotalAmount <= 0) {
+    newTotalAmount = Number(existing.amount);
+  }
+
+  const buyerOrgId = buyerUser?.organizationId || existing.buyer?.organizationId;
+  const initialStatus = buyerOrgId ? 'pending_approval' : 'order_placed';
+  const initialPoStatus = buyerOrgId ? 'GENERATED' : 'ISSUED';
 
   const newPo = await db.purchaseOrder.create({
     data: {
       poNumber,
       title: `Repeat Order: ${existing.title}`,
-      status: 'order_placed',
-      amount: newAmount,
-      totalValue: newAmount,
+      status: initialStatus,
+      poStatus: initialPoStatus,
+      amount: newTotalAmount,
+      totalValue: newTotalAmount,
       buyerId: userId(req),
       sellerId: existing.sellerId,
       tenderId: existing.tenderId,
       contractId: existing.contractId,
       paymentTerms: existing.paymentTerms,
       deliveryType: existing.deliveryType,
-      deliveryAddress: body.deliveryAddress,
-      expectedDelivery: body.expectedDelivery,
+      deliveryAddress: body.deliveryAddress || existing.deliveryAddress,
+      expectedDelivery: newDeliveryDate,
+      metadata: {
+        source: 'repeat_order',
+        repeatOfPoId: existing.id,
+        repeatOfPoNumber: existing.poNumber,
+        repeatOrderDate: repeatOrderDate.toISOString(),
+        requiredByDate: requiredByDate.toISOString(),
+        newDeliveryDate: newDeliveryDate.toISOString(),
+        remarks: body.remarks || null,
+        originalOrderTitle: existing.title,
+        createdAt: new Date().toISOString()
+      },
       items: {
-        create: existing.items.map(item => ({
-          productId: item.productId,
-          itemName: item.itemName,
-          description: item.description,
-          quantity: body.quantity,
-          unitOfMeasure: item.unitOfMeasure,
-          unitPrice: item.unitPrice,
-          taxRate: item.taxRate,
-          totalAmount: Number(item.unitPrice) * body.quantity
-        }))
+        create: itemsToCreate
       }
     },
     include: {
-      buyer: { select: { id: true, name: true, email: true } },
-      seller: { select: { id: true, name: true, email: true } },
+      buyer: { select: { id: true, name: true, email: true, organization: true } },
+      seller: { select: { id: true, name: true, email: true, organization: true } },
       items: true
     }
   });
 
-  await auditWrite(req, 'purchase_order.generated', 'purchaseOrder', newPo.id);
-  notifySellerNewPurchaseOrder(newPo.id).catch(() => undefined);
-  ok(res, newPo, 201);
+  let approvalInfo = {
+    requiresApproval: false,
+    currentStage: 'READY_ISSUED',
+    message: 'Repeat purchase order created successfully.'
+  };
+
+  if (buyerOrgId) {
+    try {
+      const chain = await createApprovalChain({
+        entityType: 'purchase_order',
+        entityId: newPo.id,
+        organizationId: buyerOrgId,
+        totalValue: newTotalAmount,
+        initiatorUserId: userId(req)
+      });
+      approvalInfo = {
+        requiresApproval: true,
+        currentStage: chain[0]?.stage || 'DEPARTMENT_HEAD',
+        message: 'Repeat order submitted. Routed to Department Head for approval.'
+      };
+    } catch (err: any) {
+      logger.warn(`Failed to create approval chain for repeat PO #${newPo.id}: ${err?.message}`);
+      await db.purchaseOrder.update({
+        where: { id: newPo.id },
+        data: { status: 'order_placed', poStatus: 'ISSUED' }
+      });
+      approvalInfo = {
+        requiresApproval: false,
+        currentStage: 'ISSUED',
+        message: 'Repeat purchase order generated and placed.'
+      };
+    }
+  }
+
+  await auditWrite(req, 'purchase_order.repeat_created', 'purchaseOrder', newPo.id, {
+    originalPoId: existing.id,
+    originalPoNumber: existing.poNumber,
+    newPoNumber: newPo.poNumber,
+    totalValue: newTotalAmount
+  });
+
+  if (!approvalInfo.requiresApproval) {
+    notifySellerNewPurchaseOrder(newPo.id).catch(() => undefined);
+  }
+
+  ok(res, {
+    purchaseOrder: newPo,
+    approvalInfo,
+    message: approvalInfo.message
+  }, 201);
 }));
+
+const formatOrgWithAddress = (org: any) => {
+  if (!org) return org;
+  return {
+    ...org,
+    address: [org.addressLine1, org.addressLine2].filter(Boolean).join(', ') || [org.city, org.state, org.pincode].filter(Boolean).join(', ') || null,
+    organizationLogoFile: org.logoFile || org.organizationLogoFile || null
+  };
+};
+
+const formatPoWithOrgAddress = (po: any) => {
+  if (!po) return po;
+  return {
+    ...po,
+    buyer: po.buyer ? {
+      ...po.buyer,
+      organization: formatOrgWithAddress(po.buyer.organization)
+    } : po.buyer,
+    seller: po.seller ? {
+      ...po.seller,
+      organization: formatOrgWithAddress(po.seller.organization)
+    } : po.seller
+  };
+};
 
 router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
@@ -7631,8 +8406,62 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
     db.purchaseOrder.findMany({
       where,
       include: {
-        buyer: { select: { id: true, name: true, email: true } },
-        seller: { select: { id: true, name: true, email: true } },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            role: true,
+            registrationDetails: true,
+            organizationId: true,
+            organization: {
+              select: {
+                id: true,
+                organizationName: true,
+                gstin: true,
+                panNumber: true,
+                addressLine1: true,
+                addressLine2: true,
+                city: true,
+                state: true,
+                pincode: true,
+                organizationLogoFileId: true,
+                profile: { select: { logoUrl: true } },
+                logoFile: { select: { id: true, url: true, fileUrl: true } }
+              }
+            },
+            buyerProfile: true
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            role: true,
+            registrationDetails: true,
+            organizationId: true,
+            organization: {
+              select: {
+                id: true,
+                organizationName: true,
+                gstin: true,
+                panNumber: true,
+                addressLine1: true,
+                addressLine2: true,
+                city: true,
+                state: true,
+                pincode: true,
+                organizationLogoFileId: true,
+                profile: { select: { logoUrl: true } },
+                logoFile: { select: { id: true, url: true, fileUrl: true } }
+              }
+            },
+            sellerProfile: true
+          }
+        },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
         invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
@@ -7642,7 +8471,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
     }),
     db.purchaseOrder.count({ where })
   ]);
-  ok(res, paged(purchaseOrders, total, query, 'purchaseOrders'));
+  ok(res, paged(purchaseOrders.map(formatPoWithOrgAddress), total, query, 'purchaseOrders'));
 }));
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
@@ -7655,8 +8484,27 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
           id: true,
           name: true,
           email: true,
-          buyerProfile: true,
-          organization: { select: { organizationName: true, address: true, city: true, state: true, pincode: true } }
+          mobile: true,
+          role: true,
+          registrationDetails: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+              organizationLogoFileId: true,
+              profile: { select: { logoUrl: true } },
+              logoFile: { select: { id: true, url: true, fileUrl: true } }
+            }
+          },
+          buyerProfile: true
         }
       },
       seller: {
@@ -7665,8 +8513,26 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
           name: true,
           email: true,
           mobile: true,
-          sellerProfile: true,
-          organization: { select: { organizationName: true, address: true, city: true, state: true, pincode: true } }
+          role: true,
+          registrationDetails: true,
+          organizationId: true,
+          organization: {
+            select: {
+              id: true,
+              organizationName: true,
+              gstin: true,
+              panNumber: true,
+              addressLine1: true,
+              addressLine2: true,
+              city: true,
+              state: true,
+              pincode: true,
+              organizationLogoFileId: true,
+              profile: { select: { logoUrl: true } },
+              logoFile: { select: { id: true, url: true, fileUrl: true } }
+            }
+          },
+          sellerProfile: true
         }
       },
       items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
@@ -7699,46 +8565,113 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
   }
 
   if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-  ok(res, po);
+  ok(res, formatPoWithOrgAddress(po));
 }));
 
-for (const [path, action, roles] of [
-  ['/purchase-orders/:id/acknowledge', 'purchase_order.acknowledged', ['seller', 'admin']],
-  ['/purchase-orders/:id/cancel', 'purchase_order.cancelled', ['buyer', 'admin']]
-] as const) {
-  router.post(path, authenticate, authorize(...roles), asyncRoute(async (req, res) => {
-    const { id } = parse(idParams, req.params);
-    await assertBuyerProcurementApproved(req);
-    const po = await db.purchaseOrder.findUnique({ where: { id } });
-    let isAllowed = false;
-    if (po) {
-      if (isAdmin(req)) isAllowed = true;
-      else if (action === 'purchase_order.cancelled' && po.buyerId === userId(req)) isAllowed = true;
-      else if (action === 'purchase_order.acknowledged') {
-        const sellerIds = [userId(req)];
-        if (req.user?.organizationId || (req.user as any)?.companyId) {
-          const orgUsers = await db.user.findMany({
-            where: {
-              OR: [
-                ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
-                ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
-              ]
-            },
-            select: { id: true }
-          });
-          orgUsers.forEach((u: any) => sellerIds.push(u.id));
-        }
-        if (sellerIds.includes(po.sellerId)) isAllowed = true;
+router.post('/purchase-orders/:id/acknowledge', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isAllowed = false;
+  if (po) {
+    if (isAdmin(req)) isAllowed = true;
+    else {
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
       }
+      if (sellerIds.includes(po.sellerId)) isAllowed = true;
     }
-    if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    const updated = action === 'purchase_order.acknowledged'
-      ? await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id)
-      : await fulfillmentWorkflow.cancelPO(actorFrom(req), id);
-    await auditWrite(req, action, 'purchaseOrder', id);
-    ok(res, updated);
-  }));
-}
+  }
+  if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const updated = await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id);
+  await auditWrite(req, 'purchase_order.acknowledged', 'purchaseOrder', id);
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/reject', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isAllowed = false;
+  if (po) {
+    if (isAdmin(req)) isAllowed = true;
+    else {
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
+      }
+      if (sellerIds.includes(po.sellerId)) isAllowed = true;
+    }
+  }
+  if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const body = req.body || {};
+  const reason = (typeof body.reason === 'string' ? body.reason : typeof body.rejectionReason === 'string' ? body.rejectionReason : '')?.trim() || undefined;
+  const updated = await fulfillmentWorkflow.rejectPO(actorFrom(req), id, reason);
+  await auditWrite(req, 'purchase_order.rejected', 'purchaseOrder', id, { reason });
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/cancel', authenticate, authorize('buyer', 'seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const po = await db.purchaseOrder.findUnique({ where: { id } });
+  let isBuyerAllowed = false;
+  let isSellerAllowed = false;
+  if (po) {
+    if (isAdmin(req)) {
+      isBuyerAllowed = true;
+      isSellerAllowed = true;
+    } else {
+      if (po.buyerId === userId(req)) isBuyerAllowed = true;
+      const sellerIds = [userId(req)];
+      if (req.user?.organizationId || (req.user as any)?.companyId) {
+        const orgUsers = await db.user.findMany({
+          where: {
+            OR: [
+              ...(req.user.organizationId ? [{ organizationId: req.user.organizationId }] : []),
+              ...((req.user as any)?.companyId ? [{ companyId: (req.user as any).companyId }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        orgUsers.forEach((u: any) => sellerIds.push(u.id));
+      }
+      if (sellerIds.includes(po.sellerId)) isSellerAllowed = true;
+    }
+  }
+  if (!po || (!isBuyerAllowed && !isSellerAllowed)) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  
+  if (isSellerAllowed && !isBuyerAllowed) {
+    const body = req.body || {};
+    const reason = (typeof body.reason === 'string' ? body.reason : typeof body.rejectionReason === 'string' ? body.rejectionReason : '')?.trim() || undefined;
+    const updated = await fulfillmentWorkflow.rejectPO(actorFrom(req), id, reason);
+    await auditWrite(req, 'purchase_order.rejected', 'purchaseOrder', id, { reason });
+    return ok(res, updated);
+  }
+
+  const updated = await fulfillmentWorkflow.cancelPO(actorFrom(req), id);
+  await auditWrite(req, 'purchase_order.cancelled', 'purchaseOrder', id);
+  ok(res, updated);
+}));
 
 router.get('/purchase-orders/:id/pdf', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
@@ -8994,10 +9927,9 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           select: {
             id: true,
             role: true,
-            businessType: true,
-            organizationType: true,
             registrationDetails: true,
-            profile: true,
+            sellerProfile: { select: { organizationType: true } },
+            shgProfile: { select: { id: true } },
             organization: {
               select: {
                 organizationType: true
@@ -9071,6 +10003,30 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
               });
               topBuyerName = buyerUser?.organization?.organizationName || buyerUser?.name || 'Unknown';
             }
+            if (!topBuyerName || topBuyerName === 'N/A') {
+              // Fallback to most active buyer with requirements or approved buyer
+              const topReqBuyer = await db.buyerRequirement.groupBy({
+                by: ['buyerId'],
+                _count: { id: true },
+                orderBy: { _count: { id: 'desc' } },
+                take: 1
+              }).catch(() => []);
+              if (topReqBuyer.length > 0 && topReqBuyer[0].buyerId) {
+                const bUser = await db.user.findUnique({
+                  where: { id: topReqBuyer[0].buyerId },
+                  include: { organization: true }
+                });
+                topBuyerName = bUser?.organization?.organizationName || bUser?.name || 'N/A';
+              } else {
+                const firstBuyer = await db.user.findFirst({
+                  where: { role: 'buyer', onboardingStatus: 'approved_for_procurement' },
+                  include: { organization: true }
+                });
+                if (firstBuyer) {
+                  topBuyerName = firstBuyer.organization?.organizationName || firstBuyer.name || 'N/A';
+                }
+              }
+            }
           } catch (e) {
             console.error('Failed to fetch top buyer', e);
           }
@@ -9093,7 +10049,7 @@ router.get('/admin/reports/summary', authenticate, authorizeAdmin, asyncRoute(as
           return isShgBusinessType(user?.registrationDetails?.businessType)
             || isShgBusinessType(user?.registrationDetails?.stakeholderCategory)
             || isShgBusinessType(user?.registrationDetails?.shgType)
-            || isShgBusinessType(user?.profile?.organizationType)
+            || isShgBusinessType(user?.sellerProfile?.organizationType)
             || isShgBusinessType(user?.organization?.organizationType)
             || isShgBusinessType(user?.organizationType)
             || isShgBusinessType(user?.businessType);
@@ -10769,38 +11725,36 @@ async function ensureUserOrganizationId(req: any): Promise<number> {
         const orgName = regDetails.businessName || regDetails.organisation || gstDetails.legalName || gstDetails.tradeName || user.name || 'Default Organisation';
         
         let orgType = 'MSME';
-        if (user.role === 'buyer') {
+        const typeStr = String(regDetails.businessType || regDetails.organisationType || '').trim().toUpperCase();
+        if (typeStr.includes('PROPRIETORSHIP')) {
+          orgType = 'PROPRIETORSHIP';
+        } else if (typeStr.includes('PARTNERSHIP')) {
+          orgType = 'PARTNERSHIP';
+        } else if (typeStr.includes('LLP')) {
+          orgType = 'LLP';
+        } else if (typeStr.includes('STARTUP')) {
+          orgType = 'STARTUP';
+        } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
+          orgType = 'PUBLIC_LIMITED';
+        } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
+          const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
+          orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
+        } else if (typeStr.includes('SHG')) {
+          orgType = 'SHG';
+        } else if (typeStr.includes('NGO')) {
+          orgType = 'NGO';
+        } else if (typeStr.includes('TRUST')) {
+          orgType = 'TRUST';
+        } else if (typeStr.includes('SOCIETY')) {
+          orgType = 'SOCIETY';
+        } else if (typeStr.includes('GOVERNMENT') || typeStr.includes('GOVT')) {
+          orgType = 'GOVERNMENT';
+        } else if (typeStr.includes('PSU')) {
+          orgType = 'PSU';
+        } else if (user.role === 'buyer') {
           orgType = 'GOVERNMENT';
         } else {
-          const typeStr = String(regDetails.businessType || regDetails.organisationType || '').trim().toUpperCase();
-          if (typeStr.includes('PROPRIETORSHIP')) {
-            orgType = 'PROPRIETORSHIP';
-          } else if (typeStr.includes('PARTNERSHIP')) {
-            orgType = 'PARTNERSHIP';
-          } else if (typeStr.includes('LLP')) {
-            orgType = 'LLP';
-          } else if (typeStr.includes('STARTUP')) {
-            orgType = 'STARTUP';
-          } else if (typeStr.includes('PUBLIC_LIMITED') || typeStr.includes('PUBLIC LTD')) {
-            orgType = 'PUBLIC_LIMITED';
-          } else if (typeStr.includes('COMPANY') || typeStr.includes('PRIVATE_LIMITED') || typeStr.includes('PVT LTD') || typeStr.includes('PVT. LTD.')) {
-            const isPublic = typeStr.includes('PUBLIC') || (!typeStr.includes('PVT') && !typeStr.includes('PRIVATE') && String(orgName).toUpperCase().includes('LIMITED') && !String(orgName).toUpperCase().includes('PVT') && !String(orgName).toUpperCase().includes('PRIVATE'));
-            orgType = isPublic ? 'PUBLIC_LIMITED' : 'PRIVATE_LIMITED';
-          } else if (typeStr.includes('SHG')) {
-            orgType = 'SHG';
-          } else if (typeStr.includes('NGO')) {
-            orgType = 'NGO';
-          } else if (typeStr.includes('TRUST')) {
-            orgType = 'TRUST';
-          } else if (typeStr.includes('SOCIETY')) {
-            orgType = 'SOCIETY';
-          } else if (typeStr.includes('GOVERNMENT')) {
-            orgType = 'GOVERNMENT';
-          } else if (typeStr.includes('PSU')) {
-            orgType = 'PSU';
-          } else {
-            orgType = 'MSME';
-          }
+          orgType = 'MSME';
         }
 
         const defaultCompanyId = await getDefaultCompanyId();
@@ -11084,6 +12038,8 @@ export type NormalizedProcurement = {
   budgetDetails?: any;
   approvalAuthority?: string;
   justification?: string;
+  urgency?: string;
+  priority?: string;
   internalDetails?: Record<string, any>;
   detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
   approvalTrail?: Array<Record<string, unknown>>;
@@ -11415,6 +12371,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       competentAuthority: internal.competentAuthority || '',
     };
 
+    const resolvedPriority = basics.priority || basics.urgency || technicalPacket.urgency || technicalPacket.priority || String(b.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal';
+
     const bidDetailSections = [
       detailSection('Procurement Intent', {
         title: b.title,
@@ -11422,7 +12380,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         estimatedValue: b.estimatedValue ? `INR ${Number(b.estimatedValue).toLocaleString('en-IN')}` : undefined,
         deliveryLocation: b.deliveryLocation,
         requiredByDate: basics.requiredByDate,
-        priority: basics.priority,
+        priority: resolvedPriority,
+        urgency: resolvedPriority,
         buyerType: basics.buyerType,
       }),
       detailSection('Internal Approvals & Compliance', {
@@ -11520,6 +12479,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       approvalAuthority,
       justification,
       internalDetails,
+      priority: resolvedPriority,
+      urgency: resolvedPriority,
       budgetDetails: {
         costCenter: internal.costCenter || '',
         justification,
@@ -11806,6 +12767,23 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   }
 
   // 5) Requirement
+  const buyerReqIds = requirements.map(r => r.id);
+  const matchedRequirementResponses = buyerReqIds.length > 0
+    ? await db.requirementResponse.findMany({
+        where: {
+          requirementId: { in: buyerReqIds },
+          status: { not: 'DRAFT' }
+        },
+        select: { id: true, requirementId: true }
+      }).catch(() => [])
+    : [];
+
+  const reqResponseCountMap = new Map<number, number>();
+  for (const resp of matchedRequirementResponses) {
+    const rid = Number(resp.requirementId);
+    reqResponseCountMap.set(rid, (reqResponseCountMap.get(rid) || 0) + 1);
+  }
+
   for (const r of requirements) {
     const payload = (r as any).payload || {};
 
@@ -11930,6 +12908,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       quantity: String((r as any).quantity || ''),
       unit: (r as any).unit || '',
       organizationName: (r as any).organization?.organizationName || payload.basics?.buyerOrganizationName || loggedInOrgName || '',
+      participantsCount: reqResponseCountMap.get(r.id) || 0,
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
       evaluationMethod: payload.evaluation?.method || payload.evaluation?.evaluationMethod || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1 Basis',

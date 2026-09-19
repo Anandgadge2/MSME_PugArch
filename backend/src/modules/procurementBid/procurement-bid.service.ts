@@ -3,24 +3,25 @@ import { env } from '../../config/env.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
-import { createOrReuseProcurementPOForAward } from './procurement-order.service.js';
+import { createOrReuseProcurementPOForAward, getSellerUserIdsForActor } from './procurement-order.service.js';
 import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
+import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
 
 const db = prisma as any;
 
 type Actor = AuthenticatedUser;
 
-const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'];
-const financialOpenStatuses = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'];
+const publicBidStatuses = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED', 'EXPIRED'];
+const financialOpenStatuses = ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED'];
 const sellerVerifiedStatuses = ['approved_for_procurement', 'approved'];
 const activeUserStatuses = ['ACTIVE'];
 const verifiedOrganizationStatuses = ['VERIFIED'];
 const editableBidStatuses = ['DRAFT'];
 const editableApprovalStatuses = ['DRAFT', 'REJECTED'];
-const technicalEvaluationStatuses = ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION'];
-const financialEvaluationReadyStatuses = ['TECHNICAL_EVALUATION_COMPLETED'];
+const technicalEvaluationStatuses = ['CLOSED', 'EXPIRED', 'TECHNICAL_EVALUATION', 'UNDER_EVALUATION'];
+const financialEvaluationReadyStatuses = ['TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'];
 const restrictedProcurementMethods = ['LIMITED_TENDER', 'REPEAT_ORDER'];
 
 const bidTransitions: Record<string, string[]> = {
@@ -34,18 +35,21 @@ const bidTransitions: Record<string, string[]> = {
   EXPIRED: ['UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   TECHNICAL_EVALUATION: ['TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION', 'CANCELLED'],
   TECHNICAL_EVALUATION_COMPLETED: ['FINANCIAL_EVALUATION', 'UNDER_EVALUATION', 'CANCELLED'],
-  FINANCIAL_EVALUATION: ['L1_GENERATED', 'AWARD_RECOMMENDED', 'UNDER_EVALUATION', 'CANCELLED'],
-  L1_GENERATED: ['AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'],
-  AWARD_RECOMMENDED: ['AWARDED', 'CANCELLED'],
+  FINANCIAL_EVALUATION: ['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'UNDER_EVALUATION', 'CANCELLED'],
+  L1_GENERATED: ['AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'CANCELLED'],
+  AWARD_RECOMMENDED: ['AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARDED', 'CANCELLED'],
+  AWARD_OFFERED: ['AWARD_ACCEPTED', 'AWARD_DECLINED', 'UNDER_EVALUATION', 'PO_GENERATED', 'CANCELLED'],
+  AWARD_ACCEPTED: ['PO_GENERATED', 'IN_PROGRESS', 'CANCELLED'],
+  AWARD_DECLINED: ['UNDER_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'CANCELLED'],
   AWARDED: ['PO_GENERATED', 'CANCELLED'],
   PO_GENERATED: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['DELIVERED', 'CANCELLED'],
   DELIVERED: ['GRN_COMPLETED', 'CANCELLED'],
   GRN_COMPLETED: ['INVOICE_SUBMITTED', 'CANCELLED'],
   INVOICE_SUBMITTED: ['PAYMENT_COMPLETED', 'CANCELLED'],
-  PAYMENT_COMPLETED: ['CLOSED', 'CANCELLED'],
-  UNDER_EVALUATION: ['AWARDED', 'NEGOTIATION', 'CANCELLED'],
-  NEGOTIATION: ['AWARDED', 'CANCELLED'],
+  PAYMENT_COMPLETED: ['COMPLETED', 'CLOSED', 'CANCELLED'],
+  UNDER_EVALUATION: ['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_OFFERED', 'AWARDED', 'NEGOTIATION', 'CANCELLED'],
+  NEGOTIATION: ['AWARD_OFFERED', 'AWARDED', 'CANCELLED'],
   CANCELLED: []
 };
 
@@ -321,10 +325,20 @@ export const bidInclude: any = {
       role: true,
       buyerProfile: {
         select: {
+          id: true,
+          organizationName: true,
+          organizationType: true,
           department: true,
+          designation: true,
           representativeName: true,
           email: true,
-          mobile: true
+          mobile: true,
+          registeredAddress: true,
+          corporateAddress: true,
+          city: true,
+          district: true,
+          state: true,
+          pincode: true
         }
       }
     }
@@ -355,16 +369,25 @@ export const leanBidInclude = {
       id: true,
       name: true,
       email: true,
+      mobile: true,
       role: true,
       organizationId: true,
       buyerProfile: {
         select: {
+          id: true,
           organizationName: true,
+          organizationType: true,
           department: true,
           designation: true,
+          representativeName: true,
+          email: true,
+          mobile: true,
+          registeredAddress: true,
+          corporateAddress: true,
           city: true,
           district: true,
-          state: true
+          state: true,
+          pincode: true
         }
       }
     }
@@ -380,6 +403,12 @@ export const leanBidInclude = {
   clarifications: {
     include: {
       seller: { select: { id: true, name: true } }
+    }
+  },
+  awards: {
+    include: {
+      seller: { select: { id: true, name: true, email: true, organization: { select: { organizationName: true } } } },
+      participation: true
     }
   }
 };
@@ -418,10 +447,10 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     ? Number(token)
     : (cleanDigits && !isNaN(Number(cleanDigits)) && Number(cleanDigits) <= 2147483647 ? Number(cleanDigits) : null);
 
-  const candidateTokens = new Set<string>([token]);
+  const candidateTokens = new Set<string>(getCanonicalLookupVariants(token));
   if (cleanDigits) {
     const padded5 = cleanDigits.padStart(5, '0');
-    for (const p of ['REQ', 'RFP', 'RFQ', 'TND', 'LTND', 'RC', 'DP', 'RA', 'PB', 'PRQ']) {
+    for (const p of CANONICAL_METHOD_PREFIXES) {
       candidateTokens.add(`${p}-${cleanDigits}`);
       candidateTokens.add(`${p}-${padded5}`);
       candidateTokens.add(`${p}-2026-${padded5}`);
@@ -432,6 +461,8 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
   const whereConditions: any[] = Array.from(candidateTokens).map(t => ({ bidNumber: t }));
   if (parsedNum) {
     whereConditions.push({ id: parsedNum });
+    whereConditions.push({ technicalPacket: { path: ['sourceRequirementId'], equals: parsedNum } });
+    whereConditions.push({ technicalPacket: { path: ['requirementId'], equals: parsedNum } });
   }
 
   let bid = await db.procurementBid.findFirst({
@@ -443,9 +474,9 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables concurrently...');
-    const reqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
+    const legacyReqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
-      reqWhere.push({ id: parsedNum });
+      legacyReqWhere.push({ id: parsedNum });
     }
 
     const qReqWhere: any[] = Array.from(candidateTokens).map(t => ({ subject: t }));
@@ -454,15 +485,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     }
 
     const [buyerReqCandidate, legacyReqCandidate, qReq] = await Promise.all([
-      db.buyerRequirement.findFirst({
-        where: { OR: reqWhere },
+      parsedNum ? db.buyerRequirement.findUnique({
+        where: { id: parsedNum },
         include: { buyerOrganization: true, createdBy: true }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying buyerRequirement');
         return null;
-      }),
+      }) : Promise.resolve(null),
       db.requirement.findFirst({
-        where: { OR: reqWhere },
+        where: { OR: legacyReqWhere },
         include: { organization: true, buyer: true }
       }).catch(err => {
         logger.warn({ err }, '[RESOLVE_BID] Error querying requirement');
@@ -491,7 +522,9 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           where: {
             OR: [
               { bidNumber: reqNumber },
-              { sourceModel: 'QUOTE_REQUEST', sourceId: reqId }
+              ...(token && token !== reqNumber ? [{ bidNumber: token }] : []),
+              { technicalPacket: { path: ['sourceRequirementId'], equals: reqId } },
+              { technicalPacket: { path: ['quoteRequestId'], equals: reqId } }
             ]
           },
           include
@@ -522,15 +555,22 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
               buyerOrganizationName: buyerOrgName || 'Buyer Organization',
               status: 'OPEN',
               lifecycleStage: 'SELLER_PARTICIPATION',
-              sourceModel: 'QUOTE_REQUEST',
-              sourceId: reqId,
               deliveryLocation: 'India',
               startDate: qReq.createdAt || new Date(),
-              endDate: new Date(Date.now() + 30 * 86400000)
+              endDate: new Date(Date.now() + 30 * 86400000),
+              technicalPacket: {
+                sourceModel: 'QUOTE_REQUEST',
+                sourceRequirementId: reqId,
+                quoteRequestId: reqId
+              }
             },
             include
           });
           logger.info({ newBidId: bid.id }, '[RESOLVE_BID] Created shadow procurementBid for QuoteRequest successfully');
+        }
+        if (bid) {
+          bid.sourceModel = 'QUOTE_REQUEST';
+          bid.sourceId = reqId;
         }
       }
 
@@ -547,7 +587,10 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           OR: [
             { bidNumber: reqNumber },
             { bidNumber: `REQ-${reqId}` },
-            { bidNumber: `PB-${reqId}` }
+            { bidNumber: `PB-${reqId}` },
+            ...(token && token !== reqNumber ? [{ bidNumber: token }] : []),
+            { technicalPacket: { path: ['sourceRequirementId'], equals: reqId } },
+            { technicalPacket: { path: ['requirementId'], equals: reqId } }
           ]
         },
         include
@@ -564,6 +607,14 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           validBuyerId = fallbackUser?.id;
         }
 
+        const shadowTechnicalPacket: any = {
+          ...(buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : {}),
+          sourceModel: 'REQUIREMENT',
+          sourceRequirementId: reqId,
+          requirementId: reqId,
+          requirementNumber: reqNumber
+        };
+
         logger.info({ reqNumber, reqId, validBuyerId }, '[RESOLVE_BID] Creating shadow procurementBid record in DB...');
         bid = await db.procurementBid.create({
           data: {
@@ -578,16 +629,18 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: buyerOrgName || 'Buyer Organization',
             status: buyerReq.status === 'APPROVED' ? 'OPEN' : (buyerReq.status || 'OPEN'),
             lifecycleStage: 'SELLER_PARTICIPATION',
-            sourceModel: 'REQUIREMENT',
-            sourceId: reqId,
             deliveryLocation: buyerReq.location || buyerReq.deliveryLocation || [buyerReq.buyerOrganization?.district, buyerReq.buyerOrganization?.state].filter(Boolean).join(', ') || 'India',
             startDate: buyerReq.createdAt || new Date(),
             endDate: buyerReq.lastDate || buyerReq.requiredBy || new Date(Date.now() + 30 * 86400000),
-            technicalPacket: buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : undefined
+            technicalPacket: shadowTechnicalPacket
           },
           include
         });
         logger.info({ newBidId: bid.id }, '[RESOLVE_BID] Created shadow procurementBid successfully');
+      }
+      if (bid) {
+        bid.sourceModel = 'REQUIREMENT';
+        bid.sourceId = reqId;
       }
     }
   }
@@ -630,7 +683,14 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 
       // Try to find existing shadow bid for this rate contract
       bid = await db.procurementBid.findFirst({
-        where: { OR: [{ bidNumber: rcBidNumber }, { bidNumber: token }, { sourceModel: 'RATE_CONTRACT', sourceId: contract.id }] },
+        where: {
+          OR: [
+            { bidNumber: rcBidNumber },
+            { bidNumber: token },
+            { technicalPacket: { path: ['sourceContractId'], equals: contract.id } },
+            { technicalPacket: { path: ['contractId'], equals: contract.id } }
+          ]
+        },
         include
       }).catch(() => null);
 
@@ -664,12 +724,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: meta.buyerOrgName || 'Buyer Organization',
             status: 'OPEN',
             lifecycleStage: 'SELLER_PARTICIPATION',
-            sourceModel: 'RATE_CONTRACT',
-            sourceId: contract.id,
             deliveryLocation: meta.deliveryLocation || 'India',
             startDate: formatDate(contract.startDate) || new Date(),
             endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000),
-            technicalPacket: meta.items && Array.isArray(meta.items) && meta.items.length > 0 ? { wizardData: { items: meta.items } } : undefined
+            technicalPacket: {
+              ...(meta.items && Array.isArray(meta.items) && meta.items.length > 0 ? { wizardData: { items: meta.items } } : {}),
+              sourceModel: 'RATE_CONTRACT',
+              sourceContractId: contract.id,
+              contractId: contract.id
+            }
           },
           include
         }).catch((err: any) => {
@@ -680,9 +743,25 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           }).catch(() => null);
         });
         if (bid) {
+          bid.sourceModel = 'RATE_CONTRACT';
+          bid.sourceId = contract.id;
           logger.info({ bidId: bid.id }, '[RESOLVE_BID] Created/found shadow procurementBid for Rate Contract');
         }
       }
+    }
+  }
+
+  if (bid) {
+    const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
+    const linkedReqId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
+    const linkedContractId = Number(packetMeta.sourceContractId || packetMeta.contractId || 0) || null;
+    const linkedQuoteId = Number(packetMeta.quoteRequestId || 0) || null;
+
+    if (!bid.sourceModel) {
+      bid.sourceModel = packetMeta.sourceModel || (linkedContractId ? 'RATE_CONTRACT' : linkedQuoteId ? 'QUOTE_REQUEST' : linkedReqId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
+    }
+    if (!bid.sourceId) {
+      bid.sourceId = packetMeta.sourceId || linkedReqId || linkedContractId || linkedQuoteId || bid.id;
     }
   }
 
@@ -798,12 +877,21 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     title: bid.title,
     description: bid.description,
     buyerId: bid.buyerId,
+    buyerName: bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
+    buyerEmail: bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
+    buyerMobile: bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
+    buyerAddress: [
+      bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.corporateAddress || bid.buyer?.buyerProfile?.address || bid.buyerOrganization?.registeredAddress,
+      bid.buyer?.buyerProfile?.city || bid.buyerOrganization?.city,
+      bid.buyer?.buyerProfile?.district || bid.buyerOrganization?.district,
+      bid.buyer?.buyerProfile?.state || bid.buyerOrganization?.state,
+      bid.buyer?.buyerProfile?.pincode || bid.buyerOrganization?.pincode
+    ].filter(Boolean).join(', ') || undefined,
     buyerOrganizationName: bid.buyerOrganizationName,
     buyerType: bid.buyerType,
     departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
-    subCategory: bid.subCategory,
     bidType: bid.bidType,
     procurementType: bid.procurementType,
     quantity: moneyNumber(bid.quantity),
@@ -859,10 +947,22 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       email: bid.buyer.email,
       mobile: bid.buyer.mobile,
       buyerProfile: bid.buyer.buyerProfile ? {
-        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName,
-        representativeName: bid.buyer.buyerProfile.representativeName,
-        email: bid.buyer.buyerProfile.email,
-        mobile: bid.buyer.buyerProfile.mobile
+        id: bid.buyer.buyerProfile.id,
+        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName,
+        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        designation: bid.buyer.buyerProfile.designation || null,
+        representativeName: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
+        contactPerson: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
+        email: bid.buyer.buyerProfile.email || bid.buyer.email || null,
+        mobile: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        phone: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        registeredAddress: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
+        address: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
+        city: bid.buyer.buyerProfile.city || null,
+        district: bid.buyer.buyerProfile.district || null,
+        state: bid.buyer.buyerProfile.state || null,
+        pincode: bid.buyer.buyerProfile.pincode || null,
       } : null
     } : null,
     buyerOrganization: bid.buyerOrganization,
@@ -887,8 +987,28 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
       return subStatus !== 'DRAFT' && !p.isWithdrawn;
     }).length,
+    hasSubmittedProposal: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+      const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+      const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+      const matchesUser = (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+      const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+      return matchesUser && subStatus === 'SUBMITTED';
+    }) : undefined,
+    myParticipation: actorRole === 'seller' ? (() => {
+      const found = (bid.participations || []).find((p: any) => {
+        const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+        const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+        return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+      });
+      return found ? serializeParticipation(found, { canSeeFinancial: true, bid, ownView: true }) : undefined;
+    })() : undefined,
+    hasParticipated: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+      const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+      const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+      return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+    }) : undefined,
     participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
-      if (isAdmin || isBuyerOwner) return true;
+      if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
       if (actorRole === 'seller') {
         const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         // During bidding and before financial evaluation, sellers must only see their own participation
@@ -900,9 +1020,81 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return false;
     }).map((p: any) => {
       const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-      const allowFinancial = isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+      const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
+    results: canSeeParticipants ? (bid.participations || [])
+      .filter((p: any) => {
+        const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+        if (subStatus === 'DRAFT' || p.isWithdrawn) return false;
+        if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
+        if (actorRole === 'seller') {
+          const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+          if (!financialOpenStatuses.includes(bid.status)) return isOwn;
+          return true;
+        }
+        return false;
+      })
+      .map((p: any) => {
+        const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+        const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+        return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
+      })
+      .sort((a: any, b: any) => {
+        const priceA = Number(a.totalAmount || a.quotedAmount || 0);
+        const priceB = Number(b.totalAmount || b.quotedAmount || 0);
+        if (priceA > 0 && priceB > 0 && priceA !== priceB) return priceA - priceB;
+        if (priceA > 0 && priceB <= 0) return -1;
+        if (priceB > 0 && priceA <= 0) return 1;
+        return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
+      })
+      .map((p: any, idx: number) => {
+        const quotedAmt = Number(p.totalAmount || p.quotedAmount || 0);
+        const sellerOrg = p.sellerName || p.seller?.organization?.organizationName || p.seller?.name || 'Supplier';
+        const contactPerson = p.seller?.name || p.contactPerson || p.sellerName || 'Representative';
+        return {
+          id: p.id,
+          participationId: p.id,
+          sellerId: p.sellerId,
+          sellerName: sellerOrg,
+          contactPerson: contactPerson,
+          sellerEmail: p.sellerEmail || 'Not provided',
+          sellerMobile: p.sellerMobile || 'Not listed',
+          submittedAt: p.submittedAt || p.createdAt,
+          sellerType: 'Verified Supplier',
+          offeredItem: p.offeredItemDescription || 'Procurement requirement',
+          makeBrand: p.makeBrand || 'Standard',
+          model: p.model || 'Standard',
+          technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Qualified',
+          totalPrice: quotedAmt,
+          quotedAmount: quotedAmt,
+          gstPercentage: Number(p.gstPercentage || 0),
+          totalAmount: quotedAmt,
+          offeredQuantity: p.offeredQuantity || 1,
+          deliveryTimeline: p.deliveryTimeline || 'Standard',
+          documents: p.documents || [],
+          lineItems: p.lineItems || [],
+          finalRank: `L${idx + 1}`,
+          resultStatus: 'Responsive',
+          details: {
+            organizationName: sellerOrg,
+            contactPerson: contactPerson,
+            email: p.sellerEmail || '',
+            mobile: p.sellerMobile || '',
+            submittedAt: p.submittedAt || p.createdAt,
+            deliveryTimeline: p.deliveryTimeline || 'Standard',
+            complianceRemarks: p.complianceRemarks || 'Compliant',
+            rfqNotes: p.rfqNotes || p.offeredItemDescription || '',
+            terms: p.terms || '',
+            message: p.offeredItemDescription || '',
+            quotedAmount: quotedAmt,
+            totalAmount: quotedAmt,
+            offeredQuantity: p.offeredQuantity || 1,
+            lineItems: p.lineItems || [],
+            documents: p.documents || [],
+          }
+        };
+      }) : undefined,
     clarifications: (isAdmin || isBuyerOwner)
       ? bid.clarifications
       : actor?.role === 'seller'
@@ -1027,12 +1219,21 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
     deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
     rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
-    responseData: (options.ownView || canSeeFin) ? { ...ackData, ...respData, ...descData } : {},
-    acknowledgement: (options.ownView || canSeeFin) ? p.acknowledgement : undefined,
-    lineItems: (options.ownView || canSeeFin) ? lineItemsArr : [],
+    responseData: { ...ackData, ...respData, ...descData },
+    acknowledgement: p.acknowledgement,
+    lineItems: lineItemsArr.map((item: any) => ({
+      ...item,
+      unitPrice: canSeeFin ? item.unitPrice : null,
+      lineTotal: canSeeFin ? item.lineTotal : null,
+      unitRate: canSeeFin ? item.unitRate : null,
+      totalAmount: canSeeFin ? item.totalAmount : null,
+      gstPercent: canSeeFin ? item.gstPercent : null,
+      gstPercentage: canSeeFin ? item.gstPercentage : null,
+    })),
     terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
     offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
-    submissionStatus: p.submissionStatus,
+    status: p.submissionStatus || 'DRAFT',
+    submissionStatus: p.submissionStatus || 'DRAFT',
     submittedAt: p.submittedAt,
     technicalSubmittedAt: p.technicalSubmittedAt,
     financialSubmittedAt: p.financialSubmittedAt,
@@ -1040,20 +1241,32 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     updatedAt: p.updatedAt,
     isWithdrawn: p.isWithdrawn,
     rejectionReason: p.rejectionReason,
-    documents: (options.ownView || canSeeFin) ? (p.documents || [])
-      .map((doc: any) => ({
-        id: doc.id,
-        documentCategory: doc.documentCategory,
-        documentName: doc.documentName,
-        fileName: doc.fileName,
-        fileUrl: doc.fileUrl || doc.url || null,
-        fileKey: doc.fileKey || null,
-        mimeType: doc.mimeType,
-        fileSize: doc.fileSize,
-        documentStatus: doc.documentStatus,
-        uploadedAt: doc.uploadedAt,
-        fileAssetId: doc.fileAssetId
-      })) : [],
+    documents: (
+      (Array.isArray(p.documents) && p.documents.length > 0)
+        ? p.documents
+        : (Array.isArray(respData.documents) && respData.documents.length > 0)
+          ? respData.documents
+          : (Array.isArray(ackData.documents) && ackData.documents.length > 0)
+            ? ackData.documents
+            : []
+    ).filter((doc: any) => {
+      if (!canSeeFin && (doc.documentCategory === 'FINANCIAL_QUOTE' || String(doc.documentName || '').toLowerCase().includes('price breakup'))) {
+        return false;
+      }
+      return true;
+    }).map((doc: any) => ({
+      id: doc.id,
+      documentCategory: doc.documentCategory || 'TECHNICAL_PROPOSAL',
+      documentName: doc.documentName || doc.name || doc.fileName || 'Attachment',
+      fileName: doc.fileName || doc.name || 'document',
+      fileUrl: doc.fileUrl || doc.url || null,
+      fileKey: doc.fileKey || null,
+      mimeType: doc.mimeType || 'application/octet-stream',
+      fileSize: doc.fileSize || 0,
+      documentStatus: doc.documentStatus || 'UPLOADED',
+      uploadedAt: doc.uploadedAt || p.submittedAt || p.createdAt,
+      fileAssetId: doc.fileAssetId || null
+    })),
     hasSealedFinancialQuote: !canSeeFin,
     clarifications: p.clarifications,
     evaluations: p.evaluations,
@@ -1088,8 +1301,17 @@ const getTenderBidActivityWhere = (query: any = {}) => {
 export const serializeTenderBidActivity = (tender: any) => {
   const profile = tender.buyer?.buyerProfile;
   const latestBid = tender.bids?.[0];
-  const location = [profile?.city, profile?.state].filter(Boolean).join(', ');
+  const fullAddress = [
+    profile?.registeredAddress || profile?.corporateAddress || profile?.address,
+    profile?.city,
+    profile?.district,
+    profile?.state,
+    profile?.pincode
+  ].filter(Boolean).join(', ');
+  const location = fullAddress || [profile?.city, profile?.state].filter(Boolean).join(', ');
   const closesAt = tender.closesAt || latestBid?.createdAt || tender.updatedAt || tender.createdAt;
+  const contactName = profile?.representativeName || tender.buyer?.name || 'Authorized Procurement Officer';
+  const orgName = profile?.organizationName || tender.buyer?.name || 'Verified buyer';
 
   return {
     id: `TENDER-${tender.id}`,
@@ -1098,10 +1320,14 @@ export const serializeTenderBidActivity = (tender: any) => {
     bidNumber: tender.tenderId,
     title: tender.title,
     description: tender.description,
-    buyerOrganizationName: profile?.organizationName || tender.buyer?.name || 'Verified buyer',
+    buyerName: contactName,
+    buyerEmail: profile?.email || tender.buyer?.email || '',
+    buyerMobile: profile?.mobile || tender.buyer?.mobile || '',
+    buyerAddress: location || 'Location not specified',
+    buyerOrganizationName: orgName,
     buyerType: profile?.organizationType || 'Private Enterprise',
+    departmentName: profile?.department || 'Procurement & Stores Department',
     category: tender.category,
-    subCategory: null,
     bidType: 'Tender',
     procurementType: 'Tender Bid',
     quantity: null,
@@ -1109,7 +1335,7 @@ export const serializeTenderBidActivity = (tender: any) => {
     estimatedValue: moneyNumber(tender.budget),
     deliveryLocation: location || 'Location not specified',
     state: profile?.state || null,
-    district: profile?.city || null,
+    district: profile?.district || profile?.city || null,
     startDate: tender.publishedAt || tender.createdAt,
     endDate: closesAt,
     status: tender.status,
@@ -1121,6 +1347,38 @@ export const serializeTenderBidActivity = (tender: any) => {
     createdAt: tender.createdAt,
     updatedAt: latestBid?.createdAt || tender.updatedAt,
     participantsCount: tender._count?.bids ?? 0,
+    buyer: tender.buyer ? {
+      id: tender.buyer.id,
+      name: tender.buyer.name || contactName,
+      email: tender.buyer.email || profile?.email || '',
+      mobile: tender.buyer.mobile || profile?.mobile || '',
+      buyerProfile: profile ? {
+        id: profile.id,
+        organizationName: orgName,
+        department: profile.department,
+        departmentName: profile.department,
+        designation: profile.designation,
+        representativeName: profile.representativeName,
+        contactPerson: profile.representativeName,
+        email: profile.email || tender.buyer?.email,
+        phone: profile.mobile || tender.buyer?.mobile,
+        mobile: profile.mobile || tender.buyer?.mobile,
+        address: profile.registeredAddress || profile.corporateAddress || profile.address || location,
+        registeredAddress: profile.registeredAddress || profile.corporateAddress || profile.address,
+        corporateAddress: profile.corporateAddress,
+        city: profile.city,
+        district: profile.district,
+        state: profile.state,
+        pincode: profile.pincode,
+      } : null
+    } : null,
+    buyerOrganization: profile ? {
+      organizationName: orgName,
+      organizationType: profile.organizationType,
+      city: profile.city,
+      district: profile.district,
+      state: profile.state,
+    } : null,
     documents: tender.documentUrl ? [{
       id: `tender-doc-${tender.id}`,
       documentType: 'TENDER_DOCUMENT',
@@ -1135,12 +1393,30 @@ export const serializeTenderBidActivity = (tender: any) => {
 };
 
 export const resolveTenderBidActivity = async (idOrNumber: string | number) => {
-  const token = String(idOrNumber);
-  const tenderId = token.startsWith('TENDER-') ? Number(token.replace('TENDER-', '')) : null;
-  const where = tenderId ? { id: tenderId } : { tenderId: token };
+  const token = String(idOrNumber).trim();
+  const digits = token.match(/\d+/g);
+  const lastDigits = digits ? digits[digits.length - 1] : null;
+  const numId = Number(token) || (token.startsWith('TENDER-') ? Number(token.replace('TENDER-', '')) : null);
+
+  const searchOr: any[] = [
+    { tenderId: token },
+    { tenderId: token.replace(/-2026-/, '-') },
+    { tenderId: token.replace(/^TND-/, 'TENDER-') },
+    { tenderId: token.replace(/^TENDER-/, 'TND-') },
+  ];
+  if (numId && Number.isFinite(numId)) searchOr.push({ id: numId });
+  if (lastDigits) {
+    searchOr.push({ tenderId: `TND-${lastDigits}` });
+    searchOr.push({ tenderId: `TND-2026-${lastDigits}` });
+    searchOr.push({ tenderId: `TND-2026-${lastDigits.padStart(5, '0')}` });
+    const parsedLast = Number(lastDigits);
+    if (Number.isFinite(parsedLast) && parsedLast > 0 && parsedLast <= 2147483647) {
+      searchOr.push({ id: parsedLast });
+    }
+  }
 
   const tender = await db.tender.findFirst({
-    where,
+    where: { OR: searchOr },
     select: {
       id: true,
       tenderId: true,
@@ -1158,7 +1434,26 @@ export const resolveTenderBidActivity = async (idOrNumber: string | number) => {
         select: {
           id: true,
           name: true,
-          buyerProfile: { select: { organizationName: true, organizationType: true, city: true, state: true } }
+          email: true,
+          mobile: true,
+          buyerProfile: {
+            select: {
+              id: true,
+              organizationName: true,
+              organizationType: true,
+              department: true,
+              designation: true,
+              representativeName: true,
+              email: true,
+              mobile: true,
+              registeredAddress: true,
+              corporateAddress: true,
+              city: true,
+              district: true,
+              state: true,
+              pincode: true
+            }
+          }
         }
       },
       bids: {
@@ -1231,7 +1526,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
   const page = Math.max(1, Number(query.page || 1));
   const pageSize = Math.min(500, Math.max(1, Number(query.pageSize || 12)));
   const takeForMergedPage = page * pageSize;
-  const actorInviteIds = actor?.role === 'seller'
+  const actorInviteIds = (actor?.role === 'seller' || actor?.role === 'shg')
     ? [Number(actor.id), Number(actor.organizationId)].filter(Number.isFinite)
     : [];
   // Fallback for rows created before the invitation table existed / not yet backfilled:
@@ -1268,7 +1563,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
             // Public bids are visible to everyone.
             publicBidPredicate,
             // Private bids the seller was invited to (relational — the reliable path).
-            ...(actor.role === 'seller' ? [{
+            ...((actor.role === 'seller' || actor.role === 'shg') ? [{
               AND: [
                 privateBidPredicate,
                 { invitations: { some: { OR: [{ sellerOrgId: { in: actorInviteIds } }, { sellerUserId: { in: actorInviteIds } }] } } }
@@ -1321,7 +1616,10 @@ export const listPublicBids = async (query: any, actor?: any) => {
       include: {
         documents: true,
         buyerOrganization: true,
-        participations: { select: { id: true } },
+        participations: {
+          where: { isWithdrawn: false },
+          select: { id: true, sellerId: true, submissionStatus: true, seller: { select: { id: true, organizationId: true } } }
+        },
         awards: true,
         invitations: { select: { sellerOrgId: true, sellerUserId: true } },
         buyer: {
@@ -1377,26 +1675,43 @@ export const listPublicBids = async (query: any, actor?: any) => {
   ]);
 
   const items = [
-    ...bids.map((bid: any) => ({
-      ...serializeBid(bid),
-      sourceModel: 'PROCUREMENT_BID',
-      sourceId: bid.id,
-      // Emit whether THIS seller was explicitly invited (relational rows or legacy
-      // technicalPacket JSON). The invitations page filters on this flag.
-      isInvited: actorInviteIds.length > 0 && (
-        (bid.invitations || []).some((inv: any) =>
-          actorInviteIds.includes(Number(inv.sellerOrgId)) || actorInviteIds.includes(Number(inv.sellerUserId))
-        ) ||
-        (() => {
-          const tp: any = bid.technicalPacket;
-          const embedded = [
-            ...(Array.isArray(tp?.vendors?.invitedSellers) ? tp.vendors.invitedSellers : []),
-            ...(Array.isArray(tp?.qualifiedVendors) ? tp.qualifiedVendors : [])
-          ].map(Number);
-          return embedded.some(v => actorInviteIds.includes(v));
-        })()
-      )
-    })),
+    ...bids.map((bid: any) => {
+      const isSeller = actor?.role === 'seller';
+      const currentActorId = actor?.id ? Number(actor.id) : null;
+      const currentOrgId = actor?.organizationId ? Number(actor.organizationId) : null;
+      const hasParticipated = isSeller && Boolean(
+        bid.participations && Array.isArray(bid.participations) && (
+          bid.participations.some((p: any) => {
+            const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+            const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+            return (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+          })
+        )
+      );
+
+      return {
+        ...serializeBid(bid, { actor, includeParticipants: isSeller }),
+        sourceModel: 'PROCUREMENT_BID',
+        sourceId: bid.id,
+        participated: hasParticipated,
+        hasParticipated,
+        // Emit whether THIS seller was explicitly invited (relational rows or legacy
+        // technicalPacket JSON). The invitations page filters on this flag.
+        isInvited: actorInviteIds.length > 0 && (
+          (bid.invitations || []).some((inv: any) =>
+            actorInviteIds.includes(Number(inv.sellerOrgId)) || actorInviteIds.includes(Number(inv.sellerUserId))
+          ) ||
+          (() => {
+            const tp: any = bid.technicalPacket;
+            const embedded = [
+              ...(Array.isArray(tp?.vendors?.invitedSellers) ? tp.vendors.invitedSellers : []),
+              ...(Array.isArray(tp?.qualifiedVendors) ? tp.qualifiedVendors : [])
+            ].map(Number);
+            return embedded.some(v => actorInviteIds.includes(v));
+          })()
+        )
+      };
+    }),
     ...tenderBidActivities.map(serializeTenderBidActivity)
   ]
     .sort((a: any, b: any) => {
@@ -1422,7 +1737,6 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
       buyerOrganizationName: body.buyerOrganizationName || user?.organization?.organizationName || user?.buyerProfile?.organizationName || user?.name || 'Buyer organization',
       buyerType: body.buyerType,
       category: body.category,
-      subCategory: body.subCategory,
       bidType: body.bidType,
       procurementType: body.procurementType,
       quantity: body.quantity,
@@ -1634,6 +1948,17 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
           type: 'bid.published',
           redirectUrl: `/buyer/procurement/events/${bid.id}`
         }, ['in_app', 'email']);
+        void notificationService.notifySellersAndShgsOfProcurement({
+          id: bid.id,
+          title: bid.title,
+          bidNumber: bid.bidNumber,
+          procurementType: bid.procurementType,
+          canonicalMethod: bid.canonicalMethod,
+          buyerOrganizationName: bid.buyerOrganizationName,
+          estimatedValue: bid.estimatedValue,
+          endDate: bid.endDate,
+          visibility: bid.visibility
+        });
       } catch (err) {
         logger.warn({ err }, 'Failed to send publish notification');
       }
@@ -1696,6 +2021,17 @@ export const approveBid = async (req: AuthRequest, bidId: string) => {
           }, ['in_app', 'email']);
         }
       }
+      void notificationService.notifySellersAndShgsOfProcurement({
+        id: bid.id,
+        title: bid.title,
+        bidNumber: bid.bidNumber,
+        procurementType: bid.procurementType,
+        canonicalMethod: bid.canonicalMethod,
+        buyerOrganizationName: bid.buyerOrganizationName,
+        estimatedValue: bid.estimatedValue,
+        endDate: bid.endDate,
+        visibility: bid.visibility
+      });
     }
     await notificationService.notifyUser(bid.buyerId, {
       title: openNow ? 'Bid Published' : 'Bid Approved',
@@ -2059,21 +2395,25 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
   const rawSubmissionDeadline = sched?.submissionDate || sched?.submissionDeadline || bid.endDate;
   let effectiveClarDeadline: Date | null = null;
   if (rawClarDeadline && rawSubmissionDeadline) {
-    const d1 = new Date(rawClarDeadline);
+    let d1 = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      d1 = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    }
     const d2 = new Date(rawSubmissionDeadline);
     const t1 = !isNaN(d1.getTime()) ? d1.getTime() : 0;
     const t2 = !isNaN(d2.getTime()) ? d2.getTime() : 0;
-    effectiveClarDeadline = new Date(Math.max(t1, t2));
+    effectiveClarDeadline = t1 > 0 ? (t2 > 0 ? new Date(Math.min(t1, t2)) : d1) : (t2 > 0 ? d2 : null);
   } else if (rawClarDeadline) {
-    effectiveClarDeadline = new Date(rawClarDeadline);
+    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
+      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
+    } else {
+      effectiveClarDeadline = new Date(rawClarDeadline);
+    }
   } else if (rawSubmissionDeadline) {
     effectiveClarDeadline = new Date(rawSubmissionDeadline);
   }
 
   if (effectiveClarDeadline && !isNaN(effectiveClarDeadline.getTime())) {
-    if (typeof rawClarDeadline === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawClarDeadline.trim())) {
-      effectiveClarDeadline = new Date(`${rawClarDeadline.trim()}T23:59:59.999`);
-    }
     if (effectiveClarDeadline.getTime() < Date.now()) {
       throw new ApiError(400, 'The clarification window has closed for this procurement.', 'CLARIFICATION_DEADLINE_PASSED');
     }
@@ -2122,7 +2462,101 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
     await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
     const rows = [];
     for (const item of body.evaluations) {
-      const participation = await tx.procurementBidParticipation.findUnique({ where: { id: Number(item.participationId) } });
+      const targetIdNum = Number(item.participationId);
+      let participation = !isNaN(targetIdNum) ? await tx.procurementBidParticipation.findUnique({ where: { id: targetIdNum } }) : null;
+      if (!participation || participation.bidId !== bid.id) {
+        participation = await tx.procurementBidParticipation.findFirst({
+          where: {
+            bidId: bid.id,
+            OR: [
+              ...(!isNaN(targetIdNum) ? [{ id: targetIdNum }, { sellerId: targetIdNum }] : []),
+              { participationNumber: String(item.participationId).trim() }
+            ]
+          }
+        });
+      }
+
+      // Check linked RequirementResponse if direct participation record not found
+      if (!participation && !isNaN(targetIdNum)) {
+        const reqResp = await tx.requirementResponse.findUnique({
+          where: { id: targetIdNum }
+        });
+        if (reqResp) {
+          const uniquePartNumber = `PRT-REQ-${bid.id}-${reqResp.id}`;
+          participation = await tx.procurementBidParticipation.findFirst({
+            where: { bidId: bid.id, sellerId: reqResp.sellerUserId }
+          });
+          const reqRespData = typeof reqResp.responseData === 'string'
+            ? (() => { try { return JSON.parse(reqResp.responseData); } catch { return {}; } })()
+            : (reqResp.responseData || {});
+          if (!participation) {
+            participation = await tx.procurementBidParticipation.create({
+              data: {
+                bidId: bid.id,
+                sellerId: reqResp.sellerUserId,
+                participationNumber: uniquePartNumber,
+                submissionStatus: 'SUBMITTED',
+                technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
+                financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                quotedAmount: reqResp.offeredPrice || 0,
+                totalAmount: reqResp.offeredPrice || 0,
+                makeBrand: (reqResp as any).makeBrand || reqRespData.makeBrand || null,
+                model: (reqResp as any).model || reqRespData.model || null,
+                offeredItemDescription: reqResp.message || reqRespData.message || null,
+                acknowledgement: reqRespData,
+                submittedAt: reqResp.createdAt
+              }
+            });
+          }
+          await tx.requirementResponse.update({
+            where: { id: reqResp.id },
+            data: { status: item.status === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED' }
+          }).catch(() => {});
+        }
+      }
+
+      // Check linked QuoteResponse if still not found
+      if (!participation && !isNaN(targetIdNum)) {
+        const qResp = await tx.quoteResponse.findUnique({
+          where: { id: targetIdNum }
+        });
+        if (qResp) {
+          const uniquePartNumber = `PRT-QR-${bid.id}-${qResp.id}`;
+          participation = await tx.procurementBidParticipation.findFirst({
+            where: { bidId: bid.id, sellerId: qResp.sellerId }
+          });
+          const qRespData = typeof (qResp as any).responseData === 'string'
+            ? (() => { try { return JSON.parse((qResp as any).responseData); } catch { return {}; } })()
+            : ((qResp as any).responseData || {});
+          if (!participation) {
+            participation = await tx.procurementBidParticipation.create({
+              data: {
+                bidId: bid.id,
+                sellerId: qResp.sellerId,
+                participationNumber: uniquePartNumber,
+                submissionStatus: 'SUBMITTED',
+                technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
+                financialStatus: item.status === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                quotedAmount: qResp.totalAmount || 0,
+                totalAmount: qResp.totalAmount || 0,
+                makeBrand: (qResp as any).makeBrand || qRespData.makeBrand || null,
+                model: (qResp as any).model || qRespData.model || null,
+                offeredItemDescription: (qResp as any).notes || qRespData.message || null,
+                acknowledgement: qRespData,
+                submittedAt: qResp.createdAt
+              }
+            });
+          }
+          await tx.quoteResponse.update({
+            where: { id: qResp.id },
+            data: {
+              technicalStatus: item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED',
+              technicalRemarks: item.remarks || null
+            }
+          }).catch(() => {});
+        }
+      }
+
       if (!participation || participation.bidId !== bid.id) throw new ApiError(404, 'Participation not found', 'PARTICIPATION_NOT_FOUND');
       const technicalStatus = item.status === 'QUALIFIED' ? 'QUALIFIED' : 'DISQUALIFIED';
       await tx.procurementBidParticipation.update({
@@ -2158,13 +2592,43 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
 export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: string) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
-  if (bid.status !== 'TECHNICAL_EVALUATION') throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
-  const qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
+  if (
+    bid.status === 'TECHNICAL_EVALUATION_COMPLETED' ||
+    ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(bid.status)
+  ) {
+    return bid;
+  }
+  if (!['TECHNICAL_EVALUATION', 'CLOSED', 'EXPIRED', 'UNDER_EVALUATION'].includes(bid.status)) {
+    throw new ApiError(400, 'Technical evaluation is not active.', 'TECHNICAL_EVALUATION_PENDING');
+  }
+  let qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
+  let pending = await db.procurementBidParticipation.count({ where: { bidId: bid.id, submissionStatus: 'SUBMITTED', technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] } } });
+
+  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
+  if (!qualified && sourceReqId > 0) {
+    qualified = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['SHORTLISTED', 'ACCEPTED', 'QUALIFIED'] } } });
+    pending = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['PENDING', 'UNDER_REVIEW', 'SUBMITTED'] } } });
+  }
+
   if (!qualified) throw new ApiError(400, 'At least one seller must be technically qualified.', 'TECHNICAL_EVALUATION_PENDING');
-  const pending = await db.procurementBidParticipation.count({ where: { bidId: bid.id, submissionStatus: 'SUBMITTED', technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] } } });
   if (pending) throw new ApiError(400, 'Every submitted participant must be technically qualified or disqualified before completion.', 'TECHNICAL_EVALUATION_PENDING');
-  assertBidTransition(bid.status, 'TECHNICAL_EVALUATION_COMPLETED');
+  if (bid.status !== 'TECHNICAL_EVALUATION') {
+    assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
+  }
+  assertBidTransition('TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED');
   const updated = await db.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION_COMPLETED', lifecycleStage: 'TECHNICAL_EVALUATION_COMPLETED' } });
+
+  if (sourceReqId > 0) {
+    await db.buyerRequirement.updateMany({
+      where: { id: sourceReqId },
+      data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+    }).catch(() => null);
+    await db.requirement.updateMany({
+      where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+      data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+    }).catch(() => null);
+  }
+
   await procurementAudit(req, 'TECHNICAL_EVALUATION_COMPLETED', 'ProcurementBid', bid.id, updated);
   return updated;
 };
@@ -2172,10 +2636,18 @@ export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: strin
 export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) => {
   const bid = await resolveBid(bidId, { participations: true });
   assertBuyerOwner(req.user!, bid);
+  if (
+    bid.status === 'FINANCIAL_EVALUATION' ||
+    ['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED'].includes(bid.status)
+  ) {
+    return bid;
+  }
   if (!financialEvaluationReadyStatuses.includes(bid.status)) {
     throw new ApiError(400, 'Technical evaluation must be completed before opening financial bids.', 'TECHNICAL_EVALUATION_PENDING');
   }
   assertBidTransition(bid.status, 'FINANCIAL_EVALUATION');
+
+  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
 
   const ranked = await db.$transaction(async (tx: any) => {
     const qualified = await tx.procurementBidParticipation.findMany({
@@ -2207,6 +2679,16 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
       where: { id: bid.id },
       data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED', financialOpeningDate: now() }
     });
+    if (sourceReqId > 0) {
+      await tx.buyerRequirement.updateMany({
+        where: { id: sourceReqId },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+      await tx.requirement.updateMany({
+        where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+    }
     await tx.procurementBidParticipation.updateMany({
       where: { bidId: bid.id, technicalStatus: { not: 'QUALIFIED' } },
       data: { financialStatus: 'LOCKED' }
@@ -2467,9 +2949,23 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
           participationId: participation.id,
           sellerId: participation.sellerId,
           awardedAmount: participation.totalAmount || participation.quotedAmount || 0,
-          awardStatus: 'ADMIN_APPROVED',
+          originalBidAmount: participation.totalAmount || participation.quotedAmount || 0,
+          justificationReason: body.justificationReason || body.adminOverrideReason || null,
+          awardStatus: 'OFFERED',
           awardedById: req.user!.id,
-          remarks: body.remarks || body.adminOverrideReason || 'Accepted by buyer',
+          remarks: body.remarks || body.adminOverrideReason || 'Award offered by buyer',
+          awardedAt: now()
+        }
+      });
+    } else {
+      created = await tx.procurementBidAward.update({
+        where: { id: created.id },
+        data: {
+          awardStatus: 'OFFERED',
+          awardedAmount: participation.totalAmount || participation.quotedAmount || 0,
+          originalBidAmount: participation.totalAmount || participation.quotedAmount || 0,
+          justificationReason: body.justificationReason || body.adminOverrideReason || null,
+          remarks: body.remarks || body.adminOverrideReason || 'Award offered by buyer',
           awardedAt: now()
         }
       });
@@ -2477,17 +2973,15 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
 
     await tx.procurementBidParticipation.update({
       where: { id: participation.id },
-      data: { finalStatus: 'AWARDED', technicalStatus: 'QUALIFIED', financialStatus: 'EVALUATED' }
+      data: { finalStatus: 'AWARD_OFFERED', technicalStatus: 'QUALIFIED', financialStatus: 'EVALUATED' }
     });
 
-    await tx.procurementBidParticipation.updateMany({
-      where: { bidId: bid.id, id: { not: participation.id } },
-      data: { finalStatus: 'NOT_SELECTED' }
-    });
+    // CRITICAL: All other participants remain at their current status (UNDER_EVALUATION).
+    // They are NOT rejected or marked NOT_SELECTED here!
 
     await tx.procurementBid.update({
       where: { id: bid.id },
-      data: { status: 'AWARDED', lifecycleStage: 'AWARDED' }
+      data: { status: 'AWARD_OFFERED', lifecycleStage: 'AWARD_RECOMMENDED' }
     });
 
     return created;
@@ -2496,20 +2990,554 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
     timeout: 20000
   });
 
-  logger.info({ awardId: award.id }, '[RECOMMEND_AWARD] Award transaction completed successfully');
+  logger.info({ awardId: award.id }, '[RECOMMEND_AWARD] Award offer recorded successfully');
 
-  await procurementAudit(req, 'FINAL_AWARD_APPROVED', 'ProcurementBidAward', award.id, award).catch(err => logger.warn({ err }, '[RECOMMEND_AWARD] Error creating audit log'));
+  await procurementAudit(req, 'AWARD_OFFERED', 'ProcurementBidAward', award.id, award).catch(err => logger.warn({ err }, '[RECOMMEND_AWARD] Error creating audit log'));
 
-  logger.info({ awardId: award.id, bidId: bid.id }, '[RECOMMEND_AWARD] Generating PO for award...');
-  const po = await createOrReuseProcurementPOForAward(req, award, bid);
-  logger.info({ poId: po.purchaseOrder?.id, poNumber: po.purchaseOrder?.poNumber }, '[RECOMMEND_AWARD] PO generated successfully');
+  await notificationService.notifyUser(participation.sellerId, {
+    title: 'Award Offer Received',
+    message: `You have been offered the contract award for "${bid.title}". Please review the award and accept or decline.`,
+    type: 'bid_awarded',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  if (body.generatePoNow) {
+    logger.info({ awardId: award.id, bidId: bid.id }, '[RECOMMEND_AWARD] Direct PO requested, generating...');
+    const po = await createOrReuseProcurementPOForAward(req, award, bid);
+    return {
+      award,
+      purchaseOrder: po.purchaseOrder,
+      purchaseOrderReused: po.reused,
+      poId: po.purchaseOrder?.id,
+      poNumber: po.purchaseOrder?.poNumber
+    };
+  }
 
   return {
     award,
+    status: 'AWARD_OFFERED',
+    message: 'Award offer submitted to seller. Awaiting seller acceptance.'
+  };
+};
+
+export const acceptAward = async (req: AuthRequest, bidId: string) => {
+  logger.info({ bidId, user: req.user?.id }, '[ACCEPT_AWARD] Seller accepting award');
+  const bid = await resolveBid(bidId, {});
+  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = req.body?.awardId ? Number(req.body.awardId) : undefined;
+
+  let award = await db.procurementBidAward.findFirst({
+    where: {
+      bidId: bid.id,
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
+      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+    },
+    include: { participation: true }
+  });
+
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+          award = specificAward;
+        } else if (specificAward.awardStatus === 'ACCEPTED') {
+          return { award: specificAward, status: 'AWARD_ACCEPTED', message: 'Award offer has already been accepted.' };
+        }
+      }
+    }
+  }
+
+  // Idempotent recovery: If award is already accepted for this bid and seller, return success rather than 404
+  if (!award) {
+    const alreadyAccepted = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        awardStatus: 'ACCEPTED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyAccepted) {
+      return { award: alreadyAccepted, status: 'AWARD_ACCEPTED', message: 'Award offer has already been accepted.' };
+    }
+    throw new ApiError(404, 'No pending award offer found for your account on this bid.', 'AWARD_NOT_FOUND');
+  }
+
+  const updatedAward = await db.$transaction(async (tx: any) => {
+    const updated = await tx.procurementBidAward.update({
+      where: { id: award.id },
+      data: {
+        awardStatus: 'ACCEPTED',
+        awardedAt: now()
+      }
+    });
+
+    await tx.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: {
+        finalStatus: 'AWARD_ACCEPTED'
+      }
+    });
+
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'AWARD_ACCEPTED'
+      }
+    });
+
+    return updated;
+  });
+
+  await procurementAudit(req, 'AWARD_ACCEPTED', 'ProcurementBidAward', award.id, updatedAward).catch(() => undefined);
+
+  await notificationService.notifyUser(bid.buyerId, {
+    title: 'Award Offer Accepted',
+    message: `Seller has accepted your contract award offer for "${bid.title}". You may now generate and issue the Purchase Order.`,
+    type: 'award_accepted',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  return { award: updatedAward, status: 'AWARD_ACCEPTED' };
+};
+
+export const declineAward = async (req: AuthRequest, bidId: string, body: any = {}) => {
+  const reason = String(body?.reason || '').trim();
+  if (!reason || reason.length < 5) {
+    throw new ApiError(400, 'A valid reason (minimum 5 characters) is required to decline an award.', 'REASON_REQUIRED');
+  }
+
+  logger.info({ bidId, user: req.user?.id, reason }, '[DECLINE_AWARD] Seller declining award');
+  const bid = await resolveBid(bidId, {});
+  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = body?.awardId ? Number(body.awardId) : undefined;
+
+  let award = await db.procurementBidAward.findFirst({
+    where: {
+      bidId: bid.id,
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
+      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+    },
+    include: { participation: true }
+  });
+
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+          award = specificAward;
+        } else if (specificAward.awardStatus === 'DECLINED') {
+          return { award: specificAward, status: 'AWARD_DECLINED', message: 'Award offer has already been declined.' };
+        }
+      }
+    }
+  }
+
+  if (!award) {
+    const alreadyDeclined = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        awardStatus: 'DECLINED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyDeclined) {
+      return { award: alreadyDeclined, status: 'AWARD_DECLINED', message: 'Award offer has already been declined.' };
+    }
+    throw new ApiError(404, 'No pending award offer found for your account on this bid.', 'AWARD_NOT_FOUND');
+  }
+
+  const updatedAward = await db.$transaction(async (tx: any) => {
+    const updated = await tx.procurementBidAward.update({
+      where: { id: award.id },
+      data: {
+        awardStatus: 'DECLINED',
+        remarks: reason
+      }
+    });
+
+    await tx.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: {
+        finalStatus: 'AWARD_DECLINED',
+        rejectionReason: reason
+      }
+    });
+
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'UNDER_EVALUATION',
+        lifecycleStage: 'FINANCIAL_EVALUATION'
+      }
+    });
+
+    return updated;
+  });
+
+  await procurementAudit(req, 'AWARD_DECLINED', 'ProcurementBidAward', award.id, { reason }).catch(() => undefined);
+
+  await notificationService.notifyUser(bid.buyerId, {
+    title: 'Award Offer Declined',
+    message: `Seller has declined the award offer for "${bid.title}". Reason: ${reason}. You may evaluate other qualified bidders.`,
+    type: 'award_declined',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  return { award: updatedAward, status: 'AWARD_DECLINED' };
+};
+
+export const sendPriceMatchCounterOffer = async (req: AuthRequest, bidId: string, body: any) => {
+  logger.info({ bidId, user: req.user?.id, body: maskSensitive(body) }, '[PRICE_MATCH_COUNTER_OFFER] Initiating price match offer');
+  const bid = await resolveBid(bidId, {
+    participations: {
+      include: {
+        seller: { include: { organization: true } }
+      }
+    }
+  });
+  assertBuyerOwner(req.user!, bid);
+
+  const rawPartId = body.participationId;
+  let partIdNum = typeof rawPartId === 'number' ? rawPartId : Number(String(rawPartId || '').replace(/^[^\d]+/, ''));
+  const targetParticipation = (bid.participations || []).find((p: any) => p.id === partIdNum || p.sellerId === partIdNum || p.participationNumber === String(rawPartId).trim());
+
+  if (!targetParticipation) {
+    throw new ApiError(404, 'Selected supplier participation could not be found for this bid.', 'PARTICIPATION_NOT_FOUND');
+  }
+
+  // Find L1 price to validate or default target price
+  const validPrices = (bid.participations || [])
+    .filter((p: any) => p.technicalStatus === 'QUALIFIED' || !p.technicalStatus || p.financialStatus === 'EVALUATED')
+    .map((p: any) => Number(p.totalAmount || p.quotedAmount || 0))
+    .filter((amt: number) => amt > 0);
+  const l1Price = validPrices.length ? Math.min(...validPrices) : Number(targetParticipation.totalAmount || targetParticipation.quotedAmount || 0);
+
+  const targetPrice = body.priceMatchTargetPrice != null && Number(body.priceMatchTargetPrice) > 0
+    ? Number(body.priceMatchTargetPrice)
+    : l1Price;
+
+  // Deadline calculation: configurable hours (default 48) or explicit ISO deadlineDate
+  let deadline: Date;
+  if (body.deadlineDate) {
+    deadline = new Date(body.deadlineDate);
+    if (isNaN(deadline.getTime()) || deadline <= new Date()) {
+      throw new ApiError(400, 'Deadline date must be a valid future timestamp.', 'INVALID_DEADLINE');
+    }
+  } else {
+    const hours = Number(body.deadlineHours) || 48;
+    if (hours < 1 || hours > 720) {
+      throw new ApiError(400, 'Deadline hours must be between 1 and 720 (up to 30 days).', 'INVALID_HOURS');
+    }
+    deadline = new Date(Date.now() + hours * 3600 * 1000);
+  }
+
+  const sellerCurrentPrice = Number(targetParticipation.totalAmount || targetParticipation.quotedAmount || 0);
+  const justification = body.justificationReason?.trim() || body.counterOfferNotes?.trim() || null;
+
+  const award = await db.$transaction(async (tx: any) => {
+    let existingAward = await tx.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        participationId: targetParticipation.id
+      }
+    });
+
+    const awardData = {
+      bidId: bid.id,
+      participationId: targetParticipation.id,
+      sellerId: targetParticipation.sellerId,
+      awardedAmount: targetPrice,
+      originalBidAmount: sellerCurrentPrice,
+      isPriceMatched: true,
+      priceMatchTargetPrice: targetPrice,
+      counterOfferStatus: 'PENDING',
+      counterOfferDeadline: deadline,
+      counterOfferNotes: body.counterOfferNotes?.trim() || null,
+      justificationReason: justification,
+      awardStatus: 'OFFERED',
+      awardedById: req.user!.id,
+      awardedAt: now(),
+      remarks: `Price match counter-offer at ₹${targetPrice.toLocaleString('en-IN')}`
+    };
+
+    let resultAward;
+    if (!existingAward) {
+      resultAward = await tx.procurementBidAward.create({ data: awardData });
+    } else {
+      resultAward = await tx.procurementBidAward.update({
+        where: { id: existingAward.id },
+        data: awardData
+      });
+    }
+
+    // Set target seller participation to COUNTER_OFFER_PENDING
+    await tx.procurementBidParticipation.update({
+      where: { id: targetParticipation.id },
+      data: {
+        finalStatus: 'COUNTER_OFFER_PENDING'
+      }
+    });
+
+    // Bid remains in evaluation with sub-status
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'AWARD_OFFERED',
+        lifecycleStage: 'AWARD_RECOMMENDED'
+      }
+    });
+
+    return resultAward;
+  }, { maxWait: 10000, timeout: 20000 });
+
+  await procurementAudit(req, 'PRICE_MATCH_COUNTER_OFFER_SENT', 'ProcurementBidAward', award.id, {
+    sellerId: targetParticipation.sellerId,
+    originalBidAmount: sellerCurrentPrice,
+    priceMatchTargetPrice: targetPrice,
+    deadline: deadline.toISOString(),
+    justification
+  }).catch(() => undefined);
+
+  const formattedPrice = `₹${targetPrice.toLocaleString('en-IN')}`;
+  const formattedDeadline = deadline.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  await notificationService.notifyUser(targetParticipation.sellerId, {
+    title: '🎯 Price Match Counter-Offer Received',
+    message: `Buyer has invited you to match the target price of ${formattedPrice} for "${bid.title}". Response deadline: ${formattedDeadline}.`,
+    type: 'counter_offer_received',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  return {
+    award,
+    status: 'COUNTER_OFFER_PENDING',
+    targetPrice,
+    deadline: deadline.toISOString(),
+    message: `Price match counter-offer sent to ${targetParticipation.seller?.name || 'vendor'} with deadline ${formattedDeadline}.`
+  };
+};
+
+export const acceptPriceMatchCounterOffer = async (req: AuthRequest, bidId: string) => {
+  logger.info({ bidId, user: req.user?.id }, '[ACCEPT_COUNTER_OFFER] Seller accepting price match offer');
+  const bid = await resolveBid(bidId, {});
+  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+
+  const award = await db.procurementBidAward.findFirst({
+    where: {
+      bidId: bid.id,
+      sellerId: { in: sellerUserIds },
+      counterOfferStatus: 'PENDING'
+    },
+    include: { participation: true }
+  });
+
+  if (!award) {
+    throw new ApiError(404, 'No pending price-match counter-offer found for your account on this bid.', 'COUNTER_OFFER_NOT_FOUND');
+  }
+
+  // Check deadline expiry
+  if (award.counterOfferDeadline && new Date() > new Date(award.counterOfferDeadline)) {
+    await db.procurementBidAward.update({
+      where: { id: award.id },
+      data: { counterOfferStatus: 'EXPIRED' }
+    }).catch(() => undefined);
+    throw new ApiError(400, 'The response deadline for this price-match counter-offer has expired.', 'COUNTER_OFFER_EXPIRED');
+  }
+
+  const acceptedAmount = award.priceMatchTargetPrice ? Number(award.priceMatchTargetPrice) : Number(award.awardedAmount);
+
+  const updated = await db.$transaction(async (tx: any) => {
+    const updatedAward = await tx.procurementBidAward.update({
+      where: { id: award.id },
+      data: {
+        counterOfferStatus: 'ACCEPTED',
+        awardStatus: 'ACCEPTED',
+        awardedAmount: acceptedAmount,
+        acceptedAt: now()
+      }
+    });
+
+    await tx.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: {
+        totalAmount: acceptedAmount,
+        quotedAmount: acceptedAmount,
+        finalStatus: 'AWARD_ACCEPTED'
+      }
+    });
+
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'AWARD_ACCEPTED'
+      }
+    });
+
+    return updatedAward;
+  }, { maxWait: 10000, timeout: 20000 });
+
+  await procurementAudit(req, 'PRICE_MATCH_COUNTER_OFFER_ACCEPTED', 'ProcurementBidAward', award.id, { acceptedAmount }).catch(() => undefined);
+
+  await notificationService.notifyUser(bid.buyerId, {
+    title: '🎯 Price Match Accepted by Supplier',
+    message: `Supplier has accepted your price-match counter-offer at ₹${acceptedAmount.toLocaleString('en-IN')} for "${bid.title}". You may now issue the Purchase Order.`,
+    type: 'counter_offer_accepted',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  return { award: updated, status: 'AWARD_ACCEPTED', acceptedAmount };
+};
+
+export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: string, body: any = {}) => {
+  const reason = String(body?.reason || '').trim();
+  if (!reason || reason.length < 5) {
+    throw new ApiError(400, 'A valid reason (minimum 5 characters) is required to decline.', 'REASON_REQUIRED');
+  }
+
+  logger.info({ bidId, user: req.user?.id, reason }, '[DECLINE_COUNTER_OFFER] Seller declining price match offer');
+  const bid = await resolveBid(bidId, {});
+  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+
+  const award = await db.procurementBidAward.findFirst({
+    where: {
+      bidId: bid.id,
+      sellerId: { in: sellerUserIds },
+      counterOfferStatus: 'PENDING'
+    },
+    include: { participation: true }
+  });
+
+  if (!award) {
+    throw new ApiError(404, 'No pending price-match counter-offer found for your account on this bid.', 'COUNTER_OFFER_NOT_FOUND');
+  }
+
+  const updated = await db.$transaction(async (tx: any) => {
+    const updatedAward = await tx.procurementBidAward.update({
+      where: { id: award.id },
+      data: {
+        counterOfferStatus: 'DECLINED',
+        awardStatus: 'DECLINED',
+        declinedAt: now(),
+        declinedReason: reason,
+        remarks: reason
+      }
+    });
+
+    await tx.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: {
+        finalStatus: 'COUNTER_OFFER_DECLINED',
+        rejectionReason: reason
+      }
+    });
+
+    // Reset bid back to evaluation so buyer can award L1 or another vendor
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'UNDER_EVALUATION',
+        lifecycleStage: 'FINANCIAL_EVALUATION'
+      }
+    });
+
+    return updatedAward;
+  }, { maxWait: 10000, timeout: 20000 });
+
+  await procurementAudit(req, 'PRICE_MATCH_COUNTER_OFFER_DECLINED', 'ProcurementBidAward', award.id, { reason }).catch(() => undefined);
+
+  await notificationService.notifyUser(bid.buyerId, {
+    title: 'Price Match Declined by Supplier',
+    message: `Supplier has declined the price-match counter-offer for "${bid.title}". Reason: ${reason}. You can now award L1 or negotiate with another vendor.`,
+    type: 'counter_offer_declined',
+    redirectUrl: `/bids/${bid.id}`
+  }).catch(() => undefined);
+
+  return { award: updated, status: 'COUNTER_OFFER_DECLINED', reason };
+};
+
+export const generatePOForBid = async (req: AuthRequest, bidId: string, body: any = {}) => {
+  logger.info({ bidId, user: req.user?.id }, '[GENERATE_PO] Buyer generating Purchase Order');
+  const bid = await resolveBid(bidId, {});
+  assertBuyerOwner(req.user!, bid);
+
+  let award = body?.awardId
+    ? await db.procurementBidAward.findFirst({
+        where: {
+          bidId: bid.id,
+          id: Number(body.awardId),
+          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+        },
+        include: { participation: true },
+        orderBy: { updatedAt: 'desc' }
+      })
+    : null;
+
+  if (!award) {
+    award = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+      },
+      include: { participation: true },
+      orderBy: { updatedAt: 'desc' }
+    });
+  }
+
+  if (!award) {
+    throw new ApiError(400, 'Cannot generate Purchase Order: No award found for this bid.', 'AWARD_NOT_FOUND');
+  }
+
+  const po = await createOrReuseProcurementPOForAward(req, award, bid);
+
+  await db.purchaseOrder.update({
+    where: { id: po.purchaseOrder.id },
+    data: {
+      status: 'issued',
+      poStatus: 'ISSUED'
+    }
+  });
+
+  await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      status: 'PO_GENERATED'
+    }
+  });
+
+  await notificationService.notifyUser(award.sellerId, {
+    title: 'Purchase Order Issued',
+    message: `Buyer has issued Purchase Order #${po.purchaseOrder.poNumber} for "${bid.title}". Please accept the PO to commit to fulfillment.`,
+    type: 'purchase_order',
+    redirectUrl: `/orders/procurement/${po.purchaseOrder.id}`
+  }).catch(() => undefined);
+
+  return {
     purchaseOrder: po.purchaseOrder,
-    purchaseOrderReused: po.reused,
-    poId: po.purchaseOrder?.id,
-    poNumber: po.purchaseOrder?.poNumber
+    reused: po.reused,
+    award
   };
 };
 

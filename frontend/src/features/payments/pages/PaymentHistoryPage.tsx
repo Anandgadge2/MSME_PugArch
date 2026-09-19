@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CheckCircle2,
   Clock3,
@@ -81,6 +82,237 @@ type PaymentRow = {
 };
 type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'ledger' | 'status' | 'date';
 
+function PaymentRowActionCell({
+  payment,
+  isOpen,
+  onToggle,
+  onClose,
+  onViewProof,
+  onUploadSlip,
+  onViewReceipt,
+  onTrackTimeline,
+}: {
+  payment: PaymentRow;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onViewProof: () => void;
+  onUploadSlip: () => void;
+  onViewReceipt: () => void;
+  onTrackTimeline: () => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuEstimatedHeight = 180;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
+
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          onClose();
+          return;
+        }
+      }
+      updatePosition();
+    };
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition, onClose]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for payment ${payment.referenceId || payment.id}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            onClose();
+          } else {
+            updatePosition();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900"
+        )}
+        title="Actions"
+      >
+        <MoreVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right',
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onKeyDown={handleMenuKeyDown}
+          className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for payment ${payment.referenceId || payment.id}`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onViewProof();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+          >
+            <FileCheck className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+            <span>View Proof</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onUploadSlip();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+            <span>Upload Slip</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onViewReceipt();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>View Receipt</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onTrackTimeline();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Clock3 className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>Track Timeline</span>
+          </button>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export default function PaymentHistoryPage({ admin = false }: { admin?: boolean }) {
   const { hasPermission } = useOrgRole();
   const [searchTerm, setSearchTerm] = useState('');
@@ -99,12 +331,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [viewProofPayment, setViewProofPayment] = useState<PaymentRow | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!openKebabId) return;
-    const handleClickOutside = () => setOpenKebabId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, [openKebabId]);
 
   const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
@@ -346,86 +572,32 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Actions',
       width: 'w-16',
       align: 'right',
-      cell: (payment, index) => (
-        <div className="relative inline-flex items-center justify-end" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpenKebabId(openKebabId === payment.id ? null : payment.id);
-            }}
-            className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-            title="Actions"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-
-          {openKebabId === payment.id && (
-            <div
-              className={cn(
-                'absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100',
-                pagedPayments.length > 2 && index >= pagedPayments.length - 2
-                  ? 'bottom-full mb-1.5 origin-bottom-right'
-                  : 'top-full mt-1.5 origin-top-right'
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  setViewProofPayment(payment);
-                  setViewProofModalOpen(true);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-              >
-                <FileCheck className="h-3.5 w-3.5 text-blue-600" />
-                <span>View Proof</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  setSelectedProofPayment(payment);
-                  setUploadProofModalOpen(true);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-              >
-                <Upload className="h-3.5 w-3.5 text-blue-600" />
-                <span>Upload Slip</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  setDetailTab('receipt');
-                  setSelected(payment);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-              >
-                <Eye className="h-3.5 w-3.5 text-slate-500" />
-                <span>View Receipt</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenKebabId(null);
-                  setDetailTab('timeline');
-                  setSelected(payment);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-              >
-                <Clock3 className="h-3.5 w-3.5 text-slate-500" />
-                <span>Track Timeline</span>
-              </button>
-            </div>
-          )}
-        </div>
+      cell: (payment) => (
+        <PaymentRowActionCell
+          payment={payment}
+          isOpen={openKebabId === payment.id}
+          onToggle={() => setOpenKebabId(openKebabId === payment.id ? null : payment.id)}
+          onClose={() => setOpenKebabId(null)}
+          onViewProof={() => {
+            setViewProofPayment(payment);
+            setViewProofModalOpen(true);
+          }}
+          onUploadSlip={() => {
+            setSelectedProofPayment(payment);
+            setUploadProofModalOpen(true);
+          }}
+          onViewReceipt={() => {
+            setDetailTab('receipt');
+            setSelected(payment);
+          }}
+          onTrackTimeline={() => {
+            setDetailTab('timeline');
+            setSelected(payment);
+          }}
+        />
       )
     }
-  ], [openKebabId, pagedPayments.length]);
+  ], [openKebabId]);
 
   const isKpisLoading = loading && filtered.length === 0;
 

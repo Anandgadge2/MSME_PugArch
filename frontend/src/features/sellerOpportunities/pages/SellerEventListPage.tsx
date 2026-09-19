@@ -15,6 +15,7 @@ import { KpiCard } from '../../shared/KpiCard';
 import { formatDate } from '../../shared/format';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
+import { methodToSlug } from '../../../lib/routes';
 
 type SellerEventView = 'all' | 'invited' | 'submitted' | 'clarifications';
 
@@ -46,6 +47,13 @@ export default function SellerEventListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
+
+  // Redirect legacy submitted filter to dedicated My Bids page
+  useEffect(() => {
+    if (filterParam === 'submitted') {
+      router.replace('/seller/bids/submitted');
+    }
+  }, [filterParam, router]);
   
   // Filters
   const [method, setMethod] = useState('');
@@ -276,9 +284,9 @@ export default function SellerEventListPage() {
             </Button>
           </Link>
           {bid.participated && (
-            <Link href={`/quotations?tenderId=${bid.id}`}>
-              <Button type="button" size="sm" className="h-8 rounded-lg bg-[#12335f] text-white hover:bg-[#0b2445] text-[10px] font-extrabold uppercase tracking-wide">
-                Quote
+            <Link href={`/seller/procurement/${methodToSlug(bid.procurementType || 'rfq')}/${encodeURIComponent(String(bid.id))}/respond`}>
+              <Button type="button" size="sm" className="h-8 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800 text-[10px] font-extrabold uppercase tracking-wide">
+                <CheckCircle2 className="mr-1 h-3 w-3" /> Quote
               </Button>
             </Link>
           )}
@@ -290,7 +298,7 @@ export default function SellerEventListPage() {
   const viewTabs: Array<{ label: string; href: string; view: SellerEventView }> = [
     { label: 'All', href: '/seller/procurement/events', view: 'all' },
     { label: 'Invited', href: '/seller/procurement/events?filter=invited', view: 'invited' },
-    { label: 'Submitted', href: '/seller/procurement/events?filter=submitted', view: 'submitted' },
+    { label: 'Submitted Bids', href: '/seller/bids/submitted', view: 'submitted' },
     { label: 'Clarifications', href: '/seller/procurement/events?filter=clarifications', view: 'clarifications' },
   ];
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, MapPin, Star, Building2, ChevronDown, CheckCircle2, X, Phone, Mail, Globe, Briefcase, FileText, Send, Info, ShieldCheck, Clock, Upload, Paperclip, LayoutGrid, List, Filter, ArrowUpDown, ArrowUp, ArrowDown, MessageSquare, MoreVertical } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
-import { api } from '../lib/api';
+import { api, unwrapApiData } from '../lib/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { toast } from 'sonner';
@@ -113,19 +113,29 @@ const Vendors = () => {
     }
   };
 
-  const categories = [
-    'All categories',
-    'IT Hardware',
-    'Software & Cloud',
-    'Office Supplies',
-    'Furniture',
-    'Industrial Equipment',
-    'Medical Supplies',
-    'Construction',
-    'Logistics',
-    'Consulting',
-    'Catering'
-  ];
+  const [dbCategories, setDbCategories] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    api.get('/api/categories')
+      .then(res => res.json())
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const names = cats
+            .map((c: any) => String(c.name || '').trim())
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b));
+          setDbCategories(names);
+        }
+      })
+      .catch(err => console.warn('Failed to load categories for vendors:', err));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const categories = useMemo(() => ['All categories', ...dbCategories], [dbCategories]);
 
   const msmeCategories = [
     'All MSME categories',

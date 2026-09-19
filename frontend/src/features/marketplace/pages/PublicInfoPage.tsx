@@ -26,6 +26,7 @@ import {
   Home,
   Info,
   Link2,
+  Loader2,
   Lock,
   Mail,
   MapPin,
@@ -45,6 +46,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { cn } from '../../../lib/utils';
+import { postApi, getApi } from '../../shared/apiClient';
 import {
   GtcContent,
   PrivacyPolicyContent,
@@ -1168,11 +1170,20 @@ function ContactUsView() {
    ========================================================================= */
 
 function GrievanceFeedbackView() {
+  const [activeTab, setActiveTab] = useState<'lodge' | 'track'>('lodge');
   const [ticketId, setTicketId] = useState<string | null>(null);
+  const [complainantEmail, setComplainantEmail] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Track State
+  const [trackRef, setTrackRef] = useState('');
+  const [isTracking, setIsTracking] = useState(false);
+  const [trackedRecord, setTrackedRecord] = useState<any | null>(null);
+
   const [formData, setFormData] = useState({
-    category: 'seller',
-    type: 'verification',
+    category: 'Micro, Small or Medium Enterprise (MSME)',
+    type: 'Vendor Verification / Approval Delay',
     name: '',
     email: '',
     mobile: '',
@@ -1183,13 +1194,48 @@ function GrievanceFeedbackView() {
     description: '',
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Generate authentic ticket reference ID
-    const randomCode = Math.floor(1000 + Math.random() * 9000);
-    const newTicket = `JSG-GRV-2026-${randomCode}`;
-    setTicketId(newTicket);
-    toast.success(`Grievance recorded successfully. Reference ID: ${newTicket}`);
+    setIsSubmitting(true);
+    try {
+      const res = await postApi<{ success: boolean; ticketNumber: string; message: string }>('/api/public/grievances', {
+        category: formData.category,
+        type: formData.type,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        mobile: formData.mobile.trim(),
+        orgName: formData.orgName.trim(),
+        referenceNumber: formData.referenceNumber.trim(),
+        priority: formData.priority,
+        subject: formData.subject.trim(),
+        description: formData.description.trim()
+      });
+
+      const assignedNumber = res.ticketNumber;
+      setTicketId(assignedNumber);
+      setComplainantEmail(formData.email.trim());
+      toast.success(res.message || `Grievance registered. Reference ID: ${assignedNumber}`);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to submit grievance. Please verify that all required fields are correctly completed.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleTrackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!trackRef.trim()) return;
+    setIsTracking(true);
+    setTrackedRecord(null);
+    try {
+      const res = await getApi<any>(`/api/public/grievances/track/${encodeURIComponent(trackRef.trim())}`);
+      setTrackedRecord(res);
+      toast.success('Grievance status record retrieved.');
+    } catch (err: any) {
+      toast.error(err?.message || 'No record found with this reference ID. Please check the number and retry.');
+    } finally {
+      setIsTracking(false);
+    }
   };
 
   const handleCopyTicket = () => {
@@ -1210,13 +1256,137 @@ function GrievanceFeedbackView() {
           <span>Odisha Right to Public Services Act (ORTPSA) Redressal Charter</span>
         </div>
         <p className="text-xs font-medium text-slate-700 leading-relaxed">
-          Grievances submitted through this portal are directly registered with the District MSME Cell, Collectorate Jharsuguda. Under statutory guidelines, complaints receive an automated tracking reference immediately, with nodal officer intervention within 24–48 hours and formal resolution target within 3 to 7 working days.
+          Grievances submitted through this portal are directly registered with the District MSME Cell, Collectorate Jharsuguda. Under statutory guidelines, complaints receive an automated tracking reference immediately, with nodal officer intervention within 24–48 hours and formal resolution target within 3 to 7 working days. All resolutions and official administrative replies are dispatched to the registered email address.
         </p>
       </div>
 
-      {ticketId ? (
+      {/* Mode Switcher */}
+      <div className="flex items-center justify-center">
+        <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-100 p-1.5 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('lodge')}
+            className={`rounded-xl px-6 py-2.5 text-xs font-black transition-all ${
+              activeTab === 'lodge'
+                ? 'bg-white text-[#0b2447] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Lodge Formal Grievance
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('track')}
+            className={`rounded-xl px-6 py-2.5 text-xs font-black transition-all ${
+              activeTab === 'track'
+                ? 'bg-white text-[#0b2447] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Track Existing Grievance
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'track' ? (
+        /* Track Existing Grievance View */
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-10 shadow-sm space-y-6">
+          <div className="border-b border-slate-100 pb-4">
+            <h2 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+              Track Grievance Status &amp; Administrative Reply
+            </h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">
+              Enter your official Reference ID (e.g., JSG-GRV-2026-XXXXX) to check current investigation progress, SLA status, and resolution remarks.
+            </p>
+          </div>
+
+          <form onSubmit={handleTrackSubmit} className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              required
+              value={trackRef}
+              onChange={(e) => setTrackRef(e.target.value)}
+              placeholder="e.g. JSG-GRV-2026-12345"
+              className="h-11 flex-1 rounded-xl border border-slate-300 px-4 text-xs font-mono font-bold text-slate-900 placeholder-slate-400 focus:border-[#0b2447] focus:ring-1 focus:ring-[#0b2447] outline-none uppercase"
+            />
+            <button
+              type="submit"
+              disabled={isTracking || !trackRef.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 py-3 text-xs font-bold text-white hover:bg-[#12335f] transition shadow disabled:opacity-60"
+            >
+              {isTracking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              <span>Track Grievance</span>
+            </button>
+          </form>
+
+          {trackedRecord && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-6 space-y-5 animate-in fade-in">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Ticket Reference</span>
+                  <p className="font-mono text-lg font-black text-[#0b2447]">{trackedRecord.ticketNumber}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Current Status</span>
+                  <div>
+                    <span className="inline-block mt-0.5 rounded-md border border-blue-300 bg-blue-50 px-3 py-1 text-xs font-black uppercase text-blue-900">
+                      {trackedRecord.status?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-semibold">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-black">Subject</span>
+                  <p className="mt-0.5 text-slate-900">{trackedRecord.subject}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-black">Category</span>
+                  <p className="mt-0.5 text-slate-800">{trackedRecord.category}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-black">Lodged At</span>
+                  <p className="mt-0.5 text-slate-800">{new Date(trackedRecord.createdAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-black">Statutory SLA Target</span>
+                  <p className="mt-0.5 text-slate-800">{new Date(trackedRecord.slaDueAt).toLocaleString()}</p>
+                </div>
+              </div>
+
+              {/* Official Resolution / Reply Remarks */}
+              {trackedRecord.resolutionRemarks ? (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-black text-emerald-900">
+                    <span className="flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      Official Administrative Resolution &amp; Reply
+                    </span>
+                    {trackedRecord.resolvedAt && (
+                      <span className="text-[10px] font-semibold text-emerald-700">
+                        {new Date(trackedRecord.resolvedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-800 font-normal leading-relaxed whitespace-pre-line">
+                    {trackedRecord.resolutionRemarks}
+                  </p>
+                  <p className="text-[10px] font-bold text-emerald-800 pt-1">
+                    ✓ A formal resolution certificate and reply copy was dispatched via registered email.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-xs text-amber-900 font-medium">
+                  <strong>Notice:</strong> This grievance is currently under examination by the designated Nodal Officer. Official findings and resolution remarks will be delivered to your registered email upon conclusion.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : ticketId ? (
         /* Grievance Submission Confirmation Card */
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-6 text-center">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm space-y-6 text-center animate-in zoom-in-95 duration-200">
           <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200">
             <CheckCircle2 className="h-8 w-8" />
           </div>
@@ -1242,12 +1412,14 @@ function GrievanceFeedbackView() {
             </button>
           </div>
 
-          <div className="max-w-md mx-auto text-xs font-medium text-slate-600 leading-relaxed text-left bg-slate-50 p-4 rounded-xl space-y-1.5">
+          <div className="max-w-md mx-auto text-xs font-medium text-slate-700 leading-relaxed text-left bg-slate-50 p-4 rounded-xl space-y-2 border border-slate-200/80">
             <p>• <strong>Complainant:</strong> {formData.name}</p>
-            <p>• <strong>Registered Email:</strong> {formData.email}</p>
+            <p>• <strong>Registered Email:</strong> <span className="font-mono text-blue-900 font-bold">{complainantEmail}</span></p>
             <p>• <strong>Subject:</strong> {formData.subject}</p>
-            <p>• <strong>Expected Review:</strong> Within 24-48 business hours</p>
             <p>• <strong>Status:</strong> <span className="text-blue-700 font-bold">Assigned to Nodal Officer, DIC</span></p>
+            <div className="mt-2 rounded-lg bg-emerald-50 p-2.5 border border-emerald-200 text-emerald-900 text-[11px]">
+              ✓ An automated acknowledgment email containing this Reference ID has been dispatched to <strong>{complainantEmail}</strong>. When resolved, the official reply remarks will also be transmitted directly to this email address.
+            </div>
           </div>
 
           <div className="pt-4 flex items-center justify-center gap-4">
@@ -1256,8 +1428,8 @@ function GrievanceFeedbackView() {
               onClick={() => {
                 setTicketId(null);
                 setFormData({
-                  category: 'seller',
-                  type: 'verification',
+                  category: 'Micro, Small or Medium Enterprise (MSME)',
+                  type: 'Vendor Verification / Approval Delay',
                   name: '',
                   email: '',
                   mobile: '',
@@ -1268,13 +1440,13 @@ function GrievanceFeedbackView() {
                   description: '',
                 });
               }}
-              className="rounded-xl bg-[#0b2447] text-white px-6 py-2.5 text-xs font-bold hover:bg-[#12335f]"
+              className="rounded-xl bg-[#0b2447] text-white px-6 py-2.5 text-xs font-bold hover:bg-[#12335f] transition shadow"
             >
               Lodge Another Grievance
             </button>
             <Link
               href="/"
-              className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100"
+              className="rounded-xl border border-slate-200 bg-slate-50 px-6 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
             >
               Return to Marketplace Home
             </Link>
@@ -1304,10 +1476,10 @@ function GrievanceFeedbackView() {
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#0b2447] focus:ring-1 focus:ring-[#0b2447] outline-none bg-white"
                 >
-                  <option value="seller">Micro, Small or Medium Enterprise (MSME)</option>
-                  <option value="buyer">Enterprise / Institutional Buyer</option>
-                  <option value="shg">Women Self-Help Group (HerSHG)</option>
-                  <option value="public">General Public / Citizen</option>
+                  <option value="Micro, Small or Medium Enterprise (MSME)">Micro, Small or Medium Enterprise (MSME)</option>
+                  <option value="Enterprise / Institutional Buyer">Enterprise / Institutional Buyer</option>
+                  <option value="Women Self-Help Group (HerSHG)">Women Self-Help Group (HerSHG)</option>
+                  <option value="General Public / Citizen">General Public / Citizen</option>
                 </select>
               </div>
 
@@ -1321,13 +1493,13 @@ function GrievanceFeedbackView() {
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-semibold text-slate-900 focus:border-[#0b2447] focus:ring-1 focus:ring-[#0b2447] outline-none bg-white"
                 >
-                  <option value="verification">Vendor Verification / Document Approval Delay</option>
-                  <option value="bidding">RFQ / Tender / Reverse Auction Technical Issue</option>
-                  <option value="order">Purchase Order / Delivery Acceptance / GRN Issue</option>
-                  <option value="payment">Invoicing / Delayed Payment / Escrow Dispute</option>
-                  <option value="fraud">Suspected Fraud / Unofficial Solicitations</option>
-                  <option value="technical">Portal Account Access / OTP Glitch</option>
-                  <option value="suggestion">Policy Suggestion / General Feedback</option>
+                  <option value="Vendor Verification / Approval Delay">Vendor Verification / Document Approval Delay</option>
+                  <option value="RFQ / Tender / Reverse Auction Technical Issue">RFQ / Tender / Reverse Auction Technical Issue</option>
+                  <option value="Purchase Order / Delivery Acceptance / GRN Issue">Purchase Order / Delivery Acceptance / GRN Issue</option>
+                  <option value="Invoicing / Delayed Payment / Escrow Dispute">Invoicing / Delayed Payment / Escrow Dispute</option>
+                  <option value="Suspected Fraud / Unofficial Solicitations">Suspected Fraud / Unofficial Solicitations</option>
+                  <option value="Portal Account Access / OTP Glitch">Portal Account Access / OTP Glitch</option>
+                  <option value="Policy Suggestion / General Feedback">Policy Suggestion / General Feedback</option>
                 </select>
               </div>
             </div>
@@ -1404,7 +1576,7 @@ function GrievanceFeedbackView() {
                   type="text"
                   value={formData.referenceNumber}
                   onChange={(e) => setFormData({ ...formData, referenceNumber: e.target.value })}
-                  placeholder="e.g. PO-2026-0041 or BID-9812"
+                  placeholder="e.g. PO-2026-0041 or TND-2026-0981"
                   className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs font-semibold text-slate-900 placeholder-slate-400 focus:border-[#0b2447] focus:ring-1 focus:ring-[#0b2447] outline-none"
                 />
               </div>
@@ -1447,10 +1619,20 @@ function GrievanceFeedbackView() {
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="submit"
-                className="inline-flex items-center gap-2 rounded-xl bg-[#0b2447] text-white px-8 py-3 text-xs font-black hover:bg-[#12335f] shadow-md transition-all active:scale-95"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0b2447] text-white px-8 py-3 text-xs font-black hover:bg-[#12335f] shadow-md transition-all active:scale-95 disabled:opacity-60"
               >
-                <span>Register Grievance &amp; Generate Ticket</span>
-                <Send className="h-4 w-4" />
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Registering with MSME Cell...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Register Grievance &amp; Generate Ticket</span>
+                    <Send className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </div>
           </form>

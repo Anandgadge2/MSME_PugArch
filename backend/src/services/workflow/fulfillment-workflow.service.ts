@@ -16,7 +16,7 @@ const assertPOAccess = async (actor: WorkflowActor, purchaseOrderId: number) => 
 
   if (actor.role === 'buyer' && Number(po.buyerId) === Number(actor.id)) return po;
 
-  if (actor.role === 'seller') {
+  if (actor.role === 'seller' || actor.role === 'shg') {
     if (Number(po.sellerId) === Number(actor.id)) return po;
     const actorUser = await db.user.findUnique({ where: { id: Number(actor.id) }, select: { organizationId: true } });
     const sellerUser = await db.user.findUnique({ where: { id: Number(po.sellerId) }, select: { organizationId: true } });
@@ -53,11 +53,11 @@ const taxBreakup = (amount: number, options?: { gstRate?: number; tdsRate?: numb
 export const fulfillmentWorkflow = {
   async acknowledgePO(actor: WorkflowActor, purchaseOrderId: number) {
     const po = await assertPOAccess(actor, purchaseOrderId);
-    if (actor.role !== 'admin' && actor.role !== 'master_admin' && actor.role !== 'seller') throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
+    if (actor.role !== 'admin' && actor.role !== 'master_admin' && actor.role !== 'seller' && actor.role !== 'shg') throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
     statusTransitions.purchaseOrder(po.status, 'accepted');
     const updated = await db.purchaseOrder.update({
       where: { id: purchaseOrderId },
-      data: { status: 'accepted', poStatus: poStatusEnumFor('accepted'), acceptedAt: new Date(), version: { increment: 1 } }
+      data: { status: 'accepted', poStatus: poStatusEnumFor('accepted') as any, acceptedAt: new Date(), version: { increment: 1 } }
     });
     // Ensure a DeliveryTracking row exists so the seller can drive dispatch
     // from the new delivery module immediately after acknowledging.
@@ -71,7 +71,63 @@ export const fulfillmentWorkflow = {
         }
       }).catch(() => undefined);
     }
+    const bidId = po.bidId || (po.metadata && (po.metadata as any).bidId);
+    if (bidId && !isNaN(Number(bidId))) {
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: po.sellerId
+        },
+        data: {
+          finalStatus: 'ORDERED'
+        }
+      }).catch(() => undefined);
+
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: { not: po.sellerId },
+          finalStatus: { notIn: ['ORDERED', 'AWARDED'] }
+        },
+        data: {
+          finalStatus: 'NOT_SELECTED'
+        }
+      }).catch(() => undefined);
+
+      await db.procurementBid.update({
+        where: { id: Number(bidId) },
+        data: {
+          status: 'IN_PROGRESS',
+          lifecycleStage: 'AWARDED'
+        }
+      }).catch(() => undefined);
+    }
     await auditWorkflow(actor, 'workflow.po.acknowledged', 'purchaseOrder', purchaseOrderId);
+    return updated;
+  },
+
+  async rejectPO(actor: WorkflowActor, purchaseOrderId: number, reason?: string) {
+    const po = await assertPOAccess(actor, purchaseOrderId);
+    if (actor.role !== 'admin' && actor.role !== 'master_admin' && actor.role !== 'seller' && actor.role !== 'shg') {
+      throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
+    }
+    statusTransitions.purchaseOrder(po.status, 'rejected');
+    const prevMetadata = (po.metadata && typeof po.metadata === 'object') ? (po.metadata as Record<string, unknown>) : {};
+    const updated = await db.purchaseOrder.update({
+      where: { id: purchaseOrderId },
+      data: {
+        status: 'rejected',
+        poStatus: poStatusEnumFor('rejected') as any,
+        metadata: {
+          ...prevMetadata,
+          rejectionReason: reason || null,
+          rejectedAt: new Date().toISOString(),
+          rejectedBy: actor.id
+        },
+        version: { increment: 1 }
+      }
+    });
+    await auditWorkflow(actor, 'workflow.po.rejected', 'purchaseOrder', purchaseOrderId, { reason });
     return updated;
   },
 
@@ -81,7 +137,7 @@ export const fulfillmentWorkflow = {
     statusTransitions.purchaseOrder(po.status, 'cancelled');
     const updated = await db.purchaseOrder.update({
       where: { id: purchaseOrderId },
-      data: { status: 'cancelled', poStatus: poStatusEnumFor('cancelled'), version: { increment: 1 } }
+      data: { status: 'cancelled', poStatus: poStatusEnumFor('cancelled') as any, version: { increment: 1 } }
     });
     await auditWorkflow(actor, 'workflow.po.cancelled', 'purchaseOrder', purchaseOrderId);
     return updated;

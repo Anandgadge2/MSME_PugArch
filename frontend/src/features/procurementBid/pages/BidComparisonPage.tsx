@@ -691,20 +691,31 @@ export default function BidComparisonPage() {
                   })}
                 </tr>
 
-                {/* 10. Warranty Period */}
-                <tr className="hover:bg-slate-50/40">
-                  <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/50">
-                    Warranty Period
-                  </td>
-                  {filteredAndSortedParticipations.map(p => {
-                    const tech = parseTechnicalOffer(p);
-                    return (
-                      <td key={p.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-700">
-                        {tech.warrantyDetails || 'None'}
-                      </td>
-                    );
-                  })}
-                </tr>
+                {/* 10. Warranty Period (rendered only if warranty details were requested or provided) */}
+                {filteredAndSortedParticipations.some(p => {
+                  const tech = parseTechnicalOffer(p);
+                  const w = tech.warrantyDetails;
+                  return w && String(w).trim() !== '' && String(w).trim().toLowerCase() !== 'none' && String(w).trim().toLowerCase() !== 'n/a';
+                }) && (
+                  <tr className="hover:bg-slate-50/40">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/50">
+                      Warranty Period
+                      {checkDiffers(filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).warrantyDetails)) && (
+                        <span className="ml-2 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[8px] font-black text-amber-800 uppercase tracking-wider">
+                          DIFFERS
+                        </span>
+                      )}
+                    </td>
+                    {filteredAndSortedParticipations.map(p => {
+                      const tech = parseTechnicalOffer(p);
+                      return (
+                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-700">
+                          {tech.warrantyDetails || '—'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
 
                 {/* 11. Technical Compliance - Commented out as requested */}
                 {/* 

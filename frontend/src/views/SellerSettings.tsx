@@ -739,7 +739,7 @@ export default function SellerSettings() {
                       ) : logoUrl ? (
                         <div key={logoUrl} className="h-32 w-32 rounded-xl border border-slate-100 bg-white p-2.5 shadow-sm flex items-center justify-center transition-transform hover:scale-105 duration-300">
                           <img
-                            src={resolveMediaUrl(logoUrl) || ''}
+                            src={resolveMediaUrl(logoUrl) || undefined}
                             alt="Organization Logo"
                             className="max-h-full max-w-full object-contain rounded-lg"
                             onError={(e) => {
@@ -784,7 +784,7 @@ export default function SellerSettings() {
                       ) : bannerUrl ? (
                         <div key={bannerUrl} className="h-32 w-full rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
                           <img
-                            src={resolveMediaUrl(bannerUrl) || ''}
+                            src={resolveMediaUrl(bannerUrl) || undefined}
                             alt="Storefront Cover Banner"
                             className="h-full w-full object-cover"
                             onError={(e) => {

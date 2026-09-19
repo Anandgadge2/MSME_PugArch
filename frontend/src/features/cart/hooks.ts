@@ -120,11 +120,28 @@ export const useAddToCart = () => {
         },
         onSuccess: (data) => {
             if (data) {
-                qc.setQueryData([...KEY, 'active'], data);
+                qc.setQueryData<CartDto>([...KEY, 'active'], (current) => {
+                    if (!current) return data;
+                    const pendingItems = current.items.filter(i => i.id < 0);
+                    if (pendingItems.length === 0) return data;
+                    return {
+                        ...data,
+                        items: data.items.map(serverItem => {
+                            const matchingPending = pendingItems.find(
+                                p => (p.productId && p.productId === serverItem.productId) ||
+                                     (p.serviceId && p.serviceId === serverItem.serviceId)
+                            );
+                            if (matchingPending && Number(matchingPending.quantity) !== Number(serverItem.quantity)) {
+                                return { ...serverItem, quantity: matchingPending.quantity };
+                            }
+                            return serverItem;
+                        })
+                    };
+                });
             }
         },
         onSettled: () => {
-            void invalidate(qc);
+            void qc.invalidateQueries({ queryKey: KEY, refetchType: 'none' });
         }
     });
 };
@@ -172,9 +189,21 @@ export const useUpdateCartItem = () => {
                 });
             }
         },
-        onSuccess: (data, variables) => {
+        onSuccess: (data: any, variables: any) => {
             if (data && 'items' in data) {
                 qc.setQueryData([...KEY, 'active'], data);
+            } else if (data && data.id) {
+                qc.setQueryData<CartDto>([...KEY, 'active'], (current) => {
+                    if (!current) return current;
+                    return {
+                        ...current,
+                        items: current.items.map(item =>
+                            item.id === data.id
+                                ? { ...item, ...data, quantity: Number(data.quantity) }
+                                : item
+                        )
+                    };
+                });
             } else if (variables && 'id' in variables && 'quantity' in variables) {
                 qc.setQueryData<CartDto>([...KEY, 'active'], (old) => {
                     if (!old) return old;
@@ -186,7 +215,7 @@ export const useUpdateCartItem = () => {
             }
         },
         onSettled: () => {
-            void invalidate(qc);
+            void qc.invalidateQueries({ queryKey: KEY, refetchType: 'none' });
         }
     });
 };

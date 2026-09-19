@@ -80,6 +80,7 @@ import {
   useVerifyInvoice
 } from '../hooks';
 import { uploadDeliveryFile } from '../upload';
+import { openFileAsset } from '../../../lib/files';
 import type {
   DeliveryDetailDto,
   DeliveryDocumentType,
@@ -553,32 +554,43 @@ function DocumentsPanel({
           </div>
         ) : (
           <div className="grid gap-2">
-            {records.map(doc => (
-              <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3 text-xs transition-colors hover:bg-slate-50">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#0f766e] ring-1 ring-slate-200 shadow-2xs">
-                    <FileText className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate font-black uppercase tracking-tight text-slate-900">{doc.documentType.replace(/_/g, ' ')}</p>
-                    <p className="truncate text-[10px] font-semibold text-slate-500">{doc.fileAsset?.originalName || `File #${doc.fileAsset?.id}`}</p>
+            {records.map(doc => {
+              const fileTarget = doc.fileAsset || (doc as any).fileAssetId || doc.id;
+              const hasFile = Boolean(doc.fileAsset?.id || (doc as any).fileAssetId || doc.id);
+              const fileName = doc.fileAsset?.originalName || (doc as any).description || `File #${doc.fileAsset?.id || (doc as any).fileAssetId || doc.id}`;
+              const docLabel = doc.documentType?.replace(/_/g, ' ') || 'Delivery Document';
+
+              return (
+                <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-3.5 py-3 text-xs transition-colors hover:bg-slate-50">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-[#0f766e] ring-1 ring-slate-200 shadow-2xs">
+                      <FileText className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate font-black uppercase tracking-tight text-slate-900">{docLabel}</p>
+                      <p className="truncate text-[10px] font-semibold text-slate-500" title={fileName}>{fileName}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="rounded-md bg-slate-200/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">{doc.uploaderRole}</span>
+                    {hasFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          openFileAsset(fileTarget, docLabel).catch(err => {
+                            notify.error(err?.message || 'Failed to open document');
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:bg-slate-50 shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0f766e]/30"
+                        aria-label={`View ${docLabel}`}
+                      >
+                        <ExternalLink className="h-3 w-3" /> View
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="rounded-md bg-slate-200/60 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">{doc.uploaderRole}</span>
-                  {doc.fileAsset?.id && (
-                    <a
-                      href={`/api/files/${doc.fileAsset.id}/view`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:bg-slate-50 shadow-2xs"
-                    >
-                      <ExternalLink className="h-3 w-3" /> View
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
         {/* Document upload form commented out on buyer side as requested */}
@@ -592,7 +604,7 @@ function DocumentsPanel({
 
 /* ================== Rating CTA ================== */
 
-const RATEABLE_STATUSES: DeliveryStatus[] = ['ACCEPTED', 'INVOICE_VERIFIED', 'PAYMENT_APPROVED', 'PAYMENT_RELEASED', 'CLOSED'];
+const RATEABLE_STATUSES: DeliveryStatus[] = ['DELIVERED', 'ACCEPTED', 'INVOICE_VERIFIED', 'PAYMENT_APPROVED', 'PAYMENT_RELEASED', 'CLOSED'];
 
 function RatingCTACard({
   deliveryStatus,
@@ -1018,15 +1030,20 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                       label="Current State"
                       value={(selectedInvoice.invoiceStatus || selectedInvoice.status || 'submitted').toString().toUpperCase()}
                     />
-                    {selectedInvoice.invoiceFile?.id && (
-                      <a
-                        href={`/api/files/${selectedInvoice.invoiceFile.id}/view`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:underline"
+                    {(selectedInvoice as any)?.invoiceFile?.id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const inv = selectedInvoice as any;
+                          const fileTarget = inv?.invoiceFile || inv?.invoiceFileId || inv?.invoiceFile?.id;
+                          openFileAsset(fileTarget, `Invoice #${selectedInvoice.invoiceNumber || selectedInvoice.id}`).catch(err => {
+                            notify.error(err?.message || 'Failed to open invoice preview');
+                          });
+                        }}
+                        className="mt-1 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e] hover:underline cursor-pointer focus:outline-none"
                       >
                         <FileText className="h-3.5 w-3.5" /> Preview PDF Document
-                      </a>
+                      </button>
                     )}
                   </div>
                 )}

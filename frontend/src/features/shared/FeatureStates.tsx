@@ -50,14 +50,20 @@ interface EmptyStateProps {
   icon?: LucideIcon;
   /** Optional CTA button. */
   action?: { label: string; onClick: () => void };
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 export function EmptyState({
   title = 'No records found',
   description = 'Try changing filters or create a new record.',
   icon: Icon = Inbox,
-  action
+  action,
+  actionLabel,
+  onAction
 }: EmptyStateProps) {
+  const resolvedAction = action || (actionLabel && onAction ? { label: actionLabel, onClick: onAction } : undefined);
+
   return (
     <div role="status" aria-live="polite" className="flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
@@ -65,9 +71,9 @@ export function EmptyState({
       </div>
       <h3 className="mt-3 text-sm font-black text-slate-900 text-wrap-anywhere">{title}</h3>
       <p className="mt-1 max-w-md text-xs font-semibold text-slate-500 text-wrap-anywhere">{description}</p>
-      {action && (
-        <Button onClick={action.onClick} className="mt-4 bg-[#12335f] text-white hover:bg-[#0e2a4f]">
-          {action.label}
+      {resolvedAction && (
+        <Button onClick={resolvedAction.onClick} className="mt-4 bg-[#12335f] text-white hover:bg-[#0e2a4f]">
+          {resolvedAction.label}
         </Button>
       )}
     </div>

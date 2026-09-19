@@ -29,12 +29,14 @@ import {
   Circle,
   Truck,
   ExternalLink,
+  Check,
+  Download,
+  Lock,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
@@ -43,8 +45,8 @@ import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
-import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
-import { formatDate, formatDateTime, formatTime } from '../../shared/format';
+import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
+import { formatDate, formatDateTime, formatTime, hasExplicitTime } from '../../shared/format';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -108,6 +110,8 @@ const formatCurrency = (val?: number | string) => {
 };
 
 type UploadState = {
+  id?: number | string;
+  fileAssetId?: number | null;
   file?: File;
   fileName?: string;
   fileSize?: number;
@@ -142,6 +146,9 @@ type LineQuote = {
   gstPercent: string;
   makeBrand: string;
   remarks: string;
+  model?: string;
+  specifications?: string;
+  complianceStatus?: string;
 };
 
 const parseResponseData = (value: any) => {
@@ -173,11 +180,15 @@ const dedupeDocuments = (documents: any[]) => {
 };
 
 const submittedStatus = (response: any) =>
-  String(response?.status || response?.submissionStatus || response?.responseStatus || '').trim().toUpperCase();
+  String(response?.submissionStatus || response?.status || response?.responseStatus || '').trim().toUpperCase();
 
 const isFinalSubmittedResponse = (response: any) => {
+  if (!response) return false;
   const status = submittedStatus(response);
-  return Boolean(response) && status !== '' && status !== 'DRAFT';
+  if (!status || ['DRAFT', 'PENDING', 'LOCKED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED'].includes(status)) {
+    return false;
+  }
+  return status === 'SUBMITTED' || status === 'ACCEPTED' || status === 'AWARDED';
 };
 
 const fileNameFromUrl = (url?: string) => {
@@ -224,13 +235,13 @@ const normalizeOwnResponse = (raw: any) => {
     : toArray(raw.lineItems).length
     ? toArray(raw.lineItems)
     : toArray(raw.lineQuotes);
-  const status = raw.status || raw.submissionStatus || responseData.status || 'SUBMITTED';
+  const status = raw.submissionStatus || raw.status || responseData.status || 'DRAFT';
   const supportingAttachment = findSupportingAttachment({ ...raw, responseData }, documents);
 
   return {
     ...raw,
     status,
-    submissionStatus: raw.submissionStatus || status,
+    submissionStatus: raw.submissionStatus || status || 'DRAFT',
     responseData: {
       ...responseData,
       documents,
@@ -253,15 +264,18 @@ const normalizeOwnResponse = (raw: any) => {
 const findSellerParticipation = (bidData: any, user: any) => {
   const participations = [
     ...toArray(bidData?.participations),
-    ...toArray(bidData?.results),
     ...toArray(bidData?.quoteResponses)
   ];
-  return participations.find((p: any) => {
+  const found = participations.find((p: any) => {
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
     return String(sellerId || '') === String(user?.id || '') ||
       (user?.organizationId && String(orgId || '') === String(user.organizationId));
   });
+  if (found) {
+    return { ...found, _isFromUserParticipation: true };
+  }
+  return null;
 };
 
 const participationToOwnResponse = (participation: any) => {
@@ -284,19 +298,29 @@ const participationToOwnResponse = (participation: any) => {
     ? toArray(participation.lineQuotes)
     : [];
 
+  const sellerId = participation.sellerId || participation.seller?.id || participation.sellerUserId;
+  const orgId = participation.organizationId || participation.sellerOrganizationId || participation.seller?.organizationId || participation.seller?.organization?.id;
+
   return normalizeOwnResponse({
+    ...participation,
     id: participation.id,
-    status: participation.status || participation.submissionStatus || 'SUBMITTED',
-    submissionStatus: participation.submissionStatus || participation.status || 'SUBMITTED',
+    sellerId,
+    sellerUserId: sellerId,
+    organizationId: orgId,
+    sellerOrganizationId: orgId,
+    seller: participation.seller,
+    _isFromUserParticipation: true,
+    status: participation.submissionStatus || participation.status || 'DRAFT',
+    submissionStatus: participation.submissionStatus || participation.status || 'DRAFT',
     offeredPrice: firstPresent(participation.offeredPrice, participation.quotedAmount, participation.totalAmount, responseData.offeredPrice),
     offeredQuantity: firstPresent(participation.offeredQuantity, responseData.offeredQuantity),
     deliveryTimeline: firstPresent(participation.deliveryTimeline, responseData.deliveryTimeline),
     terms: firstPresent(participation.terms, responseData.terms),
     message: firstPresent(participation.message, responseData.message, participation.coverNote, responseData.coverNote, participation.offeredItemDescription),
     attachmentUrl: firstPresent(participation.attachmentUrl, responseData.attachmentUrl, supportingAttachment?.fileUrl, supportingAttachment?.url),
-    createdAt: participation.submittedAt || participation.createdAt,
-    updatedAt: participation.updatedAt || participation.submittedAt || participation.createdAt,
-    submittedAt: participation.submittedAt || participation.createdAt,
+    createdAt: participation.createdAt,
+    updatedAt: participation.updatedAt || participation.createdAt,
+    submittedAt: participation.submittedAt || null,
     responseData: {
       ...responseData,
       documents,
@@ -310,8 +334,9 @@ const participationToOwnResponse = (participation: any) => {
 
 const isBelongingToUser = (resp: any, currentUser: any) => {
   if (!resp || !currentUser) return false;
+  if (resp._isFromUserParticipation) return true;
   const sellerId = resp.sellerId || resp.seller?.id || resp.sellerUserId || resp.userId;
-  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId;
+  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId || resp.seller?.organization?.id;
   return (currentUser.id && String(sellerId || '') === String(currentUser.id)) ||
     (currentUser.organizationId && String(orgId || '') === String(currentUser.organizationId));
 };
@@ -356,6 +381,11 @@ export default function SubmitQuotationPage() {
   const [deliveryTimeline, setDeliveryTimeline] = useState('');
   const [message, setMessage] = useState('');
   const [terms, setTerms] = useState('');
+  const [offeredMakeBrand, setOfferedMakeBrand] = useState('');
+  const [offeredModel, setOfferedModel] = useState('');
+  const [technicalSpecifications, setTechnicalSpecifications] = useState('');
+  const [complianceStatement, setComplianceStatement] = useState<'FULL_COMPLIANCE' | 'WITH_DEVIATION' | 'ALTERNATIVE_OFFERED' | ''>('FULL_COMPLIANCE');
+  const [expandedLineSpecs, setExpandedLineSpecs] = useState<Record<number, boolean>>({});
   const [declared, setDeclared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -365,16 +395,19 @@ export default function SubmitQuotationPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
 
   const scrollToSection = (id: string) => {
     if (id === 'quotation-details' || id === 'message-documents' || id === 'item-wise-pricing' || id === 'requested-documents' || id === 'submit-action') {
       setActiveTab(id as TabKey);
+      setUserSelectedTab(true);
     }
     setTimeout(() => {
       const el = document.getElementById(id) || document.getElementById('tab-content-container');
@@ -847,12 +880,20 @@ export default function SubmitQuotationPage() {
     const targetTerms = ownResponse.terms || ownResponse.responseData?.terms;
     const targetMessage = ownResponse.message || ownResponse.responseData?.message || ownResponse.coverNote || ownResponse.responseData?.coverNote;
     const targetAttachment = ownResponse.attachmentUrl || ownResponse.responseData?.attachmentUrl;
+    const targetMakeBrand = ownResponse.makeBrand || ownResponse.responseData?.makeBrand || ownResponse.acknowledgement?.makeBrand || '';
+    const targetModel = ownResponse.model || ownResponse.responseData?.model || ownResponse.acknowledgement?.model || '';
+    const targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
+    const targetCompliance = ownResponse.complianceStatement || ownResponse.responseData?.complianceStatement || ownResponse.acknowledgement?.complianceStatement || 'FULL_COMPLIANCE';
 
     setOfferedPrice(targetPrice != null ? String(targetPrice) : '');
     setOfferedQuantity(targetQty != null ? String(targetQty) : '');
     setDeliveryTimeline(targetTimeline != null ? String(targetTimeline) : '');
     setTerms(targetTerms != null ? String(targetTerms) : '');
     setMessage(targetMessage != null ? String(targetMessage) : '');
+    setOfferedMakeBrand(String(targetMakeBrand || ''));
+    setOfferedModel(String(targetModel || ''));
+    setTechnicalSpecifications(String(targetTechSpecs || ''));
+    setComplianceStatement((targetCompliance as any) || 'FULL_COMPLIANCE');
     if (targetAttachment) {
       setUploadState({
         fileName: ownResponse.attachmentFileName || fileNameFromUrl(String(targetAttachment)) || 'Attachment',
@@ -886,10 +927,6 @@ export default function SubmitQuotationPage() {
     if (isOwnSubmitted) {
       setSubmitted(true);
       setDeclared(true);
-      toast.info('Loaded your submitted quotation from the server.');
-    } else if (submittedStatus(ownResponse) === 'DRAFT') {
-      setSubmitted(false);
-      toast.info('Restored your draft quotation from the server.');
     } else {
       setSubmitted(false);
     }
@@ -898,9 +935,38 @@ export default function SubmitQuotationPage() {
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
   const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
 
-  // Save draft to database
+  // Submission and read-only states
+  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
+  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED', 'EXPIRED'].includes(rfqData?.status);
+  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && (() => {
+    try {
+      const dStr = String(rfqData.deadlineDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+        const endOfDay = new Date(`${dStr}T23:59:59.999`);
+        return endOfDay.getTime() < Date.now();
+      }
+      return new Date(rfqData.deadlineDate).getTime() < Date.now();
+    } catch {
+      return false;
+    }
+  })();
+  const isExpiredOrClosed = isClosed || isDeadlinePassed || rfqData?.status === 'EXPIRED';
+  const isReadOnly = isExpiredOrClosed || isSubmittedQuote;
+
+  const techStatusRaw = String(ownResponse?.technicalStatus || (ownResponse as any)?.status || '').toUpperCase();
+  const isTechQualified = techStatusRaw === 'QUALIFIED';
+  const isTechDisqualified = techStatusRaw === 'DISQUALIFIED' || Boolean((ownResponse as any)?.isDisqualified);
+  const techEvaluationRemarks = String(
+    (ownResponse as any)?.technicalRemarks ||
+    (ownResponse as any)?.rejectionReason ||
+    (ownResponse as any)?.remarks ||
+    ''
+  ).trim();
+
+  // Save draft strictly when user clicks "Save Draft" button
   const saveDraft = useCallback(async () => {
-    if (!resolvedId || isMarketplaceQuoteFlow) return;
+    if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting || savingDraft) return;
+    setSavingDraft(true);
     try {
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
@@ -908,6 +974,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim() || undefined,
         message: message.trim() || 'Draft quotation response', // default placeholder
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'DRAFT'
       };
       if (uploadState?.url) {
@@ -924,15 +994,16 @@ export default function SubmitQuotationPage() {
       toast.success('Draft saved successfully');
       setTimeout(() => setDraftSaved(false), 2000);
     } catch (err: any) {
+      if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        setSubmitted(true);
+        return;
+      }
       console.warn('Failed to save draft to server', err);
       toast.error(err?.message || 'Failed to save draft to server');
+    } finally {
+      setSavingDraft(false);
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
-
-  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
-  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
-  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
-  const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, offeredMakeBrand, offeredModel, technicalSpecifications, complianceStatement, uploadState, docUploads, lineQuotes]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -968,24 +1039,14 @@ export default function SubmitQuotationPage() {
     : isLimitedTender ? 'Back to Limited Tender'
     : 'Back to RFQ';
 
-  // Auto-save on field changes (debounced at 5 seconds)
-  React.useEffect(() => {
-    if (!resolvedId || isReadOnly || !rfqData) return;
-    const hasDynamicInput = docUploads.some(doc => doc.status === 'done') || lineQuotes.some(line => line.unitPrice !== '');
-    if (!offeredPrice && !offeredQuantity && !deliveryTimeline && !terms && !message && !uploadState && !hasDynamicInput) {
-      return;
-    }
 
-    const timer = setTimeout(() => {
-      saveDraft();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes, resolvedId, rfqData, saveDraft, ownResponse]);
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
   const rfqNumber = formatRefId('RFQ', requirementId || rfqData?.id, rfqData?.requirementNumber, rfqData?.procurementMethod || rfqData?.canonicalMethod || 'RFQ');
-  const deadline = rfqData?.deadlineDate ? formatDate(rfqData.deadlineDate) : '—';
+  const deadline = rfqData?.deadlineDate
+    ? (hasExplicitTime(rfqData.deadlineDate) ? formatDateTime(rfqData.deadlineDate) : formatDate(rfqData.deadlineDate))
+    : '—';
 
   const itemsList: Array<{
     itemName: string;
@@ -1034,9 +1095,14 @@ export default function SubmitQuotationPage() {
 
     const stripAutoDesc = (desc?: string): string => {
       if (!desc) return '';
-      const str = String(desc).trim();
-      if (str.includes('Sourcing Method:') && str.includes('Urgency:')) return '';
-      return str;
+      let text = String(desc).replace(/\r/g, '');
+      text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+      text = text.replace(/RFP\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Estimated\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+      text = text.replace(/Priority:\s*[^|\n]*/gi, '');
+      return text.trim();
     };
 
     const isGenericName = (val?: any): boolean => {
@@ -1132,8 +1198,6 @@ export default function SubmitQuotationPage() {
             item?.category,
             rfqData?.category,
             queryData?.requirement?.category,
-            rfqData?.subCategory,
-            queryData?.requirement?.subCategory,
           ];
           for (const catCand of catCandidates) {
             const catStr = typeof catCand === 'string' ? catCand : catCand?.name;
@@ -1152,11 +1216,17 @@ export default function SubmitQuotationPage() {
           finalName = `Item #${idx + 1}`;
         }
 
+        const hasDistinctDesc = Boolean(
+          cleanedDesc &&
+          cleanedDesc.toLowerCase().trim() !== finalName.toLowerCase().trim() &&
+          !finalName.toLowerCase().trim().includes(cleanedDesc.toLowerCase().trim())
+        );
+
         return {
           itemName: finalName,
           quantity: item?.quantity || item?.qty || item?.count || item?.estimatedAnnualQuantity || item?.annualQuantity || item?.estimatedRateQuantity || rfqData?.quantity || 1,
-          unitOfMeasure: item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos',
-          description: cleanedDesc !== finalName ? cleanedDesc : '',
+          unitOfMeasure: sanitizeUom(item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos'),
+          description: hasDistinctDesc ? cleanedDesc : '',
         };
       });
     } else if (rfqData || queryData?.requirement) {
@@ -1191,12 +1261,18 @@ export default function SubmitQuotationPage() {
         finalTitle = 'Requirement Item';
       }
 
+      const hasDistinctReqDesc = Boolean(
+        cleanedReqDesc &&
+        cleanedReqDesc.toLowerCase().trim() !== finalTitle.toLowerCase().trim() &&
+        !finalTitle.toLowerCase().trim().includes(cleanedReqDesc.toLowerCase().trim())
+      );
+
       parsedList = [
         {
           itemName: finalTitle,
           quantity: rfqData?.quantity || queryData?.requirement?.quantity || 1,
-          unitOfMeasure: rfqData?.unit || queryData?.requirement?.unit || 'Nos',
-          description: cleanedReqDesc !== finalTitle ? cleanedReqDesc : '',
+          unitOfMeasure: sanitizeUom(rfqData?.unit || queryData?.requirement?.unit || 'Nos'),
+          description: hasDistinctReqDesc ? cleanedReqDesc : '',
         }
       ];
     }
@@ -1227,53 +1303,70 @@ export default function SubmitQuotationPage() {
   const requestedDocs = React.useMemo(() => {
     const out: Array<{ name: string; required: boolean }> = [];
     const seen = new Map<string, number>();
-    const push = (name: unknown, required: boolean) => {
+    const authoritative = new Set<string>();
+
+    const push = (name: unknown, required: boolean, isAuthoritative = false) => {
       const label = String(name || '').trim();
       const key = label.toLowerCase();
       if (!label) return;
+
+      // Internal PAC/administrative documents are buyer justifications, not supplier compliance
+      const isInternalBuyerDoc = key.includes('emergency approval') || key.includes('pac justification') || key.includes('competent authority approval');
+      const effectiveRequired = isInternalBuyerDoc ? false : required;
+
       if (seen.has(key)) {
         const existingIdx = seen.get(key)!;
-        if (required && !out[existingIdx].required) {
+        if (isAuthoritative) {
+          out[existingIdx].required = effectiveRequired;
+          authoritative.add(key);
+        } else if (!authoritative.has(key) && effectiveRequired && !out[existingIdx].required) {
           out[existingIdx].required = true;
         }
         return;
       }
       seen.set(key, out.length);
-      out.push({ name: label, required });
+      if (isAuthoritative) authoritative.add(key);
+      out.push({ name: label, required: effectiveRequired });
     };
 
     // 1. Authoritative: payload / technicalPacket documents array with explicit required flags
-    const payloadDocs = rfqData?.payload?.documents ||
-      rfqData?.payload?.documentsRequested ||
-      rfqData?.payload?.technicalPacket?.documents ||
-      rfqData?.technicalPacket?.documents ||
-      queryData?.requirement?.payload?.documents ||
-      queryData?.requirement?.technicalPacket?.documents;
+    const authoritativeDocsArrays = [
+      rfqData?.payload?.requiredDocs,
+      rfqData?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.documents,
+      rfqData?.technicalPacket?.documents,
+      rfqData?.payload?.technicalPacket?.documents,
+      rfqData?.payload?.documentsRequested,
+      queryData?.requirement?.payload?.requiredDocs,
+      queryData?.requirement?.payload?.documents,
+      queryData?.requirement?.technicalPacket?.documents,
+      queryData?.requirement?.technicalPacket?.requiredDocs
+    ];
 
-    if (Array.isArray(payloadDocs) && payloadDocs.length > 0) {
-      payloadDocs.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
-        const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
-        push(name, isReq);
-      });
+    for (const arr of authoritativeDocsArrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        arr.forEach((d: any) => {
+          const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
+          const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
+          push(name, isReq, true);
+        });
+      }
     }
 
     // 2. Attached requirement documents
     if (Array.isArray(documents) && documents.length > 0) {
       documents.forEach((d: any) => {
         const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName || d?.title);
-        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false);
+        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false, false);
       });
     }
 
-    // 3. Buyer-specified requiredDocuments and requestedDocuments arrays across all procurement shapes
-    const reqDocArrays = [
+    // 3. Fallback buyer-specified string arrays (e.g. requiredDocuments)
+    const fallbackDocArrays = [
       rfqData?.requiredDocuments,
-      rfqData?.requestedDocuments,
       queryData?.requirement?.requiredDocuments,
-      queryData?.requirement?.requestedDocuments,
       rfqData?.payload?.requiredDocuments,
-      rfqData?.payload?.requiredDocs,
       rfqData?.payload?.documentsRequired,
       rfqData?.payload?.rules?.requiredDocuments,
       rfqData?.payload?.rules?.documentsRequired,
@@ -1281,12 +1374,11 @@ export default function SubmitQuotationPage() {
       rfqData?.payload?.tender?.requiredDocuments,
       rfqData?.payload?.wizardData?.requiredDocuments,
       rfqData?.technicalPacket?.requiredDocuments,
-      rfqData?.payload?.technicalPacket?.requiredDocuments,
     ];
 
-    for (const arr of reqDocArrays) {
+    for (const arr of fallbackDocArrays) {
       if (Array.isArray(arr) && arr.length > 0) {
-        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true));
+        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true, false));
       }
     }
 
@@ -1431,10 +1523,13 @@ export default function SubmitQuotationPage() {
         return {
           itemName: resolvedName,
           quantity: line?.quantity != null ? line.quantity : (matchingBuyerItem?.quantity != null ? matchingBuyerItem.quantity : 1),
-          unitOfMeasure: line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos',
+          unitOfMeasure: sanitizeUom(line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos'),
           unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
           gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
           makeBrand: line?.makeBrand || line?.brand || '',
+          model: line?.model || line?.modelNumber || line?.partNumber || '',
+          specifications: line?.specifications || line?.technicalSpecs || line?.itemDescription || '',
+          complianceStatus: line?.complianceStatus || line?.compliance || '',
           remarks: line?.remarks || ''
         };
       });
@@ -1447,10 +1542,13 @@ export default function SubmitQuotationPage() {
             restored.push({
               itemName: buyerItem.itemName,
               quantity: buyerItem.quantity != null ? buyerItem.quantity : 1,
-              unitOfMeasure: buyerItem.unitOfMeasure || 'Nos',
+              unitOfMeasure: sanitizeUom(buyerItem.unitOfMeasure || 'Nos'),
               unitPrice: '',
               gstPercent: '18',
               makeBrand: '',
+              model: '',
+              specifications: '',
+              complianceStatus: '',
               remarks: ''
             });
           }
@@ -1462,10 +1560,13 @@ export default function SubmitQuotationPage() {
       setLineQuotes(itemsList.map(item => ({
         itemName: item.itemName,
         quantity: item.quantity != null ? item.quantity : 1,
-        unitOfMeasure: item.unitOfMeasure || 'Nos',
+        unitOfMeasure: sanitizeUom(item.unitOfMeasure || 'Nos'),
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
         remarks: ''
       })));
     }
@@ -1488,6 +1589,14 @@ export default function SubmitQuotationPage() {
     });
     return { total: Math.round(total * 100) / 100, qty: Math.round(qty * 100) / 100, priced };
   }, [lineQuotes]);
+
+  const hasLineItems = itemsList.length > 0 || lineQuotes.length > 0;
+
+  React.useEffect(() => {
+    if (!userSelectedTab && hasLineItems && !isSubmittedQuote) {
+      setActiveTab('item-wise-pricing');
+    }
+  }, [hasLineItems, userSelectedTab, isSubmittedQuote]);
 
   React.useEffect(() => {
     if (isSubmittedQuote || lineTotals.priced === 0) return;
@@ -1531,13 +1640,24 @@ export default function SubmitQuotationPage() {
           unitRate: unitPrice,
           gstPercent,
           makeBrand: line.makeBrand.trim() || null,
+          model: (line.model || '').trim() || null,
+          specifications: (line.specifications || '').trim() || null,
+          complianceStatus: line.complianceStatus || null,
           remarks: line.remarks.trim() || null,
           lineTotal: Math.round(lineTotal * 100) / 100,
           totalAmount: Math.round(lineTotal * 100) / 100,
         };
       });
-    if (!docs.length && !lines.length) return undefined;
-    return { documents: docs, lineItems: lines };
+    const hasAnyContent = docs.length > 0 || lines.length > 0 || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim();
+    if (!hasAnyContent) return undefined;
+    return {
+      documents: docs,
+      lineItems: lines,
+      makeBrand: offeredMakeBrand.trim() || undefined,
+      model: offeredModel.trim() || undefined,
+      technicalSpecifications: technicalSpecifications.trim() || undefined,
+      complianceStatement: complianceStatement || undefined,
+    };
   }
 
   const handleUploadFiles = useCallback(async (files: FileList | File[], targetTag?: string) => {
@@ -1647,6 +1767,9 @@ export default function SubmitQuotationPage() {
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
         remarks: ''
       }
     ]);
@@ -1659,11 +1782,11 @@ export default function SubmitQuotationPage() {
 
   const handlePreviewDocument = async (item: any) => {
     if (!item) return;
-    const rawUrl = item.fileUrl || item.url || '';
     const fileName = item.fileName || item.name || item.file?.name || 'Document Preview';
+    const rawUrl = item.fileUrl || item.url || '';
 
-    // If it's a local File object and no server url
-    if (!rawUrl && item.file instanceof File) {
+    // 1. If it's a local File object in memory, preview immediately via local blob URL
+    if (item.file instanceof File) {
       try {
         const blobUrl = URL.createObjectURL(item.file);
         setPreviewDocument({
@@ -1677,11 +1800,12 @@ export default function SubmitQuotationPage() {
       }
     }
 
-    if (!rawUrl) {
+    if (!rawUrl && !item.fileAssetId && !item.id) {
       toast.error('Preview is not available for this document.');
       return;
     }
 
+    // 2. Fetch preview via getFileAssetPreview
     try {
       const prev = await getFileAssetPreview(
         {
@@ -1725,24 +1849,32 @@ export default function SubmitQuotationPage() {
     );
     const missingDocs = requestedDocs.filter(doc => doc.required && !coveredNames.has(doc.name.trim().toLowerCase()));
     if (missingDocs.length > 0) {
-      errs.requestedDocs = `Tag each uploaded file with the required document it satisfies. Missing: ${missingDocs.map(d => d.name).join(', ')}`;
+      errs.requestedDocs = `Please upload the required compliance document(s): ${missingDocs.map(d => d.name).join(', ')}`;
     }
     if (!declared) errs.declared = 'You must declare the information is accurate';
     setErrors(errs);
 
     if (Object.keys(errs).length > 0) {
-      if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
+      if (hasLineItems && (errs.offeredPrice || errs.offeredQuantity)) {
+        setActiveTab('item-wise-pricing');
+        scrollToSection('item-wise-pricing');
+        toast.error('Please specify valid pricing and quantities in Item-Wise Quotation before submitting.');
+      } else if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
         setActiveTab('quotation-details');
         scrollToSection('quotation-details');
+        toast.error('Please complete all required commercial and delivery details.');
       } else if (errs.message) {
         setActiveTab('message-documents');
         scrollToSection('message-documents');
+        toast.error('Please enter a quotation message / cover note.');
       } else if (errs.requestedDocs) {
         setActiveTab('requested-documents');
         scrollToSection('requested-documents');
+        toast.error(`Please upload the ${missingDocs.length} required document(s) in Requested Documents: ${missingDocs.map(d => d.name).join(', ')}`);
       } else if (errs.declared) {
         setActiveTab('submit-action');
         scrollToSection('submit-action');
+        toast.error('Please accept the declaration before submitting.');
       }
       return false;
     }
@@ -1757,7 +1889,7 @@ export default function SubmitQuotationPage() {
       toast.error('File size must be under 10 MB');
       return;
     }
-    setUploadState({ file, progress: 0, status: 'pending' });
+    setUploadState({ file, fileName: file.name, fileSize: file.size, progress: 0, status: 'pending' });
     setErrors(prev => {
       const next = { ...prev };
       delete next.attachment;
@@ -1772,7 +1904,15 @@ export default function SubmitQuotationPage() {
       const result = await uploadFile(uploadState.file, (percent) => {
         setUploadState(prev => prev ? { ...prev, progress: percent } : prev);
       });
-      setUploadState(prev => prev ? { ...prev, status: 'done', progress: 100, url: result.url } : prev);
+      setUploadState(prev => prev ? {
+        ...prev,
+        id: result.id,
+        fileAssetId: result.id,
+        status: 'done',
+        progress: 100,
+        url: result.url,
+        fileName: uploadState.file?.name || prev.fileName || prev.file?.name
+      } : prev);
       toast.success('Document uploaded');
     } catch (err: any) {
       setUploadState(prev => prev ? { ...prev, status: 'error', error: err?.message || 'Upload failed' } : prev);
@@ -1794,7 +1934,6 @@ export default function SubmitQuotationPage() {
 
   const handleSubmit = async () => {
     if (isSubmittedQuote) {
-      toast.error('You have already submitted your quotation for this procurement.');
       return;
     }
     // EMD check commented out as requested
@@ -1817,6 +1956,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim(),
         message: message.trim(),
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'SUBMITTED',
       };
       if (uploadState?.url) {
@@ -1844,16 +1987,41 @@ export default function SubmitQuotationPage() {
       localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
         const currentUserId = user?.id ? String(user.id) : null;
-        const keysToClear = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
-        keysToClear.forEach(k => {
+        const submittedRecord = {
+          id: Date.now(),
+          userId: currentUserId,
+          status: 'SUBMITTED',
+          submissionStatus: 'SUBMITTED',
+          submittedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          offeredPrice: payload.offeredPrice,
+          offeredQuantity: payload.offeredQuantity,
+          deliveryTimeline: payload.deliveryTimeline,
+          message: payload.message,
+          terms: payload.terms,
+          makeBrand: payload.makeBrand,
+          model: payload.model,
+          technicalSpecifications: payload.technicalSpecifications,
+          complianceStatement: payload.complianceStatement,
+          attachmentUrl: payload.attachmentUrl,
+          responseData: payload.responseData
+        };
+        const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        keysToSet.forEach(k => {
           try {
-            localStorage.removeItem(`rfq_submitted_${k}`);
-            if (currentUserId) localStorage.removeItem(`rfq_submitted_${currentUserId}_${k}`);
+            localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+            if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
           } catch {}
         });
       }
+      queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+      queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
       queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
       queryClient.invalidateQueries({ queryKey: ['marketplace-opportunities'] });
       queryClient.invalidateQueries({ queryKey: ['seller-opportunities'] });
@@ -1861,9 +2029,34 @@ export default function SubmitQuotationPage() {
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        if (typeof window !== 'undefined') {
+          const currentUserId = user?.id ? String(user.id) : null;
+          const submittedRecord = {
+            id: Date.now(),
+            userId: currentUserId,
+            status: 'SUBMITTED',
+            submissionStatus: 'SUBMITTED',
+            submittedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString()
+          };
+          const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+          keysToSet.forEach(k => {
+            try {
+              localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+              if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
+            } catch {}
+          });
+        }
         setSubmitted(true);
+        queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+        queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
+        queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
         toast.info('You have already submitted your quotation for this procurement.');
       } else {
         toast.error(err?.message || 'Failed to submit quotation');
@@ -1951,95 +2144,122 @@ export default function SubmitQuotationPage() {
   const submittedAtDisplay = submittedAtValue ? formatDateTime(submittedAtValue) : null;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {/* Navigation & Breadcrumb */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleBackToRfq}
-          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
-          aria-label={backButtonLabelText}
-        >
-          <ArrowLeft className="h-4 w-4 text-slate-500" />
-          <span>{backButtonLabelText}</span>
-        </Button>
-
-        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs" aria-label="Breadcrumb">
-          <button
+    <div className="mx-auto max-w-[1400px] space-y-3.5 px-4 py-3 md:px-6 pb-12">
+      {/* Top Bar: Navigation & Live Status */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
-          >
-            Opportunities
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(procurementBackRoute)}
-          >
-            {procurementTypePluralLabel}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+            variant="outline"
+            size="sm"
             onClick={handleBackToRfq}
+            className="h-7 gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
+            aria-label={backButtonLabelText}
           >
-            {rfqNumber}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
-            {submitActionHeaderLabel}
-          </span>
-        </nav>
+            <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+            <span>{backButtonLabelText}</span>
+          </Button>
+
+          <nav className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1 shadow-2xs" aria-label="Breadcrumb">
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
+            >
+              Opportunities
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(procurementBackRoute)}
+            >
+              {procurementTypePluralLabel}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+              onClick={handleBackToRfq}
+            >
+              {rfqNumber}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
+              {submitActionHeaderLabel}
+            </span>
+          </nav>
+        </div>
+
+        {/* Live Status Chip */}
+        <div>
+          {isSubmittedQuote ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <CheckCircle2 className="h-3 w-3" /> Submitted
+            </span>
+          ) : isExpiredOrClosed ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+              <Lock className="h-3 w-3 text-amber-600" /> Submission Closed
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 animate-pulse" /> Accepting Quotations
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Header Card */}
-      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
+      {/* Header Card (Compact & High-Density) */}
+      <section className="relative overflow-hidden border border-slate-200/90 rounded-xl bg-white px-4 py-3 md:px-5 md:py-3.5 shadow-2xs">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-1">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-                {submitActionHeaderLabel}
-              </h1>
-              <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                {procurementTypeBadgeLabel}
-              </span>
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between pt-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-900">
+              {submitActionHeaderLabel}
+            </h1>
+            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold tracking-wider text-indigo-700 border border-indigo-200">
+              {procurementTypeBadgeLabel}
+            </span>
+            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
+              {rfqNumber}
+            </span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-xs md:text-sm font-semibold text-slate-800 truncate max-w-xs md:max-w-md" title={subject}>
+              {subject}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+              <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="font-semibold text-slate-800 truncate max-w-[200px]" title={orgName}>{orgName}</span>
             </div>
-            <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
-              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumber}</span>
-              <span className="text-slate-300">•</span>
-              <span className="font-semibold text-slate-800">{subject}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-0.5">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">{orgName}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">Deadline: {deadline}</span>
-              </div>
+            <div className={cn(
+              "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border",
+              isExpiredOrClosed
+                ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                : "bg-slate-50 border-slate-200 text-slate-600"
+            )}>
+              <Calendar className={cn("h-3.5 w-3.5 shrink-0", isExpiredOrClosed ? "text-amber-600" : "text-slate-400")} />
+              <span className="font-semibold">
+                Deadline: <strong className={isExpiredOrClosed ? "text-amber-950 font-bold" : "text-slate-800"}>{deadline}</strong>
+              </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Status Banner (Submitted or Closed) ── */}
+      {/* ── Status Banner (Submitted, Expired, or Closed) ── */}
       {isSubmittedQuote ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
-            <CheckCircle2 className="h-5 w-5" />
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
+            <CheckCircle2 className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
-              <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
+              <h3 className="text-xs md:text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
+              <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-850">
                 {submittedStatus(ownResponse) || 'SUBMITTED'}
               </span>
             </div>
@@ -2048,25 +2268,39 @@ export default function SubmitQuotationPage() {
             </p>
           </div>
         </div>
-      ) : isClosed ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-500 text-white font-bold">
-            <AlertTriangle className="h-5 w-5" />
+      ) : isExpiredOrClosed ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white font-bold">
+            <AlertTriangle className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
-            <p className="text-xs font-semibold text-slate-500 mt-0.5">This requirement is no longer accepting new quotations.</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs md:text-sm font-extrabold text-amber-950">Quotation Submission Closed</h3>
+              <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
+                {rfqData?.status === 'EXPIRED' ? 'EXPIRED' : isDeadlinePassed ? 'DEADLINE ELAPSED' : (rfqData?.status || 'CLOSED')}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-amber-800 mt-0.5">
+              The submission deadline for this requirement was <strong>{deadline}</strong>. This requirement is no longer accepting quotations, so all form fields are locked in read-only mode.
+            </p>
           </div>
         </div>
       ) : null}
 
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
-      <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-xs" role="tablist" aria-label="Quotation Sections">
+      <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {[
+          {(hasLineItems ? [
+            {
+              id: 'item-wise-pricing' as const,
+              label: 'Item-Wise Quotation',
+              icon: Package,
+              iconColor: 'text-amber-500',
+              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
+            },
             {
               id: 'quotation-details' as const,
-              label: isRfp ? 'Proposal Details' : 'Quotation Details',
+              label: isRfp ? 'Commercial & Delivery Details' : 'Quotation Details',
               icon: IndianRupee,
               iconColor: 'text-emerald-500',
               hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
@@ -2077,13 +2311,6 @@ export default function SubmitQuotationPage() {
               icon: FileText,
               iconColor: 'text-indigo-500',
               hasError: !!(errors.message || errors.attachment),
-            },
-            {
-              id: 'item-wise-pricing' as const,
-              label: 'Item-Wise Quotation',
-              icon: Package,
-              iconColor: 'text-amber-500',
-              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
             },
             {
               id: 'requested-documents' as const,
@@ -2102,7 +2329,39 @@ export default function SubmitQuotationPage() {
               iconColor: 'text-indigo-500',
               hasError: !!errors.declared,
             },
-          ].map(tab => {
+          ] : [
+            {
+              id: 'quotation-details' as const,
+              label: isRfp ? 'Proposal Details' : 'Quotation Details',
+              icon: IndianRupee,
+              iconColor: 'text-emerald-500',
+              hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
+            },
+            {
+              id: 'message-documents' as const,
+              label: isRfp ? 'Proposal Message & Documents' : 'Message & Documents',
+              icon: FileText,
+              iconColor: 'text-indigo-500',
+              hasError: !!(errors.message || errors.attachment),
+            },
+            {
+              id: 'requested-documents' as const,
+              label: 'Requested Documents',
+              icon: Paperclip,
+              iconColor: 'text-purple-500',
+              count: requestedDocs.length > 0
+                ? requestedDocs.length
+                : (docUploads.filter(d => d.status === 'done').length > 0 ? docUploads.filter(d => d.status === 'done').length : undefined),
+              hasError: !!errors.requestedDocs,
+            },
+            {
+              id: 'submit-action' as const,
+              label: isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit',
+              icon: ShieldCheck,
+              iconColor: 'text-indigo-500',
+              hasError: !!errors.declared,
+            },
+          ]).map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -2114,6 +2373,7 @@ export default function SubmitQuotationPage() {
                 aria-controls={`panel-${tab.id}`}
                 type="button"
                 onClick={() => {
+                  setUserSelectedTab(true);
                   setActiveTab(tab.id);
                   scrollToSection(tab.id);
                 }}
@@ -2150,28 +2410,43 @@ export default function SubmitQuotationPage() {
             id="quotation-details"
             role="tabpanel"
             aria-labelledby="tab-quotation-details"
-            className="border border-slate-200/90 rounded-2xl bg-white p-6 md:p-8 shadow-xs space-y-6"
+            className="border border-slate-200/90 rounded-xl bg-white p-5 md:p-6 shadow-2xs space-y-5"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  {isRfp ? 'Proposal Details' : 'Quotation Details'}
+                  {isRfp ? 'Commercial & Delivery Details' : 'Quotation Details'}
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Specify your commercial terms, total price, supply quantity, and delivery timeline.
+                  {hasLineItems
+                    ? 'Review your total price & quantity (calculated from item rates), and specify delivery timeline and commercial terms.'
+                    : 'Specify your commercial terms, total price, supply quantity, and delivery timeline.'}
                 </p>
               </div>
               {lineQuotes.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold hover:bg-amber-100 transition shadow-2xs cursor-pointer"
                 >
                   <Package className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Price line-by-line ({lineQuotes.length} items) &rarr;</span>
+                  <span>&larr; Edit Line Items ({lineQuotes.length} items)</span>
                 </button>
               )}
             </div>
+
+            {isReadOnly && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-900 font-medium">
+                <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>
+                  {isSubmittedQuote
+                    ? 'This quotation has already been submitted and cannot be edited.'
+                    : isExpiredOrClosed
+                    ? `Quotation submission has closed (${deadline}). Inputs are displayed in read-only mode.`
+                    : 'This requirement is closed and no longer accepting inputs.'}
+                </span>
+              </div>
+            )}
 
             <div className="grid gap-6 md:grid-cols-2">
               {/* Offered Price */}
@@ -2304,6 +2579,93 @@ export default function SubmitQuotationPage() {
               {fieldError('deliveryTimeline')}
             </div>
 
+            {/* Technical Specifications & Brand/Model Details */}
+            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#12335f]/10 text-[#12335f]">
+                    <ShieldCheck className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                      Technical Specifications &amp; Compliance Details
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-medium">
+                      Specify your offered technical parameters, make/brand, model number, and compliance status.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Offered Make / Brand */}
+                <div>
+                  <label htmlFor="quotation-make-brand" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                    Offered Make / Brand
+                  </label>
+                  <input
+                    id="quotation-make-brand"
+                    type="text"
+                    value={offeredMakeBrand}
+                    onChange={e => setOfferedMakeBrand(e.target.value)}
+                    disabled={isReadOnly}
+                    placeholder="e.g. Tata, Havells, Schneider Electric, Custom"
+                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+
+                {/* Offered Model / Part Number */}
+                <div>
+                  <label htmlFor="quotation-model" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                    Model / Catalog / Part Number
+                  </label>
+                  <input
+                    id="quotation-model"
+                    type="text"
+                    value={offeredModel}
+                    onChange={e => setOfferedModel(e.target.value)}
+                    disabled={isReadOnly}
+                    placeholder="e.g. MOD-500X / Series 3B / Standard"
+                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Technical Compliance Declaration */}
+              <div>
+                <label htmlFor="quotation-compliance" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                  Technical Compliance Declaration
+                </label>
+                <select
+                  id="quotation-compliance"
+                  value={complianceStatement}
+                  onChange={e => setComplianceStatement(e.target.value as any)}
+                  disabled={isReadOnly}
+                  className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
+                >
+                  <option value="FULL_COMPLIANCE">✓ 100% Fully Compliant with Buyer Technical Specifications</option>
+                  <option value="WITH_DEVIATION">⚠ Compliant with Minor Commercial/Technical Deviations</option>
+                  <option value="ALTERNATIVE_OFFERED">✦ Equivalent or Superior Alternative Product Offered</option>
+                </select>
+              </div>
+
+              {/* Offered Technical Specifications & Scope of Work */}
+              <div>
+                <label htmlFor="quotation-tech-specs" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                  Offered Technical Specifications &amp; Parameters
+                </label>
+                <textarea
+                  id="quotation-tech-specs"
+                  value={technicalSpecifications}
+                  onChange={e => setTechnicalSpecifications(e.target.value)}
+                  disabled={isReadOnly}
+                  placeholder="Detail your offered specifications: capacity, material grade, dimensions, voltage/power, standards compliance (ISO/BIS/CE), operating tolerances, warranty term, and any deviations or special highlights."
+                  rows={4}
+                  className="w-full rounded-xl border border-slate-200 p-3.5 text-xs font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500"
+                />
+              </div>
+            </div>
+
             {/* Terms & Conditions */}
             <div>
               <label htmlFor="quotation-terms" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
@@ -2322,23 +2684,48 @@ export default function SubmitQuotationPage() {
 
             {/* Tab Navigation Footer */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={saveDraft}
-                disabled={submitting || isReadOnly}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Save Draft
-              </Button>
-              <Button
-                type="button"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-              >
-                <span>Next: Message & Documents</span>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              {hasLineItems ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>Previous: Item-Wise Quotation</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={saveDraft}
+                  disabled={submitting || savingDraft || isReadOnly}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
+                </Button>
+              )}
+              <div className="flex items-center gap-2.5 ml-auto">
+                {hasLineItems && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || savingDraft || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
+                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Next: Message & Documents</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </section>
         )}
@@ -2535,7 +2922,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -2546,17 +2933,17 @@ export default function SubmitQuotationPage() {
                   type="button"
                   variant="outline"
                   onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
+                  disabled={submitting || savingDraft || isReadOnly}
                   className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
-                  Save Draft
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Item-Wise Quotation</span>
+                  <span>Next: Requested Documents</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -2605,6 +2992,29 @@ export default function SubmitQuotationPage() {
                     )}
                   </>
                 )}
+                {lineQuotes.length > 0 && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const anyOpen = Object.values(expandedLineSpecs).some(Boolean);
+                      if (anyOpen) {
+                        setExpandedLineSpecs({});
+                      } else {
+                        const allOpen: Record<number, boolean> = {};
+                        lineQuotes.forEach((_, i) => { allOpen[i] = true; });
+                        setExpandedLineSpecs(allOpen);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-slate-200 text-slate-700 bg-white px-3 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    <span>
+                      {Object.values(expandedLineSpecs).some(Boolean) ? 'Collapse Specs' : 'Item Specifications'}
+                    </span>
+                  </Button>
+                )}
                 {!isReadOnly && (
                   <Button
                     type="button"
@@ -2620,6 +3030,15 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
+            {/* Two-Cover Bidding Secrecy Notice */}
+            <div className="flex items-center gap-2.5 rounded-xl border border-indigo-150 bg-indigo-50/60 px-3.5 py-2.5 text-xs text-indigo-950 shadow-2xs">
+              <Lock className="h-4 w-4 text-indigo-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="font-bold">Two-Cover Rule Commercial Bid Secrecy: </span>
+                <span className="text-slate-600 font-medium">Your unit rates and financial schedules are cryptographically sealed and masked until Stage 1 Technical Evaluation is completed by the buyer.</span>
+              </div>
+            </div>
+
             {lineQuotes.length === 0 ? (
               <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <Package className="h-10 w-10 text-slate-400 mx-auto mb-3" />
@@ -2629,7 +3048,7 @@ export default function SubmitQuotationPage() {
                 </p>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                   className="mt-4 h-9 rounded-xl bg-[#12335f] text-white text-xs font-bold cursor-pointer"
                 >
                   Go to Quotation Details
@@ -2641,8 +3060,8 @@ export default function SubmitQuotationPage() {
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       <th scope="col" className="px-3.5 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-12 text-center">#</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM DESCRIPTION</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider min-w-[260px]">ITEM DESCRIPTION</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-44">QTY / UNIT</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
@@ -2654,145 +3073,295 @@ export default function SubmitQuotationPage() {
                       const price = Number(line.unitPrice);
                       const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
                       const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
+                      const cleanUom = sanitizeUom(line.unitOfMeasure);
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
-                            {idx + 1}
-                          </td>
-                          <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle">
-                            {isReadOnly ? (
-                              <div className="space-y-0.5">
-                                <span className="text-xs font-bold text-slate-900 leading-snug block">
-                                  {line.itemName || `Item #${idx + 1}`}
-                                </span>
-                                {(line.remarks || (idx < itemsList.length && itemsList[idx]?.description)) && (
-                                  <p className="text-[10.5px] font-normal text-slate-500 leading-tight">
-                                    {line.remarks || itemsList[idx]?.description}
-                                  </p>
-                                )}
-                              </div>
-                            ) : idx < itemsList.length ? (
-                              <>
-                                <span className="text-xs font-bold text-slate-900 block">{line.itemName}</span>
-                                {itemsList[idx]?.description && (
-                                  <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
-                                )}
-                              </>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={line.itemName}
-                                  onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
-                                  aria-label={`Item description for item ${idx + 1}`}
-                                  placeholder="Item Name / Service"
-                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                                />
+                        <React.Fragment key={idx}>
+                          <tr className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle max-w-md">
+                              {isReadOnly ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName || `Item #${idx + 1}`}>
+                                    {line.itemName || `Item #${idx + 1}`}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = line.remarks || (idx < itemsList.length ? itemsList[idx]?.description : '');
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10.5px] font-normal text-slate-500 leading-tight line-clamp-2 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : idx < itemsList.length ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName}>
+                                    {line.itemName}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = itemsList[idx]?.description;
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={line.itemName}
+                                    onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
+                                    aria-label={`Item description for item ${idx + 1}`}
+                                    placeholder="Item Name / Service"
+                                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveCustomLine(idx)}
+                                    className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
+                                    title="Remove item"
+                                    aria-label={`Remove item ${idx + 1}`}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Item Specifications & Model Action Toggler */}
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveCustomLine(idx)}
-                                  className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
-                                  title="Remove item"
-                                  aria-label={`Remove item ${idx + 1}`}
+                                  onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition cursor-pointer border",
+                                    (line.model || line.specifications)
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                      : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                  )}
+                                  title="Add or view offered model number and technical specifications for this item"
                                 >
-                                  <Trash2 className="h-4 w-4" />
+                                  <FileText className="h-3 w-3" />
+                                  <span>
+                                    {(line.model || line.specifications) ? 'Specs & Model' : '+ Specs & Model'}
+                                    {' '}{expandedLineSpecs[idx] ? '▲' : '▼'}
+                                  </span>
                                 </button>
+                                {line.model && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                    Model: {line.model}
+                                  </span>
+                                )}
+                                {line.complianceStatus && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    {line.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              <div className="flex items-center justify-end gap-1">
-                                <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                  {Number(line.quantity || 0).toLocaleString('en-IN')}
-                                </span>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase">
-                                  {line.unitOfMeasure || 'Nos'}
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-end gap-1.5">
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    {Number(line.quantity || 0).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={line.quantity}
+                                    onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
+                                    aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
+                                    placeholder="1"
+                                    className="h-8 w-20 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[65px] text-left shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                hasPrice ? (
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-medium text-slate-400">—</span>
+                                )
+                              ) : (
                                 <input
                                   type="number"
                                   min="0"
-                                  step="any"
-                                  value={line.quantity}
-                                  onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
-                                  aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
-                                  placeholder="1"
-                                  className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  step="0.01"
+                                  value={line.unitPrice}
+                                  onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
+                                  aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="0.00"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
                                 />
-                                <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
-                                  {line.unitOfMeasure || 'Nos'}
-                                </span>
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              hasPrice ? (
-                                <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                  ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
+                                  {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
                                 </span>
                               ) : (
-                                <span className="text-xs font-medium text-slate-400">—</span>
-                              )
-                            ) : (
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={line.unitPrice}
-                                onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
-                                aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="0.00"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-right align-middle">
-                            {isReadOnly ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
-                                {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
-                              </span>
-                            ) : (
-                              <input
-                                type="number"
-                                min="0"
-                                max="100"
-                                step="0.1"
-                                value={line.gstPercent}
-                                onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
-                                aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="18"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-left align-middle">
-                            {isReadOnly ? (
-                              line.makeBrand ? (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
-                                  {line.makeBrand}
-                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={line.gstPercent}
+                                  onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
+                                  aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="18"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-left align-middle">
+                              {isReadOnly ? (
+                                line.makeBrand ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
+                                    {line.makeBrand}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-normal italic">—</span>
+                                )
                               ) : (
-                                <span className="text-xs text-slate-400 font-normal italic">—</span>
-                              )
-                            ) : (
-                              <input
-                                type="text"
-                                value={line.makeBrand}
-                                onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
-                                aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
-                                placeholder="Optional"
-                                className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                              />
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
-                            {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
-                          </td>
-                        </tr>
+                                <input
+                                  type="text"
+                                  value={line.makeBrand}
+                                  onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+                                  aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="Optional"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
+                              {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                          </tr>
+
+                          {/* Expandable Specifications Sub-Row */}
+                          {expandedLineSpecs[idx] && (
+                            <tr key={`specs-${idx}`} className="bg-slate-50/80 border-b border-slate-200">
+                              <td colSpan={7} className="px-5 py-3.5">
+                                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <ShieldCheck className="h-4 w-4 text-blue-600" />
+                                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                                        Specifications &amp; Compliance for Item #{idx + 1}: {line.itemName}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: false }))}
+                                      className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                                    >
+                                      Close Specs ▲
+                                    </button>
+                                  </div>
+
+                                  {idx < itemsList.length && itemsList[idx]?.description && (
+                                    <div className="rounded-lg bg-blue-50/70 border border-blue-100 p-2.5 text-xs text-blue-900">
+                                      <span className="font-bold uppercase text-[10px] text-blue-700 block mb-0.5">
+                                        Buyer Required Specification:
+                                      </span>
+                                      <p className="font-medium text-slate-800 leading-relaxed">{itemsList[idx].description}</p>
+                                    </div>
+                                  )}
+
+                                  {isReadOnly ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                      <div>
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Offered Model / Part No.:</span>
+                                        <span className="font-bold text-slate-800">{line.model || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Technical Compliance:</span>
+                                        <span className="font-bold text-emerald-800">
+                                          {line.complianceStatus === 'DEVIATION' ? '⚠ Minor Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative Offered' : line.complianceStatus === 'COMPLIANT' ? '✓ 100% Fully Compliant' : '—'}
+                                        </span>
+                                      </div>
+                                      <div className="sm:col-span-2">
+                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block mb-1">Offered Technical Specifications:</span>
+                                        <p className="font-medium text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2.5">{line.specifications || 'No detailed specifications entered.'}</p>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-3">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                            Offered Model / Catalog / Part Number
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={line.model || ''}
+                                            onChange={e => updateLineQuote(idx, { model: e.target.value })}
+                                            placeholder="e.g. MOD-2026-X, Part #7842"
+                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                          />
+                                        </div>
+
+                                        <div>
+                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                            Technical Compliance Status
+                                          </label>
+                                          <select
+                                            value={line.complianceStatus || 'COMPLIANT'}
+                                            onChange={e => updateLineQuote(idx, { complianceStatus: e.target.value })}
+                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                          >
+                                            <option value="COMPLIANT">✓ 100% Fully Compliant</option>
+                                            <option value="DEVIATION">⚠ Minor Technical Deviation</option>
+                                            <option value="ALTERNATIVE">✦ Equivalent Alternative Offered</option>
+                                          </select>
+                                        </div>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                                          Detailed Technical Specifications &amp; Compliance Notes
+                                        </label>
+                                        <textarea
+                                          value={line.specifications || ''}
+                                          onChange={e => updateLineQuote(idx, { specifications: e.target.value })}
+                                          rows={2}
+                                          placeholder="Detail technical parameters, dimensions, materials, tolerances, certifications, or deviations for this specific item..."
+                                          className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
@@ -2817,31 +3386,28 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                onClick={saveDraft}
+                disabled={submitting || savingDraft || isReadOnly}
+                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
-                <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Message & Documents</span>
+                {savingDraft ? 'Saving...' : 'Save Draft'}
               </Button>
-              <div className="flex items-center gap-2.5 ml-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  Save Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
-                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-                >
-                  <span>Next: Requested Documents</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (lineTotals.total > 0 && (!offeredPrice || Number(offeredPrice) === 0 || Number(offeredPrice) !== lineTotals.total)) {
+                    setOfferedPrice(String(lineTotals.total));
+                    setOfferedQuantity(String(lineTotals.qty));
+                  }
+                  setUserSelectedTab(true);
+                  setActiveTab('quotation-details');
+                  scrollToSection('quotation-details');
+                }}
+                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+              >
+                <span>Next: Commercial & Delivery Details</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </section>
         )}
@@ -2967,9 +3533,14 @@ export default function SubmitQuotationPage() {
                   </div>
 
                   {missingReqList.length > 0 && (
-                    <p className="mt-3.5 text-xs font-bold text-[#c2410c] leading-relaxed">
-                      Tag each uploaded file with the required document it satisfies. Missing: {missingReqList.map(d => d.name).join(', ')}
-                    </p>
+                    <div className="mt-3.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900 flex items-start gap-2.5 shadow-2xs">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span>Please upload the {missingReqList.length} required compliance document(s) listed above before submitting: </span>
+                        <span className="text-amber-950 font-black">{missingReqList.map(d => d.name).join(', ')}</span>
+                        <p className="text-[11px] font-normal text-amber-800 mt-0.5">Click the "Upload" button next to each required item to select your file.</p>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -3098,16 +3669,7 @@ export default function SubmitQuotationPage() {
                             <Eye className="h-3.5 w-3.5" /> Preview
                           </button>
                         )}
-                        {(item.fileUrl || item.url) && !isUploading && (
-                          <a
-                            href={item.fileUrl || item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-9 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" /> Open
-                          </a>
-                        )}
+                       
                         {!isReadOnly && !isUploading && (
                           <button
                             type="button"
@@ -3144,28 +3706,30 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Item-Wise Quotation</span>
+                <span>Previous: Message & Documents</span>
               </Button>
               <div className="flex items-center gap-2.5 ml-auto">
+                {!isSubmittedQuote && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || savingDraft || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                )}
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  Save Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => { setActiveTab('submit-action'); scrollToSection('submit-action'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('submit-action'); scrollToSection('submit-action'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Declaration & Submit</span>
+                  <span>{isSubmittedQuote ? 'Next: Submission Status' : 'Next: Declaration & Submit'}</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -3186,7 +3750,9 @@ export default function SubmitQuotationPage() {
                 {isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit'}
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Review your complete quotation summary and declare accuracy before submitting.
+                {isSubmittedQuote
+                  ? 'Your quotation has been successfully submitted and is locked for buyer review.'
+                  : 'Review your complete quotation summary and declare accuracy before submitting.'}
               </p>
             </div>
 
@@ -3227,6 +3793,23 @@ export default function SubmitQuotationPage() {
                   </p>
                 </div>
               </div>
+              {(offeredMakeBrand || offeredModel || technicalSpecifications) && (
+                <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-700 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Technical Specifications &amp; Compliance</span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {complianceStatement === 'WITH_DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative Offered' : '✓ 100% Fully Compliant'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
+                    {offeredMakeBrand && <div><span className="text-slate-400 font-normal">Make: </span><span className="text-slate-800 font-bold">{offeredMakeBrand}</span></div>}
+                    {offeredModel && <div><span className="text-slate-400 font-normal">Model: </span><span className="text-slate-800 font-bold">{offeredModel}</span></div>}
+                  </div>
+                  {technicalSpecifications && (
+                    <p className="line-clamp-2 text-slate-600 font-medium whitespace-pre-wrap">{technicalSpecifications}</p>
+                  )}
+                </div>
+              )}
               {message && (
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-600 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cover Note Preview</span>
@@ -3235,24 +3818,153 @@ export default function SubmitQuotationPage() {
               )}
             </div>
 
+            {/* Commercial Bid Secrecy Guarantee (Two-Cover Rule) */}
+            <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-slate-50 p-4 sm:p-5 shadow-2xs space-y-2">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded">
+                      Two-Cover Bidding Standard • Rule 160 Compliance
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Sealed Envelope
+                    </span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                    Commercial Bid Secrecy &amp; Price Protection Guarantee
+                  </h4>
+                  <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                    Your financial quote, line-item pricing, and commercial schedules remain <strong>cryptographically sealed in the database</strong> until the buyer completes <strong>Stage 1 Technical Evaluation</strong>. The evaluation committee scrutinizes only specifications, quality, and eligibility to ensure 100% fair and unbiased technical qualification.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {(() => {
+              const coveredDocNames = new Set(
+                docUploads
+                  .filter(d => d.status === 'done' && (d.taggedAs || d.name))
+                  .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
+              );
+              const missingReqList = requestedDocs.filter(req => req.required && !coveredDocNames.has(req.name.trim().toLowerCase()));
+              if (missingReqList.length === 0 || isSubmittedQuote) return null;
+
+              return (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 sm:p-5 flex items-start gap-3.5 shadow-2xs">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h4 className="text-xs sm:text-sm font-extrabold text-amber-950 uppercase tracking-wider">
+                      Required Compliance Documents Incomplete ({missingReqList.length} Missing)
+                    </h4>
+                    <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                      The buyer mandates the following compliance document(s) before final quotation submission. Please upload them to proceed:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {missingReqList.map((d, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-white border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-2xs">
+                          <Paperclip className="h-3.5 w-3.5 text-amber-600" />
+                          {d.name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setUserSelectedTab(true);
+                          setActiveTab('requested-documents');
+                          scrollToSection('requested-documents');
+                        }}
+                        className="h-9 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white text-xs font-bold px-4 shadow-2xs cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>Go to Requested Documents to Upload &rarr;</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {!isSubmittedQuote && (
               <div className="pt-2">
-                <ComplianceConsentCard
-                  title="MSME Registration & Supplier Participation Agreement"
-                  subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
-                  pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
-                  accepted={declared}
-                  onAcceptedChange={val => {
-                    setDeclared(val);
-                    setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
-                  }}
-                  checkboxLabel="I certify quotation authenticity & accept the MSME Supplier Participation Agreement"
-                  checkboxDescription="I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE."
-                  readerHeightClassName="h-[120px] sm:h-[135px]"
-                  showPolicyLibrary
+                <div
+                  className={cn(
+                    'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+                    declared
+                      ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+                      : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+                  )}
                 >
-                  <SupplierAgreementPolicyContent />
-                </ComplianceConsentCard>
+                  <label
+                    htmlFor="submit-quotation-supplier-consent"
+                    className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+                  >
+                    <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        id="submit-quotation-supplier-consent"
+                        checked={declared}
+                        onChange={(e) => {
+                          setDeclared(e.target.checked);
+                          setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
+                        }}
+                        aria-required="true"
+                        className="peer sr-only"
+                      />
+                      <div
+                        className={cn(
+                          'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                          declared
+                            ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                            : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                        )}
+                        aria-hidden="true"
+                      >
+                        <Check
+                          className={cn(
+                            'h-3 w-3 stroke-[3] transition-transform duration-150',
+                            declared ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+                      <span className="font-bold">
+                        I certify quotation authenticity &amp; accept the{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const pdfUrl = '/docs/MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            const link = document.createElement('a');
+                            link.href = pdfUrl;
+                            link.download = 'MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                          title="Click to download MSME Supplier Participation Agreement (PDF)"
+                        >
+                          <span>MSME Supplier Participation Agreement (T&amp;C)</span>
+                          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                        </button>
+                        <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+                      </span>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                        I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE.
+                      </p>
+                    </div>
+                  </label>
+                </div>
                 {fieldError('declared')}
               </div>
             )}
@@ -3261,7 +3973,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer w-full sm:w-auto"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -3270,17 +3982,77 @@ export default function SubmitQuotationPage() {
 
               {isSubmittedQuote ? (
                 <>
-                  <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
-                      <CheckCircle2 className="h-5 w-5" />
+                  {isTechDisqualified ? (
+                    <div className="flex w-full flex-col gap-3 rounded-2xl border border-rose-250 bg-rose-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700 shadow-2xs">
+                          <XCircle className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-rose-900">
+                              Stage 1 Technical Scrutiny: Disqualified
+                            </h2>
+                            <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                              Non-Compliant
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            The buyer's technical evaluation committee has completed technical scrutiny. Your submission was not qualified to proceed to Stage 2 financial opening.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-2 rounded-xl border border-rose-200 bg-white/90 p-3 text-xs shadow-2xs">
+                              <span className="font-bold text-slate-800 block text-[10.5px] uppercase tracking-wide">
+                                Committee Justification Remarks:
+                              </span>
+                              <p className="text-slate-700 mt-1 italic font-medium leading-relaxed">
+                                "{techEvaluationRemarks}"
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
-                      <p className="mt-1 text-xs font-semibold text-slate-600">
-                        {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}.`}
-                      </p>
+                  ) : isTechQualified ? (
+                    <div className="flex w-full flex-col gap-2 rounded-2xl border border-emerald-250 bg-emerald-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700 shadow-2xs">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                              Stage 1 Technical Scrutiny: Qualified
+                            </h2>
+                            <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              Eligible for Stage 2
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            Your technical proposal and compliance documents have met all specification criteria. Your financial bid will be unsealed during Stage 2 Financial Opening / Reverse Auction.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <span className="font-bold">Committee Remarks: </span>
+                              <span className="italic">{techEvaluationRemarks}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
+                        <p className="mt-1 text-xs font-semibold text-slate-600">
+                          {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}. Technical scrutiny by buyer is pending.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <Button
                     type="button"
                     variant="outline"
@@ -3305,18 +4077,18 @@ export default function SubmitQuotationPage() {
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isExpiredOrClosed ? 'Submission Closed (Deadline Elapsed)' : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
                       </>
                     )}
                   </Button>
                   <Button
                     type="button"
                     onClick={saveDraft}
-                    disabled={submitting || isReadOnly}
+                    disabled={submitting || savingDraft || isReadOnly}
                     variant="outline"
                     className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-[#12335f] hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
                   >
-                    Save Draft
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
                   </Button>
                   <Button
                     type="button"

@@ -117,7 +117,6 @@ const ProcurementDraftsPage = lazy(() => import('./features/procurementWizard/pa
 // The old bidCreationWizardV2 files are preserved but no longer routed.
 const BuyerProcurementHub = lazy(() => import('./features/procurement/pages/BuyerProcurementHub'));
 const MyProcurementsPage = lazy(() => import('./features/procurement/pages/MyProcurementsPage'));
-const SupplierResponsesPage = lazy(() => import('./features/procurement/pages/SupplierResponsesPage'));
 const ProcurementCheckoutPage = lazy(() => import('./features/procurementCheckoutV2/pages/ProcurementCheckoutPage'));
 const SellerOpportunitiesPage = lazy(() => import('./features/sellerOpportunities/pages/SellerOpportunitiesPage'));
 const SellerBidsPage = lazy(() => import('./features/procurementBid/pages/SellerBidsPage'));
@@ -130,7 +129,6 @@ const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContr
 const OpenTenderDetailPage = lazy(() => import('./features/rfq/pages/OpenTenderDetailPage'));
 const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedTenderDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
-const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
@@ -243,7 +241,6 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/buyer/procurement/create': () => import('./features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/drafts': () => import('./features/procurementWizard/pages/ProcurementDraftsPage'),
   '/buyer/procurement/hub': () => import('./features/procurement/pages/BuyerProcurementHub'),
-  '/buyer/procurement/responses': () => import('./features/procurement/pages/SupplierResponsesPage'),
   '/seller/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/buyer/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
@@ -768,13 +765,22 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
     }
 
+    // ── URL Normalization: redirect reverse auction URLs with spaces or %20 to canonical hyphenated slug ──
+    {
+      const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results?))?\/?$/i);
+      if (spaceAuctionMatch) {
+        const [, role, rawId, subPath] = spaceAuctionMatch;
+        return <Redirect to={`/${role.toLowerCase()}/procurement/reverse-auction/${rawId}${subPath || ''}`} />;
+      }
+    }
+
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
         const [, , typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
-        switch (typeSlug) {
+        switch (typeSlug.toLowerCase()) {
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
           case 'open-tender':      return <OpenTenderDetailPage />;
@@ -782,21 +788,22 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
           case 'rate-contract':    return <RateContractDetailPage />;
           case 'reverse-auction': {
             const numId = Number(id);
-            return <ReverseAuctionDetailPage id={Number.isFinite(numId) && numId > 0 ? numId : id} />;
+            if (id) return <ReverseAuctionDetailPage id={Number.isFinite(numId) && numId > 0 ? numId : id} />;
+            break;
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/live\/?$/i);
       if (procAuctionLiveMatch) {
         const raw = decodeURIComponent(procAuctionLiveMatch[2]);
         const id = Number(raw);
-        return <ReverseAuctionLivePage id={Number.isFinite(id) && id > 0 ? id : raw} />;
+        if (raw) return <ReverseAuctionLivePage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/results?\/?$/i);
       if (procAuctionResultMatch) {
         const raw = decodeURIComponent(procAuctionResultMatch[2]);
         const id = Number(raw);
-        return <AuctionResultPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
+        if (raw) return <AuctionResultPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
     }
 
@@ -809,7 +816,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       if (reverseAuctionDetailMatch) {
         const raw = decodeURIComponent(reverseAuctionDetailMatch[1]);
         const id = Number(raw);
-        return <ReverseAuctionDetailPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
+        if (raw && raw !== 'create') return <ReverseAuctionDetailPage id={Number.isFinite(id) && id > 0 ? id : raw} />;
       }
     }
 
@@ -901,8 +908,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="draft" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="awarded" /></PermissionRouteGuard>;
     
-    // Seller & Buyer repeat orders
-    if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
+    // Repeat orders route redirect
+    if (pathname === '/orders/repeat') {
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/repeat-orders" />;
+      return <Redirect to="/orders" />;
+    }
     
     if (pathname === '/buyer/onboarding' && roleOk(user.role, ['buyer'])) return <BuyerOnboarding />;
     if (pathname === '/buyer/profile' && roleOk(user.role, ['buyer'])) return <BuyerProfile />;
@@ -911,15 +921,20 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     }
     if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><CreateProcurementPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><ProcurementDraftsPage /></PermissionRouteGuard>;
-    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><SupplierResponsesPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) {
+      return <Redirect to="/buyer/my-procurements" />;
+    }
     {
       const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
       if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage id={id} /></PermissionRouteGuard>;
+        if (Number.isFinite(id) && id > 0) {
+          return <Redirect to={`/buyer/rfq/detail?requirementId=${id}&tab=clarifications`} />;
+        }
+        return <Redirect to="/buyer/my-procurements" />;
       }
       if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
-        return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage /></PermissionRouteGuard>;
+        return <Redirect to="/buyer/my-procurements" />;
       }
     }
     
@@ -1035,15 +1050,15 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <Redirect to="/buyer/procurement/create?method=REVERSE_AUCTION" />;
       }
 
-      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/live$/);
+      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live\/?$/i);
       if (reverseAuctionLiveMatch) {
-        const id = Number(reverseAuctionLiveMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const id = decodeURIComponent(reverseAuctionLiveMatch[1]);
+        if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/results$/);
+      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results?\/?$/i);
       if (reverseAuctionResultMatch) {
-        const id = Number(reverseAuctionResultMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const id = decodeURIComponent(reverseAuctionResultMatch[1]);
+        if (id) return <AuctionResultPage id={id} />;
       }
     }
     if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;

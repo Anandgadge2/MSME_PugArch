@@ -244,6 +244,18 @@ export const decideApproval = async (params: {
                 } catch (err) {
                     console.error('Failed to update direct purchase on approval completion:', err);
                 }
+            } else if (approval.entityType === 'purchase_order') {
+                try {
+                    await prisma.purchaseOrder.update({
+                        where: { id: approval.entityId },
+                        data: {
+                            status: 'order_placed',
+                            poStatus: 'ISSUED'
+                        }
+                    });
+                } catch (err) {
+                    console.error('Failed to update purchase order on approval completion:', err);
+                }
             }
         }
     } else if (params.decision === 'REJECTED') {
@@ -266,6 +278,18 @@ export const decideApproval = async (params: {
                 });
             } catch (err) {
                 console.error('Failed to update direct purchase on rejection:', err);
+            }
+        } else if (approval.entityType === 'purchase_order') {
+            try {
+                await prisma.purchaseOrder.update({
+                    where: { id: approval.entityId },
+                    data: {
+                        status: 'rejected',
+                        poStatus: 'CANCELLED'
+                    }
+                });
+            } catch (err) {
+                console.error('Failed to update purchase order on rejection:', err);
             }
         }
     } else if (params.decision === 'SENT_FOR_CLARIFICATION') {

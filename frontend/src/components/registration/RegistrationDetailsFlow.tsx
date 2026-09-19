@@ -276,18 +276,19 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
           const matchedState = data.state ? data.state.trim().toUpperCase() : '';
           let matchedDistrict = '';
-          if (matchedState && data.city) {
+          if (matchedState) {
             const districts = indiaStatesDistricts[matchedState] || [];
-            const searchCity = data.city.trim().toLowerCase();
-            const found = districts.find(d => d.toLowerCase() === searchCity);
-            if (found) {
-              matchedDistrict = found;
-            } else {
-              const foundPartial = districts.find(d => 
-                d.toLowerCase().includes(searchCity) || searchCity.includes(d.toLowerCase())
-              );
-              if (foundPartial) matchedDistrict = foundPartial;
-            }
+            const searchDistrict = (data.district || '').trim().toLowerCase();
+            const searchCity = (data.city || '').trim().toLowerCase();
+            const found = districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && dl === searchDistrict) || (searchCity && dl === searchCity);
+            }) || districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && (dl.includes(searchDistrict) || searchDistrict.includes(dl))) ||
+                     (searchCity && (dl.includes(searchCity) || searchCity.includes(dl)));
+            });
+            if (found) matchedDistrict = found;
           }
 
           setFormData((prev: any) => ({
@@ -297,7 +298,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             orgPan: finalPan || prev.orgPan,
             state: matchedState || prev.state,
             district: matchedDistrict || prev.district,
-            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName
+            city: (data.city || matchedDistrict || '').trim() || prev.city,
+            pincode: (data.pincode ? String(data.pincode).replace(/\D/g, '').slice(0, 6) : '') || prev.pincode,
+            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName,
+            address: (data.address || data.businessAddress || '').trim() || prev.address
           }));
           
           setSelectedDocs((prev) => {
@@ -1099,6 +1103,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             isEmailVerified: true,
             state: formData.state,
             district: formData.district,
+            city: formData.city || verifiedGstDetails?.city || formData.district || '',
+            pincode: formData.pincode || verifiedGstDetails?.pincode || '',
+            address: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
+            registeredAddress: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
             officeZoneName: formData.officeZoneName,
             aadhaarVerificationId: token,
             aadhaarMasked: isAadhaarVerified ? formData.aadhaarNumber : undefined,

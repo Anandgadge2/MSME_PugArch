@@ -22,31 +22,52 @@ export function FocusTrap({
 }: FocusTrapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+  const returnFocusRefStable = useRef(returnFocusRef);
+  returnFocusRefStable.current = returnFocusRef;
+
+  // Track if initial focus was already executed for this trap session
+  const hasFocusedRef = useRef(false);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      hasFocusedRef.current = false;
+      return;
+    }
 
     // 1. Capture previously focused element to return focus on unmount
-    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    if (!previousActiveElementRef.current) {
+      previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    }
 
     const container = containerRef.current;
     if (!container) return;
 
-    // 2. Initial focus
-    if (autoFocus) {
-      const focusableElements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      } else {
-        container.focus();
+    // 2. Initial focus - only once per active session, and only if focus is not already inside container
+    if (autoFocus && !hasFocusedRef.current) {
+      hasFocusedRef.current = true;
+      const currentActive = document.activeElement;
+      if (!currentActive || !container.contains(currentActive)) {
+        const explicitAutoFocus = container.querySelector<HTMLElement>('[autofocus], [data-autofocus]');
+        if (explicitAutoFocus && typeof explicitAutoFocus.focus === 'function') {
+          explicitAutoFocus.focus();
+        } else {
+          const focusableElements = container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+          if (focusableElements.length > 0) {
+            focusableElements[0].focus();
+          } else {
+            container.focus();
+          }
+        }
       }
     }
 
     // 3. Tab cycling and Escape listener
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onEscape) {
+      if (e.key === 'Escape' && onEscapeRef.current) {
         e.stopPropagation();
-        onEscape();
+        onEscapeRef.current();
         return;
       }
 
@@ -88,13 +109,16 @@ export function FocusTrap({
     // 4. Return focus on cleanup
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      if (returnFocusRef?.current && typeof returnFocusRef.current.focus === 'function') {
-        returnFocusRef.current.focus();
+      const retRef = returnFocusRefStable.current;
+      if (retRef?.current && typeof retRef.current.focus === 'function') {
+        retRef.current.focus();
       } else if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === 'function') {
         previousActiveElementRef.current.focus();
       }
+      previousActiveElementRef.current = null;
+      hasFocusedRef.current = false;
     };
-  }, [active, autoFocus, onEscape, returnFocusRef]);
+  }, [active, autoFocus]);
 
   return (
     <div ref={containerRef} tabIndex={-1} className={className} style={{ outline: 'none' }}>

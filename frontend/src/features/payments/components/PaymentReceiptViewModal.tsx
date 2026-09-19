@@ -19,6 +19,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
+import { openFileAsset } from '../../../lib/files';
 
 export interface PaymentReceiptViewModalProps {
   isOpen: boolean;
@@ -251,14 +252,26 @@ export function PaymentReceiptViewModal({
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <a
-                      href={proof.receiptFileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-md bg-[#12335f] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0b2445] transition"
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await openFileAsset(
+                            {
+                              id: proof.receiptFileId,
+                              fileUrl: proof.receiptFileUrl,
+                              mimeType: 'application/pdf'
+                            },
+                            'Payment Receipt Document'
+                          );
+                        } catch (err: any) {
+                          toast.error(err?.message || 'Unable to open payment receipt document');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-[#12335f] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0b2445] transition cursor-pointer"
                     >
                       <ExternalLink className="h-3.5 w-3.5" /> View / Download
-                    </a>
+                    </button>
                   </div>
                 </div>
               ) : (

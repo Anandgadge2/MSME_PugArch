@@ -527,7 +527,7 @@ export default function Login() {
         {/* BOTTOM FOOTER */}
         <div className="relative z-10 w-full text-center border-t border-white/[0.06] pt-4">
           <p className="text-[10px] font-medium text-slate-400/70 tracking-wider">
-            &copy; {new Date().getFullYear()} District Administration, Jharsuguda, Odisha &bull; Powered by PugArch
+            &copy; {new Date().getFullYear()} District Administration, Jharsuguda, Odisha
           </p>
         </div>
       </div>

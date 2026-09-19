@@ -55,6 +55,20 @@ export function UrgentActionsInbox() {
   const actionItems: ActionItem[] = React.useMemo(() => {
     const items: ActionItem[] = [];
 
+    if (user?.adminFeedback && user?.onboardingStatus !== 'approved_for_procurement') {
+      items.push({
+        id: 'act-admin-feedback',
+        type: 'clarification',
+        title: 'Admin Desk Scrutiny Clarification',
+        subtitle: user.adminFeedback,
+        badge: 'Desk Remark',
+        badgeTone: 'bg-amber-50 text-amber-700 border-amber-200',
+        actionHref: `${prefix}/onboarding`,
+        actionLabel: 'Review Profile',
+        icon: MessageSquare
+      });
+    }
+
     const rfqCount = summaryData?.sellerReceivedRfqsCount || summaryData?.sellerRfqsCount || 0;
     if (rfqCount > 0) {
       items.push({
@@ -101,7 +115,7 @@ export function UrgentActionsInbox() {
     }
 
     return items;
-  }, [summaryData, prefix]);
+  }, [summaryData, prefix, user]);
 
   return (
     <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden flex flex-col">

@@ -392,6 +392,17 @@ router.post('/invoice/:invoiceId/offline-proof', requirePermission('payment.init
       }
     });
 
+    const effectiveFileId = parsed.receiptFileId || (() => {
+      const match = String(parsed.receiptFileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
+      return match ? Number(match[1]) : null;
+    })();
+    if (effectiveFileId) {
+      await prisma.fileAsset.updateMany({
+        where: { id: effectiveFileId },
+        data: { entityType: 'offline_payment_proof', entityId: proof.id }
+      }).catch(() => undefined);
+    }
+
     await prisma.invoice.update({
       where: { id: invoice.id },
       data: { status: 'payment_initiated', invoiceStatus: 'PAYMENT_PENDING' as any }
@@ -566,6 +577,17 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
         uploadedByUserId: req.user?.id
       }
     });
+    const poEffectiveFileId = parsed.receiptFileId || (() => {
+      const match = String(parsed.receiptFileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
+      return match ? Number(match[1]) : null;
+    })();
+    if (poEffectiveFileId) {
+      await prisma.fileAsset.updateMany({
+        where: { id: poEffectiveFileId },
+        data: { entityType: 'offline_payment_proof', entityId: proof.id }
+      }).catch(() => undefined);
+    }
+
     await auditPayment(req, 'payment.offline_proof_uploaded', 'offlinePaymentProof', proof.id, { purchaseOrderId: po.id, method: parsed.method });
     res.status(201).json({ success: true, proof: maskSensitive(proof), paymentId: payment.id });
   } catch (err: any) {

@@ -109,6 +109,22 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     allowedEvaluations: ['L1 total value']
   },
   {
+    id: 'REVERSE_AUCTION',
+    title: 'Reverse Auction (e-RA)',
+    subtitle: 'Direct real-time dynamic bidding for standard items and commodities',
+    icon: Gavel,
+    accent: 'border-purple-200 bg-purple-50 text-purple-800',
+    badge: 'Dynamic Auction',
+    valueHint: 'Ideal for driving immediate competitive price compression',
+    fit: ['Commodity goods / standard specs', 'Pre-qualified vendor pool', 'Real-time dynamic price bidding'],
+    gates: ['Starting bid price', 'Minimum bid decrement', 'Extension rules'],
+    complexity: 'Medium',
+    estimatedTime: '1-3 Days',
+    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
+    requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
+    allowedEvaluations: ['Dynamic Reverse Auction L1']
+  },
+  {
     id: 'RATE_CONTRACT',
     title: 'Rate Contract',
     subtitle: 'Establish rate schedules for recurring demands over a fixed period',
@@ -120,22 +136,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Estimated annual quantity', 'Price adjustment formula', 'Renewal triggers'],
     complexity: 'Medium',
     estimatedTime: '10-20 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
-    requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
-    allowedEvaluations: ['L1 total value']
-  },
-  {
-    id: 'REPEAT_ORDER',
-    title: 'Repeat Order',
-    subtitle: 'Duplicate a previous successful order at original contract terms',
-    icon: RotateCcw,
-    accent: 'border-lime-200 bg-lime-50 text-lime-800',
-    badge: 'Quick Reorder',
-    valueHint: 'Repeat purchase of identical item with prior seller',
-    fit: ['Identical item specifications', 'Recent previous order (e.g. < 90 days)', 'Value within reorder policy limits'],
-    gates: ['Original order ID reference', 'No price escalation proof', 'Approval for repeat order'],
-    complexity: 'Low',
-    estimatedTime: '2-4 Days',
     buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
     allowedEvaluations: ['L1 total value']
@@ -276,7 +276,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     result.id = 'RFQ';
     result.reason = 'RFQ is recommended for low value procurement to get competitive quotes.';
     result.confidence = 'HIGH';
-    result.alternativeMethods = ['REPEAT_ORDER'];
+    result.alternativeMethods = ['LIMITED_TENDER'];
     return result;
   }
 
@@ -311,7 +311,7 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
   result.id = 'RFQ';
   result.reason = 'RFQ is recommended because your specifications are clear and you primarily need fast price collections from multiple suppliers.';
   result.confidence = 'HIGH';
-  result.alternativeMethods = ['REPEAT_ORDER'];
+  result.alternativeMethods = ['LIMITED_TENDER'];
 
   return result;
 };

@@ -31,7 +31,6 @@ interface TenderDetail {
   tenderId: string;
   title: string;
   category: string;
-  subCategory?: string;
   budget: number;
   description: string;
   status: string;
@@ -278,6 +277,10 @@ export default function TenderDetailPage() {
   const orgName = tender.buyer?.buyerProfile?.organizationName || tender.buyer?.name || 'N/A';
 
   const handleParticipate = () => {
+    if (user?.role === 'buyer' || user?.role === 'admin') {
+      router.push(`/bids/${tender.id || tenderRef}/results`);
+      return;
+    }
     router.push(`/bids/${tender.id}/participate`);
   };
 
@@ -403,6 +406,37 @@ export default function TenderDetailPage() {
     (Array.isArray((tender as any).invitations) ? (tender as any).invitations.length : 0) ||
     0;
 
+  const tenderParticipations = (tender as any).participations || (tender as any).responses || [];
+  const ownParticipation = tenderParticipations.find((p: any) =>
+    user?.id && (
+      Number(p.sellerId || p.sellerUserId) === Number(user.id) ||
+      Number(p.seller?.id || p.sellerUser?.id) === Number(user.id) ||
+      (user.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(user.organizationId))
+    )
+  );
+  const isOwnSubmitted = Boolean(
+    ownParticipation &&
+    String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
+  );
+  const hasSubmittedProposal = Boolean(
+    (tender as any).hasSubmittedProposal ||
+    isOwnSubmitted
+  );
+
+  const isUnitOfMeasure = (val?: string) => {
+    if (!val) return false;
+    const v = String(val).trim().toLowerCase();
+    return ['nos', 'nos.', 'kg', 'ton', 'mt', 'bag', 'box', 'packet', 'set', 'pair', 'roll', 'litre', 'meter', 'feet', 'piece', 'unit', '—', 'n/a', 'not specified', 'null', 'undefined'].includes(v);
+  };
+  const isPacketConfig = (val?: string) => {
+    if (!val) return false;
+    const v = String(val).trim().toLowerCase();
+    return ['two packet', 'single packet', 'two_packet', 'single_packet', '—', 'n/a', 'not specified', 'null', 'undefined'].includes(v);
+  };
+
+  const resolvedPaymentTerms = (!isPacketConfig(terms.paymentTerms) && terms.paymentTerms) || (!isPacketConfig(tender.paymentTerms) && tender.paymentTerms) || undefined;
+  const resolvedDeliveryTerms = (!isUnitOfMeasure(terms.deliveryTerms) && terms.deliveryTerms) || (!isUnitOfMeasure(tender.deliveryType) && tender.deliveryType) || undefined;
+
   return (
     <ProcurementDetailUnifiedView
       procurementType={isLimitedTender ? 'LIMITED_TENDER' : 'OPEN_TENDER'}
@@ -419,10 +453,12 @@ export default function TenderDetailPage() {
       deadlineDate={tender.closesAt}
       createdAt={tender.publishedAt || tender.createdAt}
       publishedDate={publishedDateFormatted}
+      submissionStartDate={schedule.submissionStartDate ? formatDateString(schedule.submissionStartDate, true) : ((tender as any).bidStartDate ? formatDateString((tender as any).bidStartDate, true) : undefined)}
       closingDate={closesAtFormatted}
       clarificationDate={schedule.clarificationDeadline ? formatDateString(schedule.clarificationDeadline, true) : undefined}
-      technicalDate={schedule.technicalOpeningDate ? formatDateString(schedule.technicalOpeningDate, true) : undefined}
-      financialDate={schedule.financialOpeningDate ? formatDateString(schedule.financialOpeningDate, true) : undefined}
+      technicalDate={(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate) ? formatDateString(schedule.technicalOpeningDate || (tender as any).technicalEvaluationDate, true) : undefined}
+      financialDate={(schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? formatDateString(schedule.financialOpeningDate || (tender as any).financialEvaluationDate, true) : undefined}
+      packetType={schedule.packetType || draft.packetType || tender.packetType || ((schedule.financialOpeningDate || (tender as any).financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
       bidValidityDate={schedule.bidValidityDate ? formatDateString(schedule.bidValidityDate) : undefined}
       requiredByDate={basics.requiredByDate ? formatDateString(basics.requiredByDate, true) : ((tender as any).deliveryDate ? formatDateString((tender as any).deliveryDate, true) : undefined)}
       category={tender.category}
@@ -432,8 +468,9 @@ export default function TenderDetailPage() {
       invitations={(tender as any).invitations || vendors.invitations || draft.invitations}
       buyingType={basics.buyingType || 'Goods'}
       deliveryLocation={basics.deliveryLocation || internal.deliveryAddress || tender.buyer?.buyerProfile?.address}
-      paymentTerms={tender.paymentTerms || terms.paymentTerms}
-      deliveryTerms={tender.deliveryType || terms.deliveryTerms}
+      paymentTerms={resolvedPaymentTerms}
+      deliveryTerms={resolvedDeliveryTerms}
+      projectDuration={(tender as any).duration || (tender as any).contractPeriod || basics.projectDuration || terms.projectDuration || terms.contractPeriod || undefined}
       description={tender.description}
       payload={draft}
       documents={tenderDocs}
@@ -453,8 +490,12 @@ export default function TenderDetailPage() {
       isEmdRequired={Boolean(tender.emdAmount && tender.emdAmount > 0)}
       backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}
       backRouteLabel={isLimitedTender ? 'Limited Tender Opportunities' : 'Tender Opportunities'}
-      submitButtonLabel="Submit Tender Proposal"
-      onSubmitClick={handleParticipate}
+      participations={tenderParticipations}
+      hasSubmittedProposal={hasSubmittedProposal}
+      ownParticipation={ownParticipation}
+      submitButtonLabel={user?.role === 'buyer' || user?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
+      onSubmitClick={user?.role === 'buyer' || user?.role === 'admin' ? () => router.push(`/bids/${tender.id || tenderRef}/results`) : handleParticipate}
+      onViewQuotationClick={hasSubmittedProposal ? handleParticipate : undefined}
     />
   );
 }

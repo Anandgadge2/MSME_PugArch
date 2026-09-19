@@ -189,7 +189,7 @@ function KpiCardBase({
   const currentTone = TONES[toneKey] || TONES.blue;
   const isCardActive = active ?? isActive ?? false;
   const interactive = typeof onClick === 'function';
-  const displaySubtext = subtext || hint || helper || change || description || `${label} status`;
+  const displaySubtext = subtext || hint || helper || change || description;
 
   const formattedValue = React.useMemo(() => {
     if (typeof value === 'number') {
@@ -205,7 +205,7 @@ function KpiCardBase({
     if (React.isValidElement(Icon)) return Icon;
     if (typeof Icon === 'function' || typeof Icon === 'object') {
       const IconComponent = Icon as React.ComponentType<{ className?: string }>;
-      return <IconComponent className="h-3.5 w-3.5 sm:h-4 sm:w-4" />;
+      return <IconComponent className="h-4 w-4" />;
     }
     return null;
   };
@@ -217,36 +217,36 @@ function KpiCardBase({
       aria-pressed={interactive ? Boolean(isCardActive) : undefined}
       aria-label={interactive ? ariaLabel || `Filter by ${label}` : undefined}
       className={cn(
-        'group relative w-full text-left rounded-xl border bg-gradient-to-br px-2.5 py-2 sm:px-3 sm:py-2.5 shadow-2xs backdrop-blur-sm transition-all duration-300',
+        'group relative w-full text-left rounded-xl border bg-gradient-to-br px-3.5 py-3 shadow-2xs backdrop-blur-sm transition-all duration-200',
         interactive && 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#12335f]/30',
         isCardActive
-          ? 'border-[#12335f] shadow-md ring-2 ring-[#12335f]/20 bg-white'
-          : 'hover:-translate-y-0.5 hover:border-[#12335f]/40 hover:shadow-md',
+          ? 'border-[#12335f] shadow-sm ring-2 ring-[#12335f]/15 bg-white'
+          : 'hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-sm',
         currentTone.bg,
         currentTone.shadow,
         className
       )}
     >
-      <div className="flex items-start justify-between gap-1.5 sm:gap-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           {/* Label row */}
-          <div className="flex items-center gap-1">
-            <p className="text-[8.5px] sm:text-[9.5px] font-bold uppercase tracking-wide text-slate-500 leading-tight truncate">
+          <div className="flex items-center gap-1.5">
+            <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 leading-tight truncate">
               {label}
             </p>
             {badge && (
-              <span className={cn('shrink-0 text-[7.5px] sm:text-[8px] font-black uppercase px-1 sm:px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
+              <span className={cn('shrink-0 text-[8px] sm:text-[9px] font-black uppercase px-1.5 py-0.5 rounded', badgeColor || 'bg-blue-100 text-blue-800')}>
                 {badge}
               </span>
             )}
           </div>
 
           {/* Value */}
-          <div className="mt-0.5">
+          <div className="mt-1">
             {loading ? (
-              <div className="h-4 sm:h-5 w-12 sm:w-16 bg-slate-200/80 rounded animate-pulse my-0.5" />
+              <div className="h-5 sm:h-6 w-14 sm:w-20 bg-slate-200/80 rounded animate-pulse my-0.5" />
             ) : (
-              <div className="truncate text-xs sm:text-sm lg:text-base font-extrabold tracking-tight leading-snug text-slate-900">
+              <div className="truncate text-base sm:text-lg lg:text-xl font-black tracking-tight leading-snug text-slate-900 tabular-nums">
                 {formattedValue}
               </div>
             )}
@@ -256,7 +256,7 @@ function KpiCardBase({
         {Icon && (
           <div
             className={cn(
-              'flex h-6 w-6 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-md shadow-2xs transition-transform duration-300 group-hover:scale-105',
+              'flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg shadow-2xs transition-transform duration-200 group-hover:scale-105',
               currentTone.iconBg
             )}
           >
@@ -265,14 +265,15 @@ function KpiCardBase({
         )}
       </div>
 
-      <div className="mt-1.5 flex items-center gap-1 border-t border-slate-200/60 pt-1">
-        <span className="h-1 w-1 shrink-0 rounded-full bg-slate-400 animate-pulse" />
-        <div className="min-w-0 flex-1">
-          <div className="text-[9px] sm:text-[10px] font-medium text-slate-500 truncate">
-            {displaySubtext}
+      {displaySubtext && (
+        <div className="mt-2 flex items-center gap-1.5 border-t border-slate-200/60 pt-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-medium text-slate-500 truncate">
+              {displaySubtext}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </Element>
   );
 }

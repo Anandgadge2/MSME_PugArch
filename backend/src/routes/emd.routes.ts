@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { authenticate, authorize, type AuthRequest } from '../middleware/auth.js';
 import db from '../lib/prisma.js';
 import { apiResponse } from '../utils/apiResponse.js';
+import { getCanonicalLookupVariants } from '../utils/refIdUtils.js';
 
 const router = Router();
 
@@ -21,19 +22,13 @@ const parsePacket = (value: any) => {
   return {};
 };
 
-const bidTokenVariants = (token: string) => Array.from(new Set([
-  token,
-  token.replace(/^RFQ-/, 'REQ-'),
-  token.replace(/^REQ-/, 'RFQ-')
-].filter(Boolean)));
-
 const findProcurementBidForEmd = async (token?: string | number | null) => {
   const bidToken = String(token || '').trim();
   if (!bidToken) return null;
   return (db as any).procurementBid.findFirst({
     where: {
       OR: [
-        ...bidTokenVariants(bidToken).map(t => ({ bidNumber: t })),
+        ...getCanonicalLookupVariants(bidToken).map(t => ({ bidNumber: t })),
         ...(/^\d+$/.test(bidToken) ? [{ id: Number(bidToken) }] : [])
       ]
     },

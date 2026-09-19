@@ -26,8 +26,17 @@ const asyncRoute = (
 const ok = (res: Response, data: unknown, status = 200) =>
     res.status(status).json({ success: true, data });
 
-const ensureOrg = (req: AuthRequest) => {
+const ensureOrg = async (req: AuthRequest) => {
     if (!req.user?.organizationId) {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            select: { organizationId: true, buyerProfile: { select: { organizationId: true } } }
+        });
+        const resolvedOrgId = user?.organizationId || user?.buyerProfile?.organizationId;
+        if (resolvedOrgId) {
+            req.user!.organizationId = resolvedOrgId;
+            return;
+        }
         throw new ApiError(400, 'You must belong to an organisation to use delivery addresses.', 'ORG_REQUIRED');
     }
 };
@@ -69,7 +78,7 @@ const updateAddressSchema = createAddressSchema.partial();
 router.get(
     '/buyer/address-groups',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
 
         const groups = await prisma.addressGroup.findMany({
@@ -93,7 +102,7 @@ router.get(
 router.post(
     '/buyer/address-groups',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const buyerId = req.user!.id;
 
@@ -126,10 +135,10 @@ router.post(
 router.get(
     '/buyer/delivery-addresses',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
 
-        const addresses = await prisma.deliveryAddress.findMany({
+        let addresses = await prisma.deliveryAddress.findMany({
             where: {
                 organizationId: orgId,
                 isActive: true
@@ -143,6 +152,76 @@ router.get(
             ]
         });
 
+        // If no saved delivery addresses exist for this organization, auto-provision from authentic onboarding / GST records
+        if (addresses.length === 0) {
+            const user = await prisma.user.findUnique({
+                where: { id: req.user!.id },
+                include: {
+                    buyerProfile: true,
+                    organization: true
+                }
+            });
+
+            if (user) {
+                const bp = user.buyerProfile || ({} as any);
+                const org = user.organization || ({} as any);
+                const reg = (user.registrationDetails as Record<string, any>) || {};
+                const gst = (reg.gstDetails as Record<string, any>) || {};
+
+                const addressLine1 = (
+                    bp.registeredAddress ||
+                    bp.corporateAddress ||
+                    bp.address ||
+                    org.addressLine1 ||
+                    gst.address ||
+                    gst.principalPlaceOfBusiness ||
+                    reg.registeredAddress ||
+                    reg.address ||
+                    ''
+                ).trim();
+
+                const city = (bp.city || org.city || gst.city || reg.city || 'Jharsuguda').trim();
+                const district = (bp.district || org.district || gst.district || reg.district || 'Jharsuguda').trim();
+                const state = (bp.state || org.state || gst.state || reg.state || 'ODISHA').trim();
+                const pincode = (bp.pincode || org.pincode || gst.pincode || reg.pincode || '768201').trim();
+                const contactPersonName = (bp.representativeName || user.name || 'Purchasing Officer').trim();
+                const mobileNumber = (bp.mobile || user.mobile || '9999999999').trim();
+                const orgName = (org.organizationName || bp.organizationName || user.name || 'Organization').trim();
+
+                if (addressLine1) {
+                    try {
+                        const autoAddr = await prisma.deliveryAddress.create({
+                            data: {
+                                buyerId: user.id,
+                                organizationId: orgId,
+                                addressLabel: 'Registered Head Office',
+                                organizationName: orgName,
+                                contactPersonName,
+                                mobileNumber,
+                                alternateMobileNumber: bp.alternateMobile || null,
+                                email: bp.email || user.email || null,
+                                addressLine1,
+                                addressLine2: org.addressLine2 || null,
+                                city,
+                                district,
+                                state,
+                                pincode,
+                                addressType: 'OFFICE',
+                                isDefault: true,
+                                isActive: true
+                            },
+                            include: {
+                                addressGroup: true
+                            }
+                        });
+                        addresses = [autoAddr];
+                    } catch (err) {
+                        console.error('[Auto Delivery Address Creation] Failed:', err);
+                    }
+                }
+            }
+        }
+
         return ok(res, addresses);
     })
 );
@@ -151,7 +230,7 @@ router.get(
 router.post(
     '/buyer/delivery-addresses',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const buyerId = req.user!.id;
 
@@ -201,7 +280,7 @@ router.post(
 router.patch(
     '/buyer/delivery-addresses/:id',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const addressId = parseInt(req.params.id, 10);
 
@@ -260,7 +339,7 @@ router.patch(
 router.delete(
     '/buyer/delivery-addresses/:id',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const addressId = parseInt(req.params.id, 10);
 
@@ -290,7 +369,7 @@ router.delete(
 router.post(
     '/buyer/delivery-addresses/:id/default',
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        await ensureOrg(req);
         const orgId = req.user!.organizationId!;
         const addressId = parseInt(req.params.id, 10);
 

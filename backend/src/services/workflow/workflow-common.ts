@@ -14,8 +14,7 @@ export type WorkflowActor = {
 };
 
 export const numberSeries = (prefix: string, id?: number | string, year?: number | string) => {
-  let p = (prefix || 'REQ').toUpperCase();
-  if (p === 'PRQ' || p === 'PR') p = 'DP';
+  const p = (prefix || 'RFQ').toUpperCase();
   const y = year || 2026;
   if (id != null && !isNaN(Number(id))) {
     return `${p}-${y}-${String(Math.abs(Number(id))).padStart(5, '0')}`;

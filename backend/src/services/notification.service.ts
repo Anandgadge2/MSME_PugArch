@@ -131,6 +131,107 @@ export const notificationService = {
     }
   },
 
+  /** Notify sellers & SHG users about a published public or invited procurement opportunity */
+  async notifySellersAndShgsOfProcurement(procurement: {
+    id: number | string;
+    title: string;
+    bidNumber?: string;
+    requirementNumber?: string;
+    procurementType?: string;
+    canonicalMethod?: string;
+    buyerOrganizationName?: string;
+    estimatedValue?: number | null;
+    endDate?: Date | string | null;
+    visibility?: string;
+    invitedSellerOrgIds?: number[];
+    invitedUserIds?: number[];
+  }) {
+    try {
+      const isLimited = procurement.visibility === 'LIMITED' || procurement.visibility === 'INVITED_SELLERS_ONLY';
+      let targetUsers: Array<{ id: number; email?: string | null; role?: string }> = [];
+
+      if (isLimited) {
+        const invitedOrgIds = procurement.invitedSellerOrgIds || [];
+        const invitedUserIds = procurement.invitedUserIds || [];
+        targetUsers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any },
+            OR: [
+              ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+              ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+            ]
+          },
+          select: { id: true, email: true, role: true }
+        });
+      } else {
+        // Public procurement: Notify all active Sellers and SHGs
+        targetUsers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any }
+          },
+          select: { id: true, email: true, role: true }
+        });
+      }
+
+      if (!targetUsers.length) return;
+
+      const titleStr = procurement.title || 'Procurement Opportunity';
+      const numStr = procurement.bidNumber || procurement.requirementNumber || `PRC-${procurement.id}`;
+      const methodStr = (procurement.canonicalMethod || procurement.procurementType || 'Public Sourcing').replace(/_/g, ' ');
+      const orgStr = procurement.buyerOrganizationName || 'Verified Buyer';
+
+      const notifyOpts: NotifyOpts = {
+        title: `New Procurement Opportunity: ${titleStr}`,
+        message: `${orgStr} published a new ${methodStr} requirement (${numStr}). Open portal to view details and submit your proposal.`,
+        type: 'procurement.opportunity',
+        priority: 'high',
+        redirectUrl: `/seller/opportunities`
+      };
+
+      const emailOpts: EmailOpts = {
+        subject: `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`,
+        html: `
+          <div style="margin: 0 0 20px; padding: 18px 20px; background: #0c2340; border-radius: 8px; color: #ffffff;">
+            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">NEW ${escapeHtml(methodStr)} OPPORTUNITY</p>
+            <h2 style="margin: 0; color: #ffffff; font-size: 20px; line-height: 1.3;">${escapeHtml(titleStr)}</h2>
+            <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 13px;">Ref No: <strong>${escapeHtml(numStr)}</strong> | Issued by: <strong>${escapeHtml(orgStr)}</strong></p>
+          </div>
+          <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
+            A new public procurement opportunity matching registered Seller and SHG business categories has been published on the portal.
+          </p>
+          <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569; width: 35%;">Procurement Method</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(methodStr)}</td>
+            </tr>
+            ${procurement.estimatedValue ? `
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569;">Estimated Budget</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">₹${Number(procurement.estimatedValue).toLocaleString('en-IN')}</td>
+            </tr>` : ''}
+            ${procurement.endDate ? `
+            <tr>
+              <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569;">Submission Deadline</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${new Date(procurement.endDate).toLocaleString()}</td>
+            </tr>` : ''}
+          </table>
+        `,
+        variables: {
+          actionUrl: '/seller/opportunities'
+        }
+      };
+
+      // Dispatch in-app and email to all targeted sellers & SHGs
+      await Promise.allSettled(
+        targetUsers.map(user => this.notifyUser(user.id, notifyOpts, ['in_app', 'email']))
+      );
+    } catch (error) {
+      logger.warn({ error, procurementId: procurement.id }, 'Failed to notify sellers and SHGs of published procurement');
+    }
+  },
+
   async sendSmsNotification(phone: string, message: string, templateId?: string, purpose: SmsPurpose = 'notification') {
     return smsService.sendNotificationSms(phone, message, templateId, purpose);
   },
@@ -365,6 +466,92 @@ export const notificationService = {
       );
     } catch (error) {
       logger.warn({ error, type: opts.type }, 'Failed to notify admins with email');
+    }
+  },
+
+  /** Send direct email to an arbitrary email address (e.g. citizen / unregistered grievance complainant) */
+  async sendDirectEmail(
+    toEmail: string,
+    recipientName: string,
+    opts: {
+      subject: string;
+      html: string;
+      attachments?: Array<{
+        filename: string;
+        content?: Buffer | string;
+        path?: string;
+        contentType?: string;
+      }>;
+    }
+  ) {
+    try {
+      if (!toEmail || !toEmail.includes('@')) return null;
+
+      const companyId = 1;
+      let portalName = 'JsgSmile Portal';
+      if (db.company) {
+        const company = await db.company.findUnique({
+          where: { id: companyId },
+          select: { portalDisplayName: true, name: true }
+        }).catch(() => null);
+        portalName = company?.portalDisplayName || company?.name || portalName;
+      }
+
+      const settings = db.companySetting
+        ? await db.companySetting.findUnique({
+            where: { companyId_key: { companyId, key: 'portal-email-settings' } }
+          }).catch(() => null)
+        : (db.globalSetting
+            ? await db.globalSetting.findUnique({ where: { key: 'portal-email-settings' } }).catch(() => null)
+            : null);
+      const val = settings?.value || {};
+      const fromEmail = val.fromEmail || env.SMTP_USER;
+      const fromName = val.fromName || portalName;
+
+      const emailEnabled = val.emailEnabled ?? Boolean(env.SMTP_USER && env.SMTP_PASS);
+      if (!emailEnabled) {
+        logger.warn({ toEmail }, `Email sending is disabled for company ${companyId}. Direct Email: ${opts.subject}`);
+        return null;
+      }
+
+      const finalHtml = `
+        <div style="font-family: 'Noto Sans', Arial, sans-serif; max-width: 640px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+          <div style="background: #0c2340; padding: 24px; text-align: center; border-bottom: 4px solid #c5a556;">
+            <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${portalName}</h1>
+            <p style="color: #c5a556; font-size: 12px; margin: 6px 0 0; letter-spacing: 1px; font-weight: 600; text-transform: uppercase;">Grievance Redressal &amp; Citizen Services</p>
+          </div>
+          <div style="padding: 32px 24px; color: #1e293b; line-height: 1.6; font-size: 15px;">
+            <p style="margin-top: 0; font-weight: 600; color: #0c2340;">Dear ${recipientName || 'Citizen / Stakeholder'},</p>
+            ${opts.html}
+          </div>
+          <div style="background: #f8fafc; padding: 20px 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0;">
+            <p style="margin: 0; font-weight: 500;">This is an official automated notification from the ${portalName} Grievance Cell.</p>
+            <p style="margin: 4px 0 0;">Please do not reply directly to this automated email.</p>
+            <p style="margin: 12px 0 0; font-size: 11px; opacity: 0.8;">© ${new Date().getFullYear()} ${portalName}. All rights reserved.</p>
+          </div>
+        </div>
+      `;
+
+      const transporter = await getTransporterForCompany(companyId);
+      const hasAuth = val.username || (env.SMTP_USER && env.SMTP_PASS);
+      if (!hasAuth) {
+        logger.warn({ toEmail }, 'No SMTP credentials configured; direct email not sent');
+        return null;
+      }
+
+      const info = await transporter.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: toEmail,
+        subject: opts.subject,
+        html: finalHtml,
+        attachments: opts.attachments
+      });
+
+      logger.info({ toEmail, subject: opts.subject, messageId: info?.messageId }, 'Direct email sent successfully');
+      return info;
+    } catch (error) {
+      logger.warn({ error, toEmail }, 'Failed to send direct email');
+      return null;
     }
   }
 };

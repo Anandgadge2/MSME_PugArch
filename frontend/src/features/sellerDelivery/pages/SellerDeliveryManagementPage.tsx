@@ -23,6 +23,7 @@ import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
+import { openFileAsset } from '../../../lib/files';
 import { compressImage } from '../../../lib/compress';
 import { PdfEngine, type DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { TaxInvoiceCard } from '../../invoices/components/TaxInvoiceCard';
@@ -1356,23 +1357,35 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
     const invNumber = `INV-${po?.poNumber || `PO-${delivery.purchaseOrderId}`}`;
     const dateStr = formatDate(new Date());
 
+    const sellerOrg = (po?.seller as any)?.organization;
+    const sellerReg = (po?.seller as any)?.registrationDetails || {};
+    const sellerProfile = sellerOrg?.profile || (po?.seller as any)?.organizationProfile || (po?.seller as any)?.sellerProfile;
+    const sellerLogo = sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : undefined);
+    const sellerSignature = sellerReg?.signatureUrl || undefined;
+    const sellerStamp = sellerReg?.stampUrl || undefined;
+    const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (po?.seller as any)?.organizationName || po?.seller?.name || 'N/A';
+    const buyerOrg = (po?.buyer as any)?.organization;
+    const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (po?.buyer as any)?.organizationName || po?.buyer?.name || 'N/A';
+
     const config: DocumentConfig = {
         documentTitle: 'Official Tax Invoice',
         documentNumber: invNumber,
         dateStr,
         status: 'OFFICIAL INVOICE',
+        issuerName: sellerName,
+        issuerLogo: sellerLogo,
         parties: [
             {
                 title: 'Seller / Supplier Organization',
-                name: po?.seller?.name || 'Seller Organization',
+                name: sellerName,
                 email: po?.seller?.email,
                 details: [`Delivery Tracking: DLV-${delivery.id}`]
             },
             {
                 title: 'Buyer / Billed To',
-                name: po?.buyer?.name || 'Buyer Organization',
+                name: buyerName,
                 email: po?.buyer?.email,
-                details: [`Purchase Order: ${po?.poNumber || ''}`]
+                details: [`Purchase Order: ${po?.poNumber || 'N/A'}`]
             }
         ],
         infoGrid: {
@@ -1393,11 +1406,17 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
         notes: [
             '1. Computer-generated Tax Invoice produced for MSME Procurement Dispatch.',
             '2. Payment release is governed by portal escrow settlement upon buyer acceptance & GRN verification.'
-        ]
+        ],
+        signatures: {
+            sellerTitle: 'Seller Signature & Stamp',
+            sellerName: po?.seller?.name || 'Authorized Signatory',
+            sellerSignatureUrl: sellerSignature,
+            sellerStampUrl: sellerStamp,
+        }
     };
 
     const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
+    const doc = await engine.generate(config);
     return { doc, filename: `${invNumber}-TaxInvoice.pdf`, invNumber, grandTotal };
 };
 
@@ -1531,9 +1550,35 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
         const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || po?.amount || 0);
 
-        const sellerName = fetchedInvoice?.seller?.name || po?.seller?.name || 'DNYANESHWAR DHOMAN PATIL';
-        const sellerEmail = fetchedInvoice?.seller?.email || po?.seller?.email || 'kolhesnehal35@gmail.com';
-        const buyerName = fetchedInvoice?.buyer?.name || po?.buyer?.name || 'PROAID';
+        const sellerUser = fetchedInvoice?.seller || po?.seller;
+        const sellerOrg = (sellerUser as any)?.organization || (sellerUser as any)?.sellerProfile?.organization;
+        const sellerProfile = sellerOrg?.profile || (sellerUser as any)?.organizationProfile || (sellerUser as any)?.sellerProfile;
+        const sellerReg = (sellerUser as any)?.registrationDetails || {};
+
+        const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (sellerUser as any)?.organizationName || sellerUser?.name || 'N/A';
+        const sellerEmail = sellerUser?.email || sellerReg?.email || undefined;
+        const sellerPhone = sellerUser?.mobile || sellerReg?.phone || sellerReg?.mobile || undefined;
+        const sellerAddress = sellerOrg?.address || sellerProfile?.address || sellerReg?.address || (sellerUser as any)?.address || 'N/A';
+        const sellerGstin = sellerOrg?.gstin || sellerProfile?.gstin || sellerReg?.gstin || undefined;
+        const sellerCin = sellerOrg?.cin || sellerProfile?.cin || sellerReg?.cin || undefined;
+
+        const resolvedSellerLogo = logoUrl || sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : null);
+        const resolvedSellerStamp = stampUrl || sellerReg?.stampUrl || null;
+        const resolvedSellerSig = signatureUrl || sellerReg?.signatureUrl || null;
+
+        const buyerUser = fetchedInvoice?.buyer || po?.buyer;
+        const buyerOrg = (buyerUser as any)?.organization || (buyerUser as any)?.buyerProfile?.organization;
+        const buyerProfile = buyerOrg?.profile || (buyerUser as any)?.organizationProfile || (buyerUser as any)?.buyerProfile;
+        const buyerReg = (buyerUser as any)?.registrationDetails || {};
+
+        const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (buyerUser as any)?.organizationName || buyerUser?.name || 'N/A';
+        const buyerAddress = po?.deliveryAddress || buyerOrg?.address || buyerProfile?.address || buyerReg?.address || (buyerUser as any)?.address || 'N/A';
+        const buyerPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerReg?.pan || undefined;
+        const buyerGstin = buyerOrg?.gstin || buyerProfile?.gstin || buyerReg?.gstin || undefined;
+
+        const bankName = sellerReg?.bankName || sellerProfile?.bankName || 'N/A';
+        const accountNo = sellerReg?.accountNumber || sellerProfile?.accountNumber || sellerReg?.accountNo || 'N/A';
+        const ifscCode = sellerReg?.ifscCode || sellerProfile?.ifscCode || 'N/A';
 
         const rawItems: any[] = po?.items || [];
         const items: TaxInvoiceItem[] = rawItems.length > 0
@@ -1571,27 +1616,27 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             copyType,
             invoiceNumber: invNo,
             dateStr,
-            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : (sellerOrg?.state || 'State Registered'),
             seller: {
                 name: sellerName,
-                address: 'block no 78, Snehal Kolhe, at girls hostel SSBT COET Jalgaon, area complex',
-                gstin: '27BMOPP7706E2Z1',
-                phone: '9326546128',
+                address: sellerAddress,
+                gstin: sellerGstin,
+                phone: sellerPhone,
                 email: sellerEmail,
-                cin: 'U62013MH2023PTC416118',
-                logoUrl,
-                stampUrl,
-                signatureUrl
+                cin: sellerCin,
+                logoUrl: resolvedSellerLogo,
+                stampUrl: resolvedSellerStamp,
+                signatureUrl: resolvedSellerSig
             },
             billTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201. India',
-                pan: 'PFGPK6340B',
-                gstin: '27AALCS2063D1ZG'
+                address: buyerAddress,
+                pan: buyerPan,
+                gstin: buyerGstin
             },
             shipTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'ganesh complex jharsuguda, odisa, Jharsuguda, Odisha. 345678. INDIA'
+                address: buyerAddress
             },
             items,
             subtotal,
@@ -1603,9 +1648,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             igstAmount,
             totalAmount: grandTotal,
             bankDetails: {
-                bankName: 'State Bank of India',
-                accountNo: '39820194812',
-                ifscCode: 'SBIN0001892',
+                bankName,
+                accountNo,
+                ifscCode,
                 accountName: sellerName
             }
         };
@@ -1885,15 +1930,20 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                     </p>
                                 </div>
                             </div>
-                            {existingChallanDoc.fileAsset?.id && (
-                                <a
-                                    href={`/api/files/${existingChallanDoc.fileAsset.id}/view`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs"
+                            {(existingChallanDoc.fileAsset?.id || existingChallanDoc.fileAssetId) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const fileTarget = existingChallanDoc.fileAsset || existingChallanDoc.fileAssetId;
+                                        openFileAsset(fileTarget, 'Delivery Challan').catch(err => {
+                                            toast.error(err?.message || 'Failed to open Delivery Challan');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                    aria-label="View Delivery Challan"
                                 >
                                     View Challan
-                                </a>
+                                </button>
                             )}
                         </div>
                     ) : null}
@@ -1927,15 +1977,31 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                         </p>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
-                                    className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100"
-                                    title="Remove attached challan file"
-                                    aria-label="Remove delivery challan file"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {challanFileAssetId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                openFileAsset(challanFileAssetId, 'Delivery Challan').catch(err => {
+                                                    toast.error(err?.message || 'Failed to open Delivery Challan');
+                                                });
+                                            }}
+                                            className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                            aria-label="View uploaded Delivery Challan"
+                                        >
+                                            View
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
+                                        className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                        title="Remove attached challan file"
+                                        aria-label="Remove delivery challan file"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div
@@ -3081,6 +3147,41 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                 Attach Proof of Delivery (POD) or recipient receipt for DLV-{delivery.id}.
             </p>
 
+            {delivery.documents && delivery.documents.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Previously Uploaded Documents</p>
+                    <div className="space-y-1.5">
+                        {delivery.documents.map((d: any) => {
+                            const fileTarget = d.fileAsset || d.fileAssetId || d.id;
+                            const docLabel = d.documentType?.replace(/_/g, ' ') || 'Document';
+                            return (
+                                <div key={d.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200/80 px-2.5 py-1.5 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <FileText className="h-3.5 w-3.5 shrink-0 text-[#12335f]" />
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-900 truncate text-[11px]">{docLabel}</p>
+                                            <p className="text-[10px] text-slate-500 truncate">{d.description || d.fileAsset?.originalName || `Asset #${d.fileAssetId}`}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            openFileAsset(fileTarget, docLabel).catch(err => {
+                                                toast.error(err?.message || 'Failed to open document');
+                                            });
+                                        }}
+                                        className="shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-[#12335f] hover:bg-slate-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                                        aria-label={`View ${docLabel}`}
+                                    >
+                                        <ExternalLink className="h-2.5 w-2.5" /> View
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <Field label="Document Type">
                 <select
                     value={docType}
@@ -3122,14 +3223,31 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleRemoveFile}
-                            className="ml-2 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition"
-                            title="Remove attached file"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {fileAssetId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        openFileAsset(Number(fileAssetId), 'Proof of Delivery').catch(err => {
+                                            toast.error(err?.message || 'Failed to open POD document');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    aria-label="View uploaded Proof of Delivery"
+                                >
+                                    View
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleRemoveFile}
+                                className="ml-1 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition cursor-pointer"
+                                title="Remove attached file"
+                                aria-label="Remove attached POD file"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div

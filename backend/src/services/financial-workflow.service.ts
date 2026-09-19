@@ -109,7 +109,7 @@ export const acceptBidAndGeneratePurchaseOrder = async (bidId: number, actor: Ac
   return result;
 };
 
-const PO_ACCEPT_STATUSES = new Set(['generated']);
+const PO_ACCEPT_STATUSES = new Set(['generated', 'issued', 'order_placed', 'pending_approval', 'GENERATED', 'ISSUED', 'ORDER_PLACED', 'PENDING_APPROVAL']);
 
 export const acceptPurchaseOrderAndCreateDelivery = async (purchaseOrderId: number, actor: Actor) => {
   const result = await prisma.$transaction(async (tx) => {

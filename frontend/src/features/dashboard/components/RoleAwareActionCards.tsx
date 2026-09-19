@@ -9,7 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import React, { useCallback, useMemo, useEffect } from 'react';
 import {
     ClipboardCheck, ClipboardList, FileText, Gavel,
-    Inbox, Package, Receipt, Send, Store, Truck, Landmark, IndianRupee
+    Inbox, Package, Receipt, Send, Store, Truck, Landmark, IndianRupee,
+    Layers, RotateCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
@@ -34,6 +35,7 @@ interface DashboardSummary {
     supplierResponsesCount?: number;
     // Seller-side
     sellerOpenTendersCount?: number;
+    sellerRfpsCount?: number;
     sellerOpportunitiesCount?: number;
     sellerActivePOsCount?: number;
     sellerCatalogueItemsCount?: number;
@@ -42,6 +44,7 @@ interface DashboardSummary {
     sellerSubmittedBidsCount?: number;
     sellerRfqsCount?: number;
     sellerReceivedRfqsCount?: number;
+    sellerRateContractsCount?: number;
     invoiceFactoringCount?: number;
     reverseAuctionsActive?: number;
     reverseAuctionsScheduled?: number;
@@ -154,9 +157,9 @@ function RoleAwareActionCards() {
             subtext: 'Orders in fulfillment'
         },
         {
-            label: 'Supplier Responses',
+            label: 'My Procurements',
             count: data.supplierResponsesCount ?? data.myRfqsCount ?? 0,
-            href: '/buyer/procurement/responses',
+            href: '/buyer/my-procurements',
             icon: Send,
             tone: 'blue',
             show: isBuyer,
@@ -223,7 +226,7 @@ function RoleAwareActionCards() {
             tone: 'indigo',
             show: isSeller,
             priority: false,
-            subtext: 'Open opportunities available'
+            subtext: 'Live opportunities available'
         },
         {
             label: 'Public Tenders',
@@ -234,6 +237,16 @@ function RoleAwareActionCards() {
             show: isSeller,
             priority: false,
             subtext: 'Live open tenders'
+        },
+        {
+            label: 'Requests for Proposal',
+            count: data.sellerRfpsCount || 0,
+            href: `${sellerPrefix}/opportunities/rfps`,
+            icon: Layers,
+            tone: 'purple',
+            show: isSeller,
+            priority: false,
+            subtext: 'Live RFP proposals'
         },
         {
             label: 'My Bids / Quotations',
@@ -293,7 +306,7 @@ function RoleAwareActionCards() {
             tone: 'purple',
             show: isSeller,
             priority: false,
-            subtext: 'Buyer RFQ requests'
+            subtext: 'Live buyer RFQs'
         },
         {
             label: 'Live Auctions',
@@ -304,6 +317,16 @@ function RoleAwareActionCards() {
             show: isSeller,
             priority: false,
             subtext: 'Real-time bidding events'
+        },
+        {
+            label: 'Rate Contracts',
+            count: data.sellerRateContractsCount || 0,
+            href: `${sellerPrefix}/opportunities/rate-contracts`,
+            icon: RotateCcw,
+            tone: 'teal',
+            show: isSeller,
+            priority: false,
+            subtext: 'Live annual rate contracts'
         },
         {
             label: 'Invoice Factoring',

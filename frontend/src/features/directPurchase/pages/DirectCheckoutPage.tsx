@@ -544,7 +544,7 @@ export default function DirectCheckoutPage() {
         <div className="space-y-6 lg:col-span-5 xl:col-span-4">
           <Card className="border-slate-200/80 shadow-md sticky top-6">
             <CardHeader className="border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] text-white py-4 rounded-t-xl">
-              <CardTitle className="text-sm font-black uppercase tracking-widest flex items-center justify-between">
+              <CardTitle className="text-sm font-white text-bold uppercase tracking-widest flex items-center justify-between">
                 <span>Order Summary</span>
                 <span className="text-xs font-semibold opacity-80">{cart.items.length} Item(s)</span>
               </CardTitle>

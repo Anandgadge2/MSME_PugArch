@@ -21,6 +21,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { reverseAuctionApi } from '../api';
 import { formatCurrency, formatDateTime } from '../../shared/format';
 import { toast } from 'sonner';
@@ -416,18 +417,14 @@ export default function StartReverseAuctionModal({
 
               {startType === 'SCHEDULED' && (
                 <div className="pt-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Scheduled Start Date & Time
-                  </label>
-                  <input
-                    type="datetime-local"
+                  <DateTimePicker
+                    id="scheduled-start-time"
+                    label="Scheduled Start Date & Time"
                     value={scheduledStartTime}
-                    onChange={e => setScheduledStartTime(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    onChange={val => setScheduledStartTime(val)}
+                    placeholder="Select scheduled start date & time (12-hr AM/PM)"
+                    hint={`Scheduled preview: ${formatDateTime(scheduledStartTime)}`}
                   />
-                  <p className="text-[10px] font-semibold text-slate-500 mt-1">
-                    Scheduled preview: {formatDateTime(scheduledStartTime)}
-                  </p>
                 </div>
               )}
 
@@ -467,7 +464,7 @@ export default function StartReverseAuctionModal({
                   <input
                     type="number"
                     min="1"
-                    step="100"
+                    step="1"
                     value={minDecrement}
                     onChange={e => setMinDecrement(Number(e.target.value))}
                     className="h-10 w-full rounded-xl border border-slate-200 px-3 text-xs font-bold text-slate-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"

@@ -306,7 +306,19 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       })(),
       details,
       finalRank: toUiRank(p.rank),
-      resultStatus: p.finalStatus === 'AWARDED' ? 'Awarded' : p.finalStatus === 'REJECTED' ? 'Rejected' : p.rank ? 'Responsive' : 'Under Review',
+      resultStatus: (() => {
+        const isParticipationAwarded =
+          p.finalStatus === 'AWARDED' ||
+          (Array.isArray(raw.awards) && raw.awards.some((a: any) =>
+            Number(a.participationId) === Number(p.id) ||
+            (a.sellerId && Number(a.sellerId) === Number(p.sellerId))
+          ));
+        if (isParticipationAwarded) return 'Awarded';
+        if (p.finalStatus === 'NOT_SELECTED' || p.finalStatus === 'REJECTED') return 'Not Selected';
+        return p.rank ? 'Responsive' : 'Under Review';
+      })(),
+      finalStatus: p.finalStatus,
+      sellerId: p.sellerId,
     };
   }) : [];
 
@@ -337,7 +349,7 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const termsPayload = pkt?.terms || {};
   const internal = pkt?.internal || {};
   const linkedRequirementId = Number(firstValue(raw.sourceId, pkt?.sourceRequirementId, pkt?.requirementId, pkt?.linkedRequirementId, wizardData?.sourceRequirementId, wizardData?.requirementId, 0)) || undefined;
-  const sourceModel = raw.sourceModel || (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID');
+  const sourceModel = raw.sourceModel || (raw.bidNumber ? 'PROCUREMENT_BID' : (linkedRequirementId ? 'REQUIREMENT' : 'PROCUREMENT_BID'));
 
   // Title: prefer direct title, then payload basics, contract title, item name or bidNumber
   const isPlaceholder = (s?: any) => {
@@ -366,9 +378,20 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     ? String(candidateTitle).trim()
     : (raw.bidNumber ? `Procurement ${raw.bidNumber}` : (raw.id ? `Procurement Bid #${raw.id}` : 'Procurement Bid'));
 
-  // Buyer name: prefer direct, then from organization, then payload
-  const buyerName = raw.buyerOrganizationName
+  // Buyer name: prefer direct person name, then from organization, then payload
+  const buyerPersonName = raw.buyer?.buyerProfile?.representativeName
+    || raw.buyer?.buyerProfile?.contactPerson
+    || raw.buyer?.buyerProfile?.contactPersonName
+    || raw.buyer?.name
+    || raw.contactPerson
+    || (raw.buyerName && raw.buyerName !== raw.buyerOrganizationName ? raw.buyerName : '')
+    || '';
+
+  // Organization name: prefer direct organization name
+  const buyerOrgName = raw.buyerOrganizationName
     || raw.buyerOrganization?.organizationName
+    || raw.buyer?.buyerProfile?.organizationName
+    || raw.organization?.organizationName
     || internal.orgName
     || basics.buyerOrganizationName
     || '';
@@ -403,29 +426,29 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const eligArr = raw.eligibilityCriteria?.length ? raw.eligibilityCriteria : (termsPayload.eligibilityCriteria || basics.eligibilityCriteria || []);
   const reqDocs = raw.requiredDocuments?.length ? raw.requiredDocuments : (pkt?.requiredDocs || []);
 
-  // Important dates
-  const candidatePublish = raw.publishedAt || raw.approvedAt || raw.startDate || schedule.publishDate || null;
-  let authenticPublishedAt = raw.createdAt || raw.startDate || null;
-  if (candidatePublish && raw.createdAt) {
-    const tCandidate = new Date(candidatePublish).getTime();
+  // Important dates: Prioritize verbatim schedule deadline from wizard configuration
+  const scheduleDeadline = schedule.submissionDate || schedule.submissionDeadline || schedule.submissionEndDate || schedule.bidClosingDate || null;
+  const rawEndDate = scheduleDeadline || raw.endDate || null;
+
+  // Publication date: Prefer authentic createdAt / approvedAt / publishedAt, preventing timezone-shifted future phantom dates
+  let authenticPublishedAt = raw.publishedAt || raw.approvedAt || raw.createdAt || raw.startDate || null;
+  const schedulePublish = schedule.publishDate || schedule.submissionStartDate || null;
+  if (schedulePublish && raw.createdAt) {
+    const tSchedule = new Date(schedulePublish).getTime();
     const tCreated = new Date(raw.createdAt).getTime();
-    if (Number.isFinite(tCandidate) && Number.isFinite(tCreated)) {
-      if (tCandidate > tCreated + 60000) {
-        authenticPublishedAt = candidatePublish;
-      } else {
-        authenticPublishedAt = raw.approvedAt || raw.createdAt;
-      }
+    // Only treat as scheduled future publish if schedule is genuinely scheduled for the future (> 4 hours after creation)
+    if (Number.isFinite(tSchedule) && Number.isFinite(tCreated) && tSchedule > tCreated + 4 * 3600000) {
+      authenticPublishedAt = schedulePublish;
+    } else {
+      authenticPublishedAt = raw.approvedAt || raw.createdAt || raw.publishedAt || raw.startDate;
     }
-  } else if (candidatePublish) {
-    authenticPublishedAt = candidatePublish;
   }
 
   const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
-  const rawEndDate = raw.endDate || schedule.submissionDate || schedule.submissionDeadline || null;
   const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
   const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const techDate = String(raw.technicalOpeningDate || schedule.technicalOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
-  const finDate = String(raw.financialOpeningDate || schedule.financialOpeningDate || raw.endDate || raw.startDate || new Date().toISOString()).slice(0, 10);
+  const techDate = String(schedule.technicalOpeningDate || raw.technicalOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
+  const finDate = String(schedule.financialOpeningDate || raw.financialOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
 
   return {
     id: raw.bidNumber || String(raw.id || ''),
@@ -434,9 +457,19 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     sourceId: linkedRequirementId || raw.id,
     title,
     itemName: itemName || 'Procurement requirement',
-    buyerName: buyerName || 'Buyer organization',
+    buyerName: buyerPersonName || buyerOrgName || 'Buyer organization',
+    buyerOrganizationName: buyerOrgName,
+    buyerEmail: raw.buyerEmail || raw.buyer?.buyerProfile?.email || raw.buyer?.email || '',
+    buyerMobile: raw.buyerMobile || raw.buyer?.buyerProfile?.mobile || raw.buyer?.buyerProfile?.phone || raw.buyer?.mobile || raw.buyer?.phone || '',
+    buyerAddress: raw.buyerAddress || [
+      raw.buyer?.buyerProfile?.registeredAddress || raw.buyer?.buyerProfile?.corporateAddress || raw.buyer?.buyerProfile?.address || raw.buyerOrganization?.registeredAddress,
+      raw.buyer?.buyerProfile?.city || raw.buyerOrganization?.city,
+      raw.buyer?.buyerProfile?.district || raw.buyerOrganization?.district,
+      raw.buyer?.buyerProfile?.state || raw.buyerOrganization?.state,
+      raw.buyer?.buyerProfile?.pincode || raw.buyerOrganization?.pincode
+    ].filter(Boolean).join(', ') || '',
     buyerType: (raw.buyerType || basics.buyerType || 'Private Enterprise') as ProcurementBid['buyerType'],
-    departmentName: raw.departmentName || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
+    departmentName: raw.departmentName || raw.buyer?.buyerProfile?.department || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
     bidType: (raw.bidType || basics.whatAreYouBuying || 'Product') as ProcurementBid['bidType'],
     procurementType: raw.procurementType || (raw.canonicalMethod ? String(raw.canonicalMethod).replace(/_/g, ' ') : undefined) || raw.method || raw.bidType || 'Open Bid',
     canonicalMethod: raw.canonicalMethod,
@@ -491,8 +524,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       })();
 
       return Boolean(
-        raw.myParticipation ||
+        raw.participated ||
         raw.hasParticipated ||
+        raw.myParticipation ||
         (currentUserId && participations.some((p: any) => {
           const sId = p.sellerId || p.sellerUserId || p.seller?.id;
           const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId;
@@ -574,8 +608,54 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     internalDetails: pkt?.internal || (raw as any).internalDetails || null,
     approvalAuthority: pkt?.internal?.approvalAuthority || (raw as any).approvalAuthority || '',
     justification: pkt?.internal?.justification || pkt?.basics?.justification || pkt?.limitedTenderJustification || (raw as any).justification || '',
-    buyer: raw.buyer || null,
+    buyer: raw.buyer ? {
+      ...raw.buyer,
+      name: raw.buyer.name || buyerPersonName,
+      email: raw.buyer.email || raw.buyer?.buyerProfile?.email || raw.buyerEmail || '',
+      mobile: raw.buyer.mobile || raw.buyer?.buyerProfile?.mobile || raw.buyer?.buyerProfile?.phone || raw.buyerMobile || '',
+      buyerProfile: raw.buyer.buyerProfile ? {
+        ...raw.buyer.buyerProfile,
+        organizationName: raw.buyer.buyerProfile.organizationName || buyerOrgName,
+        representativeName: raw.buyer.buyerProfile.representativeName || buyerPersonName,
+        contactPerson: raw.buyer.buyerProfile.representativeName || raw.buyer.buyerProfile.contactPerson || buyerPersonName,
+        email: raw.buyer.buyerProfile.email || raw.buyer.email || raw.buyerEmail || '',
+        mobile: raw.buyer.buyerProfile.mobile || raw.buyer.buyerProfile.phone || raw.buyer.mobile || raw.buyerMobile || '',
+        phone: raw.buyer.buyerProfile.mobile || raw.buyer.buyerProfile.phone || raw.buyer.mobile || raw.buyerMobile || '',
+        department: raw.buyer.buyerProfile.department || raw.buyer.buyerProfile.departmentName || '',
+        departmentName: raw.buyer.buyerProfile.department || raw.buyer.buyerProfile.departmentName || '',
+        address: raw.buyer.buyerProfile.registeredAddress || raw.buyer.buyerProfile.corporateAddress || raw.buyer.buyerProfile.address || raw.deliveryLocation || '',
+        registeredAddress: raw.buyer.buyerProfile.registeredAddress || raw.buyer.buyerProfile.corporateAddress || raw.buyer.buyerProfile.address || '',
+      } : (raw.buyerOrganization || raw.organization || null)
+    } : {
+      name: buyerPersonName || 'Buyer',
+      email: raw.buyerEmail || '',
+      mobile: raw.buyerMobile || '',
+      buyerProfile: raw.buyerOrganization || raw.organization || null
+    },
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
+    urgency: firstValue(
+      raw.urgency,
+      raw.priority,
+      pkt?.urgency,
+      pkt?.priority,
+      basics.priority,
+      basics.urgency,
+      pkt?.recommendation?.urgency,
+      String(raw.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      String(basics.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      'Normal'
+    ),
+    priority: firstValue(
+      raw.priority,
+      raw.urgency,
+      basics.priority,
+      basics.urgency,
+      pkt?.priority,
+      pkt?.urgency,
+      pkt?.recommendation?.urgency,
+      String(raw.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      'Normal'
+    ),
   };
 };
 
@@ -588,7 +668,8 @@ export const procurementBidApi = {
     return { ...data, items: (data.items || []).map(normalizeBid) };
   },
   async detail(id: string, skipCache = false) {
-    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}`, { headers: authHeaders(), skipCache });
+    const qs = skipCache ? '?skipCache=true' : '';
+    const res = await api.get(`/api/procurement-bids/${encodeURIComponent(id)}${qs}`, { headers: authHeaders(), skipCache });
     const body = await readJsonResponse(res);
     return normalizeBid(unwrapApiData(body));
   },
@@ -725,8 +806,56 @@ export const procurementBidApi = {
     const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
-  async recommendAward(bidId: string, data: { participationId: number; remarks?: string; adminOverrideReason?: string }) {
+  async recommendAward(bidId: string, data: { participationId: number; remarks?: string; adminOverrideReason?: string; justificationReason?: string }) {
     const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/recommend-award`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async sendPriceMatchCounterOffer(bidId: string, data: { participationId: number; priceMatchTargetPrice?: number; deadlineHours?: number; deadlineDate?: string; counterOfferNotes?: string; justificationReason?: string }) {
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/counter-offer`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptPriceMatchCounterOffer(bidId: string, awardId?: string | number) {
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/counter-offer/accept`, { awardId }, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async declinePriceMatchCounterOffer(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
+    let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
+    if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
+      payload = { reason: reasonParam, awardId: awardIdOrData };
+    }
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/counter-offer/decline`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptAward(bidId: string, awardId?: string | number) {
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async declineAward(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
+    let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
+    if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
+      payload = { reason: reasonParam, awardId: awardIdOrData };
+    }
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async generatePO(bidId: string, data: any = {}) {
+    const payload =
+      typeof data === 'object' && data !== null && !Array.isArray(data)
+        ? data
+        : (data !== undefined && data !== null && data !== '' ? { awardId: data } : {});
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptPO(poId: number | string, data: any = {}) {
+    const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/accept-po`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async recordOrderPayment(invoiceId: number | string, data: { paymentReference: string; bankName: string; paymentDate: string; paymentSlipFileId?: number; remarks?: string }) {
+    const res = await api.post(`/api/buyer/invoices/${encodeURIComponent(String(invoiceId))}/record-payment`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async confirmOrderSettlement(invoiceId: number | string, data: { remarks?: string } = {}) {
+    const res = await api.post(`/api/seller/invoices/${encodeURIComponent(String(invoiceId))}/confirm-settlement`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async getBidResults(bidId: string) {

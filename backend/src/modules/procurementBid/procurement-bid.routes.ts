@@ -13,9 +13,38 @@ import { getAccessTokenFromRequest } from '../../services/auth-cookie.service.js
 import { ApiError } from '../../utils/ApiError.js';
 import { logger } from '../../config/logger.js';
 import { fulfillmentWorkflow } from '../../services/workflow/fulfillment-workflow.service.js';
-import { getCache, setCache, deleteCache, getOrSetCache } from '../../services/cache.service.js';
+import { getCache, setCache, deleteCache, getOrSetCache, invalidateByPattern } from '../../services/cache.service.js';
+import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants, formatRequirementNumber } from '../../utils/refIdUtils.js';
+import { parseDateIST } from '../../utils/dateUtils.js';
 
 const router = Router();
+
+export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
+  try {
+    const keysToInvalidate = new Set<string>();
+    if (typeof bidOrId === 'string' || typeof bidOrId === 'number') {
+      keysToInvalidate.add(String(bidOrId));
+    } else if (bidOrId && typeof bidOrId === 'object') {
+      if (bidOrId.id) keysToInvalidate.add(String(bidOrId.id));
+      if (bidOrId.bidNumber) keysToInvalidate.add(String(bidOrId.bidNumber));
+      if (bidOrId.sourceId) keysToInvalidate.add(String(bidOrId.sourceId));
+      const sourceReqId = (bidOrId.technicalPacket as any)?.sourceRequirementId || (bidOrId.technicalPacket as any)?.requirementId;
+      if (sourceReqId) keysToInvalidate.add(String(sourceReqId));
+    }
+    if (token) {
+      keysToInvalidate.add(String(token));
+      for (const variant of getCanonicalLookupVariants(token)) {
+        keysToInvalidate.add(variant);
+      }
+    }
+    for (const key of keysToInvalidate) {
+      if (!key) continue;
+      await invalidateByPattern(`cache:proc_bid_${key}*`).catch(() => null);
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to invalidate bid cache');
+  }
+};
 
 const optionalActor = async (req: AuthRequest) => {
   const authHeader = req.headers.authorization || '';
@@ -73,11 +102,10 @@ const bidBaseSchema = z.object({
   buyerOrganizationName: z.string().trim().max(220).optional(),
   buyerType: z.string().trim().min(2).max(100),
   category: z.string().trim().min(2).max(120),
-  subCategory: z.string().trim().max(120).optional(),
   bidType: z.string().trim().min(2).max(80),
   procurementType: z.string().trim().max(80).optional(),
   quantity: z.coerce.number().positive().optional(),
-  unit: z.string().trim().max(40).optional(),
+  unit: z.string().trim().max(120).optional(),
   estimatedValue: z.coerce.number().nonnegative().optional(),
   deliveryLocation: z.string().trim().min(2).max(400),
   state: z.string().trim().max(80).optional(),
@@ -88,7 +116,7 @@ const bidBaseSchema = z.object({
   technicalOpeningDate: z.coerce.date().optional(),
   financialOpeningDate: z.coerce.date().optional(),
   bidValidityDate: z.coerce.date().optional(),
-  evaluationMethod: z.string().trim().max(40).optional(),
+  evaluationMethod: z.string().trim().max(120).optional(),
   isEmdRequired: z.boolean().optional(),
   emdAmount: z.coerce.number().nonnegative().optional(),
   documentFee: z.coerce.number().nonnegative().optional(),
@@ -148,13 +176,39 @@ router.get('/procurement-bids', asyncRoute(async (req, res) => {
   const actor = await optionalActor(req);
   const cacheKey = `cache:procurement-bids:${actor?.id || 'anon'}:${actor?.role || 'anon'}:${JSON.stringify(req.query)}`;
   const data = await getOrSetCache(cacheKey, () => service.listPublicBids(req.query, actor), 30);
+  if ((actor?.role === 'seller' || actor?.role === 'shg') && data?.items && Array.isArray(data.items) && data.items.length > 0) {
+    await enrichBidsWithResponses(data.items, Number(actor.id));
+    const currentActorId = Number(actor.id);
+    const currentOrgId = actor.organizationId ? Number(actor.organizationId) : null;
+    for (const item of data.items) {
+      if (Array.isArray(item.participations)) {
+        const hasSubmitted = item.participations.some((p: any) => {
+          const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+          const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+          const matchesUser = (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+          const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+          return matchesUser && subStatus === 'SUBMITTED';
+        });
+        const hasPart = item.participations.some((p: any) => {
+          const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+          const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || 0);
+          return (currentActorId && pSellerId === currentActorId) || (currentOrgId && pOrgId === currentOrgId);
+        });
+        if (hasPart) {
+          item.participated = true;
+          item.hasParticipated = true;
+        }
+        item.hasSubmittedProposal = hasSubmitted;
+      }
+    }
+  }
   return apiResponse.success(res, data, 200, 'Bids fetched successfully');
 }));
 
-router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'buyer', 'admin'), asyncRoute(async (req, res) => {
+router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'buyer', 'admin', 'shg'), asyncRoute(async (req, res) => {
   const role = String(req.user?.role || '');
   const currentUserId = Number(req.user?.id);
-  const where = role === 'seller'
+  const where = (role === 'seller' || role === 'shg')
     ? { sellerId: currentUserId }
     : role === 'buyer'
       ? { tender: { buyerId: currentUserId } }
@@ -215,8 +269,9 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   const originalToken = req.params.bidId;
   let token = originalToken;
 
+  const shouldSkipCache = req.query.skipCache === 'true' || req.headers['cache-control']?.includes('no-cache') || req.headers['pragma'] === 'no-cache';
   const cacheKey = `cache:proc_bid_${originalToken}_${actor?.id || 'anon'}_${actor?.role || 'guest'}`;
-  const cachedResponse = await getCache<any>(cacheKey);
+  const cachedResponse = shouldSkipCache ? null : await getCache<any>(cacheKey);
   if (cachedResponse) {
     return apiResponse.success(res, cachedResponse, 200, 'Procurement bid details fetched successfully');
   }
@@ -227,6 +282,18 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     if (directBid) {
       await enrichBidsWithResponses([directBid], actor?.id);
       const serialized = service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true });
+      if (directBid.awards && directBid.awards.length > 0) {
+        const awardIds = directBid.awards.map((a: any) => a.id);
+        const pos = await (prisma as any).purchaseOrder.findMany({
+          where: { sourceType: 'procurement_bid_award', sourceId: { in: awardIds } },
+          include: {
+            invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+            grns: { include: { items: true } }
+          }
+        });
+        (serialized as any).purchaseOrders = pos;
+        (serialized as any).activeOrder = pos[0] || null;
+      }
       await setCache(cacheKey, serialized, 30);
       return apiResponse.success(res, serialized, 200, 'Procurement bid details fetched successfully');
     }
@@ -357,7 +424,8 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             { bidNumber: rateContract.contractNumber },
             { bidNumber: `RC-${rateContract.id}` },
             { bidNumber: `RC-${rateContract.contractNumber}` },
-            { sourceModel: 'RATE_CONTRACT', sourceId: rateContract.id }
+            { technicalPacket: { path: ['sourceContractId'], equals: rateContract.id } },
+            { technicalPacket: { path: ['contractId'], equals: rateContract.id } }
           ]
         },
         include: {
@@ -388,13 +456,20 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         rateContract.contractNumber
       ].filter(Boolean) as string[]));
 
-      const legacyResponses = (targetReqIds.length > 0 || targetReqNumbers.length > 0)
+      if (targetReqNumbers.length > 0) {
+        const matchingLegacy = await (prisma as any).requirement.findMany({
+          where: { requirementNumber: { in: targetReqNumbers } },
+          select: { id: true }
+        }).catch(() => []);
+        for (const m of matchingLegacy) {
+          if (m?.id && !targetReqIds.includes(m.id)) targetReqIds.push(m.id);
+        }
+      }
+
+      const legacyResponses = targetReqIds.length > 0
         ? await (prisma as any).requirementResponse.findMany({
             where: {
-              OR: [
-                ...(targetReqIds.length > 0 ? [{ requirementId: { in: targetReqIds } }] : []),
-                ...(targetReqNumbers.length > 0 ? [{ requirement: { requirementNumber: { in: targetReqNumbers } } }] : [])
-              ],
+              requirementId: { in: targetReqIds },
               status: { not: 'DRAFT' }
             },
             include: {
@@ -529,7 +604,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         buyerType: 'Private Enterprise',
         departmentName: srcReq?.buyer?.buyerProfile?.departmentName || srcReq?.createdBy?.buyerProfile?.departmentName || '',
         category: realCategory,
-        subCategory: meta.contractSubCategory || '',
         bidType: 'Rate Contract',
         procurementType: 'Rate Contract',
         quantity: items.reduce((sum: number, i: any) => sum + Number(i.quantity || 0), 0) || 1,
@@ -550,7 +624,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             title: realTitle,
             description: meta.contractDescription || srcReq?.description || '',
             category: realCategory,
-            subCategory: meta.contractSubCategory || '',
             deliveryLocation: meta.deliverySla || srcReq?.deliveryLocation || srcReq?.location || '',
             estimatedValue: Number(rateContract.value || srcReq?.estimatedValue || 0),
             requiredByDate: endDateStr,
@@ -751,11 +824,12 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }
     }
   } catch (err: any) {
-    // Fallback: if no ProcurementBid found, check if this is a Requirement ID, Reference Number, or Rate Contract
-    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))) {
-      const parsedId = (token.startsWith('REQ-') || token.startsWith('RFQ-') || token.startsWith('RC-') || token.startsWith('RATE-') || token.startsWith('RFP-') || token.startsWith('TND-') || token.startsWith('LTND-'))
-        ? Number(token.replace(/^(REQ-|RFQ-|RC-|RATE-|RFP-|TND-|LTND-)/, ''))
-        : Number(token);
+    const isPrefixed = CANONICAL_METHOD_PREFIXES.some(p => token.startsWith(`${p}-`));
+    if (err?.code === 'BID_NOT_FOUND' && (/^\d+$/.test(token) || isPrefixed)) {
+      const numMatch = token.match(/\d+$/);
+      const parsedId = /^\d+$/.test(token)
+        ? Number(token)
+        : (numMatch ? Number(numMatch[0]) : null);
       let requirement = null;
 
       if (Number.isFinite(parsedId) && parsedId > 0 && parsedId <= 2147483647) {
@@ -774,7 +848,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           requirement.buyer = buyerReq.createdBy;
           requirement.buyerId = buyerReq.createdById;
           requirement.organizationId = buyerReq.buyerOrganizationId;
-          requirement.requirementNumber = `REQ-${String(Math.abs(Number(buyerReq.id))).padStart(5, '0')}`;
+          requirement.requirementNumber = formatRequirementNumber(buyerReq.id);
           
           requirement.payload = {
             basics: {
@@ -804,13 +878,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }
 
       if (!requirement) {
-        const searchTokens = Array.from(new Set([
-          token,
-          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'REQ-'),
-          token.replace(/^(RFQ|RFP|RC|LTND)-/, 'TND-'),
-          token.replace(/^REQ-/, 'TND-'),
-          token.replace(/^TND-/, 'REQ-'),
-        ]));
+        const searchTokens = getCanonicalLookupVariants(token);
         requirement = await prisma.requirement.findFirst({
           where: {
             OR: [
@@ -1131,10 +1199,11 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           deliveryLocation: basics.deliveryLocation || internal.deliveryAddress || [requirement.organization?.district, requirement.organization?.state].filter(Boolean).join(', ') || '',
           state: requirement.organization?.state || '',
           district: requirement.organization?.district || '',
-          startDate: schedule.publishDate ? new Date(schedule.publishDate) : (schedule.submissionStartDate ? new Date(schedule.submissionStartDate) : requirement.createdAt),
-          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? new Date(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? new Date(requirement.requiredBy) : requirement.createdAt),
-          technicalOpeningDate: schedule.technicalOpeningDate || null,
-          financialOpeningDate: schedule.financialOpeningDate || null,
+          startDate: schedule.publishDate ? parseDateIST(schedule.publishDate) : (schedule.submissionStartDate ? parseDateIST(schedule.submissionStartDate) : requirement.createdAt),
+          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy) : requirement.createdAt),
+          submissionStartDate: (schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) ? parseDateIST(schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) : null,
+          technicalOpeningDate: (schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) ? parseDateIST(schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) : null,
+          financialOpeningDate: (schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) ? parseDateIST(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) : null,
           status: requirement.status === 'APPROVED' ? 'OPEN' : requirement.status || 'OPEN',
           approvalStatus: requirement.status || 'APPROVED',
           lifecycleStage: 'SELLER_PARTICIPATION',
@@ -1144,7 +1213,11 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           documentFee: null,
           allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
           allowReverseAuction: false,
-          packetType: 'SINGLE_PACKET',
+          packetType: (
+            String(schedule.packetType || payload.packetType || payload.rules?.packetType || '').toUpperCase().includes('TWO') ||
+            String(schedule.packetType || payload.packetType || payload.rules?.packetType || '') === '2' ||
+            Boolean(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate)
+          ) ? 'TWO_PACKET' : 'SINGLE_PACKET',
           technicalPacket: payload,
           termsAndConditions: terms.termsAndConditions || [],
           eligibilityCriteria: terms.eligibilityCriteria || basics.eligibilityCriteria || [],
@@ -1235,8 +1308,12 @@ router.post('/procurement-bids/:bidId/participation/:participationId/submit', au
 }));
 
 router.get('/seller/procurement-bids', authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+  const sellerFilters: any[] = [{ sellerId: req.user!.id }];
+  if (req.user?.organizationId) {
+    sellerFilters.push({ seller: { organizationId: req.user.organizationId } });
+  }
   const rows = await (prisma as any).procurementBidParticipation.findMany({
-    where: { sellerId: req.user!.id },
+    where: { OR: sellerFilters },
     include: { bid: true, documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true },
     orderBy: { createdAt: 'desc' }
   });
@@ -1244,30 +1321,80 @@ router.get('/seller/procurement-bids', authenticate, requireAccountType('seller'
 }));
 
 router.get('/seller/procurement-bids/:bidId/invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
-  const bidId = Number(req.params.bidId);
+  const bid = await service.resolveBid(req.params.bidId, {});
+  const bidId = bid.id;
   
   const award = await (prisma as any).procurementBidAward.findFirst({
-    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    where: { 
+      bidId, 
+      sellerId: req.user!.id, 
+      awardStatus: { in: ['ADMIN_APPROVED', 'ACCEPTED'] } 
+    },
     orderBy: { createdAt: 'desc' }
   });
   
-  if (!award) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  if (!award) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: false, 
+      hasPO: false, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
+  }
   
   const po = await (prisma as any).purchaseOrder.findFirst({
     where: { sourceType: 'procurement_bid_award', sourceId: award.id }
   });
   
-  if (!po) return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  if (!po) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: true, 
+      hasPO: false, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
+  }
+
+  const isPoAccepted = ['accepted', 'ACCEPTED'].includes(String(po.status || po.poStatus || ''));
+  if (!isPoAccepted) {
+    return apiResponse.success(res, { 
+      exists: false, 
+      isAwarded: true, 
+      hasPO: true, 
+      hasAcceptedPO: false, 
+      canConvertToInvoice: false,
+      poId: po.id,
+      poNumber: po.poNumber 
+    }, 200, 'PO pending seller acceptance');
+  }
   
   const invoice = await (prisma as any).invoice.findFirst({
     where: { purchaseOrderId: po.id }
   });
   
   if (invoice) {
-    return apiResponse.success(res, { exists: true, invoiceId: invoice.id }, 200, 'Invoice status fetched');
+    return apiResponse.success(res, { 
+      exists: true, 
+      invoiceId: invoice.id, 
+      invoiceNumber: invoice.invoiceNumber, 
+      isAwarded: true, 
+      hasPO: true, 
+      hasAcceptedPO: true, 
+      canConvertToInvoice: false 
+    }, 200, 'Invoice status fetched');
   }
   
-  return apiResponse.success(res, { exists: false }, 200, 'Invoice status fetched');
+  return apiResponse.success(res, { 
+    exists: false, 
+    isAwarded: true, 
+    hasPO: true, 
+    hasAcceptedPO: true, 
+    canConvertToInvoice: true,
+    poId: po.id,
+    poNumber: po.poNumber 
+  }, 200, 'Invoice status fetched');
 }));
 
 router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -1275,17 +1402,26 @@ router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, 
   const bidId = bid.id;
   
   const award = await (prisma as any).procurementBidAward.findFirst({
-    where: { bidId, sellerId: req.user!.id, awardStatus: 'ADMIN_APPROVED' },
+    where: { 
+      bidId, 
+      sellerId: req.user!.id, 
+      awardStatus: { in: ['ADMIN_APPROVED', 'ACCEPTED'] } 
+    },
     orderBy: { createdAt: 'desc' }
   });
   
-  if (!award) throw new ApiError(404, 'No approved award found for this bid.', 'AWARD_NOT_FOUND');
+  if (!award) throw new ApiError(403, 'You must be the awarded seller to generate an invoice for this procurement.', 'AWARD_NOT_FOUND');
   
   const po = await (prisma as any).purchaseOrder.findFirst({
     where: { sourceType: 'procurement_bid_award', sourceId: award.id }
   });
   
-  if (!po) throw new ApiError(404, 'Purchase order has not been generated for this award yet.', 'PO_NOT_FOUND');
+  if (!po) throw new ApiError(400, 'Purchase order has not been generated for this award yet.', 'PO_NOT_FOUND');
+
+  const isPoAccepted = ['accepted', 'ACCEPTED'].includes(String(po.status || po.poStatus || ''));
+  if (!isPoAccepted) {
+    throw new ApiError(400, 'You must accept the Purchase Order before converting it to an invoice.', 'PO_NOT_ACCEPTED');
+  }
   
   let invoice = await (prisma as any).invoice.findFirst({
     where: { purchaseOrderId: po.id }
@@ -1312,7 +1448,8 @@ router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, 
 
 router.get('/seller/procurement-bids/:bidId/status', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const bid = await service.resolveBid(req.params.bidId, { participations: { where: { OR: [{ sellerId: req.user!.id }, ...(req.user!.organizationId ? [{ seller: { organizationId: req.user!.organizationId } }] : [])] }, include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true } } });
-  const participation = bid.participations?.[0];
+  await enrichBidsWithResponses([bid], req.user!.id);
+  const participation = bid.participations?.find((p: any) => p.sellerId === req.user!.id || (req.user!.organizationId && p.seller?.organizationId === req.user!.organizationId)) || bid.participations?.[0];
   const isRestrictedBid = service.isRestrictedBidMethod(bid);
   if (isRestrictedBid) {
     if (!participation && !service.isActorInvitedToBid(req.user as any, bid)) {
@@ -1400,18 +1537,24 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
       }
     }
 
+    const candidateTitles = Array.from(new Set(bids.map(b => b.title).filter(Boolean)));
     const reqIdsArray = Array.from(targetReqIds);
     const reqNumsArray = Array.from(new Set([...targetReqNumbers, ...targetBidNumbers]));
 
     // If no candidate requirement IDs or numbers, return immediately without touching DB
-    if (reqIdsArray.length === 0 && reqNumsArray.length === 0) {
+    if (reqIdsArray.length === 0 && reqNumsArray.length === 0 && candidateTitles.length === 0) {
       return bids;
     }
 
     // Fetch ONLY the matching requirements concurrently
     const [buyerReqs, legacyReqs, quoteRequests] = await Promise.all([
       prisma.buyerRequirement.findMany({
-        where: { id: { in: reqIdsArray } },
+        where: {
+          OR: [
+            ...(reqIdsArray.length > 0 ? [{ id: { in: reqIdsArray } }] : []),
+            ...(candidateTitles.length > 0 ? [{ title: { in: candidateTitles as string[] } }] : [])
+          ]
+        },
         select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true }
       }).catch(() => []),
       prisma.requirement.findMany({
@@ -1511,8 +1654,7 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
 
         if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isTitleAndBuyerMatch) {
           const sellerId = r.sellerUserId;
-          if (sellerId && !existingSellerIds.has(sellerId)) {
-            existingSellerIds.add(sellerId);
+          if (sellerId) {
             const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
             const rawDocs = Array.isArray(respData.documents) ? respData.documents : [];
             const documents = rawDocs.map((d: any, idx: number) => ({
@@ -1541,34 +1683,69 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
                 uploadedAt: r.createdAt,
               });
             }
-            bid.participations.push({
-              id: r.id,
-              bidId: bid.id,
-              sellerId: sellerId,
-              seller: {
-                ...r.sellerUser,
-                organization: r.sellerOrganization
-              },
-              participationNumber: `PRT-REQ-${r.id}`,
-              technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
-              financialStatus: 'OPENED',
-              financialSealed: false,
-              finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-              submissionStatus: 'SUBMITTED',
-              quotedAmount: Number(r.offeredPrice || 0),
-              totalAmount: Number(r.offeredPrice || 0),
-              offeredQuantity: r.offeredQuantity,
-              deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
-              terms: r.terms || respData.terms,
-              makeBrand: respData.makeBrand || r.makeBrand,
-              model: respData.model || r.model,
-              offeredItemDescription: r.message || '',
-              responseData: respData,
-              lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
-              documents,
-              createdAt: r.createdAt,
-              submittedAt: r.createdAt,
-            });
+            if (!existingSellerIds.has(sellerId)) {
+              existingSellerIds.add(sellerId);
+              bid.participations.push({
+                id: r.id,
+                bidId: bid.id,
+                sellerId: sellerId,
+                seller: {
+                  ...r.sellerUser,
+                  organization: r.sellerOrganization
+                },
+                participationNumber: `PRT-REQ-${r.id}`,
+                technicalStatus: r.status === 'SHORTLISTED' || r.status === 'ACCEPTED' ? 'QUALIFIED' : (r.status === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING'),
+                financialStatus: 'OPENED',
+                financialSealed: false,
+                finalStatus: r.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+                submissionStatus: 'SUBMITTED',
+                quotedAmount: Number(r.offeredPrice || 0),
+                totalAmount: Number(r.offeredPrice || 0),
+                offeredQuantity: r.offeredQuantity ? Number(r.offeredQuantity) : 1,
+                deliveryTimeline: r.deliveryTimeline || respData.deliveryTimeline,
+                terms: r.terms || respData.terms,
+                makeBrand: respData.makeBrand || r.makeBrand,
+                model: respData.model || r.model,
+                offeredItemDescription: r.message || '',
+                responseData: respData,
+                lineItems: Array.isArray(respData.lineItems) ? respData.lineItems : [],
+                documents,
+                createdAt: r.createdAt,
+                submittedAt: r.createdAt,
+              });
+            } else {
+              // Existing participation in DB: merge rich documents, lineItems, specs, SLA, and responseData
+              const existingPart = bid.participations.find((p: any) => p.sellerId === sellerId);
+              if (existingPart) {
+                if ((!existingPart.documents || existingPart.documents.length === 0) && documents.length > 0) {
+                  existingPart.documents = documents;
+                }
+                if (!existingPart.offeredQuantity && r.offeredQuantity) {
+                  existingPart.offeredQuantity = Number(r.offeredQuantity);
+                }
+                if ((!existingPart.deliveryTimeline || existingPart.deliveryTimeline === 'Standard') && (r.deliveryTimeline || respData.deliveryTimeline)) {
+                  existingPart.deliveryTimeline = r.deliveryTimeline || respData.deliveryTimeline;
+                }
+                if ((!existingPart.makeBrand || existingPart.makeBrand === 'Standard' || existingPart.makeBrand === 'As per specification') && (respData.makeBrand || r.makeBrand)) {
+                  existingPart.makeBrand = respData.makeBrand || r.makeBrand;
+                }
+                if (!existingPart.model && (respData.model || r.model)) {
+                  existingPart.model = respData.model || r.model;
+                }
+                if ((!existingPart.terms || existingPart.terms === 'Standard Payment Terms') && (r.terms || respData.terms)) {
+                  existingPart.terms = r.terms || respData.terms;
+                }
+                if (!existingPart.offeredItemDescription && (r.message || respData.message)) {
+                  existingPart.offeredItemDescription = r.message || respData.message;
+                }
+                if ((!existingPart.lineItems || existingPart.lineItems.length === 0) && Array.isArray(respData.lineItems) && respData.lineItems.length > 0) {
+                  existingPart.lineItems = respData.lineItems;
+                }
+                if (!existingPart.responseData || Object.keys(existingPart.responseData).length === 0) {
+                  existingPart.responseData = respData;
+                }
+              }
+            }
           }
         }
       }
@@ -1581,26 +1758,65 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
 
         if (isQuoteIdMatch) {
           const sellerId = qr.sellerId;
-          if (sellerId && !existingSellerIds.has(sellerId)) {
-            existingSellerIds.add(sellerId);
-            bid.participations.push({
-              id: qr.id,
-              bidId: bid.id,
-              sellerId: sellerId,
-              seller: qr.seller,
-              participationNumber: `PRT-QR-${qr.id}`,
-              technicalStatus: 'QUALIFIED',
-              financialStatus: 'OPENED',
-              financialSealed: false,
-              finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
-              submissionStatus: 'SUBMITTED',
-              quotedAmount: Number(qr.totalAmount || 0),
-              totalAmount: Number(qr.totalAmount || 0),
-              offeredItemDescription: qr.notes || '',
-              documents: [],
-              createdAt: qr.createdAt,
-              submittedAt: qr.createdAt,
-            });
+          if (sellerId) {
+            const qrTech = String(qr.technicalStatus || '').toUpperCase();
+            const normalizedTechStatus = qrTech === 'DISQUALIFIED' || qrTech === 'NOT_QUALIFIED'
+              ? 'DISQUALIFIED'
+              : (qrTech === 'QUALIFIED' ? 'QUALIFIED' : 'PENDING');
+            const respData = typeof (qr as any).responseData === 'string'
+              ? (() => { try { return JSON.parse((qr as any).responseData); } catch { return {}; } })()
+              : ((qr as any).responseData || {});
+            const qrDocs = Array.isArray((qr as any).documents) ? (qr as any).documents : (Array.isArray(respData.documents) ? respData.documents : []);
+            const qrLineItems = Array.isArray((qr as any).lineItems) ? (qr as any).lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : []);
+
+            if (!existingSellerIds.has(sellerId)) {
+              existingSellerIds.add(sellerId);
+              bid.participations.push({
+                id: qr.id,
+                bidId: bid.id,
+                sellerId: sellerId,
+                seller: qr.seller,
+                participationNumber: `PRT-QR-${qr.id}`,
+                technicalStatus: normalizedTechStatus,
+                technicalRemarks: qr.technicalRemarks || null,
+                financialStatus: normalizedTechStatus === 'QUALIFIED' ? 'OPENED' : 'LOCKED',
+                financialSealed: normalizedTechStatus !== 'QUALIFIED',
+                finalStatus: qr.status === 'ACCEPTED' ? 'AWARDED' : 'PENDING',
+                submissionStatus: 'SUBMITTED',
+                quotedAmount: Number(qr.totalAmount || 0),
+                totalAmount: Number(qr.totalAmount || 0),
+                offeredQuantity: (qr as any).offeredQuantity || respData.offeredQuantity || 1,
+                deliveryTimeline: (qr as any).deliveryTimeline || respData.deliveryTimeline || 'Standard',
+                offeredItemDescription: qr.notes || respData.message || '',
+                documents: qrDocs,
+                lineItems: qrLineItems,
+                responseData: respData,
+                createdAt: qr.createdAt,
+                submittedAt: qr.createdAt,
+              });
+            } else {
+              const existingPart = bid.participations.find((p: any) => p.sellerId === sellerId);
+              if (existingPart) {
+                if ((!existingPart.documents || existingPart.documents.length === 0) && qrDocs.length > 0) {
+                  existingPart.documents = qrDocs;
+                }
+                if (!existingPart.offeredQuantity && ((qr as any).offeredQuantity || respData.offeredQuantity)) {
+                  existingPart.offeredQuantity = Number((qr as any).offeredQuantity || respData.offeredQuantity);
+                }
+                if ((!existingPart.deliveryTimeline || existingPart.deliveryTimeline === 'Standard') && ((qr as any).deliveryTimeline || respData.deliveryTimeline)) {
+                  existingPart.deliveryTimeline = (qr as any).deliveryTimeline || respData.deliveryTimeline;
+                }
+                if (!existingPart.offeredItemDescription && (qr.notes || respData.message)) {
+                  existingPart.offeredItemDescription = qr.notes || respData.message;
+                }
+                if ((!existingPart.lineItems || existingPart.lineItems.length === 0) && qrLineItems.length > 0) {
+                  existingPart.lineItems = qrLineItems;
+                }
+                if (!existingPart.responseData || Object.keys(existingPart.responseData).length === 0) {
+                  existingPart.responseData = respData;
+                }
+              }
+            }
           }
         }
       }
@@ -1708,22 +1924,62 @@ router.post('/buyer/procurement-bids/:bidId/clarifications', authenticate, requi
 
 router.post('/buyer/procurement-bids/:bidId/technical-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.technical.evaluate'), validate({ params: idParamSchema, body: technicalEvaluationSchema }), asyncRoute(async (req, res) => {
   const data = await service.evaluateTechnical(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Technical evaluation saved');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/complete-technical-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.technical.evaluate'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const data = await service.completeTechnicalEvaluation(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Technical evaluation completed');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/open-financial-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.financial.evaluate'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const data = await service.openFinancialEvaluation(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Financial evaluation opened and L1/L2/L3/L4 ranking generated');
 }));
 
-router.post(['/buyer/procurement-bids/:bidId/recommend-award', '/buyer/bids/:bidId/recommend-award'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, remarks: z.string().trim().max(2000).optional(), adminOverrideReason: z.string().trim().max(2000).optional() }) }), asyncRoute(async (req, res) => {
+router.post(['/buyer/procurement-bids/:bidId/award', '/buyer/procurement-bids/:bidId/recommend-award', '/buyer/bids/:bidId/recommend-award'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, remarks: z.string().trim().max(2000).optional(), adminOverrideReason: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional(), generatePoNow: z.boolean().optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.recommendAward(req, req.params.bidId, req.body);
-  return apiResponse.created(res, data, 'Award recommendation created');
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.created(res, data, 'Award offer created');
+}));
+
+router.post(['/buyer/procurement-bids/:bidId/counter-offer', '/buyer/bids/:bidId/counter-offer'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, priceMatchTargetPrice: z.coerce.number().positive().optional(), deadlineHours: z.coerce.number().int().min(1).max(720).optional(), deadlineDate: z.string().optional(), counterOfferNotes: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional() }) }), asyncRoute(async (req, res) => {
+  const data = await service.sendPriceMatchCounterOffer(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.created(res, data, 'Price match counter-offer sent to supplier');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/counter-offer/accept', '/seller/bids/:bidId/counter-offer/accept'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+  const data = await service.acceptPriceMatchCounterOffer(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Price match counter-offer accepted successfully');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
+  const data = await service.declinePriceMatchCounterOffer(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Price match counter-offer declined');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/accept-award', '/seller/bids/:bidId/accept-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+  const data = await service.acceptAward(req, req.params.bidId);
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Award offer accepted successfully');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bidId/decline-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
+  const data = await service.declineAward(req, req.params.bidId, req.body);
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Award offer declined successfully');
+}));
+
+router.post('/buyer/procurement-bids/:bidId/generate-po', authenticate, requireAccountType('buyer', 'admin'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+  const data = await service.generatePOForBid(req, req.params.bidId, req.body || {});
+  await invalidateBidCaches(data, req.params.bidId);
+  return apiResponse.created(res, data, 'Purchase order generated and issued');
 }));
 
 router.get('/admin/procurement-bids', authenticate, requireAccountType('admin'), requirePermission('tender.view'), checkFeatureEnabled('admin-bid-approval'), asyncRoute(async (req, res) => {
@@ -1802,8 +2058,13 @@ router.get('/seller/awards', authenticate, requireAccountType('seller'), asyncRo
   return apiResponse.success(res, data, 200, 'Seller awards fetched');
 }));
 
-router.post('/seller/awards/:awardId/accept', authenticate, requireAccountType('seller'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema }), asyncRoute(async (req, res) => {
-  const data = await orderService.acceptSellerAward(req, Number(req.params.awardId), req.body || {});
+router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+  const targetId = Number(req.params.id || req.params.awardId);
+  if (req.path.includes('purchase-orders')) {
+    const data = await orderService.acceptPO(req, targetId, req.body || {});
+    return apiResponse.success(res, data, 200, 'Purchase Order accepted and fulfillment committed');
+  }
+  const data = await orderService.acceptSellerAward(req, targetId, req.body || {});
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 
@@ -1884,9 +2145,16 @@ router.post('/orders/:orderId/settlement/mark-confirmed', authenticate, requireA
   return apiResponse.success(res, data, 200, 'Settlement confirmed');
 }));
 
-router.get('/admin/settlements', authenticate, requireAccountType('admin'), requirePermission('report.view'), asyncRoute(async (req, res) => {
-  const data = await orderService.listAdminSettlements(req.user!, req.query);
-  return apiResponse.success(res, data, 200, 'Settlements fetched');
+router.post(['/buyer/invoices/:invoiceId/record-payment', '/orders/:orderId/invoices/:invoiceId/record-payment', '/orders/:orderId/payment/record'], authenticate, requireAccountType('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
+  const data = await orderService.recordOrderPayment(req, invoiceId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Payment receipt recorded successfully');
+}));
+
+router.post(['/seller/invoices/:invoiceId/confirm-settlement', '/orders/:orderId/invoices/:invoiceId/confirm-settlement'], authenticate, requireAccountType('seller', 'admin'), asyncRoute(async (req, res) => {
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
+  const data = await orderService.confirmOrderSettlement(req, invoiceId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Payment settlement confirmed and order completed');
 }));
 
 // ── Edge Case Routes ──

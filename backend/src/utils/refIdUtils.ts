@@ -2,14 +2,38 @@
  * Standardized Unique Alphanumeric Reference ID Helper for Backend
  * Enforces the Method-First Scheme across services and routes:
  * Format: ${METHOD_PREFIX}-${YEAR}-${SEQUENCE}
+ * Strictly supported canonical prefixes: RFQ, RFP, TND, LTND, RC, DP, RA.
  * (e.g. RFP-2026-39620, RFQ-2026-78901, TND-2026-47138, LTND-2026-10492, RC-2026-68496, DP-2026-71536, RA-2026-55102).
  */
 
-export function deriveMethodPrefix(method?: string | null, rawRef?: string | null, fallback = 'REQ'): string {
+export const CANONICAL_METHOD_PREFIXES = ['RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA'] as const;
+export type CanonicalMethodPrefix = typeof CANONICAL_METHOD_PREFIXES[number];
+
+/**
+ * Returns strictly canonical prefix variations for a given raw token.
+ * E.g., for "TND-2026-39952" -> ["TND-2026-39952", "RFQ-2026-39952", "RFP-2026-39952", ...]
+ * Never includes legacy/disallowed prefixes like REQ, BID, OT, PRQ, PR, PB, TENDER.
+ */
+export function getCanonicalLookupVariants(rawToken: string): string[] {
+  const token = String(rawToken || '').trim();
+  if (!token) return [];
+
+  const variants = new Set<string>([token]);
+  const prefixMatch = token.match(/^([A-Z]{2,6})-(.+)$/i);
+  if (prefixMatch) {
+    const strippedSuffix = prefixMatch[2];
+    for (const pfx of CANONICAL_METHOD_PREFIXES) {
+      variants.add(`${pfx}-${strippedSuffix}`);
+    }
+  }
+  return Array.from(variants);
+}
+
+export function deriveMethodPrefix(method?: string | null, rawRef?: string | null, fallback = 'RFQ'): string {
   if (method) {
     const m = String(method).toUpperCase().replace(/[\s-]+/g, '_');
     if (m.includes('LIMITED_TENDER') || m === 'LTND' || m.includes('LIMITED_RFQ')) return 'LTND';
-    if (m.includes('TENDER') || m === 'OT' || m === 'OPEN_TENDER') return 'TND';
+    if (m.includes('TENDER') || m === 'TND') return 'TND';
     if (m.includes('RFQ') || m.includes('QUOTE') || m.includes('QUOTATION')) return 'RFQ';
     if (m.includes('RFP') || m.includes('PROPOSAL')) return 'RFP';
     if (m.includes('RATE_CONTRACT') || m === 'RC') return 'RC';
@@ -29,17 +53,17 @@ export function deriveMethodPrefix(method?: string | null, rawRef?: string | nul
   if (rawRef && typeof rawRef === 'string') {
     const trimmed = rawRef.trim().toUpperCase();
     if (trimmed.startsWith('LTND-')) return 'LTND';
-    if (trimmed.startsWith('TND-') || trimmed.startsWith('OT-')) return 'TND';
+    if (trimmed.startsWith('TND-')) return 'TND';
     if (trimmed.startsWith('RFQ-')) return 'RFQ';
     if (trimmed.startsWith('RFP-')) return 'RFP';
     if (trimmed.startsWith('RC-')) return 'RC';
-    if (trimmed.startsWith('DP-') || trimmed.startsWith('PRQ-') || trimmed.startsWith('PR-')) return 'DP';
+    if (trimmed.startsWith('DP-')) return 'DP';
     if (trimmed.startsWith('RA-')) return 'RA';
   }
 
-  const fb = (fallback || 'REQ').toUpperCase();
-  if (fb === 'PRQ' || fb === 'PR') return 'DP';
-  return fb;
+  const fb = (fallback || 'RFQ').toUpperCase();
+  if (CANONICAL_METHOD_PREFIXES.includes(fb as any)) return fb;
+  return 'RFQ';
 }
 
 export function formatRefId(
@@ -62,13 +86,13 @@ export function formatRefId(
       trimmed = `REQ-${trimmed.slice(3)}`;
     }
 
-    // Pattern 1: Already has year and sequence: PREFIX-YYYY-XXXXX (e.g. RFP-2026-00054, REQ-2026-39620)
+    // Pattern 1: Already has year and sequence: PREFIX-YYYY-XXXXX (e.g. RFP-2026-00054, RFQ-2026-39620)
     const matchFull = trimmed.match(/^[A-Z]{2,5}-(\d{4})-(\d+)$/i);
     if (matchFull) {
       extractedYear = matchFull[1];
       extractedSeq = matchFull[2].padStart(5, '0');
     } else {
-      // Pattern 2: PREFIX-XXXXX (e.g. REQ-39620, PRQ-71536, DP-97090, RFP-54)
+      // Pattern 2: PREFIX-XXXXX (e.g. DP-97090, RFP-54)
       const matchShort = trimmed.match(/^[A-Z]{2,5}-(\d+)$/i);
       if (matchShort) {
         const rawDigits = matchShort[1];
@@ -97,5 +121,7 @@ export function formatRequirementNumber(
   rawNum?: string | null,
   method?: string | null
 ): string {
-  return formatRefId('REQ', id, rawNum, method);
+  const pfx = method ? deriveMethodPrefix(method, rawNum, 'RFQ') : 'RFQ';
+  return formatRefId(pfx, id, rawNum, method);
 }
+

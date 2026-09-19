@@ -327,7 +327,7 @@ export default function LiveAuctionLeaderboard({
           </Button>
 
           <Link
-            href={`/seller/procurement/reverse-auction/${auction.id}/live`}
+            href={`/seller/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`}
             target="_blank"
             className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
           >

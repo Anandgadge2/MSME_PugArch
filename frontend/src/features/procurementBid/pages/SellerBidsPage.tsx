@@ -228,6 +228,15 @@ const isAwarded = (p: any) =>
     String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt
   ));
 
+const isAwardedAndPoAccepted = (p: any) =>
+  isAwarded(p) && (
+    Boolean(p?.hasAcceptedPO) ||
+    Boolean(p?.canConvertToInvoice) ||
+    ['ACCEPTED', 'accepted'].includes(String(p?.poStatus || '')) ||
+    finalStatusOf(p) === 'ORDERED' ||
+    (Array.isArray(p?.awards) && p.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ACCEPTED'))
+  );
+
 // Draft = still being prepared by the seller and not yet awarded/withdrawn/rejected.
 const isDraft = (p: any) => {
   if (isAwarded(p)) return false;
@@ -330,9 +339,10 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         return;
       }
 
-      const [bidsData, mrData] = await Promise.allSettled([
+      const [bidsData, mrData, pubData] = await Promise.allSettled([
         procurementBidApi.getSellerBids(),
-        procurementBidApi.getSellerMarketplaceResponses()
+        procurementBidApi.getSellerMarketplaceResponses(),
+        procurementBidApi.list({ pageSize: 100 })
       ]);
       
       const bids = bidsData.status === 'fulfilled' ? bidsData.value : [];
@@ -340,6 +350,24 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         ...b,
         status: b.status ?? b.submissionStatus ?? 'DRAFT'
       }));
+
+      // Index public bids by id, bidNumber, requirementId, and title for instant enrichment
+      const publicBids: any[] = (pubData.status === 'fulfilled' && pubData.value?.items) ? pubData.value.items : [];
+      const publicBidMap = new Map<string, any>();
+      for (const pb of publicBids) {
+        if (!pb) continue;
+        if (pb.id) publicBidMap.set(String(pb.id), pb);
+        if (pb.bidNumber) publicBidMap.set(String(pb.bidNumber).trim().toUpperCase(), pb);
+        if (pb.requirementId) publicBidMap.set(`req-${pb.requirementId}`, pb);
+        if (pb.title) {
+          const key = String(pb.title).trim().toLowerCase();
+          const existing = publicBidMap.get(key);
+          if (!existing || (/^(RFQ|RFP|TND|BID|REQ|LT|RA|RC)-/i.test(String(pb.bidNumber)) && !/^(RFQ|RFP|TND|BID|REQ|LT|RA|RC)-/i.test(String(existing.bidNumber)))) {
+            publicBidMap.set(key, pb);
+          }
+        }
+      }
+
       const rawMarketplace = mrData.status === 'fulfilled' ? mrData.value : [];
       const marketplaceResponses = Array.isArray(rawMarketplace)
         ? rawMarketplace
@@ -347,29 +375,70 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
           ? (rawMarketplace as any).responses
           : [];
       
-      const normalizedMarketplace = marketplaceResponses.map((res: any) => ({
-        id: `mr-${res.id}`,
-        bidId: `req-${res.requirementId}`,
-        status: String(res.status || 'SUBMITTED').toUpperCase(),
-        createdAt: res.createdAt,
-        updatedAt: res.updatedAt,
-        quotedAmount: res.offeredPrice,
-        isMarketplaceResponse: true,
-        requirementId: res.requirementId,
-        bid: {
-          id: `req-${res.requirementId}`,
-          title: res.requirement?.title || res.requirement?.description || 'Quotation Response',
-          itemName: res.requirement?.title || 'Quotation Response',
-          buyerName: res.requirement?.buyerOrganization?.organizationName || 'Verified Buyer',
-          category: res.requirement?.category?.name || 'RFQ Response',
-          endDate: res.requirement?.lastDate,
-          estimatedValue: res.requirement?.budgetMax || res.requirement?.budgetMin,
-          status: res.requirement?.status || 'OPEN',
-          lifecycleStage: 'EVALUATION'
-        }
-      }));
+      const normalizedMarketplace = marketplaceResponses.map((res: any) => {
+        const titleKey = String(res.requirement?.title || '').trim().toLowerCase();
+        const matched = (titleKey ? publicBidMap.get(titleKey) : null) ||
+                        publicBidMap.get(`req-${res.requirementId}`) || 
+                        publicBidMap.get(String(res.requirementId));
+
+        const realBidNumber = matched?.bidNumber || res.requirement?.bidNumber || res.requirement?.tenderId;
+        const canonicalId = realBidNumber || matched?.id || res.requirementId;
+
+        return {
+          id: `mr-${res.id}`,
+          bidId: realBidNumber || `req-${res.requirementId}`,
+          canonicalIdentifier: canonicalId,
+          matchedBidNumber: realBidNumber,
+          status: String(res.status || 'SUBMITTED').toUpperCase(),
+          createdAt: res.createdAt,
+          updatedAt: res.updatedAt,
+          quotedAmount: res.offeredPrice,
+          isMarketplaceResponse: true,
+          requirementId: res.requirementId,
+          bid: {
+            id: realBidNumber || `req-${res.requirementId}`,
+            bidNumber: realBidNumber,
+            title: matched?.title || res.requirement?.title || res.requirement?.description || 'Quotation Response',
+            itemName: matched?.itemName || res.requirement?.title || 'Quotation Response',
+            buyerName: matched?.buyerName || res.requirement?.buyerOrganization?.organizationName || 'Verified Buyer',
+            category: matched?.category || res.requirement?.category?.name || 'RFQ Response',
+            endDate: matched?.endDate || res.requirement?.lastDate,
+            estimatedValue: matched?.estimatedValue || res.requirement?.budgetMax || res.requirement?.budgetMin,
+            status: matched?.status || res.requirement?.status || 'OPEN',
+            lifecycleStage: matched?.lifecycleStage || 'EVALUATION',
+            procurementType: matched?.procurementType || 'RFQ'
+          }
+        };
+      });
       
-      const merged = [...normalizedBids, ...normalizedMarketplace];
+      // Deduplicate: when the same procurement exists in both sources, keep the
+      // procurementBidParticipation entry (richer data: technicalStatus, evaluations, etc.)
+      const bidKeys = new Set<string>();
+      for (const b of normalizedBids) {
+        const bidNum = String(b.bid?.bidNumber || '').trim().toUpperCase();
+        const bidId = String(b.bid?.id || '').trim();
+        const reqId = String(b.requirementId || b.bid?.sourceId || '').trim();
+        const title = String(b.bid?.title || '').trim().toLowerCase();
+        if (bidNum) bidKeys.add(bidNum);
+        if (bidId) bidKeys.add(bidId);
+        if (reqId && reqId !== '0') bidKeys.add(reqId);
+        if (title && title.length > 3) bidKeys.add(title);
+      }
+
+      const dedupedMarketplace = normalizedMarketplace.filter((mr: any) => {
+        const mrBidNum = String(mr.matchedBidNumber || mr.bid?.bidNumber || '').trim().toUpperCase();
+        const mrBidId = String(mr.canonicalIdentifier || mr.bid?.id || '').trim();
+        const mrReqId = String(mr.requirementId || '').trim();
+        const mrTitle = String(mr.bid?.title || '').trim().toLowerCase();
+        return !(
+          (mrBidNum && bidKeys.has(mrBidNum)) ||
+          (mrBidId && bidKeys.has(mrBidId)) ||
+          (mrReqId && mrReqId !== '0' && bidKeys.has(mrReqId)) ||
+          (mrTitle && mrTitle.length > 3 && bidKeys.has(mrTitle))
+        );
+      });
+
+      const merged = [...normalizedBids, ...dedupedMarketplace];
       cachedSellerParticipations = merged;
       lastSellerFetchTime = Date.now();
       setParticipations(merged);
@@ -391,8 +460,8 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     switch (subRouteType) {
       case 'submitted':
         return {
-          title: 'My Submitted Bids',
-          desc: 'Monitor status, clarifications, and evaluation stages of all bids you have submitted.'
+          title: 'My Submitted Bids & Quotations',
+          desc: 'Monitor status, review submitted quotations, and track evaluation stages of all your submissions.'
         };
       case 'draft':
         return {
@@ -406,7 +475,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         };
       default:
         return {
-          title: 'All Bid Participations',
+          title: 'My Bids & Participations',
           desc: 'Overview of all your drafted, submitted, and awarded bid activities.'
         };
     }
@@ -728,32 +797,47 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   };
 
   const handleAction = (item: any) => {
-    if (item.isMarketplaceResponse) {
-      const isRfp = item.bid?.category?.toLowerCase().includes('proposal') || item.bid?.category?.toLowerCase().includes('rfp');
-      router.push(sellerRoutes.detail(isRfp ? 'RFP' : 'RFQ', item.requirementId));
+    const pType = getParticipationType(item);
+    const isReverse = pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE');
+    const targetId = item.bid?.id || item.bidId || item.requirementId || item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier;
+
+    if (isReverse) {
+      router.push(`/seller/procurement/reverse-auction/${targetId}/live`);
       return;
     }
-    const bidId = item.bid?.id || item.bidId;
-    
-    const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || '').toLowerCase();
-    const isRfp = typeStr.includes('rfp') || typeStr.includes('proposal');
-    const isRfq = typeStr.includes('rfq');
 
-    // Any not-yet-submitted participation (draft or partially uploaded) resumes the
-    // participate flow; finalised/awarded ones open the read-only details view.
     if (isDraft(item)) {
-      router.push(`/bids/${bidId}/participate`);
-    } else {
-      if (typeStr.includes('reverse') || typeStr.includes('auction')) {
-        router.push(`/seller/procurement/reverse-auction/${bidId}/live`);
-      } else if (isRfp) {
-        router.push(sellerRoutes.detail('RFP', bidId));
-      } else if (isRfq) {
-        router.push(sellerRoutes.detail('RFQ', bidId));
-      } else {
-        router.push(`/bids/${bidId}`);
-      }
+      router.push(`/bids/${targetId}/participate`);
+      return;
     }
+
+    const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || pType || '').toLowerCase();
+    if (typeStr.includes('reverse') || typeStr.includes('auction')) {
+      router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(targetId))}/live`);
+      return;
+    }
+    let slug = 'rfq';
+    if (typeStr.includes('rfp') || typeStr.includes('proposal')) slug = 'rfp';
+    else if (typeStr.includes('open') || typeStr.includes('tender')) slug = 'open-tender';
+    else if (typeStr.includes('limited')) slug = 'limited-tender';
+    else if (typeStr.includes('rate')) slug = 'rate-contract';
+
+    // Route directly to the submitted quotation review view
+    router.push(`/seller/procurement/${slug}/${encodeURIComponent(String(targetId))}/respond`);
+  };
+
+  const handleViewDetails = (e: React.MouseEvent, item: any) => {
+    e.stopPropagation();
+    const targetId = item.bid?.id || item.bidId || item.requirementId || item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier;
+    const typeStr = String(item.bid?.procurementType || item.bid?.bidType || item.bid?.category || getParticipationType(item) || '').toLowerCase();
+    let slug = 'rfq';
+    if (typeStr.includes('reverse') || typeStr.includes('auction')) slug = 'reverse-auction';
+    else if (typeStr.includes('rfp') || typeStr.includes('proposal')) slug = 'rfp';
+    else if (typeStr.includes('open') || typeStr.includes('tender')) slug = 'open-tender';
+    else if (typeStr.includes('limited')) slug = 'limited-tender';
+    else if (typeStr.includes('rate')) slug = 'rate-contract';
+
+    router.push(`/seller/procurement/${slug}/${encodeURIComponent(String(targetId))}`);
   };
 
   const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {
@@ -893,29 +977,45 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       header: 'Bid Stage',
       sortable: true,
       sortKey: 'stage',
-      width: 'w-32',
-      cell: (item: any) => (
-        <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(item.bid?.status || 'OPEN'))}>
-          {String(item.bid?.status || 'OPEN').replace(/_/g, ' ')}
-        </span>
-      )
+      width: 'w-44',
+      cell: (item: any) => {
+        const techStatus = String(item.technicalStatus || '').toUpperCase();
+        const bidStatus = String(item.bid?.status || 'OPEN');
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(bidStatus))}>
+              {bidStatus.replace(/_/g, ' ')}
+            </span>
+            {techStatus === 'QUALIFIED' && (
+              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                <CheckCircle2 className="h-2.5 w-2.5" /> Qualified
+              </span>
+            )}
+            {techStatus === 'DISQUALIFIED' && (
+              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                <XCircle className="h-2.5 w-2.5" /> Disqualified
+              </span>
+            )}
+          </div>
+        );
+      }
     },
     {
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      width: 'w-28',
+      width: 'w-44',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item: any) => {
         const pType = getParticipationType(item);
         return (
-          <div className="flex justify-end gap-2" onClick={e => e.stopPropagation()}>
-            {isAwarded(item) && (
+          <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
+            {isAwardedAndPoAccepted(item) && (
               <Button 
                 onClick={(e) => handleConvertToInvoice(e, item)}
                 disabled={convertingInvoiceId === item.id}
-                className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
+                className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-2.5 flex items-center gap-1 shadow-xs"
                 title="Convert to Invoice"
               >
                 {convertingInvoiceId === item.id ? (
@@ -934,12 +1034,23 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                 }}
                 className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
               >
-                <Gavel className="h-3 w-3" /> Live Auction
+                <Gavel className="h-3 w-3" /> Live
+              </Button>
+            ) : isDraft(item) ? (
+              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
+                Resume
               </Button>
             ) : (
-              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
-                {isDraft(item) ? 'Resume' : 'View'}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button 
+                  onClick={() => handleAction(item)} 
+                  className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-2.5 shadow-xs"
+                  title="View Submitted Quotation"
+                >
+                  View Quote
+                </Button>
+               
+              </div>
             )}
           </div>
         );
@@ -1565,25 +1676,55 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                         <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wide', bidStatusColor(bid.status || 'OPEN'))}>
                           Bid: {String(bid.status || 'OPEN').replace(/_/g, ' ')}
                         </span>
+                        {String(item.technicalStatus || '').toUpperCase() === 'QUALIFIED' && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                            <CheckCircle2 className="h-2.5 w-2.5" /> Qualified
+                          </span>
+                        )}
+                        {String(item.technicalStatus || '').toUpperCase() === 'DISQUALIFIED' && (
+                          <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                            <XCircle className="h-2.5 w-2.5" /> Disqualified
+                          </span>
+                        )}
 
-                        <div className="flex gap-2">
-                          {isAwarded(item) && (
+                        <div className="flex items-center gap-2">
+                          {isAwardedAndPoAccepted(item) && (
                             <Button 
                               onClick={(e) => handleConvertToInvoice(e, item)} 
                               disabled={convertingInvoiceId === item.id}
-                              className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-4 flex items-center gap-1.5 shadow-sm"
+                              className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
                             >
                               {convertingInvoiceId === item.id ? (
                                 <RefreshCw className="h-3 w-3 animate-spin" />
                               ) : (
                                 <FileText className="h-3 w-3" />
                               )}
-                              Convert to Invoice
+                              Invoice
                             </Button>
                           )}
-                          <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-4">
-                            {isDraft(item) ? 'Resume Draft' : 'View Details'}
-                          </Button>
+                          {isDraft(item) ? (
+                            <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-4">
+                              Resume Draft
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <Button 
+                                onClick={() => handleAction(item)} 
+                                className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3.5 shadow-xs"
+                                title="View Submitted Quotation"
+                              >
+                                View Quote
+                              </Button>
+                              <Button 
+                                onClick={(e) => handleViewDetails(e, item)} 
+                                variant="outline"
+                                className="h-8 border-slate-200 text-slate-700 hover:bg-slate-100 text-[10px] font-black uppercase rounded-lg px-2.5 flex items-center gap-1"
+                                title="View Procurement Notice"
+                              >
+                                <Eye className="h-3.5 w-3.5" /> Notice
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
