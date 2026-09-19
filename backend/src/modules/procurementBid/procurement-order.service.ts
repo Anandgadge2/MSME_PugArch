@@ -138,6 +138,16 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
   if (query.status) where.status = String(query.status);
   if (query.buyerId) where.buyerId = Number(query.buyerId);
   if (query.sellerId) where.sellerId = Number(query.sellerId);
+  if (query.awardId) where.sourceId = Number(query.awardId);
+  if (query.bidId) {
+    const rawBidVal = Number(query.bidId);
+    if (!isNaN(rawBidVal)) {
+      where.OR = [
+        { bidId: rawBidVal },
+        { sourceId: { in: (await db.procurementBidAward.findMany({ where: { bidId: rawBidVal }, select: { id: true } })).map((a: any) => a.id) } }
+      ];
+    }
+  }
 
   if (query.minAmount || query.maxAmount) {
     where.amount = {};

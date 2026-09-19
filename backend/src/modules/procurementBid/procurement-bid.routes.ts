@@ -285,14 +285,27 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       if (directBid.awards && directBid.awards.length > 0) {
         const awardIds = directBid.awards.map((a: any) => a.id);
         const pos = await (prisma as any).purchaseOrder.findMany({
-          where: { sourceType: 'procurement_bid_award', sourceId: { in: awardIds } },
+          where: {
+            OR: [
+              { sourceType: 'procurement_bid_award', sourceId: { in: awardIds } },
+              { bidId: directBid.id }
+            ]
+          },
           include: {
             invoices: { include: { fileAsset: true, paymentSlipFile: true } },
             grns: { include: { items: true } }
-          }
+          },
+          orderBy: { createdAt: 'desc' }
         });
         (serialized as any).purchaseOrders = pos;
         (serialized as any).activeOrder = pos[0] || null;
+        if (serialized.awards && Array.isArray(serialized.awards)) {
+          const poMap = new Map(pos.map((p: any) => [p.sourceId, p]));
+          serialized.awards.forEach((aw: any) => {
+            if (poMap.has(aw.id)) aw.order = poMap.get(aw.id);
+            else if (pos.length > 0) aw.order = pos[0];
+          });
+        }
       }
       await setCache(cacheKey, serialized, 30);
       return apiResponse.success(res, serialized, 200, 'Procurement bid details fetched successfully');

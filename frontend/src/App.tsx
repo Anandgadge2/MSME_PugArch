@@ -956,7 +956,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/buyer/vendors' || pathname === '/buyer/sellers') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><Vendors /></PermissionRouteGuard>;
     if (pathname === '/buyer/saved-suppliers' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><SavedSuppliersPage /></PermissionRouteGuard>;
     
-    if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
+    if ((pathname === '/buyer/orders' || pathname === '/buyer/purchase-orders') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
     if (pathname === '/buyer/repeat-orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
     if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="inspection.approve"><GenericFeaturePage title="Inspection" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" /></PermissionRouteGuard>;
     if (pathname === '/buyer/invoices' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role="buyer" /></PermissionRouteGuard>;

@@ -66,6 +66,7 @@ import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
+import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -1706,7 +1707,7 @@ function MetricCard({
   return (
     <article
       className={cn(
-        "flex flex-col rounded-lg border p-2 sm:px-2.5 sm:py-2 justify-between min-h-[62px] sm:min-h-[66px] shadow-2xs transition-all hover:shadow-xs",
+        "flex flex-col rounded-lg border px-2 py-1.5 sm:px-2.5 sm:py-1.5 justify-between min-h-[56px] sm:min-h-[60px] shadow-2xs transition-all hover:shadow-xs",
         styles.card,
       )}
     >
@@ -3967,6 +3968,9 @@ export function ProcurementDetailUnifiedView(
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [isCompareChooserOpen, setIsCompareChooserOpen] = useState(false);
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
+  const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
+  const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -4038,6 +4042,7 @@ export function ProcurementDetailUnifiedView(
       ? (props as any).purchaseOrders
       : [];
   const directActiveOrder: any =
+    localCreatedOrder ||
     props.rawBid?.activeOrder ||
     (props as any)?.activeOrder ||
     activeAward?.order ||
@@ -4048,14 +4053,14 @@ export function ProcurementDetailUnifiedView(
     queryKey: ["procurement-active-order", targetId],
     queryFn: async () => {
       try {
-        const res: any = await getApi(`/api/orders/procurement?take=5`);
+        const res: any = await getApi(`/api/orders/procurement?take=50`);
         const list = Array.isArray(res) ? res : res?.items || res?.data || [];
         return (
           list.find(
             (o: any) =>
               String(o.procurementBidId || o.bidId || o.requirementId) ===
                 String(targetId) ||
-              (activeAward?.id && String(o.awardId) === String(activeAward.id)),
+              (activeAward?.id && String(o.awardId || o.sourceId) === String(activeAward.id)),
           ) || null
         );
       } catch {
@@ -4063,9 +4068,15 @@ export function ProcurementDetailUnifiedView(
       }
     },
     enabled: Boolean(targetId) && !directActiveOrder,
-    staleTime: 15000,
+    staleTime: 5000,
   });
-  const effectiveActiveOrder = directActiveOrder || fetchedOrder || null;
+  const effectiveActiveOrder = useMemo(() => {
+    const ord = localCreatedOrder || directActiveOrder || fetchedOrder || null;
+    if (ord && localAcceptedPO) {
+      return { ...ord, status: "accepted", poStatus: "ACCEPTED" };
+    }
+    return ord;
+  }, [localCreatedOrder, directActiveOrder, fetchedOrder, localAcceptedPO]);
 
   const currentUserId = String(currentUser?.id || "");
   const currentOrgId = String(
@@ -4223,12 +4234,18 @@ export function ProcurementDetailUnifiedView(
   const handleGeneratePOFromBanner = async (awardId: string) => {
     try {
       setIsIssuingPOFromBanner(true);
-      await procurementBidApi.generatePO(targetId, { awardId });
+      const res: any = await procurementBidApi.generatePO(targetId, { awardId });
       toast.success(
         "Purchase Order issued successfully! Non-selected bidders notified.",
       );
-      queryClient.invalidateQueries();
-      router.push("/buyer/purchase-orders");
+      const created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
+      if (created && (created.id || created.poNumber)) {
+        setLocalCreatedOrder(created);
+      }
+      await queryClient.invalidateQueries();
+      queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+      queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+      queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to issue Purchase Order.");
     } finally {
@@ -4243,8 +4260,11 @@ export function ProcurementDetailUnifiedView(
       toast.success(
         "Purchase Order accepted! Delivery committed and non-selected bidders transitioned.",
       );
-      queryClient.invalidateQueries();
-      router.push("/seller/delivery-management");
+      setLocalAcceptedPO(true);
+      await queryClient.invalidateQueries();
+      queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+      queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+      queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to accept Purchase Order.");
     } finally {
@@ -7608,6 +7628,80 @@ export function ProcurementDetailUnifiedView(
               </div>
             )}
 
+          {/* Seller: Purchase Order Accepted — Fulfillment Committed */}
+          {!isBuyerSide &&
+            isAwardedToMe &&
+            effectiveActiveOrder &&
+            [
+              "accepted",
+              "in_fulfillment",
+              "dispatched",
+              "grn_pending",
+              "invoiced",
+            ].includes(
+              String(
+                effectiveActiveOrder.status ||
+                  effectiveActiveOrder.poStatus ||
+                  "",
+              ).toLowerCase(),
+            ) && (
+              <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          Purchase Order Accepted &amp; Committed
+                        </span>
+                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                          PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
+                        </span>
+                      </div>
+                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                        Order Confirmed — Delivery Stage Active
+                      </h3>
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        You have formally accepted Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} for{" "}
+                        <strong className="text-emerald-700 font-bold">
+                          ₹{Number(
+                            effectiveActiveOrder.amount ||
+                              effectiveActiveOrder.totalValue ||
+                              activeAward?.finalAmount ||
+                              0,
+                          ).toLocaleString("en-IN")}
+                        </strong>
+                        . Your delivery commitment has been recorded. Dispatch goods, track shipment, and upload delivery challan for buyer GRN inspection.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsReceiptModalOpen(true)}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
+                      View PO Copy
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => router.push("/seller/delivery-management")}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                    >
+                      <Truck className="h-3.5 w-3.5" />
+                      Go to Delivery Management
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* Seller: Price-Match Counter-Offer Received */}
           {!isBuyerSide &&
             isAwardedToMe &&
@@ -7761,7 +7855,7 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             activeAward?.awardStatus === "ACCEPTED" &&
-            !activeAward?.order && (
+            !effectiveActiveOrder && (
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
@@ -7814,7 +7908,7 @@ export function ProcurementDetailUnifiedView(
           {isBuyerSide &&
             activeAward &&
             activeAward.awardStatus === "ACCEPTED" &&
-            !activeAward.order && (
+            !effectiveActiveOrder && (
               <div className="relative overflow-hidden rounded-xl border border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-3 sm:p-4 text-white shadow-md animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1">
@@ -7845,6 +7939,100 @@ export function ProcurementDetailUnifiedView(
                         <FileText className="h-3.5 w-3.5" />
                       )}
                       Generate &amp; Issue Purchase Order
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* Buyer: Purchase Order Issued & Active */}
+          {isBuyerSide &&
+            activeAward &&
+            effectiveActiveOrder && (
+              <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                      <FileText className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          Purchase Order Issued &amp; Active
+                        </span>
+                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                          PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border",
+                            ["accepted", "in_fulfillment", "dispatched"].includes(
+                              String(
+                                effectiveActiveOrder.status ||
+                                  effectiveActiveOrder.poStatus ||
+                                  "",
+                              ).toLowerCase(),
+                            )
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                              : "bg-amber-100 text-amber-800 border-amber-200",
+                          )}
+                        >
+                          {["accepted", "in_fulfillment", "dispatched"].includes(
+                            String(
+                              effectiveActiveOrder.status ||
+                                effectiveActiveOrder.poStatus ||
+                                "",
+                            ).toLowerCase(),
+                          )
+                            ? "Supplier Accepted — Delivery In Progress"
+                            : "Awaiting Supplier Acceptance & Commitment"}
+                        </span>
+                      </div>
+                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                        Official Purchase Order Released — Contract Binding Enacted
+                      </h3>
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
+                        <strong className="text-slate-900 font-bold">
+                          {activeAward.sellerName ||
+                            activeAward.seller?.name ||
+                            activeAward.awardedSellerName ||
+                            activeAward.sellerOrganization?.name ||
+                            "Awarded Supplier"}
+                        </strong>{" "}
+                        for{" "}
+                        <strong className="text-emerald-700 font-bold">
+                          ₹{Number(
+                            effectiveActiveOrder.amount ||
+                              effectiveActiveOrder.totalValue ||
+                              activeAward?.finalAmount ||
+                              0,
+                          ).toLocaleString("en-IN")}
+                        </strong>
+                        . All participating bidders have been transitioned, and order binding is legally established.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsReceiptModalOpen(true)}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      View Purchase Order
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push("/buyer/orders")}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                    >
+                      <Truck className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
+                      Manage All Orders
                     </Button>
                   </div>
                 </div>
@@ -8008,6 +8196,16 @@ export function ProcurementDetailUnifiedView(
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Purchase Order Receipt Modal for Viewing/Printing/Downloading */}
+          {isReceiptModalOpen && effectiveActiveOrder && (
+            <PurchaseOrderReceiptModal
+              order={effectiveActiveOrder}
+              onClose={() => setIsReceiptModalOpen(false)}
+              isBuyer={isBuyerSide}
+              isSeller={!isBuyerSide}
+            />
           )}
 
           {/* Buyer: Award Contract Confirmation Modal */}
@@ -8184,7 +8382,7 @@ export function ProcurementDetailUnifiedView(
           )}
 
           {/* Header */}
-          <header className="rounded-xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-2xs">
+          <header className="rounded-xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-2xs">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -8281,7 +8479,7 @@ export function ProcurementDetailUnifiedView(
                     )
                   )}
                 </div>
-                <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 break-words leading-snug">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 break-words leading-snug">
                   {resolvedSubject}
                 </h1>
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-500 tracking-normal">
@@ -8518,7 +8716,9 @@ export function ProcurementDetailUnifiedView(
                       <span>
                         {isEmdGated
                           ? "Pay EMD to Submit"
-                          : props.submitButtonLabel || defaultSubmitBtnLabel}
+                          : isBuyerOrAdmin && isBidAwarded
+                            ? "View Awarded Results & Ranking"
+                            : props.submitButtonLabel || defaultSubmitBtnLabel}
                       </span>
                       <ArrowRight className="h-3 w-3" />
                     </Button>
@@ -8666,8 +8866,8 @@ export function ProcurementDetailUnifiedView(
               tabIndex={0}
               className="space-y-3.5 sm:space-y-4 focus:outline-none"
             >
-              {/* Procurement Awarded Banner for Buyer (when awarded) */}
-              {isBuyerOrAdmin && isBidAwarded && (
+              {/* Procurement Awarded Banner for Buyer (when awarded and before PO released) */}
+              {isBuyerOrAdmin && isBidAwarded && !effectiveActiveOrder && (
                 <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-start gap-2.5">
@@ -8690,19 +8890,6 @@ export function ProcurementDetailUnifiedView(
                           officially awarded and archived.
                         </p>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => router.push(`/bids/${targetId}/results`)}
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer"
-                      >
-                        <Award className="h-3.5 w-3.5" />
-                        <span>View Awarded Results &amp; Ranking</span>
-                        <ArrowRight className="h-3 w-3" />
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -9889,31 +10076,29 @@ export function ProcurementDetailUnifiedView(
                               </div>
                             )}
 
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                isTechEvalCompleted || isBidAwarded
-                                  ? "primary"
-                                  : "outline"
-                              }
-                              onClick={() =>
-                                router.push(`/bids/${targetId}/results`)
-                              }
-                              className={cn(
-                                "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
-                                isTechEvalCompleted || isBidAwarded
-                                  ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                                  : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50",
-                              )}
-                            >
-                              <span>
-                                {isBidAwarded
-                                  ? "View Awarded Results & Ranking"
-                                  : "View Stage 2 Financial Opening & Results"}
-                              </span>
-                              <ArrowRight className="h-3.5 w-3.5" />
-                            </Button>
+                            {!isBidAwarded && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  isTechEvalCompleted ? "primary" : "outline"
+                                }
+                                onClick={() =>
+                                  router.push(`/bids/${targetId}/results`)
+                                }
+                                className={cn(
+                                  "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
+                                  isTechEvalCompleted
+                                    ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                                    : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50",
+                                )}
+                              >
+                                <span>
+                                  View Stage 2 Financial Opening & Results
+                                </span>
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </div>
