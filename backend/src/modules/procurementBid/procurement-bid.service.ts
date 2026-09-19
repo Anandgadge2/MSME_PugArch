@@ -956,6 +956,26 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
       return subStatus !== 'DRAFT' && !p.isWithdrawn;
     }).length,
+    hasSubmittedProposal: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+      const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+      const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+      const matchesUser = (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+      const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
+      return matchesUser && subStatus === 'SUBMITTED';
+    }) : undefined,
+    myParticipation: actorRole === 'seller' ? (() => {
+      const found = (bid.participations || []).find((p: any) => {
+        const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+        const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+        return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+      });
+      return found ? serializeParticipation(found, { canSeeFinancial: true, bid, ownView: true }) : undefined;
+    })() : undefined,
+    hasParticipated: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+      const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
+      const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
+      return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
+    }) : undefined,
     participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
       if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
       if (actorRole === 'seller') {

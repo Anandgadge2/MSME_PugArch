@@ -1329,7 +1329,8 @@ router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, 
 
 router.get('/seller/procurement-bids/:bidId/status', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const bid = await service.resolveBid(req.params.bidId, { participations: { where: { OR: [{ sellerId: req.user!.id }, ...(req.user!.organizationId ? [{ seller: { organizationId: req.user!.organizationId } }] : [])] }, include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true } } });
-  const participation = bid.participations?.[0];
+  await enrichBidsWithResponses([bid], req.user!.id);
+  const participation = bid.participations?.find((p: any) => p.sellerId === req.user!.id || (req.user!.organizationId && p.seller?.organizationId === req.user!.organizationId)) || bid.participations?.[0];
   const isRestrictedBid = service.isRestrictedBidMethod(bid);
   if (isRestrictedBid) {
     if (!participation && !service.isActorInvitedToBid(req.user as any, bid)) {
@@ -1534,8 +1535,7 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
 
         if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isTitleAndBuyerMatch) {
           const sellerId = r.sellerUserId;
-          if (sellerId && !existingSellerIds.has(sellerId)) {
-            existingSellerIds.add(sellerId);
+          if (sellerId) {
             const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
             const rawDocs = Array.isArray(respData.documents) ? respData.documents : [];
             const documents = rawDocs.map((d: any, idx: number) => ({

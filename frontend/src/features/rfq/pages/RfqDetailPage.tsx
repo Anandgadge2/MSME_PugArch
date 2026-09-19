@@ -795,8 +795,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
   const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
   const submitted  = Boolean(
-    (ownResponse && String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase() === 'SUBMITTED') ||
-    rawBid?.hasSubmittedProposal
+    (ownResponse && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase())) ||
+    rawBid?.hasSubmittedProposal ||
+    (ownParticipation && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase()))
   );
   const statusUpper = String(status || 'OPEN').toUpperCase();
   const isAwarded  = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||

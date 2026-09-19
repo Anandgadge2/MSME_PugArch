@@ -1937,11 +1937,26 @@ export default function SubmitQuotationPage() {
       localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
         const currentUserId = user?.id ? String(user.id) : null;
-        const keysToClear = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
-        keysToClear.forEach(k => {
+        const submittedRecord = {
+          id: Date.now(),
+          userId: currentUserId,
+          status: 'SUBMITTED',
+          submissionStatus: 'SUBMITTED',
+          submittedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          offeredPrice: payload.offeredPrice,
+          offeredQuantity: payload.offeredQuantity,
+          deliveryTimeline: payload.deliveryTimeline,
+          message: payload.message,
+          terms: payload.terms,
+          attachmentUrl: payload.attachmentUrl,
+          responseData: payload.responseData
+        };
+        const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        keysToSet.forEach(k => {
           try {
-            localStorage.removeItem(`rfq_submitted_${k}`);
-            if (currentUserId) localStorage.removeItem(`rfq_submitted_${currentUserId}_${k}`);
+            localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+            if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
           } catch {}
         });
       }
@@ -1949,6 +1964,10 @@ export default function SubmitQuotationPage() {
       queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
       queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
       queryClient.invalidateQueries({ queryKey: ['marketplace-opportunities'] });
       queryClient.invalidateQueries({ queryKey: ['seller-opportunities'] });
@@ -1956,11 +1975,34 @@ export default function SubmitQuotationPage() {
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        if (typeof window !== 'undefined') {
+          const currentUserId = user?.id ? String(user.id) : null;
+          const submittedRecord = {
+            id: Date.now(),
+            userId: currentUserId,
+            status: 'SUBMITTED',
+            submissionStatus: 'SUBMITTED',
+            submittedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString()
+          };
+          const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+          keysToSet.forEach(k => {
+            try {
+              localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+              if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
+            } catch {}
+          });
+        }
         setSubmitted(true);
         queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
         queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
+        queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
         toast.info('You have already submitted your quotation for this procurement.');
       } else {
         toast.error(err?.message || 'Failed to submit quotation');

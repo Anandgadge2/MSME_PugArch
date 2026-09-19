@@ -2797,17 +2797,45 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             Math.abs(Number(requirement.id))
         ].filter((value) => Number.isFinite(value) && value > 0));
 
-        if (isLegacy && req.user?.role === 'seller') {
-            const mirroredRequirement = await db.buyerRequirement.findFirst({
-                where: {
-                    title: requirement.title,
-                    description: requirement.description || requirement.title,
-                    createdById: requirement.buyerId || requirement.createdById,
-                    ...(requirement.buyerOrganizationId ? { buyerOrganizationId: requirement.buyerOrganizationId } : {})
-                },
-                select: { id: true }
-            }).catch(() => null);
+        if (req.user?.role === 'seller') {
+            const reqTitle = requirement.title;
+            const reqBuyerId = requirement.buyerId || requirement.createdById;
+            const reqBuyerOrgId = requirement.buyerOrganizationId;
+            const reqNumber = requirement.requirementNumber || requirement.bidNumber || idToken;
+
+            const [mirroredRequirement, linkedLegacyReq, linkedBidRecord] = await Promise.all([
+                db.buyerRequirement.findFirst({
+                    where: {
+                        OR: [
+                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, createdById: reqBuyerId }] : []),
+                            ...(reqTitle && reqBuyerOrgId ? [{ title: reqTitle, buyerOrganizationId: reqBuyerOrgId }] : [])
+                        ]
+                    },
+                    select: { id: true }
+                }).catch(() => null),
+                db.requirement.findFirst({
+                    where: {
+                        OR: [
+                            ...(reqNumber ? [{ requirementNumber: reqNumber }] : []),
+                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, buyerId: reqBuyerId }] : [])
+                        ]
+                    },
+                    select: { id: true }
+                }).catch(() => null),
+                db.procurementBid.findFirst({
+                    where: {
+                        OR: [
+                            ...(reqNumber ? [{ bidNumber: reqNumber }] : []),
+                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, buyerId: reqBuyerId }] : [])
+                        ]
+                    },
+                    select: { id: true }
+                }).catch(() => null)
+            ]);
+
             if (mirroredRequirement?.id) responseRequirementIds.add(mirroredRequirement.id);
+            if (linkedLegacyReq?.id) responseRequirementIds.add(linkedLegacyReq.id);
+            if (linkedBidRecord?.id) responseRequirementIds.add(linkedBidRecord.id);
         }
 
         const safeReqId = typeof requirement.id === 'number' && requirement.id > 0 ? requirement.id : -999999;
@@ -2853,6 +2881,34 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         ]);
         similar = similarList.map(decorateRequirement);
         ownResponse = response;
+
+        if (!ownResponse && req.user?.role === 'seller') {
+            const pbPart = await db.procurementBidParticipation.findFirst({
+                where: {
+                    bidId: { in: Array.from(responseRequirementIds) },
+                    sellerId: Number(req.user.id),
+                    submissionStatus: { not: 'DRAFT' },
+                    isWithdrawn: false
+                }
+            }).catch(() => null);
+
+            if (pbPart) {
+                ownResponse = {
+                    id: pbPart.id,
+                    status: pbPart.submissionStatus || 'SUBMITTED',
+                    submissionStatus: pbPart.submissionStatus || 'SUBMITTED',
+                    offeredPrice: Number(pbPart.quotedAmount || pbPart.totalAmount || 0),
+                    offeredQuantity: pbPart.offeredQuantity || 1,
+                    deliveryTimeline: pbPart.deliveryTimeline || 'Standard',
+                    message: pbPart.offeredItemDescription || '',
+                    terms: pbPart.terms || '',
+                    attachmentUrl: null,
+                    responseData: pbPart.acknowledgement || {},
+                    createdAt: pbPart.createdAt,
+                    updatedAt: pbPart.updatedAt
+                };
+            }
+        }
 
         return ok(res, { requirement, similarRequirements: similar, ownResponse });
     } catch (error) {
@@ -3149,8 +3205,39 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             } else {
                 requirement = await tx.buyerRequirement.findFirst({
                     where: { id },
-                    select: { id: true, buyerOrganizationId: true, createdById: true, lastDate: true, status: true }
+                    select: { id: true, title: true, buyerOrganizationId: true, createdById: true, lastDate: true, status: true, allowRevision: true, payload: true }
                 });
+            }
+
+            if (!requirement) {
+                const bidRecord = await tx.procurementBid.findUnique({
+                    where: { id },
+                    select: { id: true, title: true, description: true, buyerId: true, buyerOrganizationId: true }
+                }).catch(() => null);
+                if (bidRecord) {
+                    let mirror = await tx.buyerRequirement.findFirst({
+                        where: {
+                            title: bidRecord.title,
+                            createdById: bidRecord.buyerId,
+                            ...(bidRecord.buyerOrganizationId ? { buyerOrganizationId: bidRecord.buyerOrganizationId } : {})
+                        }
+                    }).catch(() => null);
+                    if (!mirror) {
+                        mirror = await tx.buyerRequirement.create({
+                            data: {
+                                title: bidRecord.title,
+                                requirementType: 'PRODUCT',
+                                description: bidRecord.description || bidRecord.title,
+                                status: 'PUBLISHED',
+                                lastDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                createdById: bidRecord.buyerId,
+                                buyerOrganizationId: bidRecord.buyerOrganizationId
+                            }
+                        });
+                    }
+                    requirement = mirror;
+                    targetId = mirror.id;
+                }
             }
 
             if (!requirement) {
@@ -3208,8 +3295,9 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
 
             const targetExistingResponse = existingDraft || (isExplicitRevisionAllowed ? existing : null);
 
+            let savedResponse;
             if (targetExistingResponse) {
-                return tx.requirementResponse.update({
+                savedResponse = await tx.requirementResponse.update({
                     where: { id: targetExistingResponse.id },
                     data: {
                         offeredPrice: body.offeredPrice !== undefined ? body.offeredPrice : targetExistingResponse.offeredPrice,
@@ -3224,7 +3312,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     select: { id: true, requirementId: true, sellerOrganizationId: true, sellerUserId: true, status: true, createdAt: true, updatedAt: true }
                 });
             } else {
-                return tx.requirementResponse.create({
+                savedResponse = await tx.requirementResponse.create({
                     data: {
                         offeredPrice: body.offeredPrice,
                         offeredQuantity: body.offeredQuantity,
@@ -3241,6 +3329,68 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     select: { id: true, requirementId: true, sellerOrganizationId: true, sellerUserId: true, status: true, createdAt: true, updatedAt: true }
                 });
             }
+
+            // Sync with ProcurementBidParticipation if linked to a ProcurementBid
+            try {
+                const matchingBid = await tx.procurementBid.findFirst({
+                    where: {
+                        OR: [
+                            { id: targetId },
+                            { technicalPacket: { path: ['sourceRequirementId'], equals: targetId } },
+                            { technicalPacket: { path: ['requirementId'], equals: targetId } },
+                            ...(requirement.title ? [{
+                                title: requirement.title,
+                                buyerId: requirement.createdById,
+                                ...(requirement.buyerOrganizationId ? { buyerOrganizationId: requirement.buyerOrganizationId } : {})
+                            }] : [])
+                        ]
+                    }
+                });
+
+                if (matchingBid) {
+                    const sellerUserId = Number(req.user?.id);
+                    const existingPart = await tx.procurementBidParticipation.findFirst({
+                        where: {
+                            bidId: matchingBid.id,
+                            sellerId: sellerUserId
+                        }
+                    });
+
+                    const partData = {
+                        quotedAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
+                        totalAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
+                        submissionStatus: body.status || 'SUBMITTED',
+                        technicalStatus: 'QUALIFIED' as any,
+                        financialStatus: 'OPENED' as any,
+                        finalStatus: 'PENDING' as any,
+                        submittedAt: new Date(),
+                        technicalSubmittedAt: new Date(),
+                        financialSubmittedAt: new Date(),
+                        offeredItemDescription: body.message || 'Quotation submitted via marketplace'
+                    };
+
+                    if (existingPart) {
+                        await tx.procurementBidParticipation.update({
+                            where: { id: existingPart.id },
+                            data: partData
+                        });
+                    } else {
+                        const count = await tx.procurementBidParticipation.count({ where: { bidId: matchingBid.id } });
+                        await tx.procurementBidParticipation.create({
+                            data: {
+                                bidId: matchingBid.id,
+                                sellerId: sellerUserId,
+                                participationNumber: `PRT-${matchingBid.id}-${String(count + 1).padStart(3, '0')}`,
+                                ...partData
+                            }
+                        });
+                    }
+                }
+            } catch (syncErr) {
+                console.error('[Marketplace Response Sync to Bid Participation Error]', syncErr);
+            }
+
+            return savedResponse;
         }, { timeout: 30000, maxWait: 10000 });
 
         // Invalidate dashboard summary cache for the seller so bid count updates immediately
@@ -3316,7 +3466,50 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             }).catch(() => null)
         ]);
 
-        if (!linkedBuyerReq && !linkedLegacyReq && !linkedBid) {
+        let resolvedBuyerReq = linkedBuyerReq;
+        let resolvedLegacyReq = linkedLegacyReq;
+        let resolvedBid = linkedBid;
+
+        if (resolvedBid && !resolvedBuyerReq) {
+            const rawPkt = resolvedBid.technicalPacket;
+            const pkt = (typeof rawPkt === 'string' ? JSON.parse(rawPkt) : (rawPkt || {})) as any;
+            const sourceReqId = Number(pkt.sourceRequirementId || pkt.requirementId || 0);
+            if (sourceReqId > 0) {
+                resolvedBuyerReq = await db.buyerRequirement.findUnique({
+                    where: { id: sourceReqId },
+                    select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
+                }).catch(() => null);
+            }
+            if (!resolvedBuyerReq) {
+                resolvedBuyerReq = await db.buyerRequirement.findFirst({
+                    where: {
+                        title: resolvedBid.title,
+                        createdById: resolvedBid.buyerId,
+                        ...(resolvedBid.buyerOrganizationId ? { buyerOrganizationId: resolvedBid.buyerOrganizationId } : {})
+                    },
+                    select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
+                }).catch(() => null);
+            }
+        }
+
+        if (resolvedBuyerReq && !resolvedBid) {
+            resolvedBid = await db.procurementBid.findFirst({
+                where: {
+                    OR: [
+                        { technicalPacket: { path: ['sourceRequirementId'], equals: resolvedBuyerReq.id } },
+                        { technicalPacket: { path: ['requirementId'], equals: resolvedBuyerReq.id } },
+                        {
+                            title: resolvedBuyerReq.title,
+                            buyerId: resolvedBuyerReq.createdById,
+                            ...(resolvedBuyerReq.buyerOrganizationId ? { buyerOrganizationId: resolvedBuyerReq.buyerOrganizationId } : {})
+                        }
+                    ]
+                },
+                select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
+            }).catch(() => null);
+        }
+
+        if (!resolvedBuyerReq && !resolvedLegacyReq && !resolvedBid) {
             return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
         }
 
@@ -3325,9 +3518,9 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
             const userId = Number(req.user.id);
             const userOrgId = req.user.organizationId ? Number(req.user.organizationId) : null;
             const isOwner = (
-                (linkedBuyerReq && (linkedBuyerReq.createdById === userId || (userOrgId && linkedBuyerReq.buyerOrganizationId === userOrgId))) ||
-                (linkedLegacyReq && (linkedLegacyReq.buyerId === userId || (userOrgId && linkedLegacyReq.organizationId === userOrgId))) ||
-                (linkedBid && (linkedBid.buyerId === userId || (userOrgId && linkedBid.buyerOrganizationId === userOrgId)))
+                (resolvedBuyerReq && (resolvedBuyerReq.createdById === userId || (userOrgId && resolvedBuyerReq.buyerOrganizationId === userOrgId))) ||
+                (resolvedLegacyReq && (resolvedLegacyReq.buyerId === userId || (userOrgId && resolvedLegacyReq.organizationId === userOrgId))) ||
+                (resolvedBid && (resolvedBid.buyerId === userId || (userOrgId && resolvedBid.buyerOrganizationId === userOrgId)))
             );
             if (!isOwner) {
                 return apiResponse.error(res, 403, 'You do not have permission to view responses for this requirement.', 'FORBIDDEN');
@@ -3336,14 +3529,14 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
 
         // Scope targets strictly to the authentic matched entities (do not bleed across same-titled or sourceRequirementId requirements)
         const allTargetReqIds = Array.from(new Set([
-            linkedBuyerReq?.id,
-            linkedLegacyReq?.id,
-            (!linkedBid && candidateIds.length) ? candidateIds[0] : null
+            resolvedBuyerReq?.id,
+            resolvedLegacyReq?.id,
+            (!resolvedBid && candidateIds.length) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const allTargetBidIds = Array.from(new Set([
-            linkedBid?.id,
-            (!linkedBuyerReq && !linkedLegacyReq && candidateIds.length && linkedBid) ? candidateIds[0] : null
+            resolvedBid?.id,
+            (!resolvedBuyerReq && !resolvedLegacyReq && candidateIds.length && resolvedBid) ? candidateIds[0] : null
         ].filter(Boolean) as number[]));
 
         const nonDraftFilter = {
