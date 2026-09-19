@@ -254,6 +254,18 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     if (directBid) {
       await enrichBidsWithResponses([directBid], actor?.id);
       const serialized = service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true });
+      if (directBid.awards && directBid.awards.length > 0) {
+        const awardIds = directBid.awards.map((a: any) => a.id);
+        const pos = await (prisma as any).purchaseOrder.findMany({
+          where: { sourceType: 'procurement_bid_award', sourceId: { in: awardIds } },
+          include: {
+            invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+            grns: { include: { items: true } }
+          }
+        });
+        (serialized as any).purchaseOrders = pos;
+        (serialized as any).activeOrder = pos[0] || null;
+      }
       await setCache(cacheKey, serialized, 30);
       return apiResponse.success(res, serialized, 200, 'Procurement bid details fetched successfully');
     }
@@ -1806,9 +1818,39 @@ router.post('/buyer/procurement-bids/:bidId/open-financial-evaluation', authenti
   return apiResponse.success(res, data, 200, 'Financial evaluation opened and L1/L2/L3/L4 ranking generated');
 }));
 
-router.post(['/buyer/procurement-bids/:bidId/recommend-award', '/buyer/bids/:bidId/recommend-award'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, remarks: z.string().trim().max(2000).optional(), adminOverrideReason: z.string().trim().max(2000).optional() }) }), asyncRoute(async (req, res) => {
+router.post(['/buyer/procurement-bids/:bidId/award', '/buyer/procurement-bids/:bidId/recommend-award', '/buyer/bids/:bidId/recommend-award'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, remarks: z.string().trim().max(2000).optional(), adminOverrideReason: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional(), generatePoNow: z.boolean().optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.recommendAward(req, req.params.bidId, req.body);
-  return apiResponse.created(res, data, 'Award recommendation created');
+  return apiResponse.created(res, data, 'Award offer created');
+}));
+
+router.post(['/buyer/procurement-bids/:bidId/counter-offer', '/buyer/bids/:bidId/counter-offer'], authenticate, requireAccountType('buyer', 'admin'), requirePermission('award.recommend'), validate({ params: idParamSchema, body: z.object({ participationId: flexibleParticipationIdSchema, priceMatchTargetPrice: z.coerce.number().positive().optional(), deadlineHours: z.coerce.number().int().min(1).max(720).optional(), deadlineDate: z.string().optional(), counterOfferNotes: z.string().trim().max(2000).optional(), justificationReason: z.string().trim().max(2000).optional() }) }), asyncRoute(async (req, res) => {
+  const data = await service.sendPriceMatchCounterOffer(req, req.params.bidId, req.body);
+  return apiResponse.created(res, data, 'Price match counter-offer sent to supplier');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/counter-offer/accept', '/seller/bids/:bidId/counter-offer/accept'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const data = await service.acceptPriceMatchCounterOffer(req, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Price match counter-offer accepted successfully');
+}));
+
+router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+  const data = await service.declinePriceMatchCounterOffer(req, req.params.bidId, req.body);
+  return apiResponse.success(res, data, 200, 'Price match counter-offer declined');
+}));
+
+router.post('/seller/procurement-bids/:bidId/accept-award', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const data = await service.acceptAward(req, req.params.bidId);
+  return apiResponse.success(res, data, 200, 'Award offer accepted successfully');
+}));
+
+router.post('/seller/procurement-bids/:bidId/decline-award', authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+  const data = await service.declineAward(req, req.params.bidId, req.body);
+  return apiResponse.success(res, data, 200, 'Award offer declined successfully');
+}));
+
+router.post('/buyer/procurement-bids/:bidId/generate-po', authenticate, requireAccountType('buyer', 'admin'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const data = await service.generatePOForBid(req, req.params.bidId, req.body || {});
+  return apiResponse.created(res, data, 'Purchase order generated and issued');
 }));
 
 router.get('/admin/procurement-bids', authenticate, requireAccountType('admin'), requirePermission('tender.view'), checkFeatureEnabled('admin-bid-approval'), asyncRoute(async (req, res) => {
@@ -1887,8 +1929,13 @@ router.get('/seller/awards', authenticate, requireAccountType('seller'), asyncRo
   return apiResponse.success(res, data, 200, 'Seller awards fetched');
 }));
 
-router.post('/seller/awards/:awardId/accept', authenticate, requireAccountType('seller'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema }), asyncRoute(async (req, res) => {
-  const data = await orderService.acceptSellerAward(req, Number(req.params.awardId), req.body || {});
+router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+  const targetId = Number(req.params.id || req.params.awardId);
+  if (req.path.includes('purchase-orders')) {
+    const data = await orderService.acceptPO(req, targetId, req.body || {});
+    return apiResponse.success(res, data, 200, 'Purchase Order accepted and fulfillment committed');
+  }
+  const data = await orderService.acceptSellerAward(req, targetId, req.body || {});
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 
@@ -1969,9 +2016,16 @@ router.post('/orders/:orderId/settlement/mark-confirmed', authenticate, requireA
   return apiResponse.success(res, data, 200, 'Settlement confirmed');
 }));
 
-router.get('/admin/settlements', authenticate, requireAccountType('admin'), requirePermission('report.view'), asyncRoute(async (req, res) => {
-  const data = await orderService.listAdminSettlements(req.user!, req.query);
-  return apiResponse.success(res, data, 200, 'Settlements fetched');
+router.post(['/buyer/invoices/:invoiceId/record-payment', '/orders/:orderId/invoices/:invoiceId/record-payment', '/orders/:orderId/payment/record'], authenticate, requireAccountType('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
+  const data = await orderService.recordOrderPayment(req, invoiceId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Payment receipt recorded successfully');
+}));
+
+router.post(['/seller/invoices/:invoiceId/confirm-settlement', '/orders/:orderId/invoices/:invoiceId/confirm-settlement'], authenticate, requireAccountType('seller', 'admin'), asyncRoute(async (req, res) => {
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
+  const data = await orderService.confirmOrderSettlement(req, invoiceId, req.body || {});
+  return apiResponse.success(res, data, 200, 'Payment settlement confirmed and order completed');
 }));
 
 // ── Edge Case Routes ──

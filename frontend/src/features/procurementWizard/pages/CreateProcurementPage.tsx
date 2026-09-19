@@ -1016,9 +1016,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     penaltyClause: '',
     location: '',
   },
-  boqTable: [
-    { srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, total: 0, remarks: '' }
-  ],
+  boqTable: [],
   boqFileAssetId: null,
   boqFileName: '',
   vendors: {
@@ -1585,7 +1583,7 @@ export default function CreateProcurementPage() {
 
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
-    list.push({ label: 'Delivery terms location is required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
+    list.push({ label: 'Delivery terms are required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
     // EMD check commented out as requested
     // if (d.terms.emdRequired) {
     //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 6 });
@@ -2080,7 +2078,7 @@ export default function CreateProcurementPage() {
         return false;
       }
       if (!d.terms.deliveryTerms) {
-        toast.error('Delivery location terms are required.');
+        toast.error('Delivery terms are required.');
         return false;
       }
       // EMD check commented out as requested
@@ -2888,7 +2886,18 @@ function BasicsStepForm({
         <Field label="What are you buying?" required>
           <select
             value={draft.basics.whatAreYouBuying}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, whatAreYouBuying: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, whatAreYouBuying: val },
+                boqTable: val === 'BOQ' && c.boqTable.length === 0
+                  ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 0, total: 0, remarks: '' }]
+                  : val !== 'BOQ'
+                    ? []
+                    : c.boqTable
+              }));
+            }}
             className={inputClass}
           >
             {allowedBuyingOptions.map(opt => (
@@ -7386,11 +7395,11 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <Field label="Delivery terms location" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
+          <Field label="Delivery Terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.')}>
             <select
               value={draft.terms.deliveryTerms}
               onChange={e => updateTerms('deliveryTerms', e.target.value)}
-              className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.'))}
+              className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
             >
               {DELIVERY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
@@ -7906,7 +7915,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           specification: item.remarks || item.description || '',
           scopeOfWork: item.remarks || item.description || '',
           category: item.category || 'General',
-          taxPercent: item.taxPercent || 18,
+          taxPercent: item.taxPercent !== undefined && item.taxPercent !== null ? Number(item.taxPercent) : 0,
         }
       }))
     : draft.items.map(item => {
@@ -8001,6 +8010,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     deliveryLocation,
     category: draft.basics.category,
     requiredByDate: draft.basics.requiredByDate,
+    priority: draft.basics.priority,
+    urgency: draft.basics.priority,
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
@@ -8078,7 +8089,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
     auctionConfig: auctionConfigPayload,
     evaluationMethod: chosenEvaluationMethod,
-    allowReverseAuction: hasReverseAuction
+    allowReverseAuction: hasReverseAuction,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
   };
 
   // Run suggestion engine to capture recommendation result
@@ -8125,6 +8138,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    boqTable: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable : [],
+    boqFileName: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileName : '',
+    boqFileAssetId: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
     serviceDetails: draft.basics.whatAreYouBuying === 'Services'
@@ -8154,8 +8170,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     documents: mappedDocuments,
     tender,
     rules,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
     basics: {
       ...basics,
+      priority: draft.basics.priority,
+      urgency: draft.basics.priority,
       isReverseAuctionNeeded: hasReverseAuction,
     },
     vendors: {
@@ -8185,6 +8205,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     workflowStatus: 'DRAFT',
     approvalStatus: draft.approval?.workflow || 'DRAFT',
     evaluationMethod: chosenEvaluationMethod,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
     payload: payloadJson,
     items: mappedItems
   };

@@ -1352,11 +1352,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           )}>
             {item.type}
           </span>
-          {isParticipatedOpportunity(item) && (
+          {isParticipatedOpportunity(item) ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0">
               <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Submitted
             </span>
-          )}
+          ) : (isClosedStatus(item.status) || !isOpenOpportunity(item, nowMs)) ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-slate-500 shrink-0">
+              <Lock className="h-2.5 w-2.5 text-slate-400" /> Closed
+            </span>
+          ) : null}
         </div>
       )
     },
@@ -1991,6 +1995,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
                 const closingTime = item.closingDate ? getClosingTimestamp(item.closingDate) : null;
                 const isClosingSoon = closingTime !== null && (closingTime - nowMs) <= 2 * 86400000 && (closingTime - nowMs) >= 0;
+                const closed = isClosedStatus(item.status) || (!isOpenOpportunity(item, nowMs));
+                const participated = isParticipatedOpportunity(item);
                 return (
                   <div
                     key={item.id}
@@ -2014,11 +2020,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                           )}>
                             {item.type}
                           </span>
-                          {isParticipatedOpportunity(item) && (
+                          {participated ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800 shadow-2xs">
-                              <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Participated
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              {closed ? "Submitted • Under Eval" : "Participated"}
                             </span>
-                          )}
+                          ) : closed ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500 shadow-2xs">
+                              <Lock className="h-3 w-3 text-slate-400" /> Missed Deadline
+                            </span>
+                          ) : null}
                         </div>
                       </div>
 
@@ -2089,49 +2100,43 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                       </div>
 
                       {/* Action Buttons */}
-                      {(() => {
-                        const closed = isClosedStatus(item.status) || (!isOpenOpportunity(item, nowMs));
-                        const participated = isParticipatedOpportunity(item);
-                        return (
-                          <div className="pt-1 flex items-center gap-2">
-                            {!closed ? (
-                              <Link
-                                href={item.href}
-                                className={cn(
-                                  "flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-white shadow-2xs transition active:scale-[0.99]",
-                                  participated
-                                    ? "bg-emerald-600 hover:bg-emerald-700"
-                                    : item.type === 'Reverse Auction'
-                                    ? "bg-red-600 hover:bg-red-700"
-                                    : "bg-[#12335f] hover:bg-[#0b2445]"
-                                )}
-                              >
-                                {participated && <CheckCircle2 className="h-3.5 w-3.5" />}
-                                <span>{item.actionLabel}</span>
-                                <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
-                              </Link>
-                            ) : participated ? (
-                              <Link
-                                href={item.href}
-                                className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                <span>Track Status</span>
-                              </Link>
-                            ) : null}
-                            <Link
-                              href={item.detailsHref}
-                              className={cn(
-                                "h-9 px-3 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-[0.99] transition shrink-0",
-                                closed && !participated ? "w-full flex-1" : ""
-                              )}
-                              title="View complete specifications and terms"
-                            >
-                              Details
-                            </Link>
-                          </div>
-                        );
-                      })()}
+                      <div className="pt-1 flex items-center gap-2">
+                        {!closed ? (
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              "flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-white shadow-2xs transition active:scale-[0.99]",
+                              participated
+                                ? "bg-emerald-600 hover:bg-emerald-700"
+                                : item.type === 'Reverse Auction'
+                                ? "bg-red-600 hover:bg-red-700"
+                                : "bg-[#12335f] hover:bg-[#0b2445]"
+                            )}
+                          >
+                            {participated && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            <span>{item.actionLabel}</span>
+                            <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
+                          </Link>
+                        ) : participated ? (
+                          <Link
+                            href={item.href}
+                            className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Track Status</span>
+                          </Link>
+                        ) : null}
+                        <Link
+                          href={item.detailsHref}
+                          className={cn(
+                            "h-9 px-3 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-[0.99] transition shrink-0",
+                            closed && !participated ? "w-full flex-1" : ""
+                          )}
+                          title="View complete specifications and terms"
+                        >
+                          Details
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 );

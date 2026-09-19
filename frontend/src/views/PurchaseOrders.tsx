@@ -1,12 +1,14 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt } from 'lucide-react';
+import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
 import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/RepeatPurchaseOrderModal';
 import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
+import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/RecordOrderPaymentModal';
+import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -118,7 +120,9 @@ const OrderActionsMenu = ({
   setConfirming,
   onUploadPaymentSlip,
   onViewPaymentSlip,
-  onViewReceipt
+  onViewReceipt,
+  onRecordPayment,
+  onConfirmSettlement
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -228,20 +232,38 @@ const OrderActionsMenu = ({
 
       {isSeller && (isAccepted || isDelivered) && (
         <>
-          {String(order.status || '').toLowerCase() === 'accepted' && (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                const amountVal = order.amount || order.totalValue || 0;
-                router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-            >
-              <FileText className="h-3.5 w-3.5 text-emerald-600" />
-              <span>Create Invoice</span>
-            </button>
-          )}
+          {(() => {
+            const hasApprovedGrn = Boolean(
+              (order as any).grns && (order as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+            );
+            if (hasApprovedGrn) {
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    const amountVal = order.amount || order.totalValue || 0;
+                    router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+                >
+                  <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Create Invoice from PO (GRN Verified)</span>
+                </button>
+              );
+            }
+            return (
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 opacity-60 cursor-not-allowed text-left"
+                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+              >
+                <Lock className="h-3.5 w-3.5 text-slate-400" />
+                <span>Convert PO to Invoice (GRN Locked)</span>
+              </button>
+            );
+          })()}
           <button
             type="button"
             onClick={() => {
@@ -286,6 +308,17 @@ const OrderActionsMenu = ({
             type="button"
             onClick={() => {
               onClose();
+              onRecordPayment?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Record Payment & Slip</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
               onUploadPaymentSlip?.(order);
             }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
@@ -308,17 +341,30 @@ const OrderActionsMenu = ({
       )}
 
       {isSeller && !isCancelled && (
-        <button
-          type="button"
-          onClick={() => {
-            onClose();
-            onViewPaymentSlip?.(order);
-          }}
-          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-        >
-          <Receipt className="h-3.5 w-3.5 text-indigo-600" />
-          <span>Payment Slip</span>
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onConfirmSettlement?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Confirm Settlement</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onViewPaymentSlip?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
+          >
+            <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Payment Slip</span>
+          </button>
+        </>
       )}
 
       {isBuyer && !isCancelled && !isDelivered && (
@@ -365,6 +411,8 @@ export default function PurchaseOrders() {
   const [receiptModalOrder, setReceiptModalOrder] = useState<PurchaseOrderDto | null>(null);
   const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
+  const [recordPaymentOrder, setRecordPaymentOrder] = useState<PurchaseOrderDto | null>(null);
+  const [confirmSettlementOrder, setConfirmSettlementOrder] = useState<PurchaseOrderDto | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -655,10 +703,13 @@ export default function PurchaseOrders() {
       if (viewingOrder && viewingOrder.id === order.id) {
         setViewingOrder({ ...viewingOrder, ...updated, status: 'accepted' });
       }
-      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED successfully! Redirecting to generate Invoice before Delivery Management...`);
+      toast.success(`Purchase Order ${order.poNumber || `PO-${order.id}`} ACCEPTED. Please prepare items for dispatch in Delivery Management.`);
       await refreshPurchaseOrders();
-      const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
+      if (order.poNumber) {
+        router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
+      } else {
+        router.push('/seller/delivery-management');
+      }
     } catch (err: any) {
       toast.error(err?.message || 'Unable to accept purchase order');
     }
@@ -694,13 +745,6 @@ export default function PurchaseOrders() {
   };
 
   const handleOpenDelivery = (order: PurchaseOrderDto) => {
-    const hasInvoice = !!(order.invoices && order.invoices.length > 0);
-    if (!hasInvoice) {
-      toast.info(`Please generate the Tax Invoice for ${order.poNumber || `PO-${order.id}`} first before proceeding to Delivery Management.`);
-      const amountVal = order.amount || order.totalValue || 0;
-      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
-      return;
-    }
     if (order.poNumber) {
       router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
     } else {
@@ -750,6 +794,8 @@ export default function PurchaseOrders() {
             onUploadPaymentSlip={setUploadProofOrder}
             onViewPaymentSlip={setViewProofOrder}
             onViewReceipt={setReceiptModalOrder}
+            onRecordPayment={setRecordPaymentOrder}
+            onConfirmSettlement={setConfirmSettlementOrder}
           />
         )}
       </div>
@@ -2204,18 +2250,34 @@ export default function PurchaseOrders() {
                       )}
                       {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
                         <>
-                          {viewingStatusLower === 'accepted' && (
-                            <Button
-                              onClick={() => {
-                                setViewingOrder(null);
-                                const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
-                                router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
-                              }}
-                              className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-                            >
-                              <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice
-                            </Button>
-                          )}
+                          {(() => {
+                            const hasApprovedGrn = Boolean(
+                              (viewingOrder as any)?.grns && (viewingOrder as any).grns.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+                            );
+                            if (hasApprovedGrn) {
+                              return (
+                                <Button
+                                  onClick={() => {
+                                    setViewingOrder(null);
+                                    const amountVal = viewingOrder.amount || viewingOrder.totalValue || 0;
+                                    router.push(`/seller/invoices?convertPoId=${viewingOrder.id}&amount=${amountVal}`);
+                                  }}
+                                  className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                                >
+                                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice from PO (GRN Verified)
+                                </Button>
+                              );
+                            }
+                            return (
+                              <Button
+                                disabled
+                                className="h-9 bg-slate-100 border border-slate-200 text-slate-400 text-xs font-bold uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap opacity-60 cursor-not-allowed"
+                                title="Convert to Invoice will unlock once the buyer inspects delivery and approves the Goods Receipt Note (GRN)."
+                              >
+                                <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Convert PO to Invoice (GRN Locked)
+                              </Button>
+                            );
+                          })()}
                           <Button
                             onClick={() => {
                               setViewingOrder(null);
@@ -2239,6 +2301,16 @@ export default function PurchaseOrders() {
                       {isBuyer && viewingStatusLower !== 'cancelled' && (
                         <>
                           <Button
+                            onClick={() => {
+                              const target = viewingOrder;
+                              setViewingOrder(null);
+                              setRecordPaymentOrder(target);
+                            }}
+                            className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                          >
+                            <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                          </Button>
+                          <Button
                             onClick={() => setUploadProofOrder(viewingOrder)}
                             className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
                           >
@@ -2252,6 +2324,18 @@ export default function PurchaseOrders() {
                             <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-600" /> Payment Slip
                           </Button>
                         </>
+                      )}
+                      {isSeller && viewingStatusLower !== 'cancelled' && (
+                        <Button
+                          onClick={() => {
+                            const target = viewingOrder;
+                            setViewingOrder(null);
+                            setConfirmSettlementOrder(target);
+                          }}
+                          className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                        >
+                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
+                        </Button>
                       )}
                       {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
                         <Button
@@ -2356,6 +2440,32 @@ export default function PurchaseOrders() {
           orderId={Number(viewProofOrder.id)}
           onStatusChange={() => {
             setViewProofOrder(null);
+            reload();
+          }}
+        />
+      )}
+
+      {recordPaymentOrder && (
+        <RecordOrderPaymentModal
+          isOpen={!!recordPaymentOrder}
+          onClose={() => setRecordPaymentOrder(null)}
+          order={recordPaymentOrder}
+          onSuccess={() => {
+            setRecordPaymentOrder(null);
+            toast.success('Payment recorded and bank slip uploaded successfully.');
+            reload();
+          }}
+        />
+      )}
+
+      {confirmSettlementOrder && (
+        <ConfirmOrderSettlementModal
+          isOpen={!!confirmSettlementOrder}
+          onClose={() => setConfirmSettlementOrder(null)}
+          order={confirmSettlementOrder}
+          onSuccess={() => {
+            setConfirmSettlementOrder(null);
+            toast.success('Settlement confirmed and order closed successfully.');
             reload();
           }}
         />

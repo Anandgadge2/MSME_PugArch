@@ -130,9 +130,12 @@ export const PAYMENT_TERMS = [
 
 // ── Delivery Type ───────────────────────────────────────────────────────────
 export const DELIVERY_TYPES = [
+  { value: 'Door delivery to site', label: 'Door delivery to site' },
   { value: 'IMMEDIATE_DELIVERY', label: 'Immediate Delivery' },
   { value: 'SCHEDULED_DELIVERY', label: 'Scheduled Delivery' },
   { value: 'URGENT_DELIVERY', label: 'Urgent Delivery' },
   { value: 'PARTIAL_DELIVERY', label: 'Partial Delivery' },
   { value: 'PROJECT_DELIVERY', label: 'Project Delivery' },
+  { value: 'Buyer pickup', label: 'Buyer pickup' },
+  { value: 'Seller dispatch', label: 'Seller dispatch' },
 ] as const;

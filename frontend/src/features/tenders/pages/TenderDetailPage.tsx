@@ -385,6 +385,20 @@ export default function TenderDetailPage() {
     isOwnSubmitted
   );
 
+  const isUnitOfMeasure = (val?: string) => {
+    if (!val) return false;
+    const v = String(val).trim().toLowerCase();
+    return ['nos', 'nos.', 'kg', 'ton', 'mt', 'bag', 'box', 'packet', 'set', 'pair', 'roll', 'litre', 'meter', 'feet', 'piece', 'unit', '—', 'n/a', 'not specified', 'null', 'undefined'].includes(v);
+  };
+  const isPacketConfig = (val?: string) => {
+    if (!val) return false;
+    const v = String(val).trim().toLowerCase();
+    return ['two packet', 'single packet', 'two_packet', 'single_packet', '—', 'n/a', 'not specified', 'null', 'undefined'].includes(v);
+  };
+
+  const resolvedPaymentTerms = (!isPacketConfig(terms.paymentTerms) && terms.paymentTerms) || (!isPacketConfig(tender.paymentTerms) && tender.paymentTerms) || undefined;
+  const resolvedDeliveryTerms = (!isUnitOfMeasure(terms.deliveryTerms) && terms.deliveryTerms) || (!isUnitOfMeasure(tender.deliveryType) && tender.deliveryType) || undefined;
+
   return (
     <ProcurementDetailUnifiedView
       procurementType={tender.category?.includes('LIMITED') || tender.visibility === 'LIMITED' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}
@@ -413,8 +427,8 @@ export default function TenderDetailPage() {
       procurementMethod={tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
       buyingType={basics.buyingType || 'Goods'}
       deliveryLocation={basics.deliveryLocation || internal.deliveryAddress || tender.buyer?.buyerProfile?.address}
-      paymentTerms={tender.paymentTerms || terms.paymentTerms || undefined}
-      deliveryTerms={tender.deliveryType || terms.deliveryTerms || undefined}
+      paymentTerms={resolvedPaymentTerms}
+      deliveryTerms={resolvedDeliveryTerms}
       projectDuration={(tender as any).duration || (tender as any).contractPeriod || basics.projectDuration || terms.projectDuration || terms.contractPeriod || undefined}
       description={tender.description}
       payload={draft}

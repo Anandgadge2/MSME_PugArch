@@ -579,6 +579,29 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       buyerProfile: raw.buyerOrganization || raw.organization || null
     },
     buyerOrganization: raw.buyerOrganization || raw.organization || null,
+    urgency: firstValue(
+      raw.urgency,
+      raw.priority,
+      pkt?.urgency,
+      pkt?.priority,
+      basics.priority,
+      basics.urgency,
+      pkt?.recommendation?.urgency,
+      String(raw.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      String(basics.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      'Normal'
+    ),
+    priority: firstValue(
+      raw.priority,
+      raw.urgency,
+      basics.priority,
+      basics.urgency,
+      pkt?.priority,
+      pkt?.urgency,
+      pkt?.recommendation?.urgency,
+      String(raw.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
+      'Normal'
+    ),
   };
 };
 
@@ -728,8 +751,52 @@ export const procurementBidApi = {
     const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`, {}, { headers: authHeaders() });
     return readApiBody(res);
   },
-  async recommendAward(bidId: string, data: { participationId: number; remarks?: string; adminOverrideReason?: string }) {
+  async recommendAward(bidId: string, data: { participationId: number; remarks?: string; adminOverrideReason?: string; justificationReason?: string }) {
     const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/recommend-award`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async sendPriceMatchCounterOffer(bidId: string, data: { participationId: number; priceMatchTargetPrice?: number; deadlineHours?: number; deadlineDate?: string; counterOfferNotes?: string; justificationReason?: string }) {
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/counter-offer`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptPriceMatchCounterOffer(bidId: string, awardId?: string | number) {
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/counter-offer/accept`, { awardId }, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async declinePriceMatchCounterOffer(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
+    let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
+    if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
+      payload = { reason: reasonParam, awardId: awardIdOrData };
+    }
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/counter-offer/decline`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptAward(bidId: string, awardId?: string | number) {
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async declineAward(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
+    let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
+    if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
+      payload = { reason: reasonParam, awardId: awardIdOrData };
+    }
+    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async generatePO(bidId: string, data: any = {}) {
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async acceptPO(poId: number | string, data: any = {}) {
+    const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/accept-po`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async recordOrderPayment(invoiceId: number | string, data: { paymentReference: string; bankName: string; paymentDate: string; paymentSlipFileId?: number; remarks?: string }) {
+    const res = await api.post(`/api/buyer/invoices/${encodeURIComponent(String(invoiceId))}/record-payment`, data, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async confirmOrderSettlement(invoiceId: number | string, data: { remarks?: string } = {}) {
+    const res = await api.post(`/api/seller/invoices/${encodeURIComponent(String(invoiceId))}/confirm-settlement`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
   async getBidResults(bidId: string) {

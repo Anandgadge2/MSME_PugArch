@@ -501,27 +501,137 @@ const loadAwardOrderForSeller = async (actor: AuthenticatedUser, awardId: number
   return { award, po, delivery };
 };
 
+export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}) => {
+  const po = await loadProcurementOrder(req.user!, orderId);
+  if (!isAdmin(req.user) && po.sellerId !== req.user!.id) {
+    const sellerIds = await getSellerUserIdsForActor(req.user!);
+    if (!sellerIds.includes(po.sellerId)) {
+      throw new ApiError(403, 'Seller access required to accept purchase order', 'FORBIDDEN_ROLE');
+    }
+  }
+
+  const delivery = po.deliveryTrackings?.[0] || await deliveryService.ensureDeliveryForPO(actorFromReq(req), po.id, {});
+  const updatedDelivery = await deliveryService.sellerAccept(actorFromReq(req), delivery.id, {
+    remarks: body.remarks,
+    expectedDelivery: body.expectedDelivery
+  });
+
+  const bidId = po.bidId || (po.metadata as any)?.bidId;
+  const awardId = (po.metadata as any)?.awardId || po.sourceId;
+
+  const result = await db.$transaction(async (tx: any) => {
+    const updatedPO = await tx.purchaseOrder.update({
+      where: { id: po.id },
+      data: {
+        status: 'accepted',
+        poStatus: 'ACCEPTED',
+        acceptedAt: now(),
+        version: { increment: 1 }
+      }
+    });
+
+    if (awardId && !isNaN(Number(awardId))) {
+      await tx.procurementBidAward.update({
+        where: { id: Number(awardId) },
+        data: {
+          awardStatus: 'ACCEPTED',
+          remarks: body.remarks || undefined
+        }
+      }).catch(() => undefined);
+    }
+
+    if (bidId && !isNaN(Number(bidId))) {
+      // 1. Mark accepted participation as ORDERED
+      await tx.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: po.sellerId
+        },
+        data: {
+          finalStatus: 'ORDERED'
+        }
+      });
+
+      // 2. CRITICAL STATE MACHINE TRIGGER: Transition all other bidders to NOT_SELECTED
+      await tx.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: { not: po.sellerId },
+          finalStatus: { notIn: ['ORDERED', 'AWARDED'] }
+        },
+        data: {
+          finalStatus: 'NOT_SELECTED'
+        }
+      });
+
+      // 3. Update bid status to IN_PROGRESS / IN_FULFILLMENT
+      await tx.procurementBid.update({
+        where: { id: Number(bidId) },
+        data: {
+          status: 'IN_PROGRESS',
+          lifecycleStage: 'AWARDED'
+        }
+      });
+    }
+
+    return { purchaseOrder: updatedPO, delivery: updatedDelivery };
+  });
+
+  // Notify unselected standby bidders that order has been placed
+  if (bidId && !isNaN(Number(bidId))) {
+    const otherBidders = await db.procurementBidParticipation.findMany({
+      where: {
+        bidId: Number(bidId),
+        sellerId: { not: po.sellerId }
+      },
+      select: { sellerId: true }
+    });
+    for (const b of otherBidders) {
+      notificationService.notifyUser(b.sellerId, {
+        title: 'Tender Concluded',
+        message: `The tender evaluation for "${po.title || 'Procurement'}" has concluded and the purchase order has been awarded. Thank you for your participation.`,
+        type: 'tender_concluded',
+        redirectUrl: `/bids/${bidId}`
+      }).catch(() => undefined);
+    }
+  }
+
+  await procurementOrderAudit(req, 'PO_ACCEPTED', 'PurchaseOrder', po.id, { body });
+
+  await notificationService.notifyUser(po.buyerId, {
+    title: 'Purchase Order Accepted',
+    message: `Seller has accepted Purchase Order #${po.poNumber}. Fulfillment has officially begun.`,
+    type: 'purchase_order',
+    redirectUrl: `/orders/procurement/${po.id}`
+  }).catch(() => undefined);
+
+  return result;
+};
+
 export const acceptSellerAward = async (req: AuthRequest, awardId: number, body: any = {}) => {
   const { award, po, delivery } = await loadAwardOrderForSeller(req.user!, awardId);
+  if (po?.id) {
+    return acceptPO(req, po.id, body);
+  }
   const updatedDelivery = await deliveryService.sellerAccept(actorFromReq(req), delivery.id, {
     remarks: body.remarks,
     expectedDelivery: body.expectedDelivery
   });
   const updatedAward = await db.procurementBidAward.update({
     where: { id: award.id },
-    data: { awardStatus: 'ADMIN_APPROVED', awardedAt: award.awardedAt || now(), remarks: body.remarks || award.remarks }
+    data: { awardStatus: 'ACCEPTED', awardedAt: award.awardedAt || now(), remarks: body.remarks || award.remarks }
   });
   await updateBidStatus(db, award.bidId, 'IN_PROGRESS', 'SELLER_AWARD_ACCEPTED', req);
-  await procurementOrderAudit(req, 'SELLER_AWARD_ACCEPTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po.id });
+  await procurementOrderAudit(req, 'SELLER_AWARD_ACCEPTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po?.id });
   
   await notificationService.notifyUser(award.bid.buyerId, {
     title: 'Purchase Order Accepted',
     message: `Seller has accepted the purchase order for "${award.bid.title}".`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/orders/procurement/${po?.id}`
   });
 
-  return { award: updatedAward, purchaseOrderId: po.id, delivery: updatedDelivery };
+  return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
 };
 
 export const rejectSellerAward = async (req: AuthRequest, awardId: number, reason: string) => {
@@ -679,7 +789,10 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
   const po = await loadProcurementOrder(req.user!, orderId);
   if (!isAdmin(req.user) && po.sellerId !== req.user!.id) throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
 
-  const approvedGrn = await db.goodsReceiptNote.findFirst({ where: { purchaseOrderId: po.id, status: { in: ['APPROVED', 'PARTIAL'] } } });
+  const approvedGrn = await db.goodsReceiptNote.findFirst({
+    where: { purchaseOrderId: po.id, status: 'APPROVED' },
+    include: { items: true }
+  });
   const approvedCrac = await db.consigneeReceiptAcceptanceCertificate.findFirst({
     where: { purchaseOrderId: po.id, status: 'GENERATED', inspectionResult: { not: 'REJECTED' } },
   });
@@ -692,13 +805,26 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
     throw new ApiError(409, 'Invoice can be created only after CRAC is generated for procurement checkout orders.', 'CRAC_REQUIRED');
   }
 
-  if (!approvedCrac && !approvedGrn) {
-    throw new ApiError(409, 'Invoice can be created only after GRN/service acceptance approval.', 'GRN_NOT_APPROVED');
+  if (!approvedGrn && !approvedCrac) {
+    throw new ApiError(409, 'Invoice cannot be created before Goods Receipt Note (GRN) is inspected and approved by the buyer.', 'GRN_REQUIRED');
   }
 
   if (!approvedCrac && approvedGrn && !settings.allowLegacyGrnInvoiceGate && isNewCheckoutFlow) {
     throw new ApiError(409, 'CRAC is required; legacy GRN-only invoice gate is disabled.', 'CRAC_REQUIRED');
   }
+
+  // Pre-populate invoice items capped to GRN accepted quantity
+  const grnItems = approvedGrn?.items || [];
+  const poItemsWithAcceptedQty = po.items.map((item: any) => {
+    const matchedGrnItem = grnItems.find((gi: any) => gi.purchaseOrderItemId === item.id || gi.itemName === item.itemName);
+    const acceptedQty = matchedGrnItem != null ? Number(matchedGrnItem.acceptedQty) : Number(item.quantity);
+    const qty = Math.max(0, Math.min(Number(item.quantity), acceptedQty));
+    return {
+      ...item,
+      cappedQuantity: qty
+    };
+  });
+
   // Derive the taxable base from PO items (unitPrice is base price excl. GST)
   const gstRate = money(body.gstPercentage || 0);
   let base: number;
@@ -707,8 +833,8 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
   } else if (body.amount) {
     base = money(body.amount);
   } else {
-    // po.amount is GST-inclusive; compute taxable base from line items
-    base = money(po.items.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+    // compute taxable base from capped line items
+    base = money(poItemsWithAcceptedQty.reduce((sum: number, item: any) => sum + Number(item.cappedQuantity) * Number(item.unitPrice), 0));
   }
   const gstAmount = money(body.gstAmount || base * gstRate / 100);
   const total = money(body.totalAmount || base + gstAmount + money(body.otherCharges || 0) - money(body.discount || 0));
@@ -719,6 +845,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
         purchaseOrderId: po.id,
         sellerId: po.sellerId,
         buyerId: po.buyerId,
+        grnId: approvedGrn?.id || null,
         amount: total,
         status: 'submitted',
         invoiceStatus: 'SUBMITTED',
@@ -728,8 +855,8 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
         invoiceFileId: body.fileAssetId ? Number(body.fileAssetId) : null,
         metadata: { source: 'procurement_order', bidId: po.metadata?.bidId, grnId: approvedGrn?.id, cracId: approvedCrac?.id, otherCharges: body.otherCharges, discount: body.discount },
         items: {
-          create: po.items.map((item: any) => {
-            const itemQty = Number(item.quantity);
+          create: poItemsWithAcceptedQty.map((item: any) => {
+            const itemQty = Number(item.cappedQuantity);
             const itemUnitPrice = Number(item.unitPrice);
             const itemTaxable = money(itemQty * itemUnitPrice);
             const itemTaxRate = Number(item.taxRate || gstRate);
@@ -738,7 +865,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
               purchaseOrderItemId: item.id,
               itemName: item.itemName,
               description: item.description,
-              quantity: item.quantity,
+              quantity: itemQty,
               unitOfMeasure: item.unitOfMeasure,
               unitPrice: item.unitPrice,
               taxableAmount: itemTaxable,
@@ -750,7 +877,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
       },
       include: { items: true, invoiceFile: true }
     });
-    await tx.purchaseOrder.update({ where: { id: po.id }, data: { status: 'invoice_submitted', version: { increment: 1 } } });
+    await tx.purchaseOrder.update({ where: { id: po.id }, data: { status: 'invoice_submitted', poStatus: 'INVOICED', version: { increment: 1 } } });
     
     const metadata = po.metadata as any;
     if (metadata?.bidId) {
@@ -902,4 +1029,136 @@ export const listAdminSettlements = async (actor: AuthenticatedUser, query: any 
     db.paymentSettlement.count({ where })
   ]);
   return { items, total, skip, take };
+};
+
+export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, body: any = {}) => {
+  const invoice = await db.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { purchaseOrder: true }
+  });
+  if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  if (!isAdmin(req.user) && invoice.buyerId !== req.user!.id) {
+    throw new ApiError(403, 'Buyer access required to record payment', 'FORBIDDEN_ROLE');
+  }
+
+  const transactionRef = String(body.transactionReference || body.utr || body.paymentReference || '').trim();
+  if (!transactionRef) {
+    throw new ApiError(400, 'Transaction reference (UTR) is required', 'UTR_REQUIRED');
+  }
+
+  const paymentDate = body.paymentDate ? new Date(body.paymentDate) : now();
+  const fileAssetId = body.fileAssetId ? Number(body.fileAssetId) : null;
+  const bankName = body.bankName ? String(body.bankName).trim() : null;
+  const paymentMode = body.paymentMode || 'BANK_TRANSFER';
+
+  const updatedInvoice = await db.$transaction(async (tx: any) => {
+    const updated = await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: 'payment_submitted',
+        invoiceStatus: 'PAYMENT_SUBMITTED',
+        paymentReference: transactionRef,
+        bankName,
+        paymentDate,
+        paymentSlipFileId: fileAssetId,
+        metadata: {
+          ...(invoice.metadata as any || {}),
+          paymentMode,
+          paymentReference: transactionRef,
+          bankName,
+          paymentDate: paymentDate.toISOString(),
+          paymentSlipFileId: fileAssetId,
+          paymentSubmittedAt: now().toISOString()
+        }
+      },
+      include: { purchaseOrder: true, paymentSlipFile: true }
+    });
+
+    if (invoice.purchaseOrderId) {
+      await tx.purchaseOrder.update({
+        where: { id: invoice.purchaseOrderId },
+        data: {
+          status: 'paid',
+          poStatus: 'PAID',
+          version: { increment: 1 }
+        }
+      });
+      const poMeta = invoice.purchaseOrder?.metadata as any;
+      if (poMeta?.bidId) {
+        await updateBidStatus(tx, Number(poMeta.bidId), 'PAYMENT_COMPLETED', 'PAYMENT_COMPLETED', req);
+      }
+    }
+
+    return updated;
+  });
+
+  await procurementOrderAudit(req, 'PAYMENT_RECORDED', 'Invoice', invoice.id, { transactionRef, bankName, paymentDate, fileAssetId });
+
+  await notificationService.notifyUser(invoice.sellerId, {
+    title: 'Payment Submitted by Buyer',
+    message: `Buyer has recorded payment (UTR: ${transactionRef}) for Invoice #${invoice.invoiceNumber}. Please verify funds in your bank account and confirm settlement.`,
+    type: 'payment_submitted',
+    redirectUrl: `/seller/invoices`
+  }).catch(() => undefined);
+
+  return updatedInvoice;
+};
+
+export const confirmOrderSettlement = async (req: AuthRequest, invoiceId: number, body: any = {}) => {
+  const invoice = await db.invoice.findUnique({
+    where: { id: invoiceId },
+    include: { purchaseOrder: true }
+  });
+  if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  if (!isAdmin(req.user) && invoice.sellerId !== req.user!.id) {
+    const sellerIds = await getSellerUserIdsForActor(req.user!);
+    if (!sellerIds.includes(invoice.sellerId)) {
+      throw new ApiError(403, 'Seller access required to confirm settlement', 'FORBIDDEN_ROLE');
+    }
+  }
+
+  const updatedInvoice = await db.$transaction(async (tx: any) => {
+    const updated = await tx.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        status: 'settled',
+        invoiceStatus: 'SETTLED',
+        settledAt: now(),
+        metadata: {
+          ...(invoice.metadata as any || {}),
+          settledAt: now().toISOString(),
+          settlementRemarks: body.remarks || 'Settlement confirmed by seller'
+        }
+      },
+      include: { purchaseOrder: true }
+    });
+
+    if (invoice.purchaseOrderId) {
+      await tx.purchaseOrder.update({
+        where: { id: invoice.purchaseOrderId },
+        data: {
+          status: 'completed',
+          poStatus: 'COMPLETED',
+          version: { increment: 1 }
+        }
+      });
+      const poMeta = invoice.purchaseOrder?.metadata as any;
+      if (poMeta?.bidId) {
+        await updateBidStatus(tx, Number(poMeta.bidId), 'COMPLETED', 'ORDER_COMPLETED', req);
+      }
+    }
+
+    return updated;
+  });
+
+  await procurementOrderAudit(req, 'ORDER_SETTLED', 'Invoice', invoice.id, { settledAt: now(), remarks: body.remarks });
+
+  await notificationService.notifyUser(invoice.buyerId, {
+    title: 'Order Completed & Settled',
+    message: `Seller has confirmed receipt of funds for Invoice #${invoice.invoiceNumber}. Purchase Order #${invoice.purchaseOrder?.poNumber || invoice.purchaseOrderId} is now completed.`,
+    type: 'order_completed',
+    redirectUrl: `/orders/procurement/${invoice.purchaseOrderId}`
+  }).catch(() => undefined);
+
+  return updatedInvoice;
 };

@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle
+  ShieldCheck, AlertCircle, Target
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -163,32 +163,52 @@ export default function BidResultsPage() {
     ].includes(rawStatus);
   }, [bid]);
 
-  const isBidAlreadyAwarded = React.useMemo(() => {
-    if (!bid) return false;
-    const rawStatus = String((bid as any).status || '').toUpperCase();
-    const rawStage = String((bid as any).lifecycleStage || '').toUpperCase();
+  const activeAward = React.useMemo(() => {
+    if (Array.isArray(bid?.awards) && bid.awards.length > 0) return bid.awards[0];
+    return null;
+  }, [bid]);
+
+  const isPriceMatchPending = activeAward?.counterOfferStatus === 'PENDING';
+  const isAwardOfferPending = activeAward && (activeAward.awardStatus === 'OFFERED' || activeAward.awardStatus === 'RECOMMENDED') && !isPriceMatchPending;
+  const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
+  
+  const isContractFinalized = React.useMemo(() => {
+    const rawStatus = String(bid?.status || '').toUpperCase();
+    const rawStage = String(bid?.lifecycleStage || '').toUpperCase();
     return (
-      ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStatus) ||
+      ['IN_PROGRESS', 'AWARDED', 'PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
       ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
-      Boolean((bid as any).awards && (bid as any).awards.length > 0) ||
-      ranking.some(r => r.resultStatus === 'Awarded' || String((r as any).finalStatus || '').toUpperCase() === 'AWARDED')
+      Boolean((bid as any)?.purchaseOrderId || (bid as any)?.purchaseOrder) ||
+      ranking.some(r => String((r as any).finalStatus || '').toUpperCase() === 'ORDERED')
     );
   }, [bid, ranking]);
 
+  const isBidAlreadyAwarded = Boolean(isContractFinalized);
+
+  const l1Price = React.useMemo(() => {
+    const prices = ranking
+      .filter(r => r.technicalStatus === 'Qualified')
+      .map(r => Number(r.totalPrice || r.quotedAmount || 0))
+      .filter(p => p > 0);
+    return prices.length > 0 ? Math.min(...prices) : 0;
+  }, [ranking]);
+
   const checkIsRowAwarded = React.useCallback((row: BidResultRow) => {
-    if (row.resultStatus === 'Awarded') return true;
-    if (String(row.finalStatus || '').toUpperCase() === 'AWARDED') return true;
-    if (String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED') return true;
-    if (Array.isArray(bid?.awards) && bid.awards.length > 0) {
+    if (isContractFinalized) {
+      if (row.resultStatus === 'Awarded') return true;
+      if (String(row.finalStatus || '').toUpperCase() === 'AWARDED' || String(row.finalStatus || '').toUpperCase() === 'ORDERED') return true;
+      if (String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' || String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'ORDERED') return true;
+    }
+    if (activeAward) {
       const partId = Number(row.participationId || row.id);
       const sellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
-      return bid.awards.some((a: any) =>
-        (partId && Number(a.participationId) === partId) ||
-        (sellerId && Number(a.sellerId) === sellerId)
+      return Boolean(
+        (partId && Number(activeAward.participationId) === partId) ||
+        (sellerId && Number(activeAward.sellerId) === sellerId)
       );
     }
     return false;
-  }, [bid]);
+  }, [activeAward, isContractFinalized]);
 
   const techEvaluationStats = React.useMemo(() => {
     const total = ranking.length;
@@ -274,11 +294,33 @@ export default function BidResultsPage() {
     show: boolean;
     row: BidResultRow | null;
     remarks: string;
+    justificationReason: string;
     submitting: boolean;
   }>({
     show: false,
     row: null,
     remarks: '',
+    justificationReason: '',
+    submitting: false,
+  });
+
+  const [priceMatchModal, setPriceMatchModal] = useState<{
+    show: boolean;
+    row: BidResultRow | null;
+    targetPrice: number;
+    deadlineOption: '24' | '48' | '72' | 'custom';
+    customHours: number;
+    justificationReason: string;
+    notes: string;
+    submitting: boolean;
+  }>({
+    show: false,
+    row: null,
+    targetPrice: 0,
+    deadlineOption: '48',
+    customHours: 48,
+    justificationReason: '',
+    notes: '',
     submitting: false,
   });
 
@@ -843,36 +885,120 @@ export default function BidResultsPage() {
           >
             <Download className="h-3.5 w-3.5" />
           </button>
-          {checkIsRowAwarded(row) ? (
-            <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
-            </span>
-          ) : row.technicalStatus === 'Disqualified' ? (
-            <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2 text-[10px] font-semibold" title="Ineligible for award due to technical disqualification">
-              Ineligible for Award
-            </span>
-          ) : isBidAlreadyAwarded ? (
-            <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2.5 text-[10px] font-semibold">
-              Not Selected
-            </span>
-          ) : (
-            <button
-              onClick={() => {
-                if (row.technicalStatus === 'Disqualified') {
-                  toast.error('Cannot award to a technically disqualified supplier.');
-                  return;
-                }
-                setAwardModal({ show: true, row, remarks: '', submitting: false });
-              }}
-              className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer"
-            >
-              Accept & PO
-            </button>
-          )}
+          {(() => {
+            const rowPartId = Number(row.participationId || row.id);
+            const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
+            const isThisRowAwarded = activeAward && (
+              (activeAward.participationId && Number(activeAward.participationId) === rowPartId) ||
+              (activeAward.sellerId && Number(activeAward.sellerId) === rowSellerId)
+            );
+
+            if (isContractFinalized) {
+              if (isThisRowAwarded || checkIsRowAwarded(row)) {
+                return (
+                  <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Awarded & PO Issued
+                  </span>
+                );
+              }
+              return (
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2.5 text-[10px] font-semibold">
+                  Not Selected
+                </span>
+              );
+            }
+
+            if (isAwardAccepted) {
+              if (isThisRowAwarded) {
+                return (
+                  <button
+                    onClick={handleGeneratePO}
+                    className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs cursor-pointer"
+                    title="Generate and issue Purchase Order to winning supplier"
+                  >
+                    <FileText className="h-3.5 w-3.5" /> Issue PO
+                  </button>
+                );
+              }
+              return (
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-2.5 text-[10px] font-semibold" title="Vendor remains on standby under evaluation">
+                  Standby (Under Evaluation)
+                </span>
+              );
+            }
+
+            if (isPriceMatchPending) {
+              if (isThisRowAwarded) {
+                return (
+                  <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 px-2.5 text-[10px] font-black">
+                    <Clock className="h-3.5 w-3.5" /> Price Match Pending
+                  </span>
+                );
+              }
+              return (
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-2.5 text-[10px] font-semibold" title="Backup supplier remains on standby under commercial evaluation">
+                  Standby (Under Evaluation)
+                </span>
+              );
+            }
+
+            if (isAwardOfferPending) {
+              if (isThisRowAwarded) {
+                return (
+                  <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-blue-100 border border-blue-300 text-blue-900 px-2.5 text-[10px] font-black">
+                    <Clock className="h-3.5 w-3.5" /> Awaiting Acceptance
+                  </span>
+                );
+              }
+              return (
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-2.5 text-[10px] font-semibold" title="Backup supplier remains on standby under commercial evaluation">
+                  Standby (Under Evaluation)
+                </span>
+              );
+            }
+
+            if (row.technicalStatus === 'Disqualified') {
+              return (
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2 text-[10px] font-semibold" title="Ineligible for award due to technical disqualification">
+                  Ineligible for Award
+                </span>
+              );
+            }
+
+            if (row.finalRank === 'L1') {
+              return (
+                <button
+                  onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
+                  className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer"
+                >
+                  <Trophy className="h-3.5 w-3.5" /> Award L1
+                </button>
+              );
+            }
+
+            return (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPriceMatchModal({ show: true, row, targetPrice: l1Price || Number(row.totalPrice || 0), deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false })}
+                  className="inline-flex h-8 items-center gap-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer"
+                  title="Send counter-offer inviting supplier to match L1 lowest price"
+                >
+                  <Target className="h-3.5 w-3.5" /> Match L1
+                </button>
+                <button
+                  onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
+                  className="inline-flex h-8 items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 px-2 text-[10px] font-bold transition shadow-2xs cursor-pointer"
+                  title="Award directly at quoted price with required justification"
+                >
+                  Award
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )
     }
-  ], [selectedForCompare, bid, isBidAlreadyAwarded, checkIsRowAwarded]);
+  ], [selectedForCompare, bid, isBidAlreadyAwarded, isContractFinalized, isAwardAccepted, isPriceMatchPending, isAwardOfferPending, activeAward, l1Price, checkIsRowAwarded]);
 
   const handleCompareClick = () => {
     if (selectedForCompare.length >= 2) {
@@ -884,18 +1010,69 @@ export default function BidResultsPage() {
 
   const handleConfirmAward = async () => {
     if (!awardModal.row || !bid) return;
+    const isNotL1 = awardModal.row.finalRank !== 'L1';
+    if (isNotL1 && !awardModal.justificationReason.trim()) {
+      toast.error('Justification reason is required when awarding a supplier other than L1.');
+      return;
+    }
     setAwardModal(prev => ({ ...prev, submitting: true }));
     try {
       await procurementBidApi.recommendAward(bid.id, {
         participationId: awardModal.row.participationId || (awardModal.row as any).id || 0,
-        remarks: awardModal.remarks || 'Accepted quotation and generated purchase order.',
+        remarks: awardModal.remarks || 'Contract award offered by buyer.',
+        justificationReason: awardModal.justificationReason.trim() || undefined,
       });
-      toast.success('Award created & Purchase Order generated successfully!');
-      setAwardModal({ show: false, row: null, remarks: '', submitting: false });
+      toast.success(`Award offer sent to ${awardModal.row.sellerName}! Waiting for supplier acceptance.`);
+      setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false });
+      loadBid();
+    } catch (err: any) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create award offer.');
+      setAwardModal(prev => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const handlePriceMatchSubmit = async () => {
+    if (!priceMatchModal.row || !bid) return;
+    const isNotL1 = priceMatchModal.row.finalRank !== 'L1';
+    if (isNotL1 && !priceMatchModal.justificationReason.trim()) {
+      toast.error('Justification reason is required when sending a price-match counter-offer to a supplier other than L1.');
+      return;
+    }
+    const deadlineHours = priceMatchModal.deadlineOption === 'custom'
+      ? Number(priceMatchModal.customHours)
+      : Number(priceMatchModal.deadlineOption);
+
+    if (isNaN(deadlineHours) || deadlineHours < 1 || deadlineHours > 720) {
+      toast.error('Please specify a valid response deadline between 1 and 720 hours.');
+      return;
+    }
+
+    setPriceMatchModal(prev => ({ ...prev, submitting: true }));
+    try {
+      await procurementBidApi.sendPriceMatchCounterOffer(bid.id, {
+        participationId: priceMatchModal.row.participationId || (priceMatchModal.row as any).id || 0,
+        priceMatchTargetPrice: Number(priceMatchModal.targetPrice),
+        deadlineHours,
+        counterOfferNotes: priceMatchModal.notes.trim() || undefined,
+        justificationReason: priceMatchModal.justificationReason.trim() || undefined,
+      });
+      toast.success(`Price-match counter-offer sent to ${priceMatchModal.row.sellerName}! Response deadline set to ${deadlineHours} hours.`);
+      setPriceMatchModal({ show: false, row: null, targetPrice: 0, deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false });
+      loadBid();
+    } catch (err: any) {
+      toast.error(err instanceof Error ? err.message : 'Failed to send price-match counter-offer.');
+      setPriceMatchModal(prev => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const handleGeneratePO = async () => {
+    if (!bid) return;
+    try {
+      await procurementBidApi.generatePO(bid.id, {});
+      toast.success('Purchase Order generated & issued successfully! Standby bidders have been politely notified.');
       loadBid();
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Failed to generate Purchase Order.');
-      setAwardModal(prev => ({ ...prev, submitting: false }));
     }
   };
 
@@ -1102,7 +1279,7 @@ export default function BidResultsPage() {
           bid={bid}
           bidId={bidId}
           onBack={handleBackFromQuotationDetail}
-          onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', submitting: false })}
+          onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
           onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
         />
 
@@ -1116,7 +1293,7 @@ export default function BidResultsPage() {
                   <h3 className="text-base font-black text-slate-900 mt-1">Accept Quotation & Award Bid</h3>
                 </div>
                 <button
-                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
                   className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
                 >
                   <X className="h-5 w-5" />
@@ -1158,7 +1335,7 @@ export default function BidResultsPage() {
               <div className="border-t border-slate-100 pt-4 flex items-center justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
                   className="h-9 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
                 >
                   Cancel
@@ -1543,6 +1720,60 @@ export default function BidResultsPage() {
               </div>
             ) : null}
 
+            {/* Active Award / Counter-Offer Status Banner */}
+            {isAwardAccepted && !isContractFinalized && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-emerald-950">Contract Award Accepted by Supplier!</h4>
+                    <p className="text-xs text-emerald-700 font-medium">The selected supplier has accepted the award terms. You can now issue the official Purchase Order to initiate fulfillment.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleGeneratePO}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-black shadow-xs transition shrink-0 cursor-pointer"
+                >
+                  <FileText className="h-4 w-4" /> Issue Purchase Order Now
+                </button>
+              </div>
+            )}
+
+            {isPriceMatchPending && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                    <Target className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-950">Price Match Counter-Offer Active (Awaiting Supplier Response)</h4>
+                    <p className="text-xs text-amber-800 font-medium">
+                      A counter-offer of ₹{activeAward?.priceMatchTargetPrice ? Number(activeAward.priceMatchTargetPrice).toLocaleString('en-IN') : 'L1 price'} was sent with response deadline {activeAward?.counterOfferDeadline ? formatDateTime(activeAward.counterOfferDeadline) : '48 hours'}. All backup suppliers remain on standby under evaluation.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isAwardOfferPending && (
+              <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-xs">
+                    <Clock className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-blue-950">Award Offer Sent — Waiting for Supplier Acceptance</h4>
+                    <p className="text-xs text-blue-800 font-medium">
+                      Contract award has been offered to the selected supplier. The Purchase Order will be generated immediately once the supplier accepts. Other bidders remain on standby.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* View Mode Rendering */}
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -1617,63 +1848,44 @@ export default function BidResultsPage() {
                             <span className="font-medium">{mobile}</span>
                           </div>
                         )}
-                        <div className="flex items-center gap-2 text-slate-500 font-medium text-[11px]">
+                        <div className="flex items-center gap-2 text-slate-500 text-[11px]">
                           <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                          <span>Submitted: {submissionTime}</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-slate-900 font-black pt-1">
-                          <Tag className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                          <span>Quoted Total: {row.totalPrice ? money(row.totalPrice) : 'Pending'}</span>
+                          <span>{submissionTime}</span>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 px-2 py-0.5">
-                          📄 {docCount} Document{docCount === 1 ? '' : 's'}
-                        </span>
-                        <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5">
-                          📦 {itemCount} Quoted Item{itemCount === 1 ? '' : 's'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-50 border border-slate-150">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold text-slate-500 uppercase">Tech Status:</span>
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase ${
-                              row.technicalStatus === 'Qualified'
-                                ? 'bg-emerald-100 border border-emerald-300 text-emerald-800'
-                                : row.technicalStatus === 'Disqualified'
-                                  ? 'bg-rose-100 border border-rose-300 text-rose-800'
-                                  : 'bg-amber-100 border border-amber-300 text-amber-800'
-                            }`}
-                          >
-                            {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
-                            {row.technicalStatus === 'Disqualified' && <X className="h-3 w-3" />}
-                            {row.technicalStatus !== 'Qualified' && row.technicalStatus !== 'Disqualified' && <Clock className="h-3 w-3" />}
-                            {row.technicalStatus || 'Pending'}
+                      <div className="rounded-xl bg-slate-50 p-2.5 space-y-1 text-xs border border-slate-150">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500 font-semibold">Offered Item:</span>
+                          <span className="font-bold text-slate-900 truncate max-w-[180px]">{row.offeredItem}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-500 font-semibold">Make / Model:</span>
+                          <span className="font-medium text-slate-700 truncate max-w-[180px]">
+                            {row.makeBrand && row.makeBrand !== 'As quoted' ? row.makeBrand : 'Standard'} 
+                            {row.model && row.model !== 'Standard' ? ` / ${row.model}` : ''}
                           </span>
                         </div>
-                        {isBidAlreadyAwarded ? (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-250 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer"
-                            title="View finalized technical evaluation (read-only audit record)"
-                          >
-                            <Eye className="h-3 w-3 text-slate-500" />
-                            View Evaluation
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedForTechEval((row as any).rawParticipation || row)}
-                            className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white border border-blue-200 px-2 py-0.5 rounded-lg shadow-2xs transition cursor-pointer"
-                          >
-                            <FileText className="h-3 w-3" />
-                            {row.technicalStatus === 'Pending' ? 'Evaluate Tech Bid' : 'Edit Evaluation'}
-                          </button>
-                        )}
+                        <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                          <span className="text-slate-500 font-bold">Total Quoted:</span>
+                          <span className="font-black text-slate-950 text-sm">
+                            {row.totalPrice ? money(row.totalPrice) : 'Pending'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs pt-1">
+                        <span className="text-slate-500 font-semibold">Technical Evaluation:</span>
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
+                          row.technicalStatus === 'Qualified'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : row.technicalStatus === 'Disqualified'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
+                          {row.technicalStatus || 'Pending'}
+                        </span>
                       </div>
 
                       <div className="grid grid-cols-3 gap-1.5 pt-2 border-t border-slate-100">
@@ -1691,33 +1903,119 @@ export default function BidResultsPage() {
                         >
                           <Download className="h-3 w-3 text-slate-500" /> PDF
                         </button>
-                        {checkIsRowAwarded(row) ? (
-                          <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-[11px] font-black uppercase tracking-wide">
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
-                          </span>
-                        ) : row.technicalStatus === 'Disqualified' ? (
-                          <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-semibold">
-                            Ineligible
-                          </span>
-                        ) : isBidAlreadyAwarded ? (
-                          <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[11px] font-semibold">
-                            Not Selected
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (row.technicalStatus === 'Disqualified') {
-                                toast.error('Cannot award to a technically disqualified supplier.');
-                                return;
-                              }
-                              setAwardModal({ show: true, row, remarks: '', submitting: false });
-                            }}
-                            className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black transition shadow-xs cursor-pointer"
-                          >
-                            Accept & PO
-                          </button>
-                        )}
+                        {(() => {
+                          const rowPartId = Number(row.participationId || row.id);
+                          const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
+                          const isThisRowAwarded = activeAward && (
+                            (activeAward.participationId && Number(activeAward.participationId) === rowPartId) ||
+                            (activeAward.sellerId && Number(activeAward.sellerId) === rowSellerId)
+                          );
+
+                          if (isContractFinalized) {
+                            if (isThisRowAwarded || checkIsRowAwarded(row)) {
+                              return (
+                                <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wide">
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-semibold">
+                                Not Selected
+                              </span>
+                            );
+                          }
+
+                          if (isAwardAccepted) {
+                            if (isThisRowAwarded) {
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={handleGeneratePO}
+                                  className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer"
+                                >
+                                  <FileText className="h-3.5 w-3.5" /> Issue PO
+                                </button>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-semibold">
+                                Standby
+                              </span>
+                            );
+                          }
+
+                          if (isPriceMatchPending) {
+                            if (isThisRowAwarded) {
+                              return (
+                                <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black">
+                                  Match Pending
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-semibold">
+                                Standby
+                              </span>
+                            );
+                          }
+
+                          if (isAwardOfferPending) {
+                            if (isThisRowAwarded) {
+                              return (
+                                <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-blue-100 border border-blue-300 text-blue-900 text-[10px] font-black">
+                                  Offer Sent
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-semibold">
+                                Standby
+                              </span>
+                            );
+                          }
+
+                          if (row.technicalStatus === 'Disqualified') {
+                            return (
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-semibold">
+                                Ineligible
+                              </span>
+                            );
+                          }
+
+                          if (row.finalRank === 'L1') {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
+                                className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer"
+                              >
+                                <Trophy className="h-3.5 w-3.5" /> Award L1
+                              </button>
+                            );
+                          }
+
+                          return (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setPriceMatchModal({ show: true, row, targetPrice: l1Price || Number(row.totalPrice || 0), deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false })}
+                                className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer flex-1"
+                                title="Send price match counter-offer"
+                              >
+                                <Target className="h-3 w-3" /> Match L1
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
+                                className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 text-[10px] font-bold transition shadow-xs cursor-pointer px-1.5"
+                                title="Award directly with justification"
+                              >
+                                Award
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   );
@@ -1820,17 +2118,17 @@ export default function BidResultsPage() {
 
 
 
-      {/* Award & PO Generation Confirmation Modal */}
+      {/* Award Offer Confirmation Modal */}
       {awardModal.show && awardModal.row && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Generate Purchase Order</span>
-                <h3 className="text-base font-black text-slate-900 mt-1">Accept Quotation & Award Bid</h3>
+                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Contract Award Offer</span>
+                <h3 className="text-base font-black text-slate-900 mt-1">Award Contract to Supplier</h3>
               </div>
               <button
-                onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
                 className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
               >
                 <X className="h-5 w-5" />
@@ -1857,23 +2155,50 @@ export default function BidResultsPage() {
                 </div>
               </div>
 
+              {awardModal.row.finalRank !== 'L1' && (
+                <div className="space-y-2">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-900 leading-snug font-medium">
+                      <strong>Non-L1 Selection:</strong> You are awarding a supplier ({awardModal.row.finalRank}) other than L1. An official justification reason is required for procurement audit compliance.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                      Audit Justification Reason <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={awardModal.justificationReason}
+                      onChange={e => setAwardModal(prev => ({ ...prev, justificationReason: e.target.value }))}
+                      placeholder="Enter justification for selecting a non-L1 supplier (e.g. superior warranty, technical superiority, local service availability)..."
+                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                  Purchase Order Notes / Award Remarks
+                  Award Notes / Contract Remarks
                 </label>
                 <textarea
                   rows={3}
                   value={awardModal.remarks}
                   onChange={e => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
-                  placeholder="Enter award notes or terms to include in the generated Purchase Order..."
+                  placeholder="Enter award notes or terms to communicate with the supplier..."
                   className="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-emerald-500 focus:outline-none"
                 />
               </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                An award offer will be dispatched to <strong>{awardModal.row.sellerName}</strong>. Once the supplier accepts, you will be prompted to issue the Purchase Order. Other bidders remain on standby until PO is finalized.
+              </p>
             </div>
 
             <div className="border-t border-slate-100 pt-4 flex justify-end gap-2.5 sm:gap-3">
               <button
-                onClick={() => setAwardModal({ show: false, row: null, remarks: '', submitting: false })}
+                onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
                 disabled={awardModal.submitting}
                 className="h-10 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 text-xs font-black text-slate-700"
               >
@@ -1884,7 +2209,144 @@ export default function BidResultsPage() {
                 disabled={awardModal.submitting}
                 className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-black text-white inline-flex items-center gap-2 shadow-xs"
               >
-                {awardModal.submitting ? 'Generating PO...' : 'Confirm & Generate PO'}
+                {awardModal.submitting ? 'Submitting Offer...' : 'Send Award Offer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price Match Counter-Offer Modal (Configurable Deadline) */}
+      {priceMatchModal.show && priceMatchModal.row && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                  <Target className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-sm">Price Match Negotiation</span>
+                  <h3 className="text-base font-black text-slate-900">Send Counter-Offer</h3>
+                </div>
+              </div>
+              <button
+                onClick={() => setPriceMatchModal(prev => ({ ...prev, show: false, row: null }))}
+                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3.5 border border-slate-150 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-bold">Selected Supplier:</span>
+                <span className="font-black text-slate-900">{priceMatchModal.row.sellerName} ({priceMatchModal.row.finalRank})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 font-bold">Original Quoted Price:</span>
+                <span className="font-bold text-slate-700">{money(priceMatchModal.row.totalPrice)}</span>
+              </div>
+              <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                <span className="text-slate-900 font-black">Lowest Responsive Bid (L1):</span>
+                <span className="font-black text-emerald-700 text-sm">{money(l1Price)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                  Target Match Price (₹)
+                </label>
+                <input
+                  type="number"
+                  value={priceMatchModal.targetPrice}
+                  onChange={e => setPriceMatchModal(prev => ({ ...prev, targetPrice: Number(e.target.value) }))}
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs font-black text-slate-900 focus:border-indigo-500 focus:outline-none"
+                  placeholder="Enter target price"
+                />
+                <p className="text-[10px] text-slate-400 mt-1 font-medium">Prefilled with L1 price. Supplier will be invited to accept contract at this amount.</p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                  Response Deadline (Configurable by Buyer)
+                </label>
+                <div className="grid grid-cols-4 gap-2 mb-2">
+                  {(['24', '48', '72', 'custom'] as const).map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setPriceMatchModal(prev => ({ ...prev, deadlineOption: opt }))}
+                      className={`h-8 rounded-xl text-xs font-bold transition border ${
+                        priceMatchModal.deadlineOption === opt
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt === 'custom' ? 'Custom' : `${opt}h`}
+                    </button>
+                  ))}
+                </div>
+                {priceMatchModal.deadlineOption === 'custom' && (
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      max={720}
+                      value={priceMatchModal.customHours}
+                      onChange={e => setPriceMatchModal(prev => ({ ...prev, customHours: Math.max(1, Number(e.target.value)) }))}
+                      className="w-24 rounded-xl border border-slate-200 p-2 text-xs font-bold text-slate-900 focus:border-indigo-500 focus:outline-none"
+                    />
+                    <span className="text-xs text-slate-600 font-semibold">Hours from now</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-indigo-600 font-semibold mt-1">
+                  ⏳ Deadline expires: {new Date(Date.now() + (priceMatchModal.deadlineOption === 'custom' ? priceMatchModal.customHours : Number(priceMatchModal.deadlineOption)) * 3600 * 1000).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                  Justification for Selecting {priceMatchModal.row.finalRank} (Required for Audit Compliance)
+                </label>
+                <textarea
+                  rows={2}
+                  value={priceMatchModal.justificationReason}
+                  onChange={e => setPriceMatchModal(prev => ({ ...prev, justificationReason: e.target.value }))}
+                  placeholder="e.g. Higher technical score, local service center, superior warranty support, faster delivery timeline..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                  Additional Notes to Supplier (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={priceMatchModal.notes}
+                  onChange={e => setPriceMatchModal(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="e.g. Please confirm delivery within 14 calendar days upon PO issuance."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100 pt-3 flex justify-end gap-2.5">
+              <button
+                onClick={() => setPriceMatchModal(prev => ({ ...prev, show: false, row: null }))}
+                disabled={priceMatchModal.submitting}
+                className="h-9 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 text-xs font-black text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePriceMatchSubmit}
+                disabled={priceMatchModal.submitting}
+                className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 px-4 text-xs font-black text-white inline-flex items-center gap-2 shadow-2xs"
+              >
+                {priceMatchModal.submitting ? 'Sending Counter-Offer...' : `Send Counter-Offer (${money(priceMatchModal.targetPrice)})`}
               </button>
             </div>
           </div>

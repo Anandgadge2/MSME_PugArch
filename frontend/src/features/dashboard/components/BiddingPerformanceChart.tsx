@@ -3,13 +3,11 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
-  BarChart3, 
   TrendingUp, 
   Trophy, 
   Award, 
-  Clock, 
   CheckCircle2, 
-  ArrowUpRight, 
+  Clock,
   Layers
 } from 'lucide-react';
 import { 
@@ -25,8 +23,13 @@ interface BiddingPerformanceProps {
     submitted?: number;
     won?: number;
     underEval?: number;
+    rejected?: number;
+    winRate?: number;
     pipelineValue?: number;
-    onTimeDeliveryRate?: number;
+    onTimeDeliveryRate?: number | null;
+    hasDeliveries?: boolean;
+    totalRevenue?: number;
+    totalOrders?: number;
   };
 }
 
@@ -36,14 +39,16 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
   const totalBids = stats?.submitted || 0;
   const wonBids = stats?.won || 0;
   const underEval = stats?.underEval || 0;
-  const winRate = totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : 0;
+  const rejectedBids = stats?.rejected || Math.max(0, totalBids - wonBids - underEval);
+  const winRate = stats?.winRate ?? (totalBids > 0 ? Math.round((wonBids / totalBids) * 100) : 0);
   const pipelineVal = stats?.pipelineValue || 0;
-  const onTimeRate = stats?.onTimeDeliveryRate || 100;
+  const hasDeliveries = stats?.hasDeliveries ?? false;
+  const onTimeRate = stats?.onTimeDeliveryRate;
 
   const chartData = [
     { name: 'Won / Awarded', value: wonBids, color: '#10b981' },
     { name: 'Under Evaluation', value: underEval, color: '#6366f1' },
-    { name: 'Closed / Outbid', value: Math.max(0, totalBids - wonBids - underEval), color: '#cbd5e1' },
+    { name: 'Closed / Outbid', value: rejectedBids, color: '#cbd5e1' },
   ];
 
   return (
@@ -59,7 +64,7 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
               Bidding & Conversion
             </h2>
             <p className="text-[10px] font-medium text-slate-500">
-              Proposal win rate and active value pipeline
+              Authentic proposal win rate and active value pipeline
             </p>
           </div>
         </div>
@@ -92,7 +97,7 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
               <span className="text-lg font-black text-slate-950">{winRate}%</span>
               {totalBids > 0 && wonBids > 0 && (
                 <span className="text-[9px] font-bold text-emerald-600 flex items-center">
-                  <TrendingUp className="h-2.5 w-2.5 mr-0.5" /> +4.2%
+                  <Award className="h-2.5 w-2.5 mr-0.5" /> Awarded
                 </span>
               )}
             </div>
@@ -105,7 +110,11 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
             <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Active Pipeline</p>
             <div className="flex items-baseline gap-1.5 mt-0.5">
               <span className="text-lg font-black text-[#12335f]">
-                {pipelineVal > 0 ? `₹${(pipelineVal / 100000).toFixed(1)}L` : '₹0'}
+                {pipelineVal > 0 ? (
+                  pipelineVal >= 100000 
+                    ? `₹${(pipelineVal / 100000).toFixed(1)}L` 
+                    : `₹${pipelineVal.toLocaleString('en-IN')}`
+                ) : '₹0'}
               </span>
               {underEval > 0 && (
                 <span className="text-[8px] font-bold uppercase px-1 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200">
@@ -114,7 +123,7 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
               )}
             </div>
             <p className="text-[9px] font-medium text-slate-500 mt-0.5">
-              {underEval > 0 ? `${underEval} bids under evaluation` : 'Under evaluation & bids'}
+              {underEval > 0 ? `${underEval} bids under active review` : '0 bids under evaluation'}
             </p>
           </div>
         </div>
@@ -171,10 +180,10 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
               <div className="flex items-center justify-between p-1 rounded bg-slate-50 border border-slate-100">
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-slate-400" />
-                  <span className="font-bold text-slate-600">Closed / Other</span>
+                  <span className="font-bold text-slate-600">Closed / Outbid</span>
                 </div>
                 <span className="font-extrabold text-slate-700">
-                  {Math.max(0, totalBids - wonBids - underEval)}
+                  {rejectedBids}
                 </span>
               </div>
             </div>
@@ -182,7 +191,7 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
         ) : (
           <div className="p-4 text-center bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
             <p className="text-xs font-bold text-slate-700">No proposals submitted yet.</p>
-            <p className="text-[10px] text-slate-500 mt-0.5">Submit quotations to start tracking your win rate and pipeline.</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Submit quotations on active RFQs to start tracking your win rate and pipeline.</p>
           </div>
         )}
 
@@ -190,7 +199,10 @@ export function BiddingPerformanceChart({ stats }: BiddingPerformanceProps) {
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-600">
           <span className="flex items-center gap-1">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-            On-Time Fulfillment SLA: <strong className="text-slate-900">{onTimeRate}%</strong>
+            On-Time Fulfillment: <strong className="text-slate-900">
+              {hasDeliveries && onTimeRate !== null ? `${onTimeRate}%` : '100%'}
+            </strong>
+            {!hasDeliveries && <span className="text-slate-400 text-[9px] font-normal">(Initial SLA)</span>}
           </span>
           <Link 
             href="/seller/bids/submitted" 

@@ -27,6 +27,7 @@ import {
   Hash,
   ZoomIn,
   ZoomOut,
+  Lock,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -180,6 +181,7 @@ export function PurchaseOrderReceiptModal({
   onViewPaymentSlip,
   activeDelivery,
 }: PurchaseOrderReceiptModalProps) {
+  const { user } = useAuth();
   const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
   const [activeTab, setActiveTab] = useState<'receipt' | 'audit'>('receipt');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -421,7 +423,6 @@ export function PurchaseOrderReceiptModal({
     (order.buyer?.organization?.organizationLogoFileId ? `/api/files/${order.buyer.organization.organizationLogoFileId}/download` : null) ||
     null;
 
-  const { user } = useAuth();
   const isViewingSeller = isSeller || user?.role === 'seller' || user?.role === 'shg' || (order && order.sellerId === user?.id);
   const isViewingBuyer = isBuyer || user?.role === 'buyer' || (order && order.buyerId === user?.id);
 
@@ -1523,14 +1524,31 @@ export function PurchaseOrderReceiptModal({
               </>
             )}
 
-            {isSeller && isAccepted && onCreateInvoice && (
-              <Button
-                onClick={() => onCreateInvoice(order)}
-                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-              >
-                <FileText className="mr-1.5 h-3.5 w-3.5" /> Create Invoice
-              </Button>
-            )}
+            {isSeller && isAccepted && onCreateInvoice && (() => {
+              const hasApprovedGrn = Boolean(
+                ((order as any)?.grns && (order as any).grns.some((g: any) => g.status === 'APPROVED')) ||
+                ['inspection_accepted', 'grn_completed', 'delivered'].includes(viewingStatusLower)
+              );
+              if (hasApprovedGrn) {
+                return (
+                  <Button
+                    onClick={() => onCreateInvoice(order)}
+                    className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
+                  >
+                    <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
+                  </Button>
+                );
+              }
+              return (
+                <Button
+                  disabled
+                  className="h-9 bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold uppercase tracking-wider shadow-none rounded-xl px-3.5 whitespace-nowrap cursor-not-allowed opacity-75"
+                  title="Locked: Invoicing is unlocked only after the buyer inspects delivery and issues an approved Goods Receipt Note (GRN)."
+                >
+                  <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Convert PO to Invoice (Requires GRN)
+                </Button>
+              );
+            })()}
 
             {isSeller && (isAccepted || viewingStatusLower === 'delivered') && onManageDispatch && (
               <Button

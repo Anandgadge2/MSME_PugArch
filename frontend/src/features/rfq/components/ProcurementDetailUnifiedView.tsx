@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowRight,
@@ -48,6 +49,8 @@ import {
   Lock,
   Truck,
   Activity,
+  Trophy,
+  Target,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -57,6 +60,8 @@ import { useAuth } from "../../../hooks/useAuth";
 import { openFileAsset, getFileAssetPreview, type DocumentPreview } from "../../../lib/files";
 import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
+import { FocusTrap } from "../../../components/ui/FocusTrap";
+import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -367,7 +372,8 @@ function formatDateString(
 function formatCurrency(val?: number | string | null) {
   if (val === undefined || val === null || val === "") return "N/A";
   const num = typeof val === "string" ? parseFloat(val) : val;
-  if (isNaN(num) || num <= 0) return "N/A";
+  if (isNaN(num)) return "N/A";
+  if (num === 0) return "₹0";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -526,45 +532,45 @@ function getEvaluationMethodDetails(
   }
 
   // 2. Item-wise L1
-  if (lower.includes("item-wise") || lower.includes("item wise")) {
-    return {
-      title: "Item-wise L1 Evaluation",
-      badge: "Split Line-by-Line",
-      basisLabel: "Lowest Landed Cost Per Item",
-      shortSummary:
-        "Each line item is evaluated independently for lowest landed cost.",
-      description:
-        "Line items are evaluated independently on their landed price. Contracts or Purchase Orders may be awarded separately to the lowest responsive bidder (L1) for each individual line item, allowing split awards across multiple vendors.",
-      keyPoints: [
-        "Independent Line Item Evaluation",
-        "Lowest Landed Cost (L1) Per Item",
-        "Multiple Supplier Awards Permitted",
-      ],
-    };
-  }
+  // if (lower.includes("item-wise") || lower.includes("item wise")) {
+  //   return {
+  //     title: "Item-wise L1 Evaluation",
+  //     badge: "Split Line-by-Line",
+  //     basisLabel: "Lowest Landed Cost Per Item",
+  //     shortSummary:
+  //       "Each line item is evaluated independently for lowest landed cost.",
+  //     description:
+  //       "Line items are evaluated independently on their landed price. Contracts or Purchase Orders may be awarded separately to the lowest responsive bidder (L1) for each individual line item, allowing split awards across multiple vendors.",
+  //     keyPoints: [
+  //       "Independent Line Item Evaluation",
+  //       "Lowest Landed Cost (L1) Per Item",
+  //       "Multiple Supplier Awards Permitted",
+  //     ],
+  //   };
+  // }
 
   // 3. Package-wise L1
-  if (
-    lower.includes("package-wise") ||
-    lower.includes("package wise") ||
-    lower.includes("schedule-wise") ||
-    lower.includes("schedule wise")
-  ) {
-    return {
-      title: "Package-wise / Schedule L1",
-      badge: "Package / Lot Award",
-      basisLabel: "Package Aggregate L1",
-      shortSummary:
-        "Evaluation is based on aggregate lowest landed cost per bundled package.",
-      description:
-        "Items are grouped into cohesive packages or schedules. Evaluation is conducted on the aggregate lowest landed price (L1) of all items within each package. Bidders must quote for all items in a package.",
-      keyPoints: [
-        "Package / Lot Aggregate Cost",
-        "All Items in Package Required",
-        "Award to Package L1 Lowest Bidder",
-      ],
-    };
-  }
+  // if (
+  //   lower.includes("package-wise") ||
+  //   lower.includes("package wise") ||
+  //   lower.includes("schedule-wise") ||
+  //   lower.includes("schedule wise")
+  // ) {
+  //   return {
+  //     title: "Package-wise / Schedule L1",
+  //     badge: "Package / Lot Award",
+  //     basisLabel: "Package Aggregate L1",
+  //     shortSummary:
+  //       "Evaluation is based on aggregate lowest landed cost per bundled package.",
+  //     description:
+  //       "Items are grouped into cohesive packages or schedules. Evaluation is conducted on the aggregate lowest landed price (L1) of all items within each package. Bidders must quote for all items in a package.",
+  //     keyPoints: [
+  //       "Package / Lot Aggregate Cost",
+  //       "All Items in Package Required",
+  //       "Award to Package L1 Lowest Bidder",
+  //     ],
+  //   };
+  // }
 
   // 4. Technical Qualification then L1
   if (
@@ -1472,14 +1478,18 @@ function TimelineRibbon({
                 key={idx}
                 className="flex flex-col justify-between space-y-1 min-w-0"
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5" aria-label={date.label}>
                   <span
+                    aria-hidden="true"
                     className={cn(
                       "h-1.5 w-1.5 rounded-full shrink-0",
                       styles.icon.replace("text-", "bg-").split(" ")[0],
                     )}
                   />
-                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 truncate">
+                  <span
+                    title={date.label}
+                    className="text-[9.5px] font-bold uppercase tracking-wider text-slate-500 truncate"
+                  >
                     {date.label}
                   </span>
                 </div>
@@ -2211,8 +2221,10 @@ function ScopeSummaryCard({
   const formatted = raw
     .replace(/(Sourcing Method:?\s*)/gi, "\nSourcing Method: ")
     .replace(/(RFP\s?Value:?\s*)/gi, "\nRFP Value: ")
+    .replace(/(Estimated\s?Value:?\s*)/gi, "\nEstimated Value: ")
     .replace(/(Value:?\s*)/gi, "\nValue: ")
     .replace(/(Urgency:?\s*)/gi, "\nUrgency: ")
+    .replace(/(Priority:?\s*)/gi, "\nPriority: ")
     .replace(/([a-z0-9])([A-Z][a-z])/g, "$1\n$2")
     .replace(/(INR\s?[\d,]+)([A-Z])/g, "$1\n$2");
 
@@ -2250,12 +2262,30 @@ function ScopeSummaryCard({
   const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer;
 
   const freeText = textParts.join(" ").trim();
-  const effectiveUrgency = urgency || "Normal";
-  const isUrgent = String(effectiveUrgency).toLowerCase().includes("urgent");
+
+  // Resolve urgency: prefer explicit non-normal prop, otherwise fallback to parsed text/KV, else default to prop or Normal
+  const parsedUrgencyFromKVs = parsedKeyValues.find(
+    (kv) => kv.label.toLowerCase() === "urgency" || kv.label.toLowerCase() === "priority"
+  )?.val;
+  const parsedUrgencyFromRaw = raw.match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1];
+  const detectedUrgency = parsedUrgencyFromKVs || parsedUrgencyFromRaw;
+
+  const effectiveUrgency =
+    urgency && urgency.toLowerCase() !== "normal"
+      ? urgency
+      : (detectedUrgency || urgency || "Normal");
+
+  const normUrgency = String(effectiveUrgency).trim().toLowerCase();
+  const isEmergency = normUrgency.includes("emergency");
+  const isUrgent = normUrgency.includes("urgent") || normUrgency.includes("high");
 
   const visibleKeyValues = parsedKeyValues.filter((kv) => {
     const lk = kv.label.toLowerCase();
-    if (lk === "urgency") {
+    if (lk === "urgency" || lk === "priority") {
+      return false;
+    }
+    // Filter out redundant estimated value pill since Estimated Value is already displayed as the first badge
+    if (lk === "value" || lk === "rfp value" || lk === "estimated value") {
       return false;
     }
     if (!shouldShowCost) {
@@ -2297,8 +2327,10 @@ function ScopeSummaryCard({
           <span
             className={cn(
               "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border",
-              isUrgent
-                ? "bg-rose-50 text-rose-700 border-rose-200"
+              isEmergency
+                ? "bg-rose-100 text-rose-800 border-rose-300 font-black"
+                : isUrgent
+                ? "bg-amber-100 text-amber-800 border-amber-300 font-bold"
                 : "bg-slate-100 text-slate-700 border-slate-200",
             )}
           >
@@ -2766,16 +2798,16 @@ function LineItemsTable({
               ? item.specifications
               : {};
           const rawSpec = firstPresent(
-            item.specification,
             item.technicalSpecification,
+            item.specification,
             item.spec,
             typeof item.specifications === "string"
               ? item.specifications
               : null,
+            sp.technicalSpecification,
+            sp.specification,
             sp.text,
             sp.description,
-            sp.specification,
-            sp.technicalSpecification,
             sp.details,
             sp.scopeOfWork,
             sp.scope,
@@ -2790,39 +2822,25 @@ function LineItemsTable({
             item.particulars,
             sp.particulars,
           );
-          const rawName = firstPresent(
-            item.name,
-            item.itemName,
-            item.title,
-            item.productName,
-            item.materialName,
-            item.serviceName,
-            sp.itemName,
-            sp.name,
-            sp.title,
-          );
-          const isSameAsName = Boolean(
-            rawSpec &&
-            rawName &&
-            (String(rawSpec).trim().toLowerCase() ===
-              String(rawName).trim().toLowerCase() ||
-              String(rawName)
-                .trim()
-                .toLowerCase()
-                .includes(String(rawSpec).trim().toLowerCase())),
-          );
+          const allFiles = getUniqueItemFiles(item, sp, item.name || "Item");
+          const hasFiles = allFiles.length > 0;
+
           return (
             <div className="text-slate-600 font-normal max-w-[280px]">
-              {rawSpec && !isSameAsName ? (
+              {rawSpec ? (
                 <span
-                  className="line-clamp-2 text-[11px] break-words block"
+                  className="line-clamp-2 text-[11px] font-medium text-slate-800 break-words block"
                   title={String(rawSpec)}
                 >
                   {formatPrimitiveValue(rawSpec)}
                 </span>
+              ) : hasFiles ? (
+                <span className="text-indigo-600 text-[11px] font-medium">
+                  Specifications Attached ({allFiles.length} file{allFiles.length === 1 ? "" : "s"})
+                </span>
               ) : (
                 <span className="text-slate-400 italic text-[11px]">
-                  As per item scope
+                  Standard specifications apply
                 </span>
               )}
             </div>
@@ -3334,22 +3352,19 @@ function BoqTableList({
             item.price,
             item.estimatedPrice,
           );
-          const rate =
+          const rateNum =
             rawRate !== undefined &&
             rawRate !== null &&
             rawRate !== "" &&
-            rawRate !== "-"
-              ? rawRate
+            rawRate !== "-" &&
+            !isNaN(Number(rawRate))
+              ? Number(rawRate)
               : defaultEstimatedValue && Number(defaultEstimatedValue) > 0
-                ? defaultEstimatedValue
-                : "-";
+                ? Number(defaultEstimatedValue)
+                : null;
           return (
             <span className="text-slate-700">
-              {rate !== "-"
-                ? typeof rate === "number"
-                  ? formatCurrency(rate)
-                  : formatPrimitiveValue(rate)
-                : "-"}
+              {rateNum !== null ? formatCurrency(rateNum) : "-"}
             </span>
           );
         },
@@ -3364,11 +3379,14 @@ function BoqTableList({
             item.gstPercent,
             item.gst,
             item.gstRate,
-            "18%",
           );
+          const taxNum =
+            tax !== undefined && tax !== null && tax !== "" && tax !== "-"
+              ? Number(String(tax).replace("%", ""))
+              : null;
           return (
             <span className="text-slate-700">
-              {tax !== "-" ? `${String(tax).replace("%", "")}%` : "-"}
+              {taxNum !== null && !isNaN(taxNum) ? `${taxNum}%` : "-"}
             </span>
           );
         },
@@ -3390,22 +3408,19 @@ function BoqTableList({
             item.totalPrice,
             item.estimatedTotal,
           );
-          const total =
+          const totalNum =
             rawTotal !== undefined &&
             rawTotal !== null &&
             rawTotal !== "" &&
-            rawTotal !== "-"
-              ? rawTotal
+            rawTotal !== "-" &&
+            !isNaN(Number(rawTotal))
+              ? Number(rawTotal)
               : defaultEstimatedValue && Number(defaultEstimatedValue) > 0
-                ? defaultEstimatedValue
-                : "-";
+                ? Number(defaultEstimatedValue)
+                : null;
           return (
             <span className="font-bold text-slate-900">
-              {total !== "-"
-                ? typeof total === "number"
-                  ? formatCurrency(total)
-                  : formatPrimitiveValue(total)
-                : "-"}
+              {totalNum !== null ? formatCurrency(totalNum) : "-"}
             </span>
           );
         },
@@ -3795,6 +3810,8 @@ export interface ProcurementDetailUnifiedViewProps {
   buyer?: any;
   estimatedValue?: number | string;
   discloseEstimatedCost?: boolean;
+  urgency?: string;
+  priority?: string;
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
   publishedDate?: string;
@@ -3942,6 +3959,225 @@ export function ProcurementDetailUnifiedView(
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
+  // ── Bid Lifecycle & Price-Match Counter-Offer State ──
+  const [declineModal, setDeclineModal] = useState<{
+    show: boolean;
+    awardId: string;
+    type: "price_match" | "award";
+    reason: string;
+    submitting: boolean;
+  }>({
+    show: false,
+    awardId: "",
+    type: "price_match",
+    reason: "",
+    submitting: false,
+  });
+  const [isAcceptingAction, setIsAcceptingAction] = useState(false);
+  const [isIssuingPOFromBanner, setIsIssuingPOFromBanner] = useState(false);
+  const [awardingParticipation, setAwardingParticipation] = useState<any | null>(null);
+  const [awardJustification, setAwardJustification] = useState("");
+  const [awardRemarks, setAwardRemarks] = useState("");
+  const [isSubmittingAward, setIsSubmittingAward] = useState(false);
+  const [isAcceptingPO, setIsAcceptingPO] = useState(false);
+
+  const rawAwards: any[] = Array.isArray(props.rawBid?.awards)
+    ? props.rawBid.awards
+    : Array.isArray((props as any)?.awards)
+    ? (props as any).awards
+    : [];
+  const activeAward =
+    rawAwards.find(
+      (a: any) =>
+        a.awardStatus === "OFFERED" ||
+        a.awardStatus === "ACCEPTED" ||
+        a.counterOfferStatus === "PENDING",
+    ) ||
+    rawAwards[0] ||
+    null;
+
+  const rawOrders: any[] = Array.isArray(props.rawBid?.purchaseOrders)
+    ? props.rawBid.purchaseOrders
+    : Array.isArray((props as any)?.purchaseOrders)
+    ? (props as any).purchaseOrders
+    : [];
+  const directActiveOrder: any =
+    props.rawBid?.activeOrder ||
+    (props as any)?.activeOrder ||
+    activeAward?.order ||
+    rawOrders[0] ||
+    null;
+
+  const { data: fetchedOrder } = useQuery({
+    queryKey: ["procurement-active-order", targetId],
+    queryFn: async () => {
+      try {
+        const res: any = await getApi(`/api/orders/procurement?take=5`);
+        const list = Array.isArray(res) ? res : res?.items || res?.data || [];
+        return (
+          list.find(
+            (o: any) =>
+              String(o.procurementBidId || o.bidId || o.requirementId) === String(targetId) ||
+              (activeAward?.id && String(o.awardId) === String(activeAward.id))
+          ) || null
+        );
+      } catch {
+        return null;
+      }
+    },
+    enabled: Boolean(targetId) && !directActiveOrder,
+    staleTime: 15000,
+  });
+  const effectiveActiveOrder = directActiveOrder || fetchedOrder || null;
+
+  const currentUserId = String(currentUser?.id || "");
+  const currentOrgId = String(
+    currentUser?.organizationId ||
+      currentUser?.sellerProfile?.id ||
+      currentUser?.sellerProfile?.organizationId ||
+      "",
+  );
+
+  const isAwardedToMe = Boolean(
+    activeAward &&
+      !isBuyerSide &&
+      ((activeAward.awardedSellerId &&
+        (String(activeAward.awardedSellerId) === currentUserId ||
+          String(activeAward.awardedSellerId) === currentOrgId)) ||
+        (activeAward.sellerId &&
+          (String(activeAward.sellerId) === currentUserId ||
+            String(activeAward.sellerId) === currentOrgId)) ||
+        (activeAward.seller?.id &&
+          (String(activeAward.seller.id) === currentUserId ||
+            String(activeAward.seller.id) === currentOrgId)) ||
+        (activeAward.seller?.organizationId &&
+          String(activeAward.seller.organizationId) === currentOrgId)),
+  );
+
+  const rawParticipations: any[] = Array.isArray(props.rawBid?.participations)
+    ? props.rawBid.participations
+    : Array.isArray((props as any)?.participations)
+    ? (props as any).participations
+    : [];
+
+  const myParticipation = React.useMemo(() => {
+    if (isBuyerSide || !currentUser) return null;
+    return rawParticipations.find(
+      (p: any) =>
+        String(p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id) ===
+          currentUserId ||
+        String(
+          p.sellerOrganizationId ||
+            p.sellerOrganization?.id ||
+            p.seller?.organizationId,
+        ) === currentOrgId,
+    );
+  }, [rawParticipations, isBuyerSide, currentUser, currentUserId, currentOrgId]);
+
+  const effectiveMyParticipation = props.ownParticipation || props.ownResponse || myParticipation;
+  const isSellerParticipated = Boolean(props.hasSubmittedProposal || effectiveMyParticipation);
+
+  const handleAcceptPriceMatch = async (awardId: string) => {
+    try {
+      setIsAcceptingAction(true);
+      await procurementBidApi.acceptPriceMatchCounterOffer(targetId, awardId);
+      toast.success("Price-match counter-offer accepted! You have won the contract allocation.");
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept price-match counter-offer.");
+    } finally {
+      setIsAcceptingAction(false);
+    }
+  };
+
+  const handleDeclinePriceMatchSubmit = async () => {
+    if (!declineModal.awardId) return;
+    if (!declineModal.reason.trim()) {
+      toast.error("Please provide a reason for declining.");
+      return;
+    }
+    try {
+      setDeclineModal((prev) => ({ ...prev, submitting: true }));
+      await procurementBidApi.declinePriceMatchCounterOffer(
+        targetId,
+        declineModal.awardId,
+        declineModal.reason.trim(),
+      );
+      toast.success("Price-match counter-offer declined. Tender returned to evaluation.");
+      setDeclineModal({ show: false, awardId: "", type: "price_match", reason: "", submitting: false });
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to decline counter-offer.");
+      setDeclineModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const handleAcceptAward = async (awardId: string) => {
+    try {
+      setIsAcceptingAction(true);
+      await procurementBidApi.acceptAward(targetId, awardId);
+      toast.success("Bid award accepted! Buyer will now issue the Purchase Order.");
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept award.");
+    } finally {
+      setIsAcceptingAction(false);
+    }
+  };
+
+  const handleDeclineAwardSubmit = async () => {
+    if (!declineModal.awardId) return;
+    if (!declineModal.reason.trim()) {
+      toast.error("Please provide a reason for declining.");
+      return;
+    }
+    try {
+      setDeclineModal((prev) => ({ ...prev, submitting: true }));
+      await procurementBidApi.declineAward(
+        targetId,
+        declineModal.awardId,
+        declineModal.reason.trim(),
+      );
+      toast.success("Award declined. Tender returned to evaluation.");
+      setDeclineModal({ show: false, awardId: "", type: "award", reason: "", submitting: false });
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to decline award.");
+      setDeclineModal((prev) => ({ ...prev, submitting: false }));
+    }
+  };
+
+  const handleGeneratePOFromBanner = async (awardId: string) => {
+    try {
+      setIsIssuingPOFromBanner(true);
+      await procurementBidApi.generatePO(targetId, awardId);
+      toast.success("Purchase Order issued successfully! Non-selected bidders notified.");
+      queryClient.invalidateQueries();
+      router.push("/buyer/purchase-orders");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to issue Purchase Order.");
+    } finally {
+      setIsIssuingPOFromBanner(false);
+    }
+  };
+
+  const handleAcceptPO = async (poId: string | number) => {
+    try {
+      setIsAcceptingPO(true);
+      await procurementBidApi.acceptPO(poId);
+      toast.success("Purchase Order accepted! Delivery committed and non-selected bidders transitioned.");
+      queryClient.invalidateQueries();
+      router.push("/seller/delivery-management");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to accept Purchase Order.");
+    } finally {
+      setIsAcceptingPO(false);
+    }
+  };
 
   const linkedAuctionQuery = useQuery({
     queryKey: ["linked-reverse-auction", targetId],
@@ -4689,13 +4925,21 @@ export function ProcurementDetailUnifiedView(
         lower === "warranty" ||
         lower === "warrantyperiod" ||
         lower.includes("warranty") ||
-        // RFQ / RFP / Rate Contract specific exclusions: Payment Terms, Project Duration, Service Details, Service Title
+        // Commercial & payment terms already rendered in top card
+        lower === "paymentterms" ||
+        lower === "paymentterm" ||
+        lower === "paymentmode" ||
+        lower.includes("paymentterm") ||
+        lower === "deliveryterms" ||
+        lower === "deliveryterm" ||
+        lower === "deliverytype" ||
+        lower === "deliverymode" ||
+        lower.includes("deliveryterm") ||
+        lower === "freightterms" ||
+        lower === "freightincluded" ||
+        // RFQ / RFP / Rate Contract specific exclusions: Project Duration, Service Details, Service Title
         ((isRfqType || isRfpType || isRateContractType) &&
-          (lower === "paymentterms" ||
-            lower === "paymentterm" ||
-            lower === "paymentmode" ||
-            lower.includes("paymentterm") ||
-            lower === "projectduration" ||
+          (lower === "projectduration" ||
             lower === "duration" ||
             lower === "contractperiod" ||
             lower === "servicedetails" ||
@@ -4751,6 +4995,29 @@ export function ProcurementDetailUnifiedView(
       basics.buyingType,
       payload.bidType,
     ) || "Product";
+
+  const isBoqProcurement =
+    String(buyingType || "").trim().toUpperCase() === "BOQ";
+
+  const filteredBoqTable = useMemo(() => {
+    return boqTable.filter((row: any) => {
+      if (!row) return false;
+      const desc = String(row.description || row.itemName || row.name || "").trim();
+      const rate = Number(row.estimatedRate || row.rate || row.unitPrice || 0);
+      const total = Number(row.total || row.amount || 0);
+      const rowCat = String(row.category || "").trim().toLowerCase();
+      const isGenericCat =
+        !rowCat ||
+        rowCat === "general" ||
+        /^category\s*#?\d+$/i.test(rowCat);
+      const hasRemarks = Boolean(row.remarks && String(row.remarks).trim().length > 0);
+      return desc.length > 0 || rate > 0 || total > 0 || !isGenericCat || hasRemarks;
+    });
+  }, [boqTable]);
+
+  const isLegitimateBoq =
+    (isBoqProcurement && filteredBoqTable.length > 0) ||
+    (lineItems.length === 0 && filteredBoqTable.length > 0);
 
   const category =
     firstPresent(
@@ -5150,14 +5417,27 @@ export function ProcurementDetailUnifiedView(
       )
     : undefined;
 
+  const cleanPaymentTerm = (val?: any) => {
+    if (!val || typeof val !== "string") return undefined;
+    const trimmed = val.trim();
+    if (
+      !trimmed ||
+      trimmed === "—" ||
+      trimmed === "N/A" ||
+      trimmed === "Not Specified" ||
+      trimmed === "null" ||
+      trimmed === "undefined" ||
+      ["two packet", "single packet", "two_packet", "single_packet"].includes(trimmed.toLowerCase())
+    ) {
+      return undefined;
+    }
+    return trimmed;
+  };
+
   const paymentTerms = firstPresent(
-    props.paymentTerms &&
-      props.paymentTerms !== "—" &&
-      props.paymentTerms !== "N/A"
-      ? props.paymentTerms
-      : undefined,
-    terms.paymentTerms,
-    terms.paymentMode,
+    cleanPaymentTerm(props.paymentTerms),
+    cleanPaymentTerm(terms.paymentTerms),
+    cleanPaymentTerm(terms.paymentMode),
   );
 
   const scopeText =
@@ -5176,6 +5456,39 @@ export function ProcurementDetailUnifiedView(
         ? `Procurement requirement for ${props.subject}`
         : undefined,
     ) || "Detailed line item specifications attached in BOQ schedule.";
+
+  const extractUrgencyFromText = (text?: string): string | undefined => {
+    if (!text) return undefined;
+    const match = String(text).match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i);
+    return match ? match[1].trim() : undefined;
+  };
+
+  const resolvedUrgency = firstPresent(
+    props.urgency,
+    (props as any).priority,
+    payload.urgency,
+    payload.priority,
+    basics.priority,
+    basics.urgency,
+    payload.basics?.priority,
+    payload.basics?.urgency,
+    (props.rawBid as any)?.urgency,
+    (props.rawBid as any)?.priority,
+    (props.rawBid as any)?.technicalPacket?.urgency,
+    (props.rawBid as any)?.technicalPacket?.priority,
+    (props.rawBid as any)?.technicalPacket?.basics?.priority,
+    (props.rawBid as any)?.technicalPacket?.basics?.urgency,
+    (props.rawBid as any)?.technicalPacket?.rules?.urgency,
+    (props.rawBid as any)?.technicalPacket?.recommendation?.urgency,
+    rules.urgency,
+    rules.priority,
+    internal.urgency,
+    internal.priority,
+    extractUrgencyFromText(props.description),
+    extractUrgencyFromText(basics.description),
+    extractUrgencyFromText((props.rawBid as any)?.description),
+    extractUrgencyFromText(scopeText),
+  ) || "Normal";
 
   const buyerOrgName =
     firstPresent(
@@ -5373,15 +5686,46 @@ export function ProcurementDetailUnifiedView(
       props.buyer?.buyerProfile?.departmentName,
     ) || "Procurement & Stores Department";
 
+  const cleanDeliveryTerm = (val?: any) => {
+    if (!val || typeof val !== "string") return undefined;
+    const trimmed = val.trim();
+    if (
+      !trimmed ||
+      trimmed === "—" ||
+      trimmed === "N/A" ||
+      trimmed === "Not Specified" ||
+      trimmed === "null" ||
+      trimmed === "undefined" ||
+      [
+        "nos",
+        "nos.",
+        "kg",
+        "ton",
+        "mt",
+        "bag",
+        "box",
+        "packet",
+        "set",
+        "pair",
+        "roll",
+        "litre",
+        "meter",
+        "feet",
+        "piece",
+        "unit",
+      ].includes(trimmed.toLowerCase())
+    ) {
+      return undefined;
+    }
+    return trimmed;
+  };
+
   const deliveryTerms = firstPresent(
-    props.deliveryTerms &&
-      props.deliveryTerms !== "N/A" &&
-      props.deliveryTerms !== "—"
-      ? props.deliveryTerms
-      : undefined,
-    terms.deliveryTerms,
-    terms.deliveryMode,
-    terms.deliverySchedule,
+    cleanDeliveryTerm(props.deliveryTerms),
+    cleanDeliveryTerm(terms.deliveryTerms),
+    cleanDeliveryTerm(terms.deliveryType),
+    cleanDeliveryTerm(terms.deliveryMode),
+    cleanDeliveryTerm(terms.deliverySchedule),
   );
 
   const rawConsignee =
@@ -5831,6 +6175,54 @@ export function ProcurementDetailUnifiedView(
     });
   }, [allParticipationsList]);
 
+  const qualifiedParticipations = useMemo(() => {
+    return submittedParticipations.filter((p: any) => {
+      const ts = String(p.technicalStatus || "").toUpperCase();
+      const isDisq = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || p.isDisqualified;
+      return !isDisq;
+    });
+  }, [submittedParticipations]);
+
+  const lowestQualifiedL1ParticipationId = useMemo(() => {
+    let lowestId: any = null;
+    let lowestAmt = Infinity;
+    for (const p of qualifiedParticipations) {
+      const amt = Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0);
+      if (amt > 0 && amt < lowestAmt) {
+        lowestAmt = amt;
+        lowestId = p.id;
+      }
+    }
+    return lowestId;
+  }, [qualifiedParticipations]);
+
+  const handleConfirmAwardSubmit = async () => {
+    if (!awardingParticipation) return;
+    const isTargetL1 = String(awardingParticipation.id) === String(lowestQualifiedL1ParticipationId);
+    if (!isTargetL1 && !awardJustification.trim()) {
+      toast.error("Please provide justification for awarding to a non-L1 bidder.");
+      return;
+    }
+    try {
+      setIsSubmittingAward(true);
+      await procurementBidApi.recommendAward(targetId, {
+        participationId: awardingParticipation.id,
+        justificationReason: awardJustification.trim() || undefined,
+        remarks: awardRemarks.trim() || undefined,
+      });
+      toast.success("Contract award offered to vendor! Vendor has been notified to formally accept.");
+      setAwardingParticipation(null);
+      setAwardJustification("");
+      setAwardRemarks("");
+      queryClient.invalidateQueries();
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to offer contract award.");
+    } finally {
+      setIsSubmittingAward(false);
+    }
+  };
+
   const isTwoPacketMode = useMemo(() => {
     const rawPacket = String(
       props.packetType ||
@@ -6149,8 +6541,66 @@ export function ProcurementDetailUnifiedView(
       },
       {
         key: "status",
-        header: "Submission",
+        header: "Lifecycle & Award Status",
         cell: (participation) => {
+          const isAwardWinner = Boolean(
+            activeAward &&
+            ((activeAward.awardedSellerId &&
+              (String(activeAward.awardedSellerId) === String(participation.sellerUserId || participation.sellerId || participation.id))) ||
+             (activeAward.sellerId &&
+              (String(activeAward.sellerId) === String(participation.sellerUserId || participation.sellerId || participation.id))) ||
+             (activeAward.participationId &&
+              String(activeAward.participationId) === String(participation.id)))
+          );
+          const isPOAccepted = Boolean(
+            effectiveActiveOrder &&
+            ['accepted', 'in_fulfillment', 'delivered', 'completed', 'invoice_submitted', 'paid'].includes(
+              String(effectiveActiveOrder.status || '').toLowerCase()
+            )
+          );
+
+          if (isAwardWinner) {
+            if (effectiveActiveOrder) {
+              return (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-emerald-800 shadow-2xs">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  Ordered & Active
+                </span>
+              );
+            }
+            if (activeAward.awardStatus === "ACCEPTED") {
+              return (
+                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-indigo-800 shadow-2xs">
+                  <Award className="h-3 w-3 text-indigo-600" />
+                  Award Accepted
+                </span>
+              );
+            }
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-amber-800 shadow-2xs">
+                <Clock className="h-3 w-3 text-amber-600" />
+                Award Offered (Pending)
+              </span>
+            );
+          }
+
+          if (isPOAccepted || String(participation.finalStatus || '').toUpperCase() === 'NOT_SELECTED') {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-slate-500">
+                Not Selected
+              </span>
+            );
+          }
+
+          if (activeAward || isEvaluationReady) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-sky-700 shadow-2xs">
+                <Clock className="h-3 w-3 text-sky-500" />
+                Under Review / Standby
+              </span>
+            );
+          }
+
           const statusLabel =
             participation.submissionStatus ||
             participation.status ||
@@ -6166,54 +6616,83 @@ export function ProcurementDetailUnifiedView(
         key: "action",
         header: "Action",
         align: "right",
-        cell: (participation) => (
-          <div className="flex items-center justify-end gap-1.5">
-            {isBuyerOrAdmin && (
+        cell: (participation) => {
+          const ts = String(participation.technicalStatus || "").toUpperCase();
+          const isDisq = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || participation.isDisqualified;
+          const isQualified = !isDisq;
+          const canAward = Boolean(
+            isBuyerOrAdmin &&
+            isEvaluationReady &&
+            isQualified &&
+            (!activeAward || activeAward.awardStatus === "DECLINED") &&
+            !effectiveActiveOrder
+          );
+
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {canAward && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    setAwardingParticipation(participation);
+                    setAwardJustification("");
+                    setAwardRemarks("");
+                  }}
+                  className="h-7.5 px-2.5 gap-1 text-[11px] font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer rounded-lg"
+                  title="Award contract to this qualified vendor"
+                >
+                  <Award className="h-3.5 w-3.5" />
+                  Award Contract
+                </Button>
+              )}
+              {isBuyerOrAdmin && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!isEvaluationReady}
+                  onClick={isEvaluationReady ? () => setSelectedForTechnicalEval(participation) : undefined}
+                  className={cn(
+                    "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs",
+                    isEvaluationReady
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                      : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
+                  )}
+                  title={
+                    isEvaluationReady
+                      ? isTechEvalCompleted
+                        ? "View technical evaluation decision and remarks"
+                        : "Evaluate technical proposal, compliance and eligibility"
+                      : "Technical scrutiny unlocks after bidding window closes"
+                  }
+                >
+                  {isEvaluationReady ? (
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                  {isTechEvalCompleted ? "View Evaluation" : "Evaluate Bid"}
+                </Button>
+              )}
               <Button
                 type="button"
                 size="sm"
                 disabled={!isEvaluationReady}
-                onClick={isEvaluationReady ? () => setSelectedForTechnicalEval(participation) : undefined}
+                onClick={isEvaluationReady ? () => setSelectedQuotationForReview(participation) : undefined}
                 className={cn(
-                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs",
+                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs",
                   isEvaluationReady
-                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
-                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
+                    ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
                 )}
-                title={
-                  isEvaluationReady
-                    ? isTechEvalCompleted
-                      ? "View technical evaluation decision and remarks"
-                      : "Evaluate technical proposal, compliance and eligibility"
-                    : "Technical scrutiny unlocks after bidding window closes"
-                }
+                title={isEvaluationReady ? "Review quotation details" : "Quotation remains sealed until bidding closes"}
               >
-                {isEvaluationReady ? (
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                ) : (
-                  <Lock className="h-3.5 w-3.5 text-slate-400" />
-                )}
-                {isTechEvalCompleted ? "View Evaluation" : "Evaluate Bid"}
+                <Eye className="h-3 w-3" />
+                Review Quotation
               </Button>
-            )}
-            <Button
-              type="button"
-              size="sm"
-              disabled={!isEvaluationReady}
-              onClick={isEvaluationReady ? () => setSelectedQuotationForReview(participation) : undefined}
-              className={cn(
-                "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs",
-                isEvaluationReady
-                  ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
-                  : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75"
-              )}
-              title={isEvaluationReady ? "Review quotation details" : "Quotation remains sealed until bidding closes"}
-            >
-              <Eye className="h-3 w-3" />
-              Review Quotation
-            </Button>
-          </div>
-        ),
+            </div>
+          );
+        },
       },
     ],
     [
@@ -6224,13 +6703,24 @@ export function ProcurementDetailUnifiedView(
       defaultRequirementQuantity,
       defaultRequirementUnit,
       defaultProcurementDeliverySchedule,
+      activeAward,
+      effectiveActiveOrder,
+      lowestQualifiedL1ParticipationId,
     ],
   );
 
   const proposalStatusDisplay = useMemo(() => {
-    // If current user is explicitly a seller and not viewing as buyer, show their submission status
+    // If current user is explicitly a seller and not viewing as buyer, show their authentic submission & evaluation status
     if (currentUser?.role === "seller" && !isBuyerSide) {
-      return props.hasSubmittedProposal ? "Submitted" : "Not submitted";
+      if (isSellerParticipated) {
+        if (isAwardedToMe) return "Awarded to You";
+        if (activeAward && !isAwardedToMe && !effectiveActiveOrder) return "Standby (Under Evaluation)";
+        if (isBiddingClosed || isDeadlinePassed) return "Submitted • Under Evaluation";
+        return "Quotation Submitted";
+      } else {
+        if (isBiddingClosed || isDeadlinePassed) return "Submission Closed";
+        return "Open for Quotation";
+      }
     }
 
     // For buyer, admin, or general viewer, derive authentic status from real database records
@@ -6304,7 +6794,12 @@ export function ProcurementDetailUnifiedView(
   }, [
     currentUser?.role,
     isBuyerSide,
-    props.hasSubmittedProposal,
+    isSellerParticipated,
+    isAwardedToMe,
+    activeAward,
+    effectiveActiveOrder,
+    isBiddingClosed,
+    isDeadlinePassed,
     props.status,
     props.participantsCount,
     submittedParticipations,
@@ -6329,10 +6824,20 @@ export function ProcurementDetailUnifiedView(
   const summaryCards = [
     {
       label: "Status",
-      value: statusLabel,
+      value: !isBuyerSide && currentUser?.role === "seller" ? proposalStatusDisplay : statusLabel,
       icon: ShieldCheck,
-      tone: "slate" as Tone,
-      subtext: "Current lifecycle state",
+      tone: (
+        !isBuyerSide && currentUser?.role === "seller"
+          ? (isSellerParticipated
+              ? (isAwardedToMe ? "emerald" : "sky")
+              : (isBiddingClosed || isDeadlinePassed ? "slate" : "amber"))
+          : "slate"
+      ) as Tone,
+      subtext: !isBuyerSide && currentUser?.role === "seller"
+        ? (isSellerParticipated
+            ? (isAwardedToMe ? "Contract won" : (isBiddingClosed || isDeadlinePassed ? "Quotation under evaluation" : "Bid received on time"))
+            : (isBiddingClosed || isDeadlinePassed ? "Missed cutoff deadline" : "Accepting proposals"))
+        : "Current lifecycle state",
     },
     {
       label: "Submission Deadline",
@@ -6596,6 +7101,19 @@ export function ProcurementDetailUnifiedView(
             </nav>
           </div>
 
+          {/* Unified 5-Stage Procurement Lifecycle Progression Bar */}
+          <ProcurementLifecycleStepper
+            status={props.rawBid?.status || props.status}
+            lifecycleStage={props.rawBid?.lifecycleStage || props.lifecycleStage}
+            awards={rawAwards}
+            activeAward={activeAward}
+            purchaseOrders={rawOrders}
+            activeOrder={effectiveActiveOrder}
+            hasApprovedGrn={Boolean(effectiveActiveOrder?.grns?.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED'))}
+            invoices={effectiveActiveOrder?.invoices || props.rawBid?.invoices || []}
+            isBuyer={isBuyerSide}
+          />
+
           {!currentUser && (
             <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-2.5">
@@ -6667,6 +7185,529 @@ export function ProcurementDetailUnifiedView(
               />
             )}
 
+          {/* ═══════════════════════════════════════════════════════════════ */}
+          {/* ENTERPRISE BID LIFECYCLE HERO ACTION BANNER                     */}
+          {/* ═══════════════════════════════════════════════════════════════ */}
+
+          {/* Buyer: Award Offered to Seller, Waiting for Acceptance */}
+          {isBuyerSide && activeAward && activeAward.awardStatus === "OFFERED" && activeAward.counterOfferStatus !== "PENDING" && (
+            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-600 via-orange-600 to-slate-900 p-5 text-white shadow-xl animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 border border-white/20 px-3 py-1 text-xs font-black uppercase tracking-wider text-amber-200">
+                    <Clock className="h-3.5 w-3.5 text-amber-300" />
+                    Contract Award Offered — Awaiting Vendor Acceptance
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    Award Offered to {activeAward.sellerName || activeAward.seller?.name || activeAward.awardedSellerName || activeAward.sellerOrganization?.name || "Selected Supplier"}
+                  </h3>
+                  <p className="text-sm font-medium text-amber-100 max-w-2xl">
+                    The formal contract award has been offered for ₹{Number(activeAward.finalAmount || activeAward.awardAmount || activeAward.originalBidAmount || 0).toLocaleString("en-IN")}. Waiting for supplier acceptance before Purchase Order generation can be unlocked. Participating bidders remain safely under review on standby.
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setActiveTab("evaluation")}
+                    className="h-10 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-4 border border-white/30 cursor-pointer"
+                  >
+                    View Evaluation Details
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller: Purchase Order Received — Accept PO & Commit Delivery */}
+          {!isBuyerSide && isAwardedToMe && effectiveActiveOrder && ['issued', 'generated', 'order_placed', 'pending_acceptance'].includes(String(effectiveActiveOrder.status || '').toLowerCase()) && (
+            <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950 p-5 text-white shadow-xl animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-300">
+                    <Truck className="h-3.5 w-3.5" />
+                    Official Purchase Order Issued
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    Purchase Order Received (PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id})
+                  </h3>
+                  <p className="text-sm font-medium text-emerald-100 max-w-2xl">
+                    The Buyer has officially generated and released Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} for ₹{Number(effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0).toLocaleString('en-IN')}. Please accept the order to commit your delivery timeline and unlock fulfillment dispatch.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  <Button
+                    type="button"
+                    disabled={isAcceptingPO}
+                    onClick={() => handleAcceptPO(effectiveActiveOrder.id)}
+                    className="h-12 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm px-6 shadow-xl border border-emerald-300 gap-2 cursor-pointer transition-transform active:scale-95"
+                  >
+                    {isAcceptingPO ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-950" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-slate-950" />
+                    )}
+                    Accept PO &amp; Commit Delivery
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller: Price-Match Counter-Offer Received */}
+          {!isBuyerSide && isAwardedToMe && activeAward?.counterOfferStatus === "PENDING" && (
+            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 p-5 text-white shadow-xl animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/20 px-3 py-1 text-xs font-black uppercase tracking-wider backdrop-blur-xs">
+                    <Target className="h-3.5 w-3.5 text-amber-200" />
+                    Price Match Counter-Offer Extended
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    The Buyer has requested a Price-Match Counter-Offer
+                  </h3>
+                  <p className="text-sm font-medium text-amber-100 max-w-2xl">
+                    You are invited to match the lowest qualified commercial bid (L1) at{" "}
+                    <strong className="text-white underline font-black">
+                      ₹{Number(activeAward.priceMatchTargetPrice || 0).toLocaleString("en-IN")}
+                    </strong>{" "}
+                    {activeAward.originalBidAmount && (
+                      <span className="text-xs text-amber-200">
+                        (Your initial quote: ₹{Number(activeAward.originalBidAmount).toLocaleString("en-IN")})
+                      </span>
+                    )}
+                    . Accepting secures the 100% single-supplier contract allocation.
+                  </p>
+                  {activeAward.counterOfferDeadline && (
+                    <div className="flex items-center gap-2 pt-1 text-xs font-bold text-amber-200">
+                      <Clock className="h-4 w-4 shrink-0" />
+                      Response Deadline:{" "}
+                      <span className="rounded bg-black/30 px-2 py-0.5 font-mono font-black text-white">
+                        {formatDateTime(activeAward.counterOfferDeadline)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  <Button
+                    type="button"
+                    disabled={isAcceptingAction}
+                    onClick={() => handleAcceptPriceMatch(activeAward.id)}
+                    className="h-11 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm px-6 shadow-lg border border-emerald-400 gap-2 cursor-pointer transition-transform active:scale-95"
+                  >
+                    {isAcceptingAction ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                    Accept Price Match
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={isAcceptingAction}
+                    onClick={() =>
+                      setDeclineModal({
+                        show: true,
+                        awardId: activeAward.id,
+                        type: "price_match",
+                        reason: "",
+                        submitting: false,
+                      })
+                    }
+                    className="h-11 bg-black/30 hover:bg-black/50 text-white font-bold text-sm px-5 border border-white/30 gap-2 cursor-pointer"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Decline Counter-Offer
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller: Award Offered (Ready for Acceptance) */}
+          {!isBuyerSide && isAwardedToMe && activeAward?.awardStatus === "OFFERED" && activeAward?.counterOfferStatus !== "PENDING" && (
+            <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-5 text-white shadow-xl animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-black/20 px-3 py-1 text-xs font-black uppercase tracking-wider backdrop-blur-xs">
+                    <Trophy className="h-3.5 w-3.5 text-amber-300" />
+                    Bid Award Offered
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    Congratulations! Your Organization has been Awarded the Contract
+                  </h3>
+                  <p className="text-sm font-medium text-emerald-100 max-w-2xl">
+                    The Buyer has recommended and awarded this tender to your organization. Please formally accept the award to initiate official Purchase Order issuance.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  <Button
+                    type="button"
+                    disabled={isAcceptingAction}
+                    onClick={() => handleAcceptAward(activeAward.id)}
+                    className="h-11 bg-white hover:bg-emerald-50 text-emerald-900 font-black text-sm px-6 shadow-lg gap-2 cursor-pointer transition-transform active:scale-95"
+                  >
+                    {isAcceptingAction ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    )}
+                    Formally Accept Award
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={isAcceptingAction}
+                    onClick={() =>
+                      setDeclineModal({
+                        show: true,
+                        awardId: activeAward.id,
+                        type: "award",
+                        reason: "",
+                        submitting: false,
+                      })
+                    }
+                    className="h-11 bg-black/30 hover:bg-black/50 text-white font-bold text-sm px-5 border border-white/30 gap-2 cursor-pointer"
+                  >
+                    <XCircle className="h-4 w-4" />
+                    Decline Award
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller: Award Accepted, Waiting for PO */}
+          {!isBuyerSide && isAwardedToMe && activeAward?.awardStatus === "ACCEPTED" && !activeAward?.order && (
+            <div className="rounded-2xl border border-indigo-200 bg-indigo-50/90 p-4 shadow-sm animate-fadeIn">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-indigo-950">
+                    Award Acceptance Confirmed — Awaiting Purchase Order Issuance
+                  </h4>
+                  <p className="text-xs font-semibold text-indigo-800">
+                    You have accepted the award. The buyer is now finalizing and issuing the official Purchase Order. You will receive an immediate notification upon issuance.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller: Participating Bidder on Standby */}
+          {!isBuyerSide && myParticipation && !isAwardedToMe && activeAward && (activeAward.counterOfferStatus === "PENDING" || activeAward.awardStatus === "OFFERED") && (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4 shadow-sm animate-fadeIn">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-blue-950">
+                    Tender Under Final Award Evaluation (Backup Supplier Standby)
+                  </h4>
+                  <p className="text-xs font-semibold text-blue-800">
+                    The buyer is actively finalizing award formalities. Your proposal remains valid, responsive, and safely on standby under evaluation. Final tender status will be updated upon PO issuance.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Buyer: Award Accepted — Ready to Issue PO */}
+          {isBuyerSide && activeAward && activeAward.awardStatus === "ACCEPTED" && !activeAward.order && (
+            <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-5 text-white shadow-xl animate-fadeIn">
+              <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1.5">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-200">
+                    <Award className="h-3.5 w-3.5 text-emerald-300" />
+                    Supplier Accepted Bid Award
+                  </div>
+                  <h3 className="text-xl font-black tracking-tight text-white">
+                    Contract Ready for Purchase Order Generation
+                  </h3>
+                  <p className="text-sm font-medium text-slate-200 max-w-2xl">
+                    The awarded supplier has formally accepted the award terms. Generate and issue the Purchase Order to bind the contract and automatically notify all participating suppliers.
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <Button
+                    type="button"
+                    disabled={isIssuingPOFromBanner}
+                    onClick={() => handleGeneratePOFromBanner(activeAward.id)}
+                    className="h-12 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm px-6 shadow-xl border border-emerald-300 gap-2 cursor-pointer transition-transform active:scale-95"
+                  >
+                    {isIssuingPOFromBanner ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    Generate & Issue Purchase Order
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Buyer: Price Match Counter-Offer Pending */}
+          {isBuyerSide && activeAward && activeAward.counterOfferStatus === "PENDING" && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm animate-fadeIn">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
+                    <Clock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-amber-950">
+                      Price-Match Counter-Offer Pending Supplier Response
+                    </h4>
+                    <p className="text-xs font-semibold text-amber-800">
+                      Target Price:{" "}
+                      <strong className="text-amber-950">
+                        ₹{Number(activeAward.priceMatchTargetPrice || 0).toLocaleString("en-IN")}
+                      </strong>{" "}
+                      | Deadline:{" "}
+                      <strong className="text-amber-950">
+                        {activeAward.counterOfferDeadline
+                          ? formatDateTime(activeAward.counterOfferDeadline)
+                          : "Active"}
+                      </strong>
+                      . Other bidders remain safely on standby.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => router.push(`/bids/${targetId}/results`)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0"
+                >
+                  View Bid Evaluation
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Decline Price Match or Award Modal */}
+          {declineModal.show && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
+              <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-rose-600" />
+                    {declineModal.type === "price_match"
+                      ? "Decline Price-Match Counter-Offer"
+                      : "Decline Contract Award"}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeclineModal({
+                        show: false,
+                        awardId: "",
+                        type: "price_match",
+                        reason: "",
+                        submitting: false,
+                      })
+                    }
+                    className="text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <p className="text-xs font-semibold text-slate-600 mt-3">
+                  {declineModal.type === "price_match"
+                    ? "Please provide an explanation for declining this price-match counter-offer. The buyer will be notified and can award L1 or another vendor."
+                    : "Please provide a reason for declining this contract award. The tender will be returned to the buyer for re-evaluation."}
+                </p>
+                <div className="mt-3">
+                  <label className="text-xs font-black text-slate-700 block mb-1">
+                    Reason for Declining <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={declineModal.reason}
+                    onChange={(e) =>
+                      setDeclineModal((prev) => ({ ...prev, reason: e.target.value }))
+                    }
+                    placeholder="e.g. Cannot meet target price due to raw material cost escalation..."
+                    className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setDeclineModal({
+                        show: false,
+                        awardId: "",
+                        type: "price_match",
+                        reason: "",
+                        submitting: false,
+                      })
+                    }
+                    className="text-xs font-bold"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={declineModal.submitting || !declineModal.reason.trim()}
+                    onClick={
+                      declineModal.type === "price_match"
+                        ? handleDeclinePriceMatchSubmit
+                        : handleDeclineAwardSubmit
+                    }
+                    className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black gap-1.5 cursor-pointer"
+                  >
+                    {declineModal.submitting ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5" />
+                    )}
+                    Confirm Decline
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Buyer: Award Contract Confirmation Modal */}
+          {awardingParticipation && (
+            <div 
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="award-modal-title"
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+            >
+              <FocusTrap>
+                <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                        <Award className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 id="award-modal-title" className="text-base font-black text-slate-900">
+                          Award Tender Contract
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Offer contract award to chosen qualified supplier
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAwardingParticipation(null)}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                      aria-label="Close award modal"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-3.5">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Vendor</span>
+                        <span className="font-black text-slate-900">
+                          {awardingParticipation.sellerOrgName || awardingParticipation.companyName || awardingParticipation.sellerName || "Supplier"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs border-t border-slate-200/60 pt-2">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Quoted Amount</span>
+                        <span className="font-black text-slate-900 text-sm">
+                          ₹{Number(awardingParticipation.totalAmount || awardingParticipation.quotedAmount || 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs border-t border-slate-200/60 pt-2">
+                        <span className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">Ranking</span>
+                        <span>
+                          {String(awardingParticipation.id) === String(lowestQualifiedL1ParticipationId) ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-800">
+                              <CheckCircle2 className="h-3 w-3" /> L1 Lowest Compliant Bidder
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase text-amber-800">
+                              Non-L1 Qualified Bidder
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+
+                    {String(awardingParticipation.id) !== String(lowestQualifiedL1ParticipationId) && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 space-y-1.5">
+                        <div className="flex items-center gap-1.5 font-black text-amber-950">
+                          <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                          Non-L1 Justification Required (GFR 173 Compliance)
+                        </div>
+                        <p className="text-[11.5px] leading-relaxed text-amber-800">
+                          Under public procurement standards, awarding to a bidder other than L1 requires an explicit committee justification (e.g. delivery feasibility, technical superiority, or past performance).
+                        </p>
+                      </div>
+                    )}
+
+                    {String(awardingParticipation.id) !== String(lowestQualifiedL1ParticipationId) && (
+                      <div>
+                        <label htmlFor="award-justification" className="text-xs font-black text-slate-700 block mb-1">
+                          Justification for Non-L1 Selection <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                          id="award-justification"
+                          rows={3}
+                          value={awardJustification}
+                          onChange={(e) => setAwardJustification(e.target.value)}
+                          placeholder="State clear official rationale for selecting this vendor over lower commercial bids..."
+                          className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-medium text-slate-900 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none resize-none"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="award-remarks" className="text-xs font-black text-slate-700 block mb-1">
+                        Award Remarks / Notes (Optional)
+                      </label>
+                      <textarea
+                        id="award-remarks"
+                        rows={2}
+                        value={awardRemarks}
+                        onChange={(e) => setAwardRemarks(e.target.value)}
+                        placeholder="Internal committee notes or specific terms to be communicated..."
+                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-medium text-slate-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2.5 mt-5 pt-3 border-t border-slate-100">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setAwardingParticipation(null)}
+                      className="text-xs font-bold"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={isSubmittingAward || (String(awardingParticipation.id) !== String(lowestQualifiedL1ParticipationId) && !awardJustification.trim())}
+                      onClick={handleConfirmAwardSubmit}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      {isSubmittingAward ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      )}
+                      Confirm &amp; Offer Contract Award
+                    </Button>
+                  </div>
+                </div>
+              </FocusTrap>
+            </div>
+          )}
+
           {/* Header */}
           <header className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -6703,13 +7744,51 @@ export function ProcurementDetailUnifiedView(
                       }
                     />
                   )}
-                  {props.hasSubmittedProposal && (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                      <ShieldCheck className="h-3 w-3" />
-                      {props.procurementType === "RFQ"
-                        ? "Quotation Submitted"
-                        : "Proposal Submitted"}
-                    </span>
+                  {!isBuyerSide && currentUser?.role === "seller" ? (
+                    isSellerParticipated ? (
+                      isAwardedToMe ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
+                          <Award className="h-3 w-3 text-emerald-600" />
+                          Contract Awarded to You
+                        </span>
+                      ) : activeAward && !effectiveActiveOrder ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 shadow-2xs">
+                          <Clock className="h-3 w-3 text-sky-600" />
+                          Standby • Under Evaluation
+                        </span>
+                      ) : (isBiddingClosed || isDeadlinePassed) ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">
+                          <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                          Submitted • Under Evaluation
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700 shadow-2xs">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          {props.procurementType === "RFQ" ? "Quotation Submitted" : "Proposal Submitted"}
+                        </span>
+                      )
+                    ) : (
+                      (isBiddingClosed || isDeadlinePassed) ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700 shadow-2xs">
+                          <Lock className="h-3 w-3 text-rose-500" />
+                          Submission Window Closed (Missed Deadline)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-700 shadow-2xs">
+                          <Clock className="h-3 w-3 text-amber-600" />
+                          Awaiting Your Quotation
+                        </span>
+                      )
+                    )
+                  ) : (
+                    props.hasSubmittedProposal && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                        <ShieldCheck className="h-3 w-3" />
+                        {props.procurementType === "RFQ"
+                          ? "Quotation Submitted"
+                          : "Proposal Submitted"}
+                      </span>
+                    )
                   )}
                 </div>
                 <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-tight text-slate-900 break-words leading-snug">
@@ -6818,7 +7897,7 @@ export function ProcurementDetailUnifiedView(
                     {props.cancelButtonLabel || "Cancel Procurement"}
                   </Button>
                 )}
-                {!isBuyerOrAdmin && props.hasSubmittedProposal && (
+                {!isBuyerOrAdmin && isSellerParticipated && (
                   <>
                     {(props.onViewQuotationClick || props.onSubmitClick) && (
                       <Button
@@ -6833,12 +7912,12 @@ export function ProcurementDetailUnifiedView(
                         <Eye className="h-3.5 w-3.5 text-slate-600" />
                         <span>
                           {isRfqType
-                            ? "View Quotation"
+                            ? "View My Quotation"
                             : isRateContractType
-                              ? "View Rate Proposal"
+                              ? "View My Rate Proposal"
                               : isReverseAuctionType
                                 ? (isBiddingClosed ? "View Auction Results" : "Live Bid Console")
-                                : "View Proposal"}
+                                : "View My Proposal"}
                         </span>
                       </Button>
                     )}
@@ -6847,31 +7926,57 @@ export function ProcurementDetailUnifiedView(
                       size="sm"
                       disabled
                       aria-disabled="true"
-                      className="h-8 px-3.5 bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                      className={cn(
+                        "h-8 px-3.5 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs",
+                        isAwardedToMe
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                          : (activeAward && !effectiveActiveOrder)
+                            ? "bg-sky-50 text-sky-800 border border-sky-300"
+                            : (isBiddingClosed || isDeadlinePassed)
+                              ? "bg-sky-50 text-sky-800 border border-sky-300"
+                              : "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                      )}
                     >
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      {isAwardedToMe ? (
+                        <Award className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (isBiddingClosed || isDeadlinePassed) ? (
+                        <ShieldCheck className="h-3.5 w-3.5 text-sky-600" />
+                      ) : (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      )}
                       <span>
-                        {props.submitButtonLabel &&
-                        props.submitButtonLabel
-                          .toLowerCase()
-                          .includes("submitted")
-                          ? props.submitButtonLabel
-                          : isRfqType
-                            ? "Quotation Submitted"
-                            : isRateContractType
-                              ? "Rate Quotation Submitted"
-                              : isReverseAuctionType
-                                ? (isBiddingClosed ? "Auction Concluded" : "Joined & Qualified")
-                                : "Proposal Submitted"}
+                        {isAwardedToMe
+                          ? "Contract Awarded"
+                          : (activeAward && !effectiveActiveOrder)
+                            ? "Standby (Under Evaluation)"
+                            : (isBiddingClosed || isDeadlinePassed)
+                              ? "Submitted • Under Evaluation"
+                              : (props.submitButtonLabel &&
+                                 props.submitButtonLabel.toLowerCase().includes("submitted")
+                                  ? props.submitButtonLabel
+                                  : isRfqType
+                                    ? "Quotation Submitted"
+                                    : isRateContractType
+                                      ? "Rate Quotation Submitted"
+                                      : isReverseAuctionType
+                                        ? "Joined & Qualified"
+                                        : "Proposal Submitted")}
                       </span>
                     </Button>
                   </>
                 )}
-                {!isBuyerOrAdmin && !props.hasSubmittedProposal && isBiddingClosed && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200 shadow-2xs">
-                    <Clock className="h-3.5 w-3.5 text-slate-500" />
-                    Bidding Concluded
-                  </span>
+                {!isBuyerOrAdmin && !isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    title={`The quotation submission deadline ended on ${closingDateFormatted || "the scheduled cutoff"}. New submissions are closed.`}
+                    className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>Submission Window Closed</span>
+                  </Button>
                 )}
                 {!isBuyerOrAdmin && !props.hasSubmittedProposal && !isBiddingClosed && isBeforeSubmissionStart && (
                   <Button
@@ -7131,6 +8236,90 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
                 )}
+
+              {/* Seller Reassurance Banner: Submitted Quotation Under Evaluation */}
+              {!isBuyerOrAdmin && isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && !isAwardedToMe && (
+                <div className="rounded-2xl border border-sky-200 bg-gradient-to-r from-sky-50/90 via-indigo-50/30 to-white p-4 sm:p-5 shadow-xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-md shadow-sky-600/20">
+                        <ShieldCheck className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10.5px] font-black uppercase tracking-wider text-sky-800 bg-sky-100 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Quotation Successfully Recorded
+                          </span>
+                          <span className="text-[10.5px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            Submission Cutoff Elapsed
+                          </span>
+                        </div>
+                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                          {activeAward && !effectiveActiveOrder
+                            ? "Provisional Evaluation in Progress (Standby Vendor)"
+                            : "Under Official Procurement Evaluation"}
+                        </h3>
+                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                          {activeAward && !effectiveActiveOrder
+                            ? "A provisional award is currently being processed with the primary bidder. You remain on Standby; should the primary bidder decline or fail compliance, the award may revert to standby vendors."
+                            : "Your quotation was received on time before the deadline. The procurement authority is currently reviewing technical compliance and evaluating bids. In accordance with statutory sealed-bidding rules, all competitor prices remain confidential."}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(props.onViewQuotationClick || props.onSubmitClick) && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={props.onViewQuotationClick || props.onSubmitClick}
+                          className="h-8.5 px-3.5 gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span>View My Submitted Quotation</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Seller Notification Banner: Did Not Participate / Missed Deadline */}
+              {!isBuyerOrAdmin && !isSellerParticipated && (isBiddingClosed || isDeadlinePassed) && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-300 text-slate-700 shadow-xs">
+                        <Lock className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-[10.5px] font-black uppercase tracking-wider text-slate-700 bg-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Lock className="h-3 w-3" /> Submission Window Closed
+                          </span>
+                          <span className="text-[10.5px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-md">
+                            Did Not Participate
+                          </span>
+                        </div>
+                        <h3 className="text-sm sm:text-[15px] font-extrabold text-slate-900 tracking-tight">
+                          Quotation Submission Deadline Has Expired
+                        </h3>
+                        <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                          The deadline for submitting quotations for this requirement was {closingDateFormatted || "the scheduled cutoff"}. You did not submit a quotation prior to closing. In accordance with public procurement guidelines, new submissions cannot be accepted.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link
+                        href="/seller/opportunities"
+                        className="inline-flex h-8.5 px-3.5 items-center justify-center gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer"
+                      >
+                        <span>Browse Active Opportunities</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="grid gap-5 lg:grid-cols-2">
                 <DataCard
                   title={
@@ -7144,6 +8333,10 @@ export function ProcurementDetailUnifiedView(
                     <PropertyItem
                       label="Procurement Method"
                       value={procurementMethod}
+                    />
+                    <PropertyItem
+                      label="Urgency / Priority"
+                      value={resolvedUrgency}
                     />
                     <PropertyItem label="Buying Type" value={buyingType} />
                     <PropertyItem label="Category" value={category} />
@@ -7186,7 +8379,7 @@ export function ProcurementDetailUnifiedView(
                     icon: Calendar,
                     tone: "emerald",
                   },
-                  ...(rawSubmissionStartDate && submissionStartDateFormatted && submissionStartDateFormatted !== publishedDateFormatted
+                  ...(submissionStartDateFormatted
                     ? [
                         {
                           label: "Submission Starts",
@@ -7197,6 +8390,7 @@ export function ProcurementDetailUnifiedView(
                       ]
                     : []),
                   ...(isClarificationAllowed &&
+                  clarificationDateFormatted &&
                   clarificationDateFormatted !== "N/A"
                     ? [
                         {
@@ -7208,7 +8402,7 @@ export function ProcurementDetailUnifiedView(
                       ]
                     : []),
                   {
-                    label: "Submission",
+                    label: submissionStartDateFormatted ? "Submission Ends" : "Submission",
                     value: closingDateFormatted,
                     icon: Clock,
                     tone: "rose",
@@ -7255,7 +8449,7 @@ export function ProcurementDetailUnifiedView(
                   scopeText={scopeText}
                   procurementTypeLabel={procurementTypeLabel}
                   estimatedValue={props.estimatedValue}
-                  urgency={payload.urgency || rules.urgency || "Normal"}
+                  urgency={resolvedUrgency}
                   procurementMethod={procurementMethod}
                 />
 
@@ -7267,13 +8461,13 @@ export function ProcurementDetailUnifiedView(
                   />
                 )}
 
-                {/* BOQ Table (Buyer-side only, removed from Seller View Details) */}
+                {/* BOQ Table (Buyer-side only, only shown for legitimate BOQ procurements) */}
                 {isBuyerSide &&
-                  hasDetailData(boqTable) &&
+                  isLegitimateBoq &&
                   !isRfqType &&
                   !isRateContractType && (
                     <BoqTableList
-                      data={boqTable}
+                      data={filteredBoqTable}
                       defaultSubject={resolvedSubject}
                       defaultCategory={category}
                       defaultEstimatedValue={props.estimatedValue}
@@ -7490,7 +8684,14 @@ export function ProcurementDetailUnifiedView(
                     }
                   />
                   <PropertyItem label="Payment Terms" value={paymentTerms} />
-                  <PropertyItem label="Delivery Terms" value={deliveryTerms} />
+                  {hasDetailData(deliveryTerms) &&
+                    deliveryTerms !== "N/A" &&
+                    deliveryTerms !== "—" && (
+                      <PropertyItem
+                        label="Delivery Terms"
+                        value={deliveryTerms}
+                      />
+                    )}
                   {!isRfqType &&
                     (isRateContractType || isServices) &&
                     (() => {
@@ -8283,6 +9484,163 @@ export function ProcurementDetailUnifiedView(
                 />
               )}
 
+              {/* Seller Submission & Quotation View Panel */}
+              {!isBuyerOrAdmin && (
+                <div className="space-y-4">
+                  {isSellerParticipated ? (
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-slate-900">
+                              {isRfqType ? "My Submitted Quotation" : "My Submitted Proposal"}
+                            </h3>
+                            <span
+                              className={cn(
+                                "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
+                                isAwardedToMe
+                                  ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                  : activeAward && !effectiveActiveOrder
+                                    ? "bg-sky-50 text-sky-800 border-sky-300"
+                                    : (isBiddingClosed || isDeadlinePassed)
+                                      ? "bg-sky-50 text-sky-800 border-sky-300"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-300",
+                              )}
+                            >
+                              {isAwardedToMe
+                                ? "Contract Awarded"
+                                : activeAward && !effectiveActiveOrder
+                                  ? "Standby (Under Evaluation)"
+                                  : (isBiddingClosed || isDeadlinePassed)
+                                    ? "Submitted • Under Evaluation"
+                                    : "Submitted"}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {effectiveMyParticipation?.submittedAt || effectiveMyParticipation?.createdAt
+                              ? `Submitted on ${formatDateTime(effectiveMyParticipation.submittedAt || effectiveMyParticipation.createdAt)}`
+                              : "Quotation officially received on portal"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {(props.onViewQuotationClick || props.onSubmitClick) && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={props.onViewQuotationClick || props.onSubmitClick}
+                              className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>View Full Quotation</span>
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (props.onDownloadClick) props.onDownloadClick();
+                              else handleDefaultPdfDownload();
+                            }}
+                            className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Download PDF</span>
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Quoted Overview Metrics */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-100">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Quoted Value</span>
+                          <span className="text-sm font-black text-slate-900">
+                            {formatCurrency(effectiveMyParticipation?.quotedAmount || effectiveMyParticipation?.totalAmount || effectiveMyParticipation?.offeredPrice || 0)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivery Timeline</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {effectiveMyParticipation?.deliveryTimeline || "As per specifications"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Payment Terms</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {effectiveMyParticipation?.paymentTerms || "As per tender terms"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Technical Documents</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {Array.isArray(effectiveMyParticipation?.documents) ? effectiveMyParticipation.documents.length : 0} Document(s) Attached
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Sealed Bidding Confidentiality Notice */}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs text-slate-600 flex items-start gap-2.5">
+                        <Lock className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
+                        <p className="leading-relaxed">
+                          <strong className="text-slate-800">Confidential Sealed Bidding:</strong> In compliance with official procurement guidelines, competing quotations, commercial rates, and rankings remain strictly sealed and confidential until technical evaluation is finalized and awards are completed.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (isBiddingClosed || isDeadlinePassed) ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center space-y-3">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-200 text-slate-500">
+                        <Lock className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1 max-w-md mx-auto">
+                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">
+                          Quotation Submission Window Closed
+                        </h4>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          The quotation submission deadline for this procurement concluded on {closingDateFormatted || "the scheduled cutoff"}. You did not submit a quotation prior to the deadline. Under sealed procurement rules, bids and evaluations are restricted to participating suppliers and the procurement committee.
+                        </p>
+                      </div>
+                      <div className="pt-2">
+                        <Link
+                          href="/seller/opportunities"
+                          className="inline-flex h-8.5 px-4 items-center justify-center gap-1.5 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer"
+                        >
+                          <span>Browse Active Opportunities</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/30 p-8 text-center space-y-3">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+                        <Clock className="h-6 w-6" />
+                      </div>
+                      <div className="space-y-1 max-w-md mx-auto">
+                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">
+                          Awaiting Your Quotation
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          The quotation window is currently open until {closingDateFormatted || "the deadline"}. Prepare your technical response and commercial rates to submit your bid.
+                        </p>
+                      </div>
+                      {props.onSubmitClick && (
+                        <div className="pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleActionSubmit}
+                            className="h-8.5 px-4 text-xs font-bold bg-[#0b2447] hover:bg-[#12335f] text-white shadow-xs rounded-xl cursor-pointer gap-1.5"
+                          >
+                            <span>Submit Quotation Now</span>
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {props.customClarificationPanel ? (
                 props.customClarificationPanel
               ) : (
@@ -8361,8 +9719,6 @@ export function SellerQuotationReviewModal({
 }: SellerQuotationReviewModalProps) {
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | number | null>(null);
-
-  if (!isOpen || !participation) return null;
 
   const isFinancialSealed = Boolean(isTwoPacketMode && !isFinancialStageOpened);
 
@@ -8489,6 +9845,8 @@ export function SellerQuotationReviewModal({
     ],
     [isFinancialSealed],
   );
+
+  if (!isOpen || !participation) return null;
 
   const handleViewAttachment = async (doc: any, docName: string) => {
     const rawUrl =

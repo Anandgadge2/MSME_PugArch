@@ -820,6 +820,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         deadlineDate={periodEnd || rcData.deadlineDate}
         createdAt={periodStart || rcData.createdAt}
         publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
+        submissionStartDate={schedule.submissionStartDate || rcData.startDate ? (formatDateString(schedule.submissionStartDate || rcData.startDate, true) || undefined) : undefined}
         closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
         clarificationDate={schedule.clarificationDeadline ? (formatDateString(schedule.clarificationDeadline, true) || undefined) : undefined}
         technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}

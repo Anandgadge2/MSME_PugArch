@@ -71,6 +71,37 @@ export const fulfillmentWorkflow = {
         }
       }).catch(() => undefined);
     }
+    const bidId = po.bidId || (po.metadata && (po.metadata as any).bidId);
+    if (bidId && !isNaN(Number(bidId))) {
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: po.sellerId
+        },
+        data: {
+          finalStatus: 'ORDERED'
+        }
+      }).catch(() => undefined);
+
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: { not: po.sellerId },
+          finalStatus: { notIn: ['ORDERED', 'AWARDED'] }
+        },
+        data: {
+          finalStatus: 'NOT_SELECTED'
+        }
+      }).catch(() => undefined);
+
+      await db.procurementBid.update({
+        where: { id: Number(bidId) },
+        data: {
+          status: 'IN_PROGRESS',
+          lifecycleStage: 'AWARDED'
+        }
+      }).catch(() => undefined);
+    }
     await auditWorkflow(actor, 'workflow.po.acknowledged', 'purchaseOrder', purchaseOrderId);
     return updated;
   },

@@ -782,6 +782,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     }
 
     if (bid) {
+      const payload = (typeof bid.technicalPacket === 'object' && bid.technicalPacket ? (bid.technicalPacket as any) : {}) as any;
+      const terms = payload.terms || {};
       tender = {
         ...bid,
         id: bid.id,
@@ -796,8 +798,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         closesAt: bid.endDate,
         createdAt: bid.createdAt,
         updatedAt: bid.updatedAt,
-        paymentTerms: bid.packetType,
-        deliveryType: bid.unit,
+        paymentTerms: terms.paymentTerms || (bid as any).paymentTerms || null,
+        deliveryType: terms.deliveryTerms || terms.deliveryType || (bid as any).deliveryType || null,
         itemCondition: bid.deliveryLocation,
         bidValidityDays: bid.bidValidityDate ? undefined : 90,
         bidValidityDate: bid.bidValidityDate,
@@ -866,9 +868,13 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
             warranty: it.warranty,
             deliverySchedule: it.deliverySchedule,
             technicalSpecification: it.technicalSpecification || it.specification || '',
+            specification: it.specification || it.technicalSpecification || it.description || '',
             gst: it.gst || (it.specifications && it.specifications.gst),
             alternateBrandAllowed: it.alternateBrandAllowed ?? (it.brand_flexible === 'Yes' || (it.specifications && it.specifications.brand_flexible === 'Yes')),
-            uploadedSpecificationFiles: it.uploadedSpecificationFiles || it.specificationFileName || (it.specifications && it.specifications.specificationFileName)
+            uploadedSpecificationFiles: it.uploadedSpecificationFiles || it.specificationFileName || (it.specifications && it.specifications.specificationFileName),
+            specificationFileName: it.specificationFileName || (it.specifications && it.specifications.specificationFileName) || '',
+            fileAssetId: it.fileAssetId || (it.specifications && it.specifications.fileAssetId) || null,
+            attachments: it.attachments || (it.specifications && it.specifications.attachments) || []
           }));
         }
       }
@@ -1920,6 +1926,8 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     visibility: deriveVisibility({ procurementType: canonicalMethod, bidType, technicalPacket: { vendors } }),
     technicalPacket: {
       ...payload,
+      urgency: payload.urgency || payload.priority || basics.priority || basics.urgency || (draftBody as any).urgency || (draftBody as any).priority || String(requirement.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal',
+      priority: payload.priority || payload.urgency || basics.priority || basics.urgency || (draftBody as any).priority || (draftBody as any).urgency || String(requirement.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal',
       schedule: {
         ...schedule,
         publishDate: isFutureScheduled ? effectiveStartDate.toISOString() : (schedule.publishDate || effectiveStartDate.toISOString()),
@@ -7486,6 +7494,8 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
     ...procurementBids.map((b: any) => {
       const doc = b.documents?.[0];
       const docUrl = doc ? `/api/files/${doc.fileAssetId}/view` : null;
+      const bPayload = (typeof b.technicalPacket === 'object' && b.technicalPacket ? (b.technicalPacket as any) : {}) as any;
+      const bTerms = bPayload.terms || {};
 
       return {
         id: b.id,
@@ -7501,8 +7511,8 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
         updatedAt: b.updatedAt ? b.updatedAt.toISOString() : null,
         documentUrl: docUrl,
         quantityUnit: b.unit || null,
-        paymentTerms: b.termsAndConditions?.join(', ') || null,
-        deliveryType: b.deliveryLocation || null,
+        paymentTerms: bTerms.paymentTerms || b.termsAndConditions?.join(', ') || null,
+        deliveryType: bTerms.deliveryTerms || bTerms.deliveryType || null,
         isV2: true,
         v2Status: b.status,
         documents: (b.documents || []).map((doc: any) => ({
@@ -11773,6 +11783,8 @@ export type NormalizedProcurement = {
   budgetDetails?: any;
   approvalAuthority?: string;
   justification?: string;
+  urgency?: string;
+  priority?: string;
   internalDetails?: Record<string, any>;
   detailSections?: Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
   approvalTrail?: Array<Record<string, unknown>>;
@@ -12104,6 +12116,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       competentAuthority: internal.competentAuthority || '',
     };
 
+    const resolvedPriority = basics.priority || basics.urgency || technicalPacket.urgency || technicalPacket.priority || String(b.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal';
+
     const bidDetailSections = [
       detailSection('Procurement Intent', {
         title: b.title,
@@ -12111,7 +12125,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         estimatedValue: b.estimatedValue ? `INR ${Number(b.estimatedValue).toLocaleString('en-IN')}` : undefined,
         deliveryLocation: b.deliveryLocation,
         requiredByDate: basics.requiredByDate,
-        priority: basics.priority,
+        priority: resolvedPriority,
+        urgency: resolvedPriority,
         buyerType: basics.buyerType,
       }),
       detailSection('Internal Approvals & Compliance', {
@@ -12207,6 +12222,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       approvalAuthority,
       justification,
       internalDetails,
+      priority: resolvedPriority,
+      urgency: resolvedPriority,
       budgetDetails: {
         costCenter: internal.costCenter || '',
         justification,

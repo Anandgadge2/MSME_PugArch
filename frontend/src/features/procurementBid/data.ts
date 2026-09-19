@@ -43,6 +43,7 @@ export interface BidResultRow {
   financialStatus: 'Opened' | 'Pending' | 'Rejected';
   finalStatus?: string;
   totalPrice: number;
+  quotedAmount?: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
   resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected' | 'Not Selected' | 'Ineligible';
   contactPerson?: string;
@@ -98,6 +99,8 @@ export interface ProcurementBid {
   currentStage: EvaluationStatus;
   clarifications: ClarificationRecord[];
   results: BidResultRow[];
+  urgency?: string;
+  priority?: string;
   bidDocuments?: Array<{ id: number | string; name: string; meta: string; fileAssetId?: number | null }>;
   participations?: ProcurementBidParticipation[];
   awards?: ProcurementBidAward[];
@@ -161,8 +164,25 @@ export interface ProcurementEvaluation {
 }
 
 export interface ProcurementBidAward {
-  id?: number;
-  participationId?: number;
+  id?: number | string;
+  bidId?: number | string;
+  participationId?: number | string;
+  sellerId?: number | string;
+  awardedSellerId?: number | string;
+  awardedSellerOrgId?: number | string;
+  awardedSellerUserId?: number | string;
+  awardStatus?: string;
+  counterOfferStatus?: string | null;
+  counterOfferDeadline?: string | null;
+  counterOfferNotes?: string | null;
+  priceMatchTargetPrice?: number | null;
+  originalBidAmount?: number | null;
+  isPriceMatched?: boolean;
+  justificationReason?: string | null;
+  acceptedAt?: string | null;
+  declinedAt?: string | null;
+  declinedReason?: string | null;
+  order?: any;
   status?: string;
   remarks?: string;
   createdAt?: string;

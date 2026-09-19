@@ -394,10 +394,12 @@ export default function SubmitQuotationPage() {
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
 
   const scrollToSection = (id: string) => {
     if (id === 'quotation-details' || id === 'message-documents' || id === 'item-wise-pricing' || id === 'requested-documents' || id === 'submit-action') {
       setActiveTab(id as TabKey);
+      setUserSelectedTab(true);
     }
     setTimeout(() => {
       const el = document.getElementById(id) || document.getElementById('tab-content-container');
@@ -1070,9 +1072,14 @@ export default function SubmitQuotationPage() {
 
     const stripAutoDesc = (desc?: string): string => {
       if (!desc) return '';
-      const str = String(desc).trim();
-      if (str.includes('Sourcing Method:') && str.includes('Urgency:')) return '';
-      return str;
+      let text = String(desc).replace(/\r/g, '');
+      text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+      text = text.replace(/RFP\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Estimated\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+      text = text.replace(/Priority:\s*[^|\n]*/gi, '');
+      return text.trim();
     };
 
     const isGenericName = (val?: any): boolean => {
@@ -1273,53 +1280,70 @@ export default function SubmitQuotationPage() {
   const requestedDocs = React.useMemo(() => {
     const out: Array<{ name: string; required: boolean }> = [];
     const seen = new Map<string, number>();
-    const push = (name: unknown, required: boolean) => {
+    const authoritative = new Set<string>();
+
+    const push = (name: unknown, required: boolean, isAuthoritative = false) => {
       const label = String(name || '').trim();
       const key = label.toLowerCase();
       if (!label) return;
+
+      // Internal PAC/administrative documents are buyer justifications, not supplier compliance
+      const isInternalBuyerDoc = key.includes('emergency approval') || key.includes('pac justification') || key.includes('competent authority approval');
+      const effectiveRequired = isInternalBuyerDoc ? false : required;
+
       if (seen.has(key)) {
         const existingIdx = seen.get(key)!;
-        if (required && !out[existingIdx].required) {
+        if (isAuthoritative) {
+          out[existingIdx].required = effectiveRequired;
+          authoritative.add(key);
+        } else if (!authoritative.has(key) && effectiveRequired && !out[existingIdx].required) {
           out[existingIdx].required = true;
         }
         return;
       }
       seen.set(key, out.length);
-      out.push({ name: label, required });
+      if (isAuthoritative) authoritative.add(key);
+      out.push({ name: label, required: effectiveRequired });
     };
 
     // 1. Authoritative: payload / technicalPacket documents array with explicit required flags
-    const payloadDocs = rfqData?.payload?.documents ||
-      rfqData?.payload?.documentsRequested ||
-      rfqData?.payload?.technicalPacket?.documents ||
-      rfqData?.technicalPacket?.documents ||
-      queryData?.requirement?.payload?.documents ||
-      queryData?.requirement?.technicalPacket?.documents;
+    const authoritativeDocsArrays = [
+      rfqData?.payload?.requiredDocs,
+      rfqData?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.documents,
+      rfqData?.technicalPacket?.documents,
+      rfqData?.payload?.technicalPacket?.documents,
+      rfqData?.payload?.documentsRequested,
+      queryData?.requirement?.payload?.requiredDocs,
+      queryData?.requirement?.payload?.documents,
+      queryData?.requirement?.technicalPacket?.documents,
+      queryData?.requirement?.technicalPacket?.requiredDocs
+    ];
 
-    if (Array.isArray(payloadDocs) && payloadDocs.length > 0) {
-      payloadDocs.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
-        const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
-        push(name, isReq);
-      });
+    for (const arr of authoritativeDocsArrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        arr.forEach((d: any) => {
+          const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
+          const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
+          push(name, isReq, true);
+        });
+      }
     }
 
     // 2. Attached requirement documents
     if (Array.isArray(documents) && documents.length > 0) {
       documents.forEach((d: any) => {
         const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName || d?.title);
-        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false);
+        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false, false);
       });
     }
 
-    // 3. Buyer-specified requiredDocuments and requestedDocuments arrays across all procurement shapes
-    const reqDocArrays = [
+    // 3. Fallback buyer-specified string arrays (e.g. requiredDocuments)
+    const fallbackDocArrays = [
       rfqData?.requiredDocuments,
-      rfqData?.requestedDocuments,
       queryData?.requirement?.requiredDocuments,
-      queryData?.requirement?.requestedDocuments,
       rfqData?.payload?.requiredDocuments,
-      rfqData?.payload?.requiredDocs,
       rfqData?.payload?.documentsRequired,
       rfqData?.payload?.rules?.requiredDocuments,
       rfqData?.payload?.rules?.documentsRequired,
@@ -1327,12 +1351,11 @@ export default function SubmitQuotationPage() {
       rfqData?.payload?.tender?.requiredDocuments,
       rfqData?.payload?.wizardData?.requiredDocuments,
       rfqData?.technicalPacket?.requiredDocuments,
-      rfqData?.payload?.technicalPacket?.requiredDocuments,
     ];
 
-    for (const arr of reqDocArrays) {
+    for (const arr of fallbackDocArrays) {
       if (Array.isArray(arr) && arr.length > 0) {
-        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true));
+        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true, false));
       }
     }
 
@@ -1534,6 +1557,14 @@ export default function SubmitQuotationPage() {
     });
     return { total: Math.round(total * 100) / 100, qty: Math.round(qty * 100) / 100, priced };
   }, [lineQuotes]);
+
+  const hasLineItems = itemsList.length > 0 || lineQuotes.length > 0;
+
+  React.useEffect(() => {
+    if (!userSelectedTab && hasLineItems && !isSubmittedQuote) {
+      setActiveTab('item-wise-pricing');
+    }
+  }, [hasLineItems, userSelectedTab, isSubmittedQuote]);
 
   React.useEffect(() => {
     if (isSubmittedQuote || lineTotals.priced === 0) return;
@@ -1772,24 +1803,32 @@ export default function SubmitQuotationPage() {
     );
     const missingDocs = requestedDocs.filter(doc => doc.required && !coveredNames.has(doc.name.trim().toLowerCase()));
     if (missingDocs.length > 0) {
-      errs.requestedDocs = `Tag each uploaded file with the required document it satisfies. Missing: ${missingDocs.map(d => d.name).join(', ')}`;
+      errs.requestedDocs = `Please upload the required compliance document(s): ${missingDocs.map(d => d.name).join(', ')}`;
     }
     if (!declared) errs.declared = 'You must declare the information is accurate';
     setErrors(errs);
 
     if (Object.keys(errs).length > 0) {
-      if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
+      if (hasLineItems && (errs.offeredPrice || errs.offeredQuantity)) {
+        setActiveTab('item-wise-pricing');
+        scrollToSection('item-wise-pricing');
+        toast.error('Please specify valid pricing and quantities in Item-Wise Quotation before submitting.');
+      } else if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
         setActiveTab('quotation-details');
         scrollToSection('quotation-details');
+        toast.error('Please complete all required commercial and delivery details.');
       } else if (errs.message) {
         setActiveTab('message-documents');
         scrollToSection('message-documents');
+        toast.error('Please enter a quotation message / cover note.');
       } else if (errs.requestedDocs) {
         setActiveTab('requested-documents');
         scrollToSection('requested-documents');
+        toast.error(`Please upload the ${missingDocs.length} required document(s) in Requested Documents: ${missingDocs.map(d => d.name).join(', ')}`);
       } else if (errs.declared) {
         setActiveTab('submit-action');
         scrollToSection('submit-action');
+        toast.error('Please accept the declaration before submitting.');
       }
       return false;
     }
@@ -2155,10 +2194,17 @@ export default function SubmitQuotationPage() {
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
       <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {[
+          {(hasLineItems ? [
+            {
+              id: 'item-wise-pricing' as const,
+              label: 'Item-Wise Quotation',
+              icon: Package,
+              iconColor: 'text-amber-500',
+              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
+            },
             {
               id: 'quotation-details' as const,
-              label: isRfp ? 'Proposal Details' : 'Quotation Details',
+              label: isRfp ? 'Commercial & Delivery Details' : 'Quotation Details',
               icon: IndianRupee,
               iconColor: 'text-emerald-500',
               hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
@@ -2169,13 +2215,6 @@ export default function SubmitQuotationPage() {
               icon: FileText,
               iconColor: 'text-indigo-500',
               hasError: !!(errors.message || errors.attachment),
-            },
-            {
-              id: 'item-wise-pricing' as const,
-              label: 'Item-Wise Quotation',
-              icon: Package,
-              iconColor: 'text-amber-500',
-              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
             },
             {
               id: 'requested-documents' as const,
@@ -2194,7 +2233,39 @@ export default function SubmitQuotationPage() {
               iconColor: 'text-indigo-500',
               hasError: !!errors.declared,
             },
-          ].map(tab => {
+          ] : [
+            {
+              id: 'quotation-details' as const,
+              label: isRfp ? 'Proposal Details' : 'Quotation Details',
+              icon: IndianRupee,
+              iconColor: 'text-emerald-500',
+              hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
+            },
+            {
+              id: 'message-documents' as const,
+              label: isRfp ? 'Proposal Message & Documents' : 'Message & Documents',
+              icon: FileText,
+              iconColor: 'text-indigo-500',
+              hasError: !!(errors.message || errors.attachment),
+            },
+            {
+              id: 'requested-documents' as const,
+              label: 'Requested Documents',
+              icon: Paperclip,
+              iconColor: 'text-purple-500',
+              count: requestedDocs.length > 0
+                ? requestedDocs.length
+                : (docUploads.filter(d => d.status === 'done').length > 0 ? docUploads.filter(d => d.status === 'done').length : undefined),
+              hasError: !!errors.requestedDocs,
+            },
+            {
+              id: 'submit-action' as const,
+              label: isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit',
+              icon: ShieldCheck,
+              iconColor: 'text-indigo-500',
+              hasError: !!errors.declared,
+            },
+          ]).map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -2206,6 +2277,7 @@ export default function SubmitQuotationPage() {
                 aria-controls={`panel-${tab.id}`}
                 type="button"
                 onClick={() => {
+                  setUserSelectedTab(true);
                   setActiveTab(tab.id);
                   scrollToSection(tab.id);
                 }}
@@ -2247,20 +2319,22 @@ export default function SubmitQuotationPage() {
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  {isRfp ? 'Proposal Details' : 'Quotation Details'}
+                  {isRfp ? 'Commercial & Delivery Details' : 'Quotation Details'}
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Specify your commercial terms, total price, supply quantity, and delivery timeline.
+                  {hasLineItems
+                    ? 'Review your total price & quantity (calculated from item rates), and specify delivery timeline and commercial terms.'
+                    : 'Specify your commercial terms, total price, supply quantity, and delivery timeline.'}
                 </p>
               </div>
               {lineQuotes.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold hover:bg-amber-100 transition shadow-2xs cursor-pointer"
                 >
                   <Package className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Price line-by-line ({lineQuotes.length} items) &rarr;</span>
+                  <span>&larr; Edit Line Items ({lineQuotes.length} items)</span>
                 </button>
               )}
             </div>
@@ -2427,23 +2501,48 @@ export default function SubmitQuotationPage() {
 
             {/* Tab Navigation Footer */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={saveDraft}
-                disabled={submitting || savingDraft || isReadOnly}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                {savingDraft ? 'Saving...' : 'Save Draft'}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-              >
-                <span>Next: Message & Documents</span>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              {hasLineItems ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>Previous: Item-Wise Quotation</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={saveDraft}
+                  disabled={submitting || savingDraft || isReadOnly}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
+                </Button>
+              )}
+              <div className="flex items-center gap-2.5 ml-auto">
+                {hasLineItems && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || savingDraft || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
+                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Next: Message & Documents</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </section>
         )}
@@ -2640,7 +2739,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -2658,10 +2757,10 @@ export default function SubmitQuotationPage() {
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Item-Wise Quotation</span>
+                  <span>Next: Requested Documents</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -2743,7 +2842,7 @@ export default function SubmitQuotationPage() {
                 </p>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                   className="mt-4 h-9 rounded-xl bg-[#12335f] text-white text-xs font-bold cursor-pointer"
                 >
                   Go to Quotation Details
@@ -2950,31 +3049,28 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                onClick={saveDraft}
+                disabled={submitting || savingDraft || isReadOnly}
+                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
-                <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Message & Documents</span>
+                {savingDraft ? 'Saving...' : 'Save Draft'}
               </Button>
-              <div className="flex items-center gap-2.5 ml-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || savingDraft || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  {savingDraft ? 'Saving...' : 'Save Draft'}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
-                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-                >
-                  <span>Next: Requested Documents</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (lineTotals.total > 0 && (!offeredPrice || Number(offeredPrice) === 0 || Number(offeredPrice) !== lineTotals.total)) {
+                    setOfferedPrice(String(lineTotals.total));
+                    setOfferedQuantity(String(lineTotals.qty));
+                  }
+                  setUserSelectedTab(true);
+                  setActiveTab('quotation-details');
+                  scrollToSection('quotation-details');
+                }}
+                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+              >
+                <span>Next: Commercial & Delivery Details</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </section>
         )}
@@ -3100,9 +3196,14 @@ export default function SubmitQuotationPage() {
                   </div>
 
                   {missingReqList.length > 0 && (
-                    <p className="mt-3.5 text-xs font-bold text-[#c2410c] leading-relaxed">
-                      Tag each uploaded file with the required document it satisfies. Missing: {missingReqList.map(d => d.name).join(', ')}
-                    </p>
+                    <div className="mt-3.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900 flex items-start gap-2.5 shadow-2xs">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span>Please upload the {missingReqList.length} required compliance document(s) listed above before submitting: </span>
+                        <span className="text-amber-950 font-black">{missingReqList.map(d => d.name).join(', ')}</span>
+                        <p className="text-[11px] font-normal text-amber-800 mt-0.5">Click the "Upload" button next to each required item to select your file.</p>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -3268,11 +3369,11 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Item-Wise Quotation</span>
+                <span>Previous: Message & Documents</span>
               </Button>
               <div className="flex items-center gap-2.5 ml-auto">
                 {!isSubmittedQuote && (
@@ -3288,7 +3389,7 @@ export default function SubmitQuotationPage() {
                 )}
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('submit-action'); scrollToSection('submit-action'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('submit-action'); scrollToSection('submit-action'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
                   <span>{isSubmittedQuote ? 'Next: Submission Status' : 'Next: Declaration & Submit'}</span>
@@ -3388,6 +3489,54 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
+            {(() => {
+              const coveredDocNames = new Set(
+                docUploads
+                  .filter(d => d.status === 'done' && (d.taggedAs || d.name))
+                  .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
+              );
+              const missingReqList = requestedDocs.filter(req => req.required && !coveredDocNames.has(req.name.trim().toLowerCase()));
+              if (missingReqList.length === 0 || isSubmittedQuote) return null;
+
+              return (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 sm:p-5 flex items-start gap-3.5 shadow-2xs">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h4 className="text-xs sm:text-sm font-extrabold text-amber-950 uppercase tracking-wider">
+                      Required Compliance Documents Incomplete ({missingReqList.length} Missing)
+                    </h4>
+                    <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                      The buyer mandates the following compliance document(s) before final quotation submission. Please upload them to proceed:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {missingReqList.map((d, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-white border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-2xs">
+                          <Paperclip className="h-3.5 w-3.5 text-amber-600" />
+                          {d.name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setUserSelectedTab(true);
+                          setActiveTab('requested-documents');
+                          scrollToSection('requested-documents');
+                        }}
+                        className="h-9 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white text-xs font-bold px-4 shadow-2xs cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>Go to Requested Documents to Upload &rarr;</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {!isSubmittedQuote && (
               <div className="pt-2">
                 <div
@@ -3470,7 +3619,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer w-full sm:w-auto"
               >
                 <ChevronLeft className="h-4 w-4" />

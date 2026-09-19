@@ -83,8 +83,14 @@ const calcTimeLeft = (d?: string | Date | null) => {
 
 const stripAutoDesc = (desc?: string): string => {
   if (!desc) return '';
-  if (desc.includes('Sourcing Method:') && desc.includes('Urgency:')) return '';
-  return desc.trim();
+  let text = String(desc).replace(/\r/g, '');
+  text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+  text = text.replace(/RFP\s?Value:\s*[^|\n]*/gi, '');
+  text = text.replace(/Estimated\s?Value:\s*[^|\n]*/gi, '');
+  text = text.replace(/Value:\s*[^|\n]*/gi, '');
+  text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+  text = text.replace(/Priority:\s*[^|\n]*/gi, '');
+  return text.trim();
 };
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -634,6 +640,15 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   });
   const title      = validTitle ? String(validTitle).trim() : (ref !== '—' ? `Procurement #${ref}` : 'Procurement Opportunity');
   const desc       = stripAutoDesc(preferReq ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description) : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description));
+  const rawDescForUrgency = String(preferReq
+    ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description || '')
+    : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description || '')
+  );
+  const descUrgencyMatch = rawDescForUrgency.match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i);
+
+  const resolvedUrgency = preferReq
+    ? (reqObj?.urgency || reqObj?.priority || reqObj?.payload?.urgency || reqObj?.payload?.priority || reqObj?.payload?.basics?.priority || reqObj?.payload?.basics?.urgency || rawBid?.urgency || rawBid?.priority || rawBid?.technicalPacket?.urgency || rawBid?.technicalPacket?.priority || rawBid?.technicalPacket?.basics?.priority || rawBid?.technicalPacket?.basics?.urgency || (descUrgencyMatch ? descUrgencyMatch[1].trim() : undefined))
+    : (rawBid?.urgency || rawBid?.priority || rawBid?.technicalPacket?.urgency || rawBid?.technicalPacket?.priority || rawBid?.technicalPacket?.basics?.priority || rawBid?.technicalPacket?.basics?.urgency || reqObj?.urgency || reqObj?.priority || reqObj?.payload?.urgency || reqObj?.payload?.priority || reqObj?.payload?.basics?.priority || reqObj?.payload?.basics?.urgency || (descUrgencyMatch ? descUrgencyMatch[1].trim() : undefined));
   const strategy   = preferReq ? (reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || '') : (rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || '');
   const category   = preferReq ? (reqObj?.category?.name || reqObj?.category || rawBid?.category || rawBid?.technicalPacket?.basics?.category || '—') : (rawBid?.category || reqObj?.category?.name || reqObj?.category || rawBid?.technicalPacket?.basics?.category || '—');
   const rawDescUpper = String(rawBid?.description || reqObj?.description || reqObj?.payload?.basics?.description || '').toUpperCase();
@@ -1208,7 +1223,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
-      submissionStartDate={explicitSubmissionStartDate ? fmtDate(explicitSubmissionStartDate, true) : undefined}
+      submissionStartDate={submissionStartDate ? fmtDate(submissionStartDate, true) : undefined}
       closingDate={deadline ? fmtDate(deadline, true) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
@@ -1225,6 +1240,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       paymentTerms={payTerms}
       deliveryTerms={delTerms}
       description={desc}
+      urgency={resolvedUrgency}
       payload={preferReq ? (reqObj?.payload || rawBid?.technicalPacket || {}) : (rawBid?.technicalPacket || reqObj?.payload || {})}
       approvalAuthority={rawBid?.approvalAuthority || (preferReq ? reqObj?.approvalAuthority : rawBid?.approvalAuthority) || rawBid?.technicalPacket?.internal?.approvalAuthority || reqObj?.payload?.internal?.approvalAuthority}
       justification={rawBid?.justification || (preferReq ? reqObj?.justification : rawBid?.justification) || rawBid?.technicalPacket?.internal?.justification || reqObj?.payload?.internal?.justification}

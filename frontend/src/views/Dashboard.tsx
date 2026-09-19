@@ -25,6 +25,8 @@ import { BuyerProcurementMonitor } from '../features/dashboard/components/BuyerP
 import { BuyerUrgentActionsInbox } from '../features/dashboard/components/BuyerUrgentActionsInbox';
 import { formatDate } from '../features/shared/format';
 import { BuyerSpendAndCompliance } from '../features/dashboard/components/BuyerSpendAndCompliance';
+import { BuyerProcurementSpendChart } from '../features/dashboard/components/BuyerProcurementSpendChart';
+import { SellerRevenueTrendChart } from '../features/dashboard/components/SellerRevenueTrendChart';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -361,6 +363,19 @@ export default function Dashboard() {
     enabled: !!token && user?.role !== 'admin',
     staleTime: 5 * 60_000,
     refetchInterval: 15000,
+  });
+
+  const { data: analyticsData, isLoading: isAnalyticsLoading } = useQuery({
+    queryKey: ['dashboard', 'analytics', user?.role],
+    queryFn: async () => {
+      const res = await api.fetch('/api/dashboard/analytics', { headers: authHeaders });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return unwrapApiData<any>(json);
+    },
+    enabled: !!token && (user?.role === 'buyer' || user?.role === 'seller' || user?.role === 'shg'),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
   });
 
   const dashboardData = useMemo(() => {
@@ -812,6 +827,12 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
             {/* Left Column (65% on large screens) */}
             <div className="lg:col-span-8 space-y-3.5">
+              <BuyerProcurementSpendChart 
+                spendTrend={analyticsData?.spendTrend}
+                methodDistribution={analyticsData?.methodDistribution}
+                procurementFunnel={analyticsData?.procurementFunnel}
+                isLoading={isAnalyticsLoading}
+              />
               <BuyerProcurementMonitor />
               <RecentOrdersSnapshot />
              
@@ -822,7 +843,7 @@ export default function Dashboard() {
               <BuyerUrgentActionsInbox />
               
               <BuyerSpendAndCompliance 
-                stats={{
+                stats={analyticsData?.compliance ?? {
                   totalSpend: Number(summaryData?.buyerProcurementTotalSpentValue || 0)
                 }}
               />
@@ -884,6 +905,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
             {/* Left Column (65% on large screens) */}
             <div className="lg:col-span-8 space-y-3.5">
+              <SellerRevenueTrendChart 
+                revenueTrend={analyticsData?.revenueTrend}
+                cashflowLifecycle={analyticsData?.cashflowLifecycle}
+                totalRevenue={analyticsData?.conversion?.totalRevenue}
+                totalOrders={analyticsData?.conversion?.totalOrders}
+                isLoading={isAnalyticsLoading}
+              />
               <LiveOpportunityRadar />
               <RecentOrdersSnapshot />
             </div>
@@ -893,12 +921,11 @@ export default function Dashboard() {
               <UrgentActionsInbox />
               
               <BiddingPerformanceChart 
-                stats={{
+                stats={analyticsData?.conversion ?? {
                   submitted: Number(summaryData?.sellerSubmittedBidsCount || summaryData?.sellerQuotationsCount || 0),
                   won: Number(summaryData?.sellerActivePOsCount || 0),
                   underEval: Number(summaryData?.sellerOpportunitiesCount || 0),
-                  pipelineValue: 0,
-                  onTimeDeliveryRate: 100
+                  pipelineValue: 0
                 }}
               />
 

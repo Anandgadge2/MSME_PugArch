@@ -1877,8 +1877,10 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
       }
 
       if (bid) {
-        const wizardData = typeof bid.technicalPacket === 'object' && bid.technicalPacket && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : {};
-        const items = typeof bid.technicalPacket === 'object' && bid.technicalPacket && Array.isArray((bid.technicalPacket as any).items) ? (bid.technicalPacket as any).items : [];
+        const packetObj = typeof bid.technicalPacket === 'object' && bid.technicalPacket ? (bid.technicalPacket as any) : {};
+        const wizardData = packetObj.wizardData || {};
+        const terms = packetObj.terms || {};
+        const items = Array.isArray(packetObj.items) ? packetObj.items : [];
         
         tender = {
           id: bid.id,
@@ -1893,8 +1895,8 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
           closesAt: bid.endDate || bid.createdAt,
           createdAt: bid.createdAt,
           updatedAt: bid.updatedAt,
-          paymentTerms: wizardData.paymentTerms || '',
-          deliveryType: bid.unit || '',
+          paymentTerms: terms.paymentTerms || wizardData.paymentTerms || (bid as any).paymentTerms || '',
+          deliveryType: terms.deliveryTerms || terms.deliveryType || (bid as any).deliveryType || '',
           itemCondition: bid.deliveryLocation || '',
           bidValidityDays: bid.bidValidityDate ? Math.max(1, Math.ceil((new Date(bid.bidValidityDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))) : undefined,
           bidValidityDate: bid.bidValidityDate,

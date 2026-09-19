@@ -40,6 +40,7 @@ import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { getBuyerProcurementsData } from './phase4.routes.js';
 import { invalidateUserAuthCache, invalidateRoleMembersAuthCache } from '../services/rbac.service.js';
+import { dashboardAnalyticsService } from '../services/dashboard-analytics.service.js';
 
 const router = Router();
 
@@ -409,6 +410,24 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
     });
     await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'org.role.cloned', entityType: 'orgCustomRole', entityId: role.id, ipAddress: req.ip, metadata: { sourceRoleId: id } });
     ok(res, role, 201);
+}));
+
+// ─── GET /api/dashboard/analytics — authentic graphs & compliance analytics ─────
+router.get('/dashboard/analytics', authenticate, shortCache(30), asyncRoute(async (req, res) => {
+    if (!req.user) return ok(res, null);
+    const orgId = req.user.organizationId;
+    const userIdNum = req.user.id;
+    const role = req.user.role;
+
+    if (role === 'buyer') {
+        const data = await dashboardAnalyticsService.getBuyerAnalytics(userIdNum, orgId);
+        return ok(res, data);
+    } else if (role === 'seller' || role === 'shg') {
+        const data = await dashboardAnalyticsService.getSellerAnalytics(userIdNum, orgId);
+        return ok(res, data);
+    } else {
+        return ok(res, { role, message: 'Analytics currently focused on buyer and seller portals' });
+    }
 }));
 
 // ─── GET /api/dashboard/summary — unified dashboard counts ───────────────────

@@ -2237,6 +2237,7 @@ model FileAsset {
   versions            FileAsset[]         @relation("FileAssetVersions")
   grnDocuments        GrnDocument[]
   invoiceFiles        Invoice[]           @relation("InvoiceFile")
+  paymentReceiptInvoices Invoice[]        @relation("InvoicePaymentSlip")
   organizationLogos   Organization[]      @relation("OrganizationLogo")
   productImages       ProductImage[]
   purchaseOrderPdfs   PurchaseOrder[]     @relation("PurchaseOrderPdf")
@@ -2637,6 +2638,14 @@ model Invoice {
   tdsAmount          Decimal?             @db.Decimal(18, 2)
   totalTaxAmount     Decimal?             @db.Decimal(18, 2)
   buyer              User                 @relation("BuyerInvoices", fields: [buyerId], references: [id])
+  grnId              Int?
+  grn                GoodsReceiptNote?    @relation(fields: [grnId], references: [id])
+  paymentReference   String?
+  bankName           String?
+  paymentDate        DateTime?
+  settledAt          DateTime?
+  paymentSlipFileId  Int?
+  paymentSlipFile    FileAsset?           @relation("InvoicePaymentSlip", fields: [paymentSlipFileId], references: [id])
   invoiceFile        FileAsset?           @relation("InvoiceFile", fields: [invoiceFileId], references: [id])
   purchaseOrder      PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id])
   seller             User                 @relation("SellerInvoices", fields: [sellerId], references: [id])
@@ -3570,21 +3579,31 @@ model ProcurementBidEvaluation {
 }
 
 model ProcurementBidAward {
-  id              Int                         @id @default(autoincrement())
-  bidId           Int
-  participationId Int
-  sellerId        Int
-  awardedAmount   Decimal                     @db.Decimal(18, 2)
-  awardStatus     ProcurementAwardStatus      @default(RECOMMENDED)
-  awardedById     Int
-  awardedAt       DateTime                    @default(now())
-  remarks         String?
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
-  awardedBy       User                        @relation("ProcurementBidAwardedBy", fields: [awardedById], references: [id])
-  bid             ProcurementBid              @relation(fields: [bidId], references: [id], onDelete: Cascade)
-  participation   ProcurementBidParticipation @relation(fields: [participationId], references: [id], onDelete: Cascade)
-  seller          User                        @relation("ProcurementBidAwardSeller", fields: [sellerId], references: [id])
+  id                    Int                         @id @default(autoincrement())
+  bidId                 Int
+  participationId       Int
+  sellerId              Int
+  awardedAmount         Decimal                     @db.Decimal(18, 2)
+  originalBidAmount     Decimal?                    @db.Decimal(18, 2)
+  isPriceMatched        Boolean                     @default(false)
+  priceMatchTargetPrice Decimal?                    @db.Decimal(18, 2)
+  counterOfferStatus    String?                     @default("NONE")
+  counterOfferDeadline  DateTime?
+  counterOfferNotes     String?
+  justificationReason   String?
+  awardStatus           ProcurementAwardStatus      @default(RECOMMENDED)
+  awardedById           Int
+  awardedAt             DateTime                    @default(now())
+  acceptedAt            DateTime?
+  declinedAt            DateTime?
+  declinedReason        String?
+  remarks               String?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  awardedBy             User                        @relation("ProcurementBidAwardedBy", fields: [awardedById], references: [id])
+  bid                   ProcurementBid              @relation(fields: [bidId], references: [id], onDelete: Cascade)
+  participation         ProcurementBidParticipation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  seller                User                        @relation("ProcurementBidAwardSeller", fields: [sellerId], references: [id])
 
   @@unique([bidId, participationId])
   @@index([sellerId])
@@ -3836,6 +3855,7 @@ model GoodsReceiptNote {
   receivedBy      User                                    @relation("GrnReceiver", fields: [receivedById], references: [id])
   documents       GrnDocument[]
   items           GrnItem[]
+  invoices        Invoice[]
   prcs            ProvisionalReceiptCertificate[]
 
   @@index([purchaseOrderId])
@@ -4342,12 +4362,17 @@ enum ProcurementBidStatus {
   OPEN_FOR_BIDDING
   UNDER_EVALUATION
   NEGOTIATION
+  AWARD_OFFERED
+  AWARD_ACCEPTED
+  AWARD_DECLINED
+  ORDERED
   PO_GENERATED
   IN_PROGRESS
   DELIVERED
   GRN_COMPLETED
   INVOICE_SUBMITTED
   PAYMENT_COMPLETED
+  COMPLETED
 }
 
 enum BidType {
@@ -4426,6 +4451,11 @@ enum ProcurementFinalStatus {
   NOT_SELECTED
   REJECTED
   L4
+  UNDER_EVALUATION
+  AWARD_OFFERED
+  AWARD_ACCEPTED
+  AWARD_DECLINED
+  ORDERED
 }
 
 enum ProcurementSubmissionStatus {
@@ -4476,6 +4506,9 @@ enum ProcurementAwardStatus {
   RECOMMENDED
   ADMIN_APPROVED
   REJECTED
+  OFFERED
+  ACCEPTED
+  DECLINED
 }
 
 enum UserStatus {
@@ -4689,7 +4722,12 @@ enum POStatus {
   ISSUED
   ACCEPTED
   IN_FULFILLMENT
+  DISPATCHED
   DELIVERED
+  GRN_APPROVED
+  INVOICED
+  PAID
+  COMPLETED
   CLOSED
   CANCELLED
 }
@@ -4772,7 +4810,9 @@ enum InvoiceStatus {
   UNDER_REVIEW
   APPROVED
   REJECTED
+  PAYMENT_SUBMITTED
   PAID
+  SETTLED
   CANCELLED
 }
 
