@@ -27,7 +27,8 @@ import {
   AlertCircle,
   MoreVertical,
   FileText,
-  Truck
+  Truck,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -47,6 +48,7 @@ import { PaymentReceiptUploadModal } from '../components/PaymentReceiptUploadMod
 import { PaymentReceiptViewModal } from '../components/PaymentReceiptViewModal';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useAuth } from '../../../hooks/useAuth';
 
 type PaymentRow = {
   id: number;
@@ -946,6 +948,10 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           payment={selected}
           initialTab={detailTab}
           onClose={() => setSelected(null)}
+          onOpenProof={(p) => {
+            setViewProofPayment(p);
+            setViewProofModalOpen(true);
+          }}
         />
       )}
 
@@ -963,6 +969,10 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         paymentId={viewProofPayment?.id}
         orderId={viewProofPayment?.purchaseOrderId}
         invoiceId={viewProofPayment?.invoiceId}
+        orderPoNumber={viewProofPayment?.purchaseOrder?.poNumber}
+        invoiceNumber={viewProofPayment?.invoice?.invoiceNumber}
+        sellerName={viewProofPayment?.payee?.name}
+        buyerName={viewProofPayment?.payer?.name}
         onStatusChange={() => { void reload(); }}
       />
     </div>
@@ -1000,7 +1010,20 @@ const paymentTimeline = (payment: PaymentRow) => {
   return events.filter(event => event.timestamp).sort((a, b) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
 };
 
-function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; initialTab?: 'receipt' | 'timeline'; onClose: () => void }) {
+function PaymentDetail({
+  payment,
+  initialTab,
+  onClose,
+  onOpenProof
+}: {
+  payment: PaymentRow;
+  initialTab?: 'receipt' | 'timeline';
+  onClose: () => void;
+  onOpenProof?: (payment: PaymentRow) => void;
+}) {
+  const { user } = useAuth();
+  const isSeller = user?.role === 'seller' || user?.role === 'shg';
+
   const [activeTab, setActiveTab] = useState<'receipt' | 'timeline'>(initialTab || 'receipt');
   const tax = payment.metadata?.taxSummary || {};
   const status = String(payment.status || 'initiated').replace(/_/g, ' ');
@@ -1008,6 +1031,53 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
   const method = String(payment.method || 'bank transfer').replace(/_/g, ' ');
   const receiptDate = payment.completedAt || payment.createdAt;
   const timelineItems = paymentTimeline(payment);
+
+  const poNumber = payment.purchaseOrder?.poNumber;
+  const poId = payment.purchaseOrderId || payment.purchaseOrder?.id;
+  const invNumber = payment.invoice?.invoiceNumber || (payment.purchaseOrder as any)?.invoices?.[0]?.invoiceNumber;
+  const invId = payment.invoiceId || (payment.purchaseOrder as any)?.invoices?.[0]?.id;
+
+  const hasUploadedProof = Boolean(
+    payment.metadata?.offlineProofId ||
+    payment.metadata?.receiptFileUrl ||
+    ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
+  );
+
+  const handleOpenPo = () => {
+    const query = poNumber || poId;
+    if (!query) return;
+    const url = isSeller
+      ? `/seller/orders?search=${encodeURIComponent(query)}`
+      : `/orders?search=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleDownloadPo = () => {
+    if (!poId) return;
+    window.open(`/api/purchase-orders/${poId}/pdf`, '_blank');
+  };
+
+  const handleOpenInvoice = () => {
+    const query = invNumber || invId;
+    if (!query) return;
+    const url = isSeller
+      ? `/seller/invoices?viewInvoiceNo=${encodeURIComponent(query)}`
+      : `/payments/invoices?viewInvoiceNo=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenDelivery = () => {
+    const query = poNumber || payment.referenceId;
+    const url = isSeller
+      ? `/seller/delivery-management?search=${encodeURIComponent(query)}`
+      : `/orders/tracking?search=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenGrn = () => {
+    const query = poNumber || payment.referenceId;
+    window.open(`/grn?search=${encodeURIComponent(query)}`, '_blank');
+  };
 
   const handleDownloadReceipt = () => {
     const printWindow = window.open('', '_blank', 'width=900,height=1100');
@@ -1189,30 +1259,86 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {((payment.purchaseOrder as any)?.bidId || (payment as any).bidId) && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/bids/${(payment.purchaseOrder as any)?.bidId || (payment as any).bidId}`, '_blank')} className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/bids/${(payment.purchaseOrder as any)?.bidId || (payment as any).bidId}`, '_blank')}
+                    className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer"
+                  >
                     <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Quotation
                   </Button>
                 )}
-                {payment.purchaseOrderId && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/orders?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.purchaseOrderId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-indigo-200 text-indigo-700 font-bold shadow-2xs cursor-pointer">
-                    <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View PO
-                  </Button>
+                {poId && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleOpenPo}
+                      className="bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 font-bold shadow-2xs cursor-pointer"
+                    >
+                      <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View PO
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadPo}
+                      className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer"
+                      title="Download Official Purchase Order PDF"
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> PO PDF
+                    </Button>
+                  </>
                 )}
-                <Button variant="outline" size="sm" onClick={() => window.open(`/seller/delivery-management?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenDelivery}
+                  className="bg-white hover:bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer"
+                >
                   <Truck className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Delivery
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => window.open(`/grn?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-800 font-bold shadow-2xs cursor-pointer">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenGrn}
+                  className="bg-white hover:bg-emerald-50 border-emerald-200 text-emerald-800 font-bold shadow-2xs cursor-pointer"
+                >
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> GRN
                 </Button>
-                {payment.invoiceId && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/invoices?viewInvoiceNo=${payment.invoice?.invoiceNumber || payment.invoiceId}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-700 font-bold shadow-2xs cursor-pointer">
+                {(invNumber || invId) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenInvoice}
+                    className="bg-white hover:bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-2xs cursor-pointer"
+                  >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> View Invoice
                   </Button>
                 )}
-                <Button variant={activeTab === 'receipt' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('receipt')}>
+                {hasUploadedProof && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenProof?.(payment)}
+                    className="bg-white hover:bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer"
+                  >
+                    <FileCheck className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> View Slip
+                  </Button>
+                )}
+                <Button
+                  variant={activeTab === 'receipt' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('receipt')}
+                  className="cursor-pointer"
+                >
                   <Receipt className="mr-1 h-3.5 w-3.5" />Receipt
                 </Button>
-                <Button variant={activeTab === 'timeline' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('timeline')}>
+                <Button
+                  variant={activeTab === 'timeline' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('timeline')}
+                  className="cursor-pointer"
+                >
                   <Clock3 className="mr-1 h-3.5 w-3.5" />Timeline
                 </Button>
               </div>
@@ -1236,8 +1362,40 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                 </div>
 
                 <div className="grid border-b border-slate-200 md:grid-cols-3">
-                  <ReceiptField label="Invoice" value={String(payment.invoice?.invoiceNumber || payment.invoiceId || '-')} />
-                  <ReceiptField label="Purchase Order" value={String(payment.purchaseOrder?.poNumber || '-')} />
+                  <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Invoice</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="break-words text-sm font-black text-slate-900">
+                        {invNumber || (invId ? `INV #${invId}` : '-')}
+                      </span>
+                      {(invNumber || invId) && (
+                        <button
+                          type="button"
+                          onClick={handleOpenInvoice}
+                          className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Purchase Order</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="break-words text-sm font-black text-slate-900">
+                        {poNumber || (poId ? `PO #${poId}` : '-')}
+                      </span>
+                      {poId && (
+                        <button
+                          type="button"
+                          onClick={handleOpenPo}
+                          className="text-[10px] font-bold text-indigo-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <ReceiptField label="Gateway / Method" value={`${gateway} / ${method}`} />
                 </div>
 

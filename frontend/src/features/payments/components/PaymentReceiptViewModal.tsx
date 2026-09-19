@@ -12,7 +12,10 @@ import {
   CreditCard,
   AlertTriangle,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Receipt,
+  User,
+  ArrowUpRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -30,6 +33,10 @@ export interface PaymentReceiptViewModalProps {
   paymentId?: number | null;
   initialProof?: any | null;
   onStatusChange?: () => void;
+  orderPoNumber?: string | null;
+  invoiceNumber?: string | null;
+  sellerName?: string | null;
+  buyerName?: string | null;
 }
 
 export function PaymentReceiptViewModal({
@@ -40,7 +47,11 @@ export function PaymentReceiptViewModal({
   orderId,
   paymentId,
   initialProof,
-  onStatusChange
+  onStatusChange,
+  orderPoNumber,
+  invoiceNumber,
+  sellerName,
+  buyerName
 }: PaymentReceiptViewModalProps) {
   const { user } = useAuth();
   const isAdminOrSeller = user?.role === 'admin' || user?.role === 'seller' || user?.role === 'master_admin';
@@ -52,9 +63,14 @@ export function PaymentReceiptViewModal({
   const [showRejectBox, setShowRejectBox] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  const [linkedPo, setLinkedPo] = useState<any | null>(null);
+  const [linkedInvoice, setLinkedInvoice] = useState<any | null>(null);
+
   useEffect(() => {
     if (!isOpen) {
       setProof(null);
+      setLinkedPo(null);
+      setLinkedInvoice(null);
       setShowRejectBox(false);
       setRejectReason('');
       return;
@@ -62,14 +78,13 @@ export function PaymentReceiptViewModal({
 
     if (initialProof) {
       setProof(initialProof);
-      return;
     }
 
-    const loadProof = async () => {
+    const loadData = async () => {
       setLoading(true);
       try {
-        let data: any = null;
-        if (invoiceId) {
+        let data: any = initialProof || null;
+        if (!data && invoiceId) {
           const res = await getApi<any>(`/api/payments/invoice/${invoiceId}/offline-proof`);
           data = res?.proof;
         }
@@ -86,6 +101,28 @@ export function PaymentReceiptViewModal({
           data = (res?.proofs || []).find((p: any) => (paymentId && p.paymentTransactionId === paymentId) || (orderId && p.purchaseOrderId === orderId));
         }
         setProof(data || null);
+
+        // Auto-fetch linked Purchase Order
+        const targetPoId = orderId || data?.purchaseOrderId;
+        if (targetPoId) {
+          try {
+            const poRes = await getApi<any>(`/api/purchase-orders/${targetPoId}`);
+            const poData = poRes?.data || poRes;
+            setLinkedPo(poData);
+            if (!invoiceId && poData?.invoices?.length > 0) {
+              setLinkedInvoice(poData.invoices[0]);
+            }
+          } catch {}
+        }
+
+        // Auto-fetch linked Invoice
+        const targetInvId = invoiceId || data?.invoiceId;
+        if (targetInvId) {
+          try {
+            const invRes = await getApi<any>(`/api/invoices/${targetInvId}`);
+            setLinkedInvoice(invRes?.data || invRes);
+          } catch {}
+        }
       } catch (err: any) {
         toast.error('Unable to fetch payment proof details');
       } finally {
@@ -93,8 +130,8 @@ export function PaymentReceiptViewModal({
       }
     };
 
-    void loadProof();
-  }, [isOpen, invoiceId, orderId, proofId, initialProof]);
+    void loadData();
+  }, [isOpen, invoiceId, orderId, proofId, initialProof, paymentId]);
 
   if (!isOpen) return null;
 
@@ -133,20 +170,51 @@ export function PaymentReceiptViewModal({
     }
   };
 
+  const resolvedPoNumber = linkedPo?.poNumber || orderPoNumber || (proof?.purchaseOrderId ? `PO #${proof.purchaseOrderId}` : null);
+  const resolvedInvoiceNumber = linkedInvoice?.invoiceNumber || invoiceNumber || (proof?.invoiceId ? `INV #${proof.invoiceId}` : null);
+  const resolvedSellerName = linkedPo?.seller?.name || linkedInvoice?.seller?.name || linkedInvoice?.party || sellerName || 'Seller Account';
+  const resolvedBuyerName = linkedPo?.buyer?.name || linkedInvoice?.buyer?.name || buyerName || 'Buyer Account';
+
+  const handleOpenPo = () => {
+    const poNum = resolvedPoNumber || linkedPo?.id || orderId;
+    if (!poNum) return;
+    const url = user?.role === 'seller'
+      ? `/seller/orders?search=${encodeURIComponent(poNum)}`
+      : `/orders?search=${encodeURIComponent(poNum)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenInvoice = () => {
+    const invNum = resolvedInvoiceNumber || linkedInvoice?.id || invoiceId;
+    if (!invNum) return;
+    const url = user?.role === 'seller'
+      ? `/seller/invoices?viewInvoiceNo=${encodeURIComponent(invNum)}`
+      : `/payments/invoices?viewInvoiceNo=${encodeURIComponent(invNum)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleDownloadPo = () => {
+    const poId = linkedPo?.id || orderId || proof?.purchaseOrderId;
+    if (!poId) return;
+    window.open(`/api/purchase-orders/${poId}/pdf`, '_blank');
+  };
+
   const status = String(proof?.status || 'UPLOADED').toUpperCase();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="modal-proof-title">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-8 animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <FileText className="h-5 w-5" />
+              <FileText className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-base font-black text-slate-900">Payment Receipt & Proof Details</h2>
+              <h2 id="modal-proof-title" className="text-base font-black text-slate-900">Payment Receipt & Proof Details</h2>
               <p className="text-xs font-semibold text-slate-500">
+                {resolvedPoNumber ? `PO: ${resolvedPoNumber}` : ''}
+                {resolvedPoNumber && proof?.transactionReference ? ' • ' : ''}
                 {proof?.transactionReference ? `UTR: ${proof.transactionReference}` : 'Offline Bank Transfer Record'}
               </p>
             </div>
@@ -154,21 +222,22 @@ export function PaymentReceiptViewModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+            aria-label="Close dialog"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition cursor-pointer"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
-            <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" />
+            <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" aria-hidden="true" />
             <p className="text-xs font-bold text-slate-500">Loading payment proof record...</p>
           </div>
         ) : !proof ? (
           <div className="p-8 text-center space-y-3">
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-              <AlertTriangle className="h-6 w-6" />
+              <AlertTriangle className="h-6 w-6" aria-hidden="true" />
             </div>
             <h3 className="text-sm font-black text-slate-800">No Payment Receipt Found</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
@@ -176,12 +245,12 @@ export function PaymentReceiptViewModal({
             </p>
           </div>
         ) : (
-          <div className="p-6 space-y-5">
-            {/* Status Pill Card */}
-            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50/80 p-4">
+          <div className="p-6 space-y-4">
+            {/* Status & Amount Card */}
+            <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50/50 p-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Paid Amount</p>
-                <p className="text-xl font-black text-slate-900 mt-0.5">{formatCurrency(proof.amount)}</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-blue-700">Total Paid Amount</p>
+                <p className="text-2xl font-black text-slate-900 mt-0.5">{formatCurrency(proof.amount)}</p>
               </div>
               <div className="text-right">
                 <span
@@ -194,11 +263,11 @@ export function PaymentReceiptViewModal({
                   }`}
                 >
                   {status === 'VERIFIED' ? (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : status === 'REJECTED' ? (
-                    <XCircle className="h-3.5 w-3.5" />
+                    <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
                   ) : (
-                    <Clock className="h-3.5 w-3.5" />
+                    <Clock className="h-3.5 w-3.5" aria-hidden="true" />
                   )}
                   {status === 'VERIFIED' ? 'Proof Verified' : status === 'REJECTED' ? 'Proof Rejected' : 'Under Review'}
                 </span>
@@ -207,6 +276,76 @@ export function PaymentReceiptViewModal({
                     Paid on {formatDate(proof.paymentDate)}
                   </p>
                 )}
+              </div>
+            </div>
+
+            {/* Linked Documents & Parties Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                  Linked Procurement Documents
+                </p>
+                <div className="flex items-center gap-2">
+                  {resolvedPoNumber && (
+                    <button
+                      type="button"
+                      onClick={handleOpenPo}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-md transition cursor-pointer"
+                    >
+                      <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>View PO</span>
+                    </button>
+                  )}
+                  {linkedPo?.id && (
+                    <button
+                      type="button"
+                      onClick={handleDownloadPo}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md transition cursor-pointer"
+                      title="Download Official PO PDF"
+                    >
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>PO PDF</span>
+                    </button>
+                  )}
+                  {resolvedInvoiceNumber && (
+                    <button
+                      type="button"
+                      onClick={handleOpenInvoice}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition cursor-pointer"
+                    >
+                      <Receipt className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>View Invoice</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Purchase Order</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{resolvedPoNumber || 'Not explicitly linked'}</p>
+                  {linkedPo?.title && (
+                    <p className="text-[10px] font-semibold text-slate-500 truncate mt-0.5">{linkedPo.title}</p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tax Invoice</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{resolvedInvoiceNumber || 'Pending / Direct PO'}</p>
+                  {linkedInvoice?.status && (
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase mt-0.5">Status: {linkedInvoice.status}</p>
+                  )}
+                </div>
+
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Payer / Buyer</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{resolvedBuyerName}</p>
+                </div>
+
+                <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Beneficiary / Seller</p>
+                  <p className="font-bold text-slate-900 mt-0.5">{resolvedSellerName}</p>
+                </div>
               </div>
             </div>
 
@@ -246,7 +385,7 @@ export function PaymentReceiptViewModal({
               {proof.receiptFileUrl ? (
                 <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <FileText className="h-5 w-5 text-blue-600 shrink-0" />
+                    <FileText className="h-5 w-5 text-blue-600 shrink-0" aria-hidden="true" />
                     <span className="text-xs font-bold text-slate-800 truncate">
                       {proof.receiptFileUrl.split('/').pop() || 'Payment_Receipt.pdf'}
                     </span>
@@ -270,7 +409,7 @@ export function PaymentReceiptViewModal({
                       }}
                       className="inline-flex items-center gap-1.5 rounded-md bg-[#12335f] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0b2445] transition cursor-pointer"
                     >
-                      <ExternalLink className="h-3.5 w-3.5" /> View / Download
+                      <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /> View / Download
                     </button>
                   </div>
                 </div>
@@ -303,7 +442,7 @@ export function PaymentReceiptViewModal({
                     type="button"
                     variant="outline"
                     onClick={() => setShowRejectBox(false)}
-                    className="h-8 text-xs font-bold"
+                    className="h-8 text-xs font-bold cursor-pointer"
                   >
                     Cancel
                   </Button>
@@ -311,7 +450,7 @@ export function PaymentReceiptViewModal({
                     type="button"
                     onClick={handleReject}
                     disabled={rejecting || !rejectReason.trim()}
-                    className="h-8 bg-red-600 hover:bg-red-700 text-white text-xs font-bold"
+                    className="h-8 bg-red-600 hover:bg-red-700 text-white text-xs font-bold cursor-pointer"
                   >
                     {rejecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Confirm Rejection'}
                   </Button>
@@ -326,20 +465,20 @@ export function PaymentReceiptViewModal({
                   type="button"
                   variant="outline"
                   onClick={() => setShowRejectBox(true)}
-                  className="h-10 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50"
+                  className="h-10 text-xs font-bold text-red-600 border-red-200 hover:bg-red-50 cursor-pointer"
                 >
-                  <XCircle className="mr-1.5 h-4 w-4" /> Reject Proof
+                  <XCircle className="mr-1.5 h-4 w-4" aria-hidden="true" /> Reject Proof
                 </Button>
                 <Button
                   type="button"
                   onClick={handleVerify}
                   disabled={verifying}
-                  className="h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider px-5 shadow-sm"
+                  className="h-10 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider px-5 shadow-sm cursor-pointer"
                 >
                   {verifying ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
                   ) : (
-                    <ShieldCheck className="mr-2 h-4 w-4" />
+                    <ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                   )}
                   Verify & Settle Payment
                 </Button>

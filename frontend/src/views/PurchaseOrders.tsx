@@ -2554,6 +2554,8 @@ export default function PurchaseOrders() {
           isOpen={!!viewProofOrder}
           onClose={() => setViewProofOrder(null)}
           orderId={Number(viewProofOrder.id)}
+          orderPoNumber={viewProofOrder.poNumber}
+          sellerName={viewProofOrder.seller?.name}
           onStatusChange={() => {
             setViewProofOrder(null);
             reload();
