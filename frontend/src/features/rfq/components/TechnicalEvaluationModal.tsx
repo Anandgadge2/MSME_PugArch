@@ -73,6 +73,13 @@ export function TechnicalEvaluationModal({
   const [previewLoadingId, setPreviewLoadingId] = useState<
     string | number | null
   >(null);
+  const formRef = React.useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (isOpen && formRef.current) {
+      formRef.current.scrollTop = 0;
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (participation) {
@@ -520,6 +527,10 @@ export function TechnicalEvaluationModal({
         queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2"] });
         queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2-full"] });
         queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
+        queryClient.invalidateQueries({ queryKey: ["procurement-bid-detail"] });
+        queryClient.invalidateQueries({ queryKey: ["tender-detail"] });
+        queryClient.invalidateQueries({ queryKey: ["tender"] });
+        queryClient.refetchQueries({ queryKey: ["buyer-unified-participations"] }).catch(() => {});
 
         if (handleSuccessCallback) {
           handleSuccessCallback();
@@ -539,7 +550,7 @@ export function TechnicalEvaluationModal({
 
   return (
     <div
-      className="fixed inset-0 z-[10050] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto"
+      className="fixed inset-0 z-[10050] flex items-center justify-center bg-slate-950/75 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="technical-eval-modal-title"
@@ -547,33 +558,33 @@ export function TechnicalEvaluationModal({
       <FocusTrap
         active={isOpen}
         onEscape={onClose}
-        className="w-full max-w-3xl my-6"
+        className="w-full max-w-3xl flex flex-col max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3.5rem)]"
       >
-        <div className="relative w-full rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+        <div className="relative w-full rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-full min-h-0">
           {/* Header Section: Official MSME Government Enterprise Navy Gradient */}
-          <div className="relative overflow-hidden border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
+          <div className="shrink-0 relative overflow-hidden border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-5 sm:px-6 py-4 text-white shadow-sm">
             <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none opacity-50" />
             <div className="relative z-10 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3.5 min-w-0">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-emerald-300 border border-white/20 shadow-inner">
-                  <ShieldCheck className="h-5 w-5" />
+                  <ShieldCheck className="h-5 w-5" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     {readOnly ? (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 text-amber-200 border border-amber-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <Lock className="h-2.5 w-2.5" /> Sealed Audit Record
+                        <Lock className="h-2.5 w-2.5" aria-hidden="true" /> Sealed Audit Record
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />{" "}
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />{" "}
                         Technical Scrutiny
                       </span>
                     )}
                   </div>
                   <h3
                     id="technical-eval-modal-title"
-                    className="text-base sm:text-lg font-black text-white tracking-tight mt-0.5 pb-2 truncate"
+                    className="text-base sm:text-lg font-black text-white tracking-tight leading-snug mt-1"
                   >
                     {readOnly
                       ? "Technical Evaluation Record (Read-Only Audit Trail)"
@@ -583,17 +594,19 @@ export function TechnicalEvaluationModal({
               </div>
               <button
                 type="button"
+                data-autofocus
                 onClick={onClose}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-blue-200 hover:bg-white/15 hover:text-white transition-all cursor-pointer border border-transparent hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-white/40"
                 aria-label="Close technical evaluation modal"
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
           </div>
 
           {/* Form Content */}
           <form
+            ref={formRef}
             onSubmit={
               readOnly
                 ? (e) => {
@@ -602,7 +615,7 @@ export function TechnicalEvaluationModal({
                   }
                 : handleSubmit
             }
-            className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5"
+            className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5"
           >
             {readOnly ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 font-medium flex items-center gap-2.5 shadow-2xs">
@@ -735,7 +748,7 @@ export function TechnicalEvaluationModal({
                       Individual item models & parameters
                     </span>
                   </div>
-                  <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 shadow-2xs">
+                  <div className={`border border-slate-200 rounded-xl bg-white divide-y divide-slate-100 shadow-2xs ${lineItems.length > 5 ? "max-h-80 overflow-y-auto" : ""}`}>
                     {lineItems.map((item: any, i: number) => {
                       const itemModel =
                         item.model ||
@@ -927,7 +940,7 @@ export function TechnicalEvaluationModal({
                   specifications on file.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${docs.length > 6 ? "max-h-48 overflow-y-auto pr-1" : ""}`}>
                   {docs.map((doc: any, idx: number) => {
                     const docName =
                       doc.documentName ||
@@ -976,10 +989,17 @@ export function TechnicalEvaluationModal({
 
             {/* Evaluation Decision: Qualify vs Disqualify */}
             <div className="space-y-2.5 pt-1">
-              <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
-                Technical Evaluation Decision{" "}
-                <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
+                  Technical Evaluation Decision{" "}
+                  {!readOnly && <span className="text-rose-500">*</span>}
+                </label>
+                {readOnly && (
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                    Recorded &amp; Sealed
+                  </span>
+                )}
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* QUALIFIED Card */}
@@ -1004,12 +1024,14 @@ export function TechnicalEvaluationModal({
                   }
                   className={`rounded-xl border p-4 transition-all focus:outline-none ${
                     readOnly
-                      ? "cursor-default"
-                      : "cursor-pointer focus:ring-2 focus:ring-emerald-500"
-                  } ${
-                    decision === "QUALIFIED"
-                      ? "border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-2xs"
-                      : "border-slate-200 hover:border-slate-300 bg-white opacity-70"
+                      ? decision === "QUALIFIED"
+                        ? "border-emerald-500 bg-emerald-50/80 shadow-2xs ring-1 ring-emerald-500/30"
+                        : "border-slate-200 bg-slate-50/50 opacity-40 cursor-default"
+                      : `cursor-pointer focus:ring-2 focus:ring-emerald-500 ${
+                          decision === "QUALIFIED"
+                            ? "border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-500/20 shadow-2xs"
+                            : "border-slate-200 hover:border-slate-300 bg-white opacity-70"
+                        }`
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -1021,13 +1043,20 @@ export function TechnicalEvaluationModal({
                       }`}
                     >
                       {decision === "QUALIFIED" && (
-                        <CheckCircle2 className="h-4 w-4" />
+                        <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
                       )}
                     </div>
-                    <div>
-                      <h4 className="text-xs font-extrabold text-emerald-900">
-                        Technically Qualified (Pass)
-                      </h4>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs font-extrabold text-emerald-900">
+                          Technically Qualified (Pass)
+                        </h4>
+                        {readOnly && decision === "QUALIFIED" && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            Recorded Decision
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         Eligible for commercial ranking, L1 award, and reverse
                         auction
@@ -1058,12 +1087,14 @@ export function TechnicalEvaluationModal({
                   }
                   className={`rounded-xl border p-4 transition-all focus:outline-none ${
                     readOnly
-                      ? "cursor-default"
-                      : "cursor-pointer focus:ring-2 focus:ring-rose-500"
-                  } ${
-                    decision === "DISQUALIFIED"
-                      ? "border-rose-500 bg-rose-50/60 ring-2 ring-rose-500/20 shadow-2xs"
-                      : "border-slate-200 hover:border-slate-300 bg-white opacity-70"
+                      ? decision === "DISQUALIFIED"
+                        ? "border-rose-500 bg-rose-50/80 shadow-2xs ring-1 ring-rose-500/30"
+                        : "border-slate-200 bg-slate-50/50 opacity-40 cursor-default"
+                      : `cursor-pointer focus:ring-2 focus:ring-rose-500 ${
+                          decision === "DISQUALIFIED"
+                            ? "border-rose-500 bg-rose-50/60 ring-2 ring-rose-500/20 shadow-2xs"
+                            : "border-slate-200 hover:border-slate-300 bg-white opacity-70"
+                        }`
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -1075,13 +1106,20 @@ export function TechnicalEvaluationModal({
                       }`}
                     >
                       {decision === "DISQUALIFIED" && (
-                        <XCircle className="h-4 w-4" />
+                        <XCircle className="h-4 w-4" aria-hidden="true" />
                       )}
                     </div>
-                    <div>
-                      <h4 className="text-xs font-extrabold text-rose-900">
-                        Disqualified (Fail)
-                      </h4>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs font-extrabold text-rose-900">
+                          Disqualified (Fail)
+                        </h4>
+                        {readOnly && decision === "DISQUALIFIED" && (
+                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-300">
+                            Recorded Decision
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         Marked ineligible for contract award
                       </p>
@@ -1092,7 +1130,7 @@ export function TechnicalEvaluationModal({
             </div>
 
             {/* Optional Score & Remarks */}
-            <div className="space-y-3 pt-1">
+            <div className="space-y-3 pt-1 pb-4">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div className="sm:col-span-1 space-y-1">
                   <label
@@ -1134,7 +1172,7 @@ export function TechnicalEvaluationModal({
                   >
                     <span>
                       Evaluation Justification &amp; Remarks{" "}
-                      {decision === "DISQUALIFIED" && (
+                      {decision === "DISQUALIFIED" && !readOnly && (
                         <span className="text-rose-500">*</span>
                       )}
                     </span>
@@ -1151,9 +1189,11 @@ export function TechnicalEvaluationModal({
                     rows={3}
                     disabled={readOnly}
                     placeholder={
-                      decision === "QUALIFIED"
-                        ? "e.g. Technical proposal complies with technical specifications, certified ISO compliant, and warranty terms accepted."
-                        : "e.g. Disqualified due to non-submission of valid ISO certificate and delivery timeline exceeding required threshold."
+                      readOnly
+                        ? "No committee justification remarks on file."
+                        : decision === "QUALIFIED"
+                          ? "e.g. Technical proposal complies with technical specifications, certified ISO compliant, and warranty terms accepted."
+                          : "e.g. Disqualified due to non-submission of valid ISO certificate and delivery timeline exceeding required threshold."
                     }
                     value={remarks}
                     onChange={(e) => {
@@ -1184,12 +1224,10 @@ export function TechnicalEvaluationModal({
                 <span>{validationError}</span>
               </div>
             )}
-
-           
           </form>
 
           {/* Footer Actions */}
-          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5">
+          <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 sm:px-6 py-3.5">
             {readOnly ? (
               <div className="flex items-center justify-between w-full">
                 <span className="text-xs font-semibold text-slate-500">

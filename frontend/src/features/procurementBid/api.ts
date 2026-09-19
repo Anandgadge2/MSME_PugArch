@@ -773,16 +773,33 @@ export const procurementBidApi = {
     return readApiBody(res);
   },
   async acceptAward(bidId: string, awardId?: string | number) {
-    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
-    return readApiBody(res);
+    try {
+      const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
+      return await readApiBody(res);
+    } catch (err: any) {
+      if (awardId) {
+        const res2 = await api.post(`/api/seller/awards/${encodeURIComponent(String(awardId))}/accept`, {}, { headers: authHeaders() });
+        return await readApiBody(res2);
+      }
+      throw err;
+    }
   },
   async declineAward(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
     let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
     if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
       payload = { reason: reasonParam, awardId: awardIdOrData };
     }
-    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
-    return readApiBody(res);
+    try {
+      const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
+      return await readApiBody(res);
+    } catch (err: any) {
+      const aId = payload.awardId || (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined);
+      if (aId) {
+        const res2 = await api.post(`/api/seller/awards/${encodeURIComponent(String(aId))}/reject`, { reason: payload.reason || 'Declined by seller' }, { headers: authHeaders() });
+        return await readApiBody(res2);
+      }
+      throw err;
+    }
   },
   async generatePO(bidId: string, data: any = {}) {
     const payload =

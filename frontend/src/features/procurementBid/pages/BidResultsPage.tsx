@@ -196,15 +196,22 @@ export default function BidResultsPage() {
   const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
   
   const isContractFinalized = React.useMemo(() => {
+    if (isAwardOfferPending || isPriceMatchPending) return false;
     const rawStatus = String(bid?.status || '').toUpperCase();
     const rawStage = String(bid?.lifecycleStage || '').toUpperCase();
+    const hasActivePo = Boolean(
+      (bid as any)?.purchaseOrderId ||
+      (bid as any)?.purchaseOrder ||
+      (bid as any)?.activeOrder ||
+      (Array.isArray((bid as any)?.purchaseOrders) && (bid as any).purchaseOrders.length > 0)
+    );
     return (
-      ['IN_PROGRESS', 'AWARDED', 'PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
-      ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
-      Boolean((bid as any)?.purchaseOrderId || (bid as any)?.purchaseOrder) ||
+      hasActivePo ||
+      ['PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
+      ['PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
       ranking.some(r => String((r as any).finalStatus || '').toUpperCase() === 'ORDERED')
     );
-  }, [bid, ranking]);
+  }, [bid, ranking, isAwardOfferPending, isPriceMatchPending]);
 
   const isBidAlreadyAwarded = Boolean(isContractFinalized);
 

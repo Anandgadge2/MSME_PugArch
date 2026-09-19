@@ -135,7 +135,7 @@ export default function TenderDetailPage() {
     const fetchTenderDetails = async () => {
       try {
         if (!tender) setLoading(true);
-        const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`);
+        const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`, true);
         setTender(data);
       } catch (err: any) {
         console.error(err);

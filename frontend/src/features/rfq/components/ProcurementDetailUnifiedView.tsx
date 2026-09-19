@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -3879,6 +3879,7 @@ export interface ProcurementDetailUnifiedViewProps {
   technicalOpeningDate?: string;
   financialOpeningDate?: string;
   participations?: any[];
+  awards?: any;
   participantsCount?: number;
   totalClarifications?: number;
   hasSubmittedProposal?: boolean;
@@ -4019,20 +4020,142 @@ export function ProcurementDetailUnifiedView(
   const [isSubmittingAward, setIsSubmittingAward] = useState(false);
   const [isAcceptingPO, setIsAcceptingPO] = useState(false);
 
-  const rawAwards: any[] = Array.isArray(props.rawBid?.awards)
+  const { data: fallbackBidData } = useQuery({
+    queryKey: ["procurement-detail-fallback-bid", targetId],
+    queryFn: async () => {
+      try {
+        if (!targetId || targetId === "N/A" || targetId === "—") return null;
+        const res = await procurementBidApi.detail(targetId);
+        return res || null;
+      } catch {
+        return null;
+      }
+    },
+    enabled:
+      Boolean(targetId) &&
+      (!props.rawBid?.awards || props.rawBid.awards.length === 0) &&
+      (!props.awards || props.awards.length === 0),
+    staleTime: 10_000,
+  });
+
+  const rawParticipations: any[] = Array.isArray(props.rawBid?.participations) && props.rawBid.participations.length > 0
+    ? props.rawBid.participations
+    : Array.isArray(props.participations) && props.participations.length > 0
+      ? props.participations
+      : Array.isArray((props as any)?.participations) && (props as any).participations.length > 0
+        ? (props as any).participations
+        : Array.isArray(fallbackBidData?.participations)
+          ? fallbackBidData.participations
+          : [];
+
+  const currentUserId = String(currentUser?.id || "");
+  const currentOrgId = String(
+    currentUser?.organizationId ||
+      currentUser?.sellerProfile?.id ||
+      currentUser?.sellerProfile?.organizationId ||
+      "",
+  );
+
+  const myParticipation = React.useMemo(() => {
+    if (isBuyerSide || !currentUser) return null;
+    return rawParticipations.find(
+      (p: any) =>
+        String(
+          p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+        ) === currentUserId ||
+        String(
+          p.sellerOrganizationId ||
+            p.sellerOrganization?.id ||
+            p.seller?.organizationId,
+        ) === currentOrgId ||
+        (currentUser.sellerProfile?.id &&
+          String(p.sellerProfileId || p.sellerId) === String(currentUser.sellerProfile.id)) ||
+        (currentUser.sellerProfile?.organizationId &&
+          String(p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === String(currentUser.sellerProfile.organizationId)),
+    );
+  }, [
+    rawParticipations,
+    isBuyerSide,
+    currentUser,
+    currentUserId,
+    currentOrgId,
+  ]);
+
+  const effectiveMyParticipation =
+    props.ownParticipation || props.ownResponse || myParticipation;
+  const isSellerParticipated = Boolean(
+    props.hasSubmittedProposal || effectiveMyParticipation,
+  );
+
+  const rawAwards: any[] = Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0
     ? props.rawBid.awards
-    : Array.isArray((props as any)?.awards)
-      ? (props as any).awards
-      : [];
+    : Array.isArray(props.awards) && props.awards.length > 0
+      ? props.awards
+      : Array.isArray((props as any)?.awards) && (props as any).awards.length > 0
+        ? (props as any).awards
+        : Array.isArray(fallbackBidData?.awards) && fallbackBidData.awards.length > 0
+          ? fallbackBidData.awards
+          : [];
+
+  const myAward = !isBuyerSide
+    ? rawAwards.find((a: any) => {
+        const aSellerId = String(
+          a.awardedSellerId || a.sellerId || a.seller?.id || a.participation?.sellerId || "",
+        );
+        const aOrgId = String(
+          a.seller?.organizationId || a.participation?.sellerOrganizationId || "",
+        );
+        const aPartId = a.participationId || a.participation?.id;
+        const myPartId = myParticipation?.id || effectiveMyParticipation?.id || props.ownParticipation?.id;
+        return (
+          (aSellerId && (aSellerId === currentUserId || aSellerId === currentOrgId)) ||
+          (aOrgId && aOrgId === currentOrgId) ||
+          (myPartId && aPartId && Number(aPartId) === Number(myPartId))
+        );
+      })
+    : null;
+
   const activeAward =
+    myAward ||
     rawAwards.find(
       (a: any) =>
         a.awardStatus === "OFFERED" ||
         a.awardStatus === "ACCEPTED" ||
+        a.awardStatus === "RECOMMENDED" ||
         a.counterOfferStatus === "PENDING",
     ) ||
     rawAwards[0] ||
     null;
+
+  const isAwardedToMe = Boolean(
+    activeAward &&
+    !isBuyerSide &&
+    ((activeAward.awardedSellerId &&
+      (String(activeAward.awardedSellerId) === currentUserId ||
+        String(activeAward.awardedSellerId) === currentOrgId)) ||
+      (activeAward.sellerId &&
+        (String(activeAward.sellerId) === currentUserId ||
+          String(activeAward.sellerId) === currentOrgId)) ||
+      (activeAward.seller?.id &&
+        (String(activeAward.seller.id) === currentUserId ||
+          String(activeAward.seller.id) === currentOrgId)) ||
+      (activeAward.seller?.organizationId &&
+        String(activeAward.seller.organizationId) === currentOrgId) ||
+      (activeAward.participation?.sellerId &&
+        (String(activeAward.participation.sellerId) === currentUserId ||
+          String(activeAward.participation.sellerId) === currentOrgId)) ||
+      (activeAward.participation?.sellerOrganizationId &&
+        String(activeAward.participation.sellerOrganizationId) === currentOrgId) ||
+      (myParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(myParticipation.id)) ||
+      (effectiveMyParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(effectiveMyParticipation.id)) ||
+      (props.ownParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(props.ownParticipation.id))),
+  );
 
   const rawOrders: any[] = Array.isArray(props.rawBid?.purchaseOrders)
     ? props.rawBid.purchaseOrders
@@ -4075,63 +4198,6 @@ export function ProcurementDetailUnifiedView(
     }
     return ord;
   }, [localCreatedOrder, directActiveOrder, fetchedOrder, localAcceptedPO]);
-
-  const currentUserId = String(currentUser?.id || "");
-  const currentOrgId = String(
-    currentUser?.organizationId ||
-      currentUser?.sellerProfile?.id ||
-      currentUser?.sellerProfile?.organizationId ||
-      "",
-  );
-
-  const isAwardedToMe = Boolean(
-    activeAward &&
-    !isBuyerSide &&
-    ((activeAward.awardedSellerId &&
-      (String(activeAward.awardedSellerId) === currentUserId ||
-        String(activeAward.awardedSellerId) === currentOrgId)) ||
-      (activeAward.sellerId &&
-        (String(activeAward.sellerId) === currentUserId ||
-          String(activeAward.sellerId) === currentOrgId)) ||
-      (activeAward.seller?.id &&
-        (String(activeAward.seller.id) === currentUserId ||
-          String(activeAward.seller.id) === currentOrgId)) ||
-      (activeAward.seller?.organizationId &&
-        String(activeAward.seller.organizationId) === currentOrgId)),
-  );
-
-  const rawParticipations: any[] = Array.isArray(props.rawBid?.participations)
-    ? props.rawBid.participations
-    : Array.isArray((props as any)?.participations)
-      ? (props as any).participations
-      : [];
-
-  const myParticipation = React.useMemo(() => {
-    if (isBuyerSide || !currentUser) return null;
-    return rawParticipations.find(
-      (p: any) =>
-        String(
-          p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
-        ) === currentUserId ||
-        String(
-          p.sellerOrganizationId ||
-            p.sellerOrganization?.id ||
-            p.seller?.organizationId,
-        ) === currentOrgId,
-    );
-  }, [
-    rawParticipations,
-    isBuyerSide,
-    currentUser,
-    currentUserId,
-    currentOrgId,
-  ]);
-
-  const effectiveMyParticipation =
-    props.ownParticipation || props.ownResponse || myParticipation;
-  const isSellerParticipated = Boolean(
-    props.hasSubmittedProposal || effectiveMyParticipation,
-  );
 
   const handleAcceptPriceMatch = async (awardId: string) => {
     try {
@@ -4465,25 +4531,76 @@ export function ProcurementDetailUnifiedView(
       for (const idToken of idsToTry) {
         const candidateResults = await Promise.allSettled([
           getApi(
-            `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
-            true,
-          ),
-          getApi(
             `/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`,
             true,
           ),
           procurementBidApi.detail(idToken),
+          getApi(
+            `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
+            true,
+          ),
           getApi(
             `/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`,
             true,
           ),
         ]);
 
+        const candidateLists: any[][] = [];
         for (const r of candidateResults) {
           if (r.status === "fulfilled" && r.value) {
             const items = extractArray(r.value);
-            if (items.length > 0) return items.map(normalizeItem);
+            if (items.length > 0) {
+              candidateLists.push(items.map(normalizeItem));
+            }
           }
+        }
+
+        if (candidateLists.length > 0) {
+          const mergedVendorMap = new Map<string, any>();
+          for (const list of candidateLists) {
+            for (const item of list) {
+              const baseKeys = [
+                item.id ? `id-${item.id}` : null,
+                item.participationId ? `part-${item.participationId}` : null,
+                item.participationNumber ? `partNum-${item.participationNumber}` : null,
+                item.sellerUserId ? `user-${item.sellerUserId}` : null,
+                item.sellerId ? `user-${item.sellerId}` : null,
+                item.sellerOrganizationId ? `org-${item.sellerOrganizationId}` : null,
+                item.sellerOrgName ? `name-${String(item.sellerOrgName).trim().toLowerCase()}` : null,
+                item.sellerOrgName ? `norm-${String(item.sellerOrgName).trim().toLowerCase().replace(/[^a-z0-9]/g, '')}` : null,
+              ].filter(Boolean) as string[];
+
+              let existing = baseKeys.map(k => mergedVendorMap.get(k)).find(Boolean);
+
+              const ts = String(item.technicalStatus || "").toUpperCase();
+              const isItemEvaluated =
+                ts === "QUALIFIED" ||
+                ts === "DISQUALIFIED" ||
+                ts === "NOT_QUALIFIED" ||
+                Boolean(item.isDisqualified);
+
+              if (existing) {
+                if (isItemEvaluated) {
+                  existing.technicalStatus = ts === "NOT_QUALIFIED" ? "DISQUALIFIED" : ts;
+                  existing.isDisqualified = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || Boolean(item.isDisqualified);
+                  if (item.technicalRemarks) existing.technicalRemarks = item.technicalRemarks;
+                  if (item.score != null) existing.score = item.score;
+                }
+                if (item.quotedAmount && !existing.quotedAmount) existing.quotedAmount = item.quotedAmount;
+                if (item.totalAmount && !existing.totalAmount) existing.totalAmount = item.totalAmount;
+                for (const k of baseKeys) mergedVendorMap.set(k, existing);
+              } else {
+                const newObj = { ...item };
+                if (isItemEvaluated) {
+                  newObj.technicalStatus = ts === "NOT_QUALIFIED" ? "DISQUALIFIED" : ts;
+                  newObj.isDisqualified = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || Boolean(item.isDisqualified);
+                }
+                for (const k of baseKeys) mergedVendorMap.set(k, newObj);
+              }
+            }
+          }
+          const uniqueItems = Array.from(new Set(mergedVendorMap.values()));
+          if (uniqueItems.length > 0) return uniqueItems;
         }
       }
 
@@ -4492,7 +4609,7 @@ export function ProcurementDetailUnifiedView(
     enabled: Boolean(
       isBuyerOrAdmin && targetId && targetId !== "RFQ" && targetId !== "RFP",
     ),
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
   const {
     data: emdRes,
@@ -6159,6 +6276,9 @@ export function ProcurementDetailUnifiedView(
         .toLowerCase();
 
       const keys: string[] = [];
+      if (p.id && String(p.id) !== "0") keys.push(`id-${p.id}`);
+      if (p.participationId && String(p.participationId) !== "0") keys.push(`part-${p.participationId}`);
+      if (p.participationNumber) keys.push(`partNum-${String(p.participationNumber).trim()}`);
       if (sOrg && String(sOrg) !== "0" && String(sOrg) !== "undefined")
         keys.push(`org-${sOrg}`);
       if (sId && String(sId) !== "0" && String(sId) !== "undefined")
@@ -6170,6 +6290,11 @@ export function ProcurementDetailUnifiedView(
         !orgName.startsWith("seller partner")
       ) {
         keys.push(`name-${orgName}`);
+        keys.push(`norm-${orgName.replace(/[^a-z0-9]/g, "")}`);
+      }
+      const email = (p.sellerEmail || p.email || p.seller?.email || p.sellerUser?.email || "").trim().toLowerCase();
+      if (email && email.includes("@")) {
+        keys.push(`email-${email}`);
       }
       return { sId, sOrg, orgName, keys };
     };
@@ -6244,7 +6369,20 @@ export function ProcurementDetailUnifiedView(
       if (existing) {
         // Merge into existing vendor record
         // 1. Technical Evaluation Priority: If this record has evaluation decisions, apply them
-        if (isEvaluated && existing.technicalStatus === "PENDING") {
+        const existingTs = String(existing.technicalStatus || "").toUpperCase();
+        const existingIsEvaluated =
+          existingTs === "QUALIFIED" ||
+          existingTs === "DISQUALIFIED" ||
+          existingTs === "NOT_QUALIFIED" ||
+          Boolean(existing.isDisqualified);
+
+        if (
+          isEvaluated &&
+          (!existingIsEvaluated ||
+            existingTs === "PENDING" ||
+            ts === "QUALIFIED" ||
+            p.technicalStatus === "QUALIFIED")
+        ) {
           existing.technicalStatus = ts;
           existing.technicalRemarks =
             p.technicalRemarks ||
@@ -6388,6 +6526,78 @@ export function ProcurementDetailUnifiedView(
     }
     return lowestId;
   }, [qualifiedParticipations]);
+
+  const handleOpenMyQuotationModal = useCallback(() => {
+    let targetPart = effectiveMyParticipation;
+    if (!targetPart) {
+      targetPart =
+        submittedParticipations.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        allParticipationsList.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        (submittedParticipations.length === 1 && !isBuyerOrAdmin
+          ? submittedParticipations[0]
+          : null) ||
+        {
+          id: `my-quote-${targetId}`,
+          sellerOrgName:
+            currentUser?.organization?.organizationName ||
+            currentUser?.organization?.name ||
+            currentUser?.companyName ||
+            currentUser?.name ||
+            "My Quoting Organization",
+          sellerName: currentUser?.name || "Authorized Representative",
+          sellerEmail: currentUser?.email || "N/A",
+          sellerPhone: currentUser?.mobile || currentUser?.phone || "N/A",
+          submissionStatus: "SUBMITTED",
+          status: "SUBMITTED",
+          quotedAmount: Number(props.rawBid?.quotedAmount || props.rawBid?.totalAmount || 0),
+          totalAmount: Number(props.rawBid?.totalAmount || props.rawBid?.quotedAmount || 0),
+          lineItems: props.rawBid?.lineItems || props.items || [],
+          documents: props.rawBid?.documents || [],
+          submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
+          deliveryTimeline: props.rawBid?.deliveryTimeline || "Standard",
+          paymentTerms: props.rawBid?.paymentTerms || "Standard Payment Terms",
+        };
+    }
+    setSelectedQuotationForReview(targetPart);
+  }, [
+    effectiveMyParticipation,
+    submittedParticipations,
+    allParticipationsList,
+    currentUserId,
+    currentOrgId,
+    currentUser,
+    isBuyerOrAdmin,
+    targetId,
+    props.rawBid,
+    props.items,
+    props.documents,
+  ]);
 
   const handleConfirmAwardSubmit = async () => {
     if (!awardingParticipation) return;
@@ -7407,20 +7617,7 @@ export function ProcurementDetailUnifiedView(
               submittedParticipations.length,
             )}
             onSubmitClick={props.onSubmitClick}
-            onViewQuotationClick={() => {
-              if (effectiveMyParticipation) {
-                setSelectedQuotationForReview(effectiveMyParticipation);
-              } else if (props.onViewQuotationClick) {
-                props.onViewQuotationClick();
-              } else if (props.onSubmitClick) {
-                props.onSubmitClick();
-              } else {
-                setActiveTab("clarifications");
-                document
-                  .getElementById("tabs-navigation-section")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }
-            }}
+            onViewQuotationClick={handleOpenMyQuotationModal}
             onViewEvaluation={() => {
               setActiveTab(isBuyerSide ? "evaluation" : "clarifications");
               const targetEl =
@@ -7819,7 +8016,10 @@ export function ProcurementDetailUnifiedView(
           {/* Seller: Award Offered (Ready for Acceptance) */}
           {!isBuyerSide &&
             isAwardedToMe &&
-            activeAward?.awardStatus === "OFFERED" &&
+            Boolean(activeAward) &&
+            ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED"].includes(
+              String(activeAward?.awardStatus || "").toUpperCase(),
+            ) &&
             activeAward?.counterOfferStatus !== "PENDING" && (
               <div className="relative overflow-hidden rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-3 sm:p-4 text-white shadow-md animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -8661,36 +8861,40 @@ export function ProcurementDetailUnifiedView(
                   </Button>
                 )}
                 {!isBuyerOrAdmin && isSellerParticipated && (
-                  <>
-                    {(props.onViewQuotationClick || props.onSubmitClick) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label="View your submitted quotation"
-                        onClick={
-                          props.onViewQuotationClick || props.onSubmitClick
-                        }
-                        className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
-                      >
-                        <Eye
-                          className="h-3.5 w-3.5 text-slate-600"
-                          aria-hidden="true"
-                        />
-                        <span>
-                          {isRfqType
-                            ? "View My Quotation"
-                            : isRateContractType
-                              ? "View My Rate Proposal"
-                              : isReverseAuctionType
-                                ? isBiddingClosed
-                                  ? "View Auction Results"
-                                  : "Live Bid Console"
-                                : "View My Proposal"}
-                        </span>
-                      </Button>
-                    )}
-                  </>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="View your submitted quotation"
+                    onClick={() => {
+                      if (
+                        isReverseAuctionType &&
+                        !isBiddingClosed &&
+                        props.onSubmitClick
+                      ) {
+                        props.onSubmitClick();
+                      } else {
+                        handleOpenMyQuotationModal();
+                      }
+                    }}
+                    className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                  >
+                    <Eye
+                      className="h-3.5 w-3.5 text-slate-600"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      {isRfqType
+                        ? "View My Quotation"
+                        : isRateContractType
+                          ? "View My Rate Proposal"
+                          : isReverseAuctionType
+                            ? isBiddingClosed
+                              ? "View Auction Results"
+                              : "Live Bid Console"
+                            : "View My Proposal"}
+                    </span>
+                  </Button>
                 )}
                 {!isBuyerOrAdmin &&
                   !isSellerParticipated &&
@@ -10296,19 +10500,28 @@ export function ProcurementDetailUnifiedView(
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isBidAwarded={isBidAwarded}
                   canAward={false}
-                  onOpenCompare={() => {
-                    setSelectedQuotationForReview(null);
-                    setSelectedCompareIds(
-                      submittedParticipations.map((p: any) =>
-                        String(p.id || p.sellerId || p.sellerUserId),
-                      ),
-                    );
-                    setIsComparisonModalOpen(true);
-                  }}
-                  onOpenTechnicalEvaluation={(p) => {
-                    setSelectedQuotationForReview(null);
-                    setSelectedForTechnicalEval(p);
-                  }}
+                  isBuyer={Boolean(isBuyerSide || isBuyerOrAdmin)}
+                  onOpenCompare={
+                    isBuyerSide || isBuyerOrAdmin
+                      ? () => {
+                          setSelectedQuotationForReview(null);
+                          setSelectedCompareIds(
+                            submittedParticipations.map((p: any) =>
+                              String(p.id || p.sellerId || p.sellerUserId),
+                            ),
+                          );
+                          setIsComparisonModalOpen(true);
+                        }
+                      : undefined
+                  }
+                  onOpenTechnicalEvaluation={
+                    isBuyerSide || isBuyerOrAdmin
+                      ? (p) => {
+                          setSelectedQuotationForReview(null);
+                          setSelectedForTechnicalEval(p);
+                        }
+                      : undefined
+                  }
                 />
               )}
 
@@ -10479,22 +10692,16 @@ export function ProcurementDetailUnifiedView(
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {(props.onViewQuotationClick ||
-                            props.onSubmitClick) && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={
-                                props.onViewQuotationClick ||
-                                props.onSubmitClick
-                              }
-                              className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              <span>View Full Quotation</span>
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={handleOpenMyQuotationModal}
+                            className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>View Full Quotation</span>
+                          </Button>
                           <Button
                             type="button"
                             size="sm"
@@ -10692,6 +10899,7 @@ interface SellerQuotationReviewModalProps {
   isFinancialStageOpened?: boolean;
   isBidAwarded?: boolean;
   canAward?: boolean;
+  isBuyer?: boolean;
   onAwardVendor?: (participation: any) => void;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
@@ -10708,6 +10916,7 @@ export function SellerQuotationReviewModal({
   isFinancialStageOpened,
   isBidAwarded,
   canAward,
+  isBuyer,
   onAwardVendor,
   onOpenCompare,
   onOpenTechnicalEvaluation,
@@ -11529,7 +11738,7 @@ export function SellerQuotationReviewModal({
                       )}
                     </div>
                   </div>
-                  {onOpenTechnicalEvaluation && !isBidAwarded && (
+                  {isBuyer && onOpenTechnicalEvaluation && !isBidAwarded && (
                     <Button
                       type="button"
                       size="sm"
@@ -11855,55 +12064,57 @@ export function SellerQuotationReviewModal({
               Close
             </Button>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {onOpenCompare && (
+            {isBuyer && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {onOpenCompare && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onOpenCompare();
+                    }}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+                  >
+                    <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                    Compare Quotations
+                  </Button>
+                )}
+
+                {/* Evaluate Bid / Technical Packet button for both single and two-packet mode */}
+                {onOpenTechnicalEvaluation && !isBidAwarded && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      onOpenTechnicalEvaluation(participation);
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+                    {techStatus === "PENDING"
+                      ? "Evaluate Bid (Qualify / Disqualify)"
+                      : "Update Evaluation Decision"}
+                  </Button>
+                )}
+
+                {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     onClose();
-                    onOpenCompare();
+                    router.push(`/bids/${targetId}/results`);
                   }}
-                  className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+                  className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
                 >
-                  <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                  Compare Quotations
+                  <Trophy className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                  View Results &amp; Award
                 </Button>
-              )}
-
-              {/* Evaluate Bid / Technical Packet button for both single and two-packet mode */}
-              {onOpenTechnicalEvaluation && !isBidAwarded && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    onOpenTechnicalEvaluation(participation);
-                  }}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                  {techStatus === "PENDING"
-                    ? "Evaluate Bid (Qualify / Disqualify)"
-                    : "Update Evaluation Decision"}
-                </Button>
-              )}
-
-              {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onClose();
-                  router.push(`/bids/${targetId}/results`);
-                }}
-                className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
-              >
-                <Trophy className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
-                View Results &amp; Award
-              </Button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </FocusTrap>

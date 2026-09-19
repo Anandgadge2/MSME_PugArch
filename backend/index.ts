@@ -1993,6 +1993,40 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
       return res.status(404).json({ message: 'Tender not found' });
     }
 
+    if (tender && (!tender.participations || tender.participations.length === 0)) {
+      const tenderNumId = Number(tender.id);
+      const tenderStrId = String(tender.tenderId || '');
+      const linkedBid = await prisma.procurementBid.findFirst({
+        where: {
+          OR: [
+            ...(tenderStrId ? [{ bidNumber: tenderStrId }] : []),
+            ...(tenderNumId ? [{ id: tenderNumId }] : [])
+          ]
+        },
+        include: {
+          participations: {
+            include: {
+              seller: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  mobile: true,
+                  role: true,
+                  organization: true
+                }
+              },
+              documents: true
+            }
+          }
+        }
+      }).catch(() => null);
+
+      if (linkedBid?.participations && linkedBid.participations.length > 0) {
+        tender.participations = linkedBid.participations;
+      }
+    }
+
     res.json(maskSensitive(tender));
   } catch (err: any) {
     return handleSecureRouteError(res, err, 'Unable to load tender');

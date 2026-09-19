@@ -317,7 +317,7 @@ export const bidInclude: any = {
   buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, organizationId: true } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, representativeName: true } } } },
       documents: true,
       clarifications: { include: { files: true } },
       evaluations: true,
@@ -367,7 +367,7 @@ export const leanBidInclude = {
   documents: true,
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, organizationId: true, organization: { select: { organizationName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, representativeName: true } }, organization: { select: { organizationName: true } } } },
       documents: true
     }
   },
@@ -1156,7 +1156,7 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     } : undefined,
     sellerName: p.sellerName || p.seller?.name || p.seller?.organization?.organizationName,
     sellerEmail: first(p.seller?.email, p.sellerEmail, respData.sellerEmail, ackData.sellerEmail, descData.sellerEmail, p.seller?.organization?.email),
-    sellerMobile: first(p.seller?.mobile, p.sellerMobile, respData.sellerMobile, ackData.sellerMobile, descData.sellerMobile, p.seller?.organization?.mobile, p.seller?.organization?.phone),
+    sellerMobile: first(p.seller?.mobile, p.seller?.sellerProfile?.mobile, p.seller?.sellerProfile?.phone, p.sellerMobile, p.phone, p.mobile, respData.sellerMobile, respData.mobile, respData.phone, ackData.sellerMobile, ackData.mobile, ackData.phone, descData.sellerMobile, descData.mobile, descData.phone, p.seller?.organization?.mobile, p.seller?.organization?.phone),
     participationNumber: p.participationNumber,
     technicalStatus: p.technicalStatus,
     financialStatus: p.financialStatus,
@@ -1199,15 +1199,28 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     updatedAt: p.updatedAt,
     isWithdrawn: p.isWithdrawn,
     rejectionReason: p.rejectionReason,
-    documents: (
-      (Array.isArray(p.documents) && p.documents.length > 0)
-        ? p.documents
-        : (Array.isArray(respData.documents) && respData.documents.length > 0)
-          ? respData.documents
-          : (Array.isArray(ackData.documents) && ackData.documents.length > 0)
-            ? ackData.documents
-            : []
-    ).filter((doc: any) => {
+    documents: (() => {
+      const allDocs: any[] = [
+        ...(Array.isArray(p.documents) ? p.documents : []),
+        ...(Array.isArray(respData.documents) ? respData.documents : []),
+        ...(Array.isArray(ackData.documents) ? ackData.documents : []),
+        ...(Array.isArray(descData.documents) ? descData.documents : [])
+      ];
+      const attUrls = [p.attachmentUrl, respData.attachmentUrl, ackData.attachmentUrl, descData.attachmentUrl].filter(Boolean);
+      for (const u of attUrls) {
+        if (typeof u === 'string' && u.trim() && !allDocs.some(d => d.fileUrl === u || d.url === u)) {
+          allDocs.push({
+            id: `att-${p.id}`,
+            documentCategory: 'TECHNICAL_PROPOSAL',
+            documentName: 'Quotation Proposal Document',
+            fileName: u.split('/').pop() || 'Proposal_Document.pdf',
+            fileUrl: u,
+            fileAssetId: p.fileAssetId || null
+          });
+        }
+      }
+      return allDocs;
+    })().filter((doc: any) => {
       if (!canSeeFin && (doc.documentCategory === 'FINANCIAL_QUOTE' || String(doc.documentName || '').toLowerCase().includes('price breakup'))) {
         return false;
       }
@@ -2531,6 +2544,55 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
           rejectionReason: item.status === 'DISQUALIFIED' ? item.remarks : null
         }
       });
+
+      // Synchronize evaluation decision across any linked RequirementResponse, QuoteResponse, or Tender Bid
+      if (participation.sellerId) {
+        const sId = Number(participation.sellerId);
+        const packet = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+        const linkedReqId = Number(packet.sourceRequirementId || packet.requirementId || bid.sourceId || 0);
+
+        // Sync RequirementResponse
+        await tx.requirementResponse.updateMany({
+          where: {
+            OR: [
+              { id: participation.id },
+              ...(linkedReqId > 0 ? [{ requirementId: linkedReqId, sellerUserId: sId }] : []),
+              { sellerUserId: sId }
+            ]
+          },
+          data: {
+            status: technicalStatus === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED'
+          }
+        }).catch(() => {});
+
+        // Sync QuoteResponse
+        await tx.quoteResponse.updateMany({
+          where: {
+            OR: [
+              { id: participation.id },
+              { sellerId: sId }
+            ]
+          },
+          data: {
+            technicalStatus,
+            technicalRemarks: item.remarks || null
+          }
+        }).catch(() => {});
+
+        // Sync Tender Bid if applicable
+        const tenderNum = Number(String(bid.bidNumber || '').replace(/\D+/g, '')) || Number(bid.sourceId || 0);
+        if (tenderNum > 0) {
+          await tx.bid.updateMany({
+            where: {
+              tenderId: tenderNum,
+              sellerId: sId
+            },
+            data: {
+              status: technicalStatus === 'QUALIFIED' ? 'accepted' : 'rejected'
+            }
+          }).catch(() => {});
+        }
+      }
       rows.push(await tx.procurementBidEvaluation.create({
         data: {
           bidId: bid.id,
