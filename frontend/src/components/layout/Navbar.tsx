@@ -386,11 +386,17 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
+  // When collapsed is explicitly chosen by user, sidebar stays solidly collapsed without hover-expansion flicker
+  const effectivelyCollapsed = isCollapsed;
+
+  // Reset hover state immediately when route changes
+  useEffect(() => {
+    setIsHovered(false);
+  }, [pathname]);
+
   useEffect(() => {
     onHoverChange?.(isHovered);
   }, [isHovered, onHoverChange]);
-
-  const effectivelyCollapsed = isCollapsed && !isHovered;
 
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],

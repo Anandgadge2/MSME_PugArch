@@ -97,6 +97,30 @@ const nextManualStatusFor = (status: string) => {
 
 const readableStatus = (status: string) => status.replace(/_/g, ' ');
 
+export function isDeliveryOrderAccepted(delivery: DeliveryDto | any): boolean {
+    const status = String(delivery?.status || '');
+    if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return true;
+    if (delivery?.sellerAcceptedAt) return true;
+    const poStatusLower = String(delivery?.purchaseOrder?.status || '').toLowerCase();
+    const poStatusUpper = String(delivery?.purchaseOrder?.poStatus || '').toUpperCase();
+    return ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'].includes(poStatusLower) ||
+           ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'].includes(poStatusUpper);
+}
+
+export function isDeliveryAwaitingAcceptance(delivery: DeliveryDto | any): boolean {
+    const status = String(delivery?.status || '');
+    if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
+    return !isDeliveryOrderAccepted(delivery);
+}
+
+export function getEffectiveDeliveryStatus(delivery: DeliveryDto | any): string {
+    const status = String(delivery?.status || '');
+    if ((status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && isDeliveryOrderAccepted(delivery)) {
+        return 'SELLER_ACCEPTED';
+    }
+    return status;
+}
+
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
@@ -104,6 +128,8 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     const menuRef = useRef<HTMLDivElement>(null);
     const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
     const status = String(delivery.status);
+    const isAwaitingAcceptance = isDeliveryAwaitingAcceptance(delivery);
+    const effectiveStatus = getEffectiveDeliveryStatus(delivery);
 
     const updatePosition = useCallback(() => {
         if (!buttonRef.current) return;
@@ -221,7 +247,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         <span>View Details</span>
                     </button>
 
-                    {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
+                    {isAwaitingAcceptance && (
                         <>
                             <button
                                 type="button"
@@ -254,7 +280,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </>
                     )}
 
-                    {status === 'SELLER_ACCEPTED' && (
+                    {(effectiveStatus === 'SELLER_ACCEPTED' || status === 'SELLER_ACCEPTED') && (
                         <button
                             type="button"
                             role="menuitem"
@@ -524,7 +550,7 @@ export default function SellerDeliveryManagementPage() {
         return () => window.removeEventListener('popstate', handlePopState);
     }, [items, actionTarget]);
 
-    const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
+    const pendingCount = items.filter(isDeliveryAwaitingAcceptance).length;
     const inTransitCount = items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
 
@@ -534,7 +560,7 @@ export default function SellerDeliveryManagementPage() {
         if (statusFilter !== 'ALL') {
             const status = String(item.status);
             if (statusFilter === 'AWAITING_ACCEPTANCE') {
-                if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
+                if (!isDeliveryAwaitingAcceptance(item)) return false;
             } else if (statusFilter === 'IN_TRANSIT') {
                 if (!['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) return false;
             } else if (statusFilter === 'COMPLETED') {
@@ -545,26 +571,15 @@ export default function SellerDeliveryManagementPage() {
         }
 
         // Search query filter
-        if (searchQuery.trim()) {
+        if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase().trim();
-            const dlvId = `dlv-${item.id}`.toLowerCase();
-            const poNumber = (item.purchaseOrder?.poNumber || '').toLowerCase();
-            const buyerName = (item.purchaseOrder?.buyer?.name || '').toLowerCase();
-            const title = (item.purchaseOrder?.title || '').toLowerCase();
-            const trackingNum = (item.trackingNumber || '').toLowerCase();
-            const carrier = (item.carrierName || '').toLowerCase();
-            const partner = (item.logisticsPartnerName || '').toLowerCase();
-            const amount = String(item.purchaseOrder?.amount || '').toLowerCase();
-
-            const match = dlvId.includes(q) ||
-                          poNumber.includes(q) ||
-                          buyerName.includes(q) ||
-                          title.includes(q) ||
-                          trackingNum.includes(q) ||
-                          carrier.includes(q) ||
-                          partner.includes(q) ||
-                          amount.includes(q);
-            if (!match) return false;
+            const idMatch = String(item.id).toLowerCase().includes(q) || `dlv-${item.id}`.toLowerCase().includes(q);
+            const poMatch = String(item.purchaseOrder?.poNumber || '').toLowerCase().includes(q);
+            const titleMatch = String(item.purchaseOrder?.title || '').toLowerCase().includes(q);
+            const buyerMatch = String(item.purchaseOrder?.buyer?.name || '').toLowerCase().includes(q);
+            const carrierMatch = String(item.carrierName || '').toLowerCase().includes(q);
+            const trackingMatch = String(item.trackingNumber || '').toLowerCase().includes(q);
+            if (!idMatch && !poMatch && !titleMatch && !buyerMatch && !carrierMatch && !trackingMatch) return false;
         }
 
         return true;
@@ -580,37 +595,27 @@ export default function SellerDeliveryManagementPage() {
         setPage(1);
     };
 
-    // Apply sorting
     const sortedItems = [...filteredItems].sort((a, b) => {
-        let valA: any = '';
-        let valB: any = '';
-        if (sortKey === 'id') {
-            valA = a.id;
-            valB = b.id;
-        } else if (sortKey === 'poNumber') {
+        let valA: any = a[sortKey as keyof DeliveryDto];
+        let valB: any = b[sortKey as keyof DeliveryDto];
+
+        if (sortKey === 'poNumber') {
             valA = a.purchaseOrder?.poNumber || '';
             valB = b.purchaseOrder?.poNumber || '';
         } else if (sortKey === 'buyer') {
             valA = a.purchaseOrder?.buyer?.name || '';
             valB = b.purchaseOrder?.buyer?.name || '';
         } else if (sortKey === 'amount') {
-            valA = Number(a.purchaseOrder?.amount || 0);
-            valB = Number(b.purchaseOrder?.amount || 0);
-        } else if (sortKey === 'status') {
-            valA = String(a.status || '');
-            valB = String(b.status || '');
-        } else if (sortKey === 'carrier') {
-            valA = a.carrierName || '';
-            valB = b.carrierName || '';
+            valA = a.purchaseOrder?.amount || 0;
+            valB = b.purchaseOrder?.amount || 0;
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         } else if (sortKey === 'eta') {
             valA = a.expectedDelivery ? new Date(a.expectedDelivery).getTime() : 0;
             valB = b.expectedDelivery ? new Date(b.expectedDelivery).getTime() : 0;
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         } else if (sortKey === 'createdAt') {
             valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        }
-
-        if (typeof valA === 'number' && typeof valB === 'number') {
             return sortDirection === 'asc' ? valA - valB : valB - valA;
         }
         const strA = String(valA || '').toLowerCase();
@@ -623,7 +628,7 @@ export default function SellerDeliveryManagementPage() {
     
     const kpis = {
         total: items.length,
-        awaitingAcceptance: items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length,
+        awaitingAcceptance: items.filter(isDeliveryAwaitingAcceptance).length,
         inTransit: items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length,
         completed: items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length
     };
@@ -684,7 +689,7 @@ export default function SellerDeliveryManagementPage() {
             width: 'w-[14%]',
             sortable: true,
             cell: (delivery) => {
-                const status = String(delivery.status);
+                const effectiveStatus = getEffectiveDeliveryStatus(delivery);
                 const stage = (s: string) => {
                     if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
                     if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
@@ -695,11 +700,11 @@ export default function SellerDeliveryManagementPage() {
                     if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(s)) return { label: 'Delivered', icon: CheckCircle2 };
                     return { label: s.replace(/_/g, ' '), icon: AlertCircle };
                 };
-                const { label: stageLabel } = stage(status);
+                const { label: stageLabel } = stage(effectiveStatus);
                 return (
                     <div className="flex flex-col gap-0.5 items-start">
-                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                            {status.replace(/_/g, ' ')}
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[effectiveStatus] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {effectiveStatus.replace(/_/g, ' ')}
                         </span>
                         <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
                     </div>
@@ -960,7 +965,7 @@ function SummaryTile({ label, value, icon: Icon, onClick, active, color = 'slate
 }
 
 function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
-    const status = String(delivery.status);
+    const effectiveStatus = getEffectiveDeliveryStatus(delivery);
 
     const stage = (s: string) => {
         if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
@@ -973,7 +978,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
         return { label: s.replace(/_/g, ' '), icon: AlertCircle };
     };
 
-    const { label, icon: Icon } = stage(status);
+    const { label, icon: Icon } = stage(effectiveStatus);
 
     return (
         <div className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
@@ -989,8 +994,8 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                         <p className="mt-1.5 text-sm font-black text-slate-900 leading-snug">{delivery.purchaseOrder?.title || 'Delivery'}</p>
                     </div>
                     <div className="text-right shrink-0">
-                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                            {status.replace(/_/g, ' ')}
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[effectiveStatus] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {effectiveStatus.replace(/_/g, ' ')}
                         </span>
                         <p className="mt-1 text-[9px] font-black uppercase text-slate-400">{label}</p>
                     </div>
@@ -2513,7 +2518,7 @@ function getStatusExplanation(status: string): string {
         case 'DISPUTED':
             return 'Delivery milestone is under dispute review.';
         default:
-            return `Order is currently in ${readableStatus(status)} stage.`;
+            return `Order is currently in ${(status || '').replace(/_/g, ' ')} stage.`;
     }
 }
 

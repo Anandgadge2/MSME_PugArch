@@ -204,11 +204,8 @@ export default function FraudAlertsPage() {
             cell: (alert) => (
                 <button
                     type="button"
-                    onClick={e => {
-                        e.stopPropagation();
-                        setOpenId(alert.id);
-                    }}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                    onClick={() => setOpenId(alert.id)}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f] cursor-pointer"
                 >
                     Review
                 </button>
@@ -328,7 +325,6 @@ export default function FraudAlertsPage() {
                 sortKey={sortKey}
                 sortDirection={sortDirection}
                 onSort={(key) => toggleSort(key as FraudSortKey)}
-                onRowClick={(alert) => setOpenId(alert.id)}
                 page={page}
                 pageSize={pageSize}
                 total={total}

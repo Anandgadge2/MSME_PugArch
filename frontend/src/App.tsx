@@ -519,8 +519,15 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 }
 
 let globalInitialLoadComplete = false;
+let globalSidebarCollapsed: boolean | null = null;
 
-export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
+export default function App({
+  serverInitialLoadComplete = false,
+  initialSidebarCollapsed = false
+}: {
+  serverInitialLoadComplete?: boolean;
+  initialSidebarCollapsed?: boolean;
+}) {
   const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
@@ -538,9 +545,31 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (globalSidebarCollapsed !== null) {
+      return globalSidebarCollapsed;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('isSidebarCollapsed');
+        if (saved !== null) {
+          const parsed = JSON.parse(saved);
+          globalSidebarCollapsed = Boolean(parsed);
+          return Boolean(parsed);
+        }
+        const cookieMatch = document.cookie.match(/(?:^|; )isSidebarCollapsed=([^;]*)/);
+        if (cookieMatch) {
+          const val = cookieMatch[1] === 'true';
+          globalSidebarCollapsed = val;
+          return val;
+        }
+      } catch {}
+    }
+    globalSidebarCollapsed = initialSidebarCollapsed;
+    return initialSidebarCollapsed;
+  });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
+  const isEffectivelyCollapsed = isSidebarCollapsed;
 
   const isFetchingQueries = useIsFetching();
   const [safetyTimeoutPassed, setSafetyTimeoutPassed] = useState(false);
@@ -578,14 +607,22 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');
     if (saved !== null) {
-      setIsSidebarCollapsed(JSON.parse(saved));
+      try {
+        const parsed = JSON.parse(saved);
+        globalSidebarCollapsed = Boolean(parsed);
+        setIsSidebarCollapsed(Boolean(parsed));
+      } catch {}
     }
   }, []);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
       const newValue = !prev;
-      localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+      globalSidebarCollapsed = newValue;
+      try {
+        localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+        document.cookie = `isSidebarCollapsed=${newValue}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
       return newValue;
     });
   };

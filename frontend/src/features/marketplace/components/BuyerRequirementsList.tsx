@@ -551,10 +551,7 @@ export function BuyerRequirementsList({
             cell: (req) => (
                 <button 
                     type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetails(req);
-                    }} 
+                    onClick={() => handleViewDetails(req)} 
                     className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] hover:shadow-md active:scale-95 transition-all duration-200 shadow-sm cursor-pointer"
                 >
                     View Details
@@ -804,7 +801,6 @@ export function BuyerRequirementsList({
                         sortKey={sort}
                         sortDirection={sortDir}
                         onSort={handleSortHeader}
-                        onRowClick={handleViewDetails}
                         minWidth="min-w-[1000px]"
                         isLoading={isLoading}
                     />

@@ -131,6 +131,26 @@ export const acceptPurchaseOrderAndCreateDelivery = async (purchaseOrderId: numb
       create: { purchaseOrderId: po.id, status: 'created' }
     });
 
+    const existingDelivery = await tx.deliveryTracking.findFirst({ where: { purchaseOrderId: po.id } });
+    if (!existingDelivery) {
+      await tx.deliveryTracking.create({
+        data: {
+          purchaseOrderId: po.id,
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date(),
+          expectedDelivery: po.expectedDelivery || null
+        }
+      });
+    } else if (existingDelivery.status === 'CREATED' || (existingDelivery.status as any) === 'PENDING_ACCEPTANCE') {
+      await tx.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date()
+        }
+      });
+    }
+
     return { purchaseOrder: updatedPo, deliveryWorkflow };
   });
 

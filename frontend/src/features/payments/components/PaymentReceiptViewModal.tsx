@@ -458,8 +458,8 @@ export function PaymentReceiptViewModal({
               </div>
             )}
 
-            {/* Admin / Seller Action Buttons */}
-            {isAdminOrSeller && status !== 'VERIFIED' && !showRejectBox && (
+            {/* Admin / Seller Action Buttons: Render ONLY when pending review */}
+            {isAdminOrSeller && !['VERIFIED', 'REJECTED'].includes(status) && !showRejectBox && (
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <Button
                   type="button"
@@ -482,6 +482,32 @@ export function PaymentReceiptViewModal({
                   )}
                   Verify & Settle Payment
                 </Button>
+              </div>
+            )}
+
+            {/* Read-only status banner when already verified or settled */}
+            {status === 'VERIFIED' && (
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-emerald-100 bg-emerald-50/60 p-3 rounded-xl">
+                <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <span>This payment proof has been verified and settled in full.</span>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-emerald-600 text-white shadow-2xs">
+                  Settled
+                </span>
+              </div>
+            )}
+
+            {/* Read-only status banner when already rejected */}
+            {status === 'REJECTED' && (
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-rose-100 bg-rose-50/60 p-3 rounded-xl">
+                <div className="flex items-center gap-2 text-rose-800 text-xs font-bold">
+                  <XCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                  <span>This payment proof was rejected. {proof.rejectionReason ? `Reason: ${proof.rejectionReason}` : ''}</span>
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md bg-rose-600 text-white shadow-2xs">
+                  Rejected
+                </span>
               </div>
             )}
           </div>

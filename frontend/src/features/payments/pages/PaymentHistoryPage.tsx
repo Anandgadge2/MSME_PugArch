@@ -935,10 +935,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           srNoHeader="Sr. No"
           srNoWidth="w-16"
           minWidth="min-w-[1080px]"
-          onRowClick={(payment) => {
-            setDetailTab('receipt');
-            setSelected(payment);
-          }}
         />
       )}
 

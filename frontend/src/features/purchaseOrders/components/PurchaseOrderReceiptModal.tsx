@@ -1622,24 +1622,49 @@ export function PurchaseOrderReceiptModal({
               </Button>
             )}
 
-            {isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip && (
-              <Button
-                onClick={() => onUploadPaymentSlip(order)}
-                className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-              >
-                <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
-              </Button>
-            )}
+            {(() => {
+              const activeInvoice = (order as any)?.invoices?.find(
+                (inv: any) =>
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+              ) || (order as any)?.invoices?.[0];
 
-            {onViewPaymentSlip && viewingStatusLower !== 'cancelled' && (
-              <Button
-                variant="outline"
-                onClick={() => onViewPaymentSlip(order)}
-                className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap"
-              >
-                <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Payment Slip
-              </Button>
-            )}
+              const hasSlip = Boolean(
+                activeInvoice?.paymentSlipFileId ||
+                activeInvoice?.paymentSlipFile ||
+                (activeInvoice as any)?.offlineProof ||
+                (order as any)?.paymentSlipFileId ||
+                (order as any)?.paymentSlip ||
+                (order as any)?.offlineProof ||
+                (order as any)?.paymentProof ||
+                viewingStatusLower.includes('paid')
+              );
+
+              if (hasSlip && onViewPaymentSlip && viewingStatusLower !== 'cancelled') {
+                return (
+                  <Button
+                    variant="outline"
+                    onClick={() => onViewPaymentSlip(order)}
+                    className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Slip
+                  </Button>
+                );
+              }
+
+              if (!hasSlip && isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip) {
+                return (
+                  <Button
+                    onClick={() => onUploadPaymentSlip(order)}
+                    className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
+                  </Button>
+                );
+              }
+
+              return null;
+            })()}
 
             {isBuyer && viewingStatusLower === 'delivered' && onRepeatOrder && (
               <Button

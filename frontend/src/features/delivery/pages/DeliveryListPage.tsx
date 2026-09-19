@@ -745,11 +745,11 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
       align: 'right',
       cellClassName: 'text-right',
       cell: (record) => (
-        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end">
           <Button
             size="sm"
             onClick={() => onSelect(record.id)}
-            className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs"
+            className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
           >
             <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
           </Button>
@@ -772,7 +772,6 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       paginationLabel="deliveries"
-      onRowClick={(record) => onSelect(record.id)}
       isLoading={isFetching && records.length === 0}
       srNoWidth="w-[4%]"
       minWidth="min-w-[1000px]"

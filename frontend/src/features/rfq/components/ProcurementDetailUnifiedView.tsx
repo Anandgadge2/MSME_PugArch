@@ -7432,6 +7432,57 @@ export function ProcurementDetailUnifiedView(
               !isAwardedToMe &&
               Boolean(activeAward && !effectiveActiveOrder)
             }
+            onViewEvaluation={() => {
+              setActiveTab(isBuyerSide ? "evaluation" : "clarifications");
+              const targetEl =
+                document.getElementById("tabs-navigation-section") ||
+                document.getElementById("tabpanel-clarifications") ||
+                document.getElementById("tabpanel-evaluation");
+              if (targetEl) {
+                targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }}
+            onViewPO={() => {
+              if (effectiveActiveOrder) {
+                setIsReceiptModalOpen(true);
+              } else if (isBuyerSide) {
+                router.push("/buyer/orders");
+              } else {
+                router.push("/seller/orders");
+              }
+            }}
+            onNavigateDelivery={() => {
+              if (isBuyerSide) {
+                router.push("/buyer/grn");
+              } else {
+                router.push("/seller/delivery-management");
+              }
+            }}
+            onNavigateInvoice={() => {
+              if (isBuyerSide) {
+                router.push("/buyer/invoices");
+              } else {
+                const amountVal =
+                  effectiveActiveOrder?.amount ||
+                  effectiveActiveOrder?.totalValue ||
+                  activeAward?.finalAmount ||
+                  0;
+                if (effectiveActiveOrder?.id) {
+                  router.push(
+                    `/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`,
+                  );
+                } else {
+                  router.push("/seller/invoices");
+                }
+              }
+            }}
+            onNavigateSettlement={() => {
+              if (isBuyerSide) {
+                router.push("/buyer/payments");
+              } else {
+                router.push("/seller/invoices");
+              }
+            }}
           />
 
           {!currentUser && (
@@ -8775,9 +8826,10 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab Navigation Bar (WAI-ARIA Compliant) */}
           <div
+            id="tabs-navigation-section"
             role="tablist"
             aria-label="Procurement details navigation"
-            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs scroll-mt-6"
           >
             {tabs.map((tab, idx) => {
               const Icon = tab.icon;

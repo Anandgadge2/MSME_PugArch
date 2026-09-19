@@ -345,70 +345,108 @@ const OrderActionsMenu = ({
         <span>Download PO</span>
       </button>
 
-      {isBuyer && !isCancelled && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onRecordPayment?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-          >
-            <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Record Payment & Slip</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onUploadPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-          >
-            <Upload className="h-3.5 w-3.5 text-indigo-600" />
-            <span>Upload Slip</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onViewPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-          >
-            <Receipt className="h-3.5 w-3.5 text-slate-500" />
-            <span>View Slip</span>
-          </button>
-        </>
-      )}
+      {(() => {
+        const isPaid = String(order.status || '').toLowerCase().includes('paid');
+        const activeInvoice = (order as any).invoices?.find(
+          (inv: any) =>
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+        ) || (order as any).invoices?.[0];
 
-      {isSeller && !isCancelled && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onConfirmSettlement?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Confirm Settlement</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onViewPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-          >
-            <Receipt className="h-3.5 w-3.5 text-indigo-600" />
-            <span>Payment Slip</span>
-          </button>
-        </>
-      )}
+        const hasSlip = Boolean(
+          activeInvoice?.paymentSlipFileId ||
+          activeInvoice?.paymentSlipFile ||
+          (activeInvoice as any)?.offlineProof ||
+          (order as any).paymentSlipFileId ||
+          (order as any).paymentSlip ||
+          (order as any).offlineProof ||
+          (order as any).paymentProof
+        );
+
+        const hasPaymentRecorded = Boolean(
+          isPaid ||
+          activeInvoice?.paymentReference ||
+          String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
+          String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+          (order as any).payments?.length > 0
+        );
+
+        const isSettled = Boolean(
+          activeInvoice?.settledAt ||
+          String(activeInvoice?.status || '').toLowerCase() === 'paid' ||
+          (isPaid && !hasSlip)
+        );
+
+        if (isBuyer && !isCancelled) {
+          return (
+            <>
+              {(hasSlip || hasPaymentRecorded || isPaid) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onViewPaymentSlip?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                  title="View uploaded payment slip"
+                >
+                  <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>View Payment Slip</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRecordPayment?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                  title="Record payment details and attach slip"
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Record Payment & Slip</span>
+                </button>
+              )}
+            </>
+          );
+        }
+
+        if (isSeller && !isCancelled) {
+          return (
+            <>
+              {(hasPaymentRecorded || hasSlip) && !isSettled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onConfirmSettlement?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Confirm Settlement</span>
+                </button>
+              )}
+
+              {(hasPaymentRecorded || hasSlip) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onViewPaymentSlip?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+                >
+                  <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Payment Slip</span>
+                </button>
+              )}
+            </>
+          );
+        }
+
+        return null;
+      })()}
 
       {isBuyer && !isCancelled && !isDelivered && (
         <button

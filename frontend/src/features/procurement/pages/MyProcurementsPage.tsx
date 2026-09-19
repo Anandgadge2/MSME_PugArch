@@ -878,7 +878,7 @@ export default function MyProcurementsPage() {
       align: 'right',
       width: 'w-[19%]',
       cell: (p: any) => (
-        <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
           {isProcurementCancellable(p) && (
             <Button
               type="button"
@@ -1113,8 +1113,7 @@ export default function MyProcurementsPage() {
               onPageSizeChange={setPageSize}
               pageSizeOptions={[10, 20, 50]}
               paginationLabel="procurements"
-              onRowClick={(p) => openDetail(p)}
-              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle cursor-pointer"
+              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle"
             />
           )}
 

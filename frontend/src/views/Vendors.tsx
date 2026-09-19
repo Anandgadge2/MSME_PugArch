@@ -751,7 +751,6 @@ const Vendors = () => {
               srNoHeader="Sr. No."
               srNoWidth="w-16"
               minWidth="min-w-[900px]"
-              onRowClick={(vendor) => handleViewProfile(vendor)}
             />
           )}
           {viewMode === 'grid' && filteredVendors.length > 0 && (

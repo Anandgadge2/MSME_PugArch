@@ -59,15 +59,34 @@ export const fulfillmentWorkflow = {
       where: { id: purchaseOrderId },
       data: { status: 'accepted', poStatus: poStatusEnumFor('accepted') as any, acceptedAt: new Date(), version: { increment: 1 } }
     });
-    // Ensure a DeliveryTracking row exists so the seller can drive dispatch
-    // from the new delivery module immediately after acknowledging.
+    // Ensure a DeliveryTracking row exists and is marked as SELLER_ACCEPTED so the seller can drive dispatch
+    // from the delivery module immediately after acknowledging without needing to re-accept on the delivery page.
     const existingDelivery = await db.deliveryTracking.findFirst({ where: { purchaseOrderId } });
     if (!existingDelivery) {
       await db.deliveryTracking.create({
         data: {
           purchaseOrderId,
-          status: 'CREATED',
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date(),
           expectedDelivery: po.expectedDelivery || null
+        }
+      }).catch(() => undefined);
+    } else if (existingDelivery.status === 'CREATED' || existingDelivery.status === 'PENDING_ACCEPTANCE') {
+      await db.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date()
+        }
+      }).catch(() => undefined);
+      await db.deliveryStatusLog.create({
+        data: {
+          deliveryTrackingId: existingDelivery.id,
+          previousStatus: existingDelivery.status,
+          newStatus: 'SELLER_ACCEPTED',
+          changedById: actor.id,
+          actorRole: actor.role,
+          remarks: 'PO accepted by seller; delivery moved to SELLER_ACCEPTED'
         }
       }).catch(() => undefined);
     }
@@ -127,6 +146,29 @@ export const fulfillmentWorkflow = {
         version: { increment: 1 }
       }
     });
+
+    const existingDelivery = await db.deliveryTracking.findFirst({ where: { purchaseOrderId } });
+    if (existingDelivery && (existingDelivery.status === 'CREATED' || existingDelivery.status === 'PENDING_ACCEPTANCE')) {
+      await db.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_REJECTED',
+          sellerRejectedAt: new Date(),
+          sellerRejectReason: reason || undefined
+        }
+      }).catch(() => undefined);
+      await db.deliveryStatusLog.create({
+        data: {
+          deliveryTrackingId: existingDelivery.id,
+          previousStatus: existingDelivery.status,
+          newStatus: 'SELLER_REJECTED',
+          changedById: actor.id,
+          actorRole: actor.role,
+          remarks: reason || 'Purchase order rejected by seller'
+        }
+      }).catch(() => undefined);
+    }
+
     await auditWorkflow(actor, 'workflow.po.rejected', 'purchaseOrder', purchaseOrderId, { reason });
     return updated;
   },

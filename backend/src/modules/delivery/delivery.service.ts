@@ -481,15 +481,20 @@ export const deliveryService = {
         status: { notIn: ['cancelled', 'completed'] },
         deliveryTrackings: { none: {} }
       },
-      select: { id: true, expectedDelivery: true }
+      select: { id: true, expectedDelivery: true, status: true, poStatus: true }
     });
     if (orphans.length === 0) return { created: 0 };
     await db.deliveryTracking.createMany({
-      data: orphans.map((po: any) => ({
-        purchaseOrderId: po.id,
-        status: 'CREATED',
-        expectedDelivery: po.expectedDelivery || null
-      })),
+      data: orphans.map((po: any) => {
+        const isAccepted = ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'].includes(String(po.status || '').toLowerCase()) ||
+          ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'].includes(String(po.poStatus || ''));
+        return {
+          purchaseOrderId: po.id,
+          status: isAccepted ? 'SELLER_ACCEPTED' : 'CREATED',
+          sellerAcceptedAt: isAccepted ? new Date() : null,
+          expectedDelivery: po.expectedDelivery || null
+        };
+      }),
       skipDuplicates: true
     });
     void safeAudit(actor, 'delivery.backfill', 'deliveryTracking', undefined, { count: orphans.length });
@@ -517,15 +522,20 @@ export const deliveryService = {
             status: { notIn: ['cancelled', 'completed'] },
             deliveryTrackings: { none: {} }
           },
-          select: { id: true, expectedDelivery: true }
+          select: { id: true, expectedDelivery: true, status: true, poStatus: true }
         });
         if (ownedPOs.length > 0) {
           await db.deliveryTracking.createMany({
-            data: ownedPOs.map((po: any) => ({
-              purchaseOrderId: po.id,
-              status: 'CREATED',
-              expectedDelivery: po.expectedDelivery || null
-            })),
+            data: ownedPOs.map((po: any) => {
+              const isAccepted = ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'].includes(String(po.status || '').toLowerCase()) ||
+                ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'].includes(String(po.poStatus || ''));
+              return {
+                purchaseOrderId: po.id,
+                status: isAccepted ? 'SELLER_ACCEPTED' : 'CREATED',
+                sellerAcceptedAt: isAccepted ? new Date() : null,
+                expectedDelivery: po.expectedDelivery || null
+              };
+            }),
             skipDuplicates: true
           }).catch(() => undefined);
         }
@@ -544,20 +554,42 @@ export const deliveryService = {
               status: { notIn: ['cancelled', 'completed'] },
               deliveryTrackings: { none: {} }
             },
-            select: { id: true, expectedDelivery: true },
+            select: { id: true, expectedDelivery: true, status: true, poStatus: true },
             take: 500
           });
           await db.deliveryTracking.createMany({
-            data: orphans.map((po: any) => ({
-              purchaseOrderId: po.id,
-              status: 'CREATED',
-              expectedDelivery: po.expectedDelivery || null
-            })),
+            data: orphans.map((po: any) => {
+              const isAccepted = ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'].includes(String(po.status || '').toLowerCase()) ||
+                ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'].includes(String(po.poStatus || ''));
+              return {
+                purchaseOrderId: po.id,
+                status: isAccepted ? 'SELLER_ACCEPTED' : 'CREATED',
+                sellerAcceptedAt: isAccepted ? new Date() : null,
+                expectedDelivery: po.expectedDelivery || null
+              };
+            }),
             skipDuplicates: true
           }).catch(() => undefined);
         }
       }
     }
+
+    // Ensure existing deliveries whose purchase order is already accepted are synchronized to SELLER_ACCEPTED
+    await db.deliveryTracking.updateMany({
+      where: {
+        status: { in: ['CREATED', 'PENDING_ACCEPTANCE'] },
+        purchaseOrder: {
+          OR: [
+            { status: { in: ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'] } },
+            { poStatus: { in: ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'] } }
+          ]
+        }
+      },
+      data: {
+        status: 'SELLER_ACCEPTED',
+        sellerAcceptedAt: new Date()
+      }
+    }).catch(() => undefined);
 
     const where: any = {};
     if (!isAdmin(actor)) {

@@ -191,6 +191,14 @@ function InvoiceRowActionCell({
   const state = statusOf(invoice);
   const isSubmitted = state === 'submitted';
   const isPayable = state === 'approved' || state === 'payment_initiated';
+  const hasSlip = Boolean(
+    (invoice as any).paymentSlipFileId ||
+    (invoice as any).paymentSlipFile ||
+    (invoice as any).paymentReference ||
+    (invoice as any).offlineProof ||
+    state === 'paid' ||
+    state === 'payment_initiated'
+  );
 
   return (
     <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
@@ -232,7 +240,7 @@ function InvoiceRowActionCell({
           }}
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
           onKeyDown={handleMenuKeyDown}
-          className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
           role="menu"
           aria-label={`Actions for invoice ${invoice.invoiceNumber || invoice.id}`}
         >
@@ -266,7 +274,7 @@ function InvoiceRowActionCell({
             <span>Track</span>
           </button>
 
-          {(state === 'paid' || state === 'payment_initiated') && (
+          {hasSlip && (
             <button
               type="button"
               role="menuitem"
@@ -279,7 +287,7 @@ function InvoiceRowActionCell({
               className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
             >
               <FileText className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-              <span>Receipt</span>
+              <span>{state === 'paid' ? 'Receipt (Paid)' : 'Payment Slip (Uploaded)'}</span>
             </button>
           )}
 
@@ -303,35 +311,39 @@ function InvoiceRowActionCell({
 
           {role === 'buyer' && isPayable && (
             <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onClose();
-                  onUploadSlip();
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left cursor-pointer"
-              >
-                <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-                <span>Upload Slip</span>
-              </button>
+              {!hasSlip && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose();
+                    onUploadSlip();
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+                  <span>Upload Slip</span>
+                </button>
+              )}
 
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onClose();
-                  onPayNow();
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left cursor-pointer"
-              >
-                <CreditCard className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
-                <span>Pay Now</span>
-              </button>
+              {state !== 'payment_initiated' && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose();
+                    onPayNow();
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left cursor-pointer"
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                  <span>Pay Now</span>
+                </button>
+              )}
             </>
           )}
         </div>,
