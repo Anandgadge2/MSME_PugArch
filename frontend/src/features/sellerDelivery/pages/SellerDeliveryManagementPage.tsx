@@ -498,7 +498,7 @@ export default function SellerDeliveryManagementPage() {
     const [searchQuery, setSearchQuery] = useState(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            return params.get('search') || params.get('q') || params.get('po') || '';
+            return params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || params.get('poId') || '';
         }
         return '';
     });
@@ -506,7 +506,7 @@ export default function SellerDeliveryManagementPage() {
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            const q = params.get('search') || params.get('q') || params.get('po') || '';
+            const q = params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || params.get('poId') || '';
             if (q) setSearchQuery(q);
         }
     }, []);
@@ -520,10 +520,31 @@ export default function SellerDeliveryManagementPage() {
         if (typeof window !== 'undefined' && items.length > 0 && !actionTarget) {
             const params = new URLSearchParams(window.location.search);
             const dispatchId = params.get('dispatch') || params.get('deliveryId');
+            const poId = params.get('poId');
+            const poSearch = params.get('poNumber') || params.get('search') || params.get('q');
             if (dispatchId) {
                 const found = items.find(d => String(d.id) === dispatchId);
                 if (found) {
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
+                }
+            }
+            if (poId) {
+                const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
+                if (found) {
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
+                }
+            }
+            if (poSearch) {
+                const cleanSearch = poSearch.replace(/[\s-]/g, '').toLowerCase();
+                const found = items.find(d => {
+                    const cleanPo = String(d.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+                    return cleanPo && (cleanPo === cleanSearch || cleanPo.includes(cleanSearch) || cleanSearch.includes(cleanPo));
+                });
+                if (found) {
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
                 }
             }
         }
@@ -534,14 +555,24 @@ export default function SellerDeliveryManagementPage() {
             if (typeof window !== 'undefined') {
                 const params = new URLSearchParams(window.location.search);
                 const dispatchId = params.get('dispatch') || params.get('deliveryId');
-                if (dispatchId && items.length > 0) {
-                    const found = items.find(d => String(d.id) === dispatchId);
-                    if (found) {
-                        setActionTarget({ kind: 'dispatch-details', delivery: found });
-                        return;
+                const poId = params.get('poId');
+                if (items.length > 0) {
+                    if (dispatchId) {
+                        const found = items.find(d => String(d.id) === dispatchId);
+                        if (found) {
+                            setActionTarget({ kind: 'dispatch-details', delivery: found });
+                            return;
+                        }
+                    }
+                    if (poId) {
+                        const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
+                        if (found) {
+                            setActionTarget({ kind: 'dispatch-details', delivery: found });
+                            return;
+                        }
                     }
                 }
-                if (!dispatchId && actionTarget) {
+                if (!dispatchId && !poId && actionTarget) {
                     setActionTarget(null);
                 }
             }
@@ -573,13 +604,17 @@ export default function SellerDeliveryManagementPage() {
         // Search query filter
         if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase().trim();
+            const cleanQ = q.replace(/[\s-]/g, '');
             const idMatch = String(item.id).toLowerCase().includes(q) || `dlv-${item.id}`.toLowerCase().includes(q);
-            const poMatch = String(item.purchaseOrder?.poNumber || '').toLowerCase().includes(q);
+            const poIdMatch = String(item.purchaseOrderId || '') === q || String(item.purchaseOrder?.id || '') === q;
+            const itemPoClean = String(item.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+            const poMatch = String(item.purchaseOrder?.poNumber || '').toLowerCase().includes(q) ||
+                            (cleanQ.length >= 3 && itemPoClean.includes(cleanQ));
             const titleMatch = String(item.purchaseOrder?.title || '').toLowerCase().includes(q);
             const buyerMatch = String(item.purchaseOrder?.buyer?.name || '').toLowerCase().includes(q);
             const carrierMatch = String(item.carrierName || '').toLowerCase().includes(q);
             const trackingMatch = String(item.trackingNumber || '').toLowerCase().includes(q);
-            if (!idMatch && !poMatch && !titleMatch && !buyerMatch && !carrierMatch && !trackingMatch) return false;
+            if (!idMatch && !poIdMatch && !poMatch && !titleMatch && !buyerMatch && !carrierMatch && !trackingMatch) return false;
         }
 
         return true;

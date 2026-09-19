@@ -103,13 +103,13 @@ export default function BidComparisonPage() {
       return res.json();
     },
     onSuccess: () => {
-      toast.success('Bid awarded successfully and Purchase Order generated!');
+      toast.success('Contract award offer issued successfully! Awaiting seller acceptance before Purchase Order can be generated.');
       setAwardModal(prev => ({ ...prev, show: false }));
       queryClient.invalidateQueries({ queryKey: ['procurement-bid', bidId] });
       router.push(`/bids/${bidId}`);
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Failed to award bid');
+      toast.error(err.message || 'Failed to issue award offer');
     }
   });
 
@@ -494,16 +494,50 @@ export default function BidComparisonPage() {
                             <p className="text-[11px] font-bold text-slate-500 mt-0.5">👤 {contactPerson}</p>
                           </div>
 
-                          {/* Accept Quotation Action Button */}
+                          {/* Award Offer Action Button */}
                           <div>
-                            <button
-                              onClick={() => handleOpenAwardModal(p)}
-                              className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow-xs transition hover:opacity-90 ${
-                                isL1 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'
-                              }`}
-                            >
-                              Accept Quotation
-                            </button>
+                            {(() => {
+                              const existingAward = (bid?.awards || []).find((a: any) => a.participationId === p.id || a.sellerId === p.sellerId);
+                              const isOffered = p.finalStatus === 'AWARD_OFFERED' || existingAward?.awardStatus === 'OFFERED';
+                              const isAccepted = p.finalStatus === 'AWARD_ACCEPTED' || existingAward?.awardStatus === 'ACCEPTED';
+                              const isPoIssued = p.finalStatus === 'PO_ISSUED' || p.finalStatus === 'ORDERED';
+
+                              if (isPoIssued) {
+                                return (
+                                  <span className="inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    PO Issued
+                                  </span>
+                                );
+                              }
+
+                              if (isAccepted) {
+                                return (
+                                  <span className="inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                    Award Accepted
+                                  </span>
+                                );
+                              }
+
+                              if (isOffered) {
+                                return (
+                                  <span className="inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    Award Offered (Pending Seller)
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  onClick={() => handleOpenAwardModal(p)}
+                                  className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow-xs transition hover:opacity-90 cursor-pointer ${
+                                    isL1 ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                                  }`}
+                                  title="Issue contract award offer to this supplier"
+                                >
+                                  <Award className="h-3.5 w-3.5" /> Issue Award Offer
+                                </button>
+                              );
+                            })()}
                           </div>
                         </div>
                       </th>
@@ -821,13 +855,13 @@ export default function BidComparisonPage() {
 
             <div>
               <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-xs">
-                PO Generation Workflow
+                Contract Award Offer Workflow
               </span>
               <h3 className="text-base font-black text-slate-900 mt-1 flex items-center gap-1.5">
-                <Award className="h-5 w-5 text-emerald-600" /> Confirm Award & Generate PO
+                <Award className="h-5 w-5 text-emerald-600" /> Confirm & Issue Award Offer
               </h3>
               <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                Officially award the procurement contract to the selected seller and generate Purchase Order.
+                Officially issue the contract award offer to the selected supplier. The supplier will be notified to accept or decline before the Purchase Order is generated.
               </p>
             </div>
 
@@ -866,12 +900,12 @@ export default function BidComparisonPage() {
             {/* Remarks Input */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider block">
-                Award Justification / PO Notes {awardModal.rank !== 1 && <span className="text-red-500">*</span>}
+                Award Justification / Notes {awardModal.rank !== 1 && <span className="text-red-500">*</span>}
               </label>
               <textarea
                 value={awardModal.remarks}
                 onChange={e => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
-                placeholder={awardModal.rank === 1 ? "PO notes or policy justifications..." : "Mandatory justification for L1 non-selection..."}
+                placeholder={awardModal.rank === 1 ? "Award offer notes or justification..." : "Mandatory justification for L1 non-selection..."}
                 rows={3}
                 className="w-full rounded-xl border border-slate-250 p-3 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
               />
@@ -901,9 +935,9 @@ export default function BidComparisonPage() {
               <button
                 onClick={handleConfirmAward}
                 disabled={awardMutation.isPending || !awardModal.confirmed || (awardModal.rank !== 1 && !awardModal.remarks.trim())}
-                className="inline-flex h-10 items-center gap-1.5 justify-center rounded-xl bg-emerald-600 px-5 text-xs font-black text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                className="inline-flex h-10 items-center gap-1.5 justify-center rounded-xl bg-emerald-600 px-5 text-xs font-black text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-xs cursor-pointer"
               >
-                <Award className="h-4 w-4" /> {awardMutation.isPending ? 'Generating PO...' : 'Confirm & Generate PO'}
+                <Award className="h-4 w-4" /> {awardMutation.isPending ? 'Issuing Award Offer...' : 'Confirm & Issue Award Offer'}
               </button>
             </div>
           </div>

@@ -57,7 +57,13 @@ interface Props {
 export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || '';
+    }
+    return '';
+  });
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [orderFilter, setOrderFilter] = useState('All Orders');
   const [carrierFilter, setCarrierFilter] = useState('All Carriers');
@@ -66,7 +72,14 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [activeKpiFilter, setActiveKpiFilter] = useState('all');
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const dId = params.get('deliveryId') || params.get('id');
+      if (dId && !isNaN(Number(dId))) return Number(dId);
+    }
+    return null;
+  });
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [sortKey, setSortKey] = useState<string>('updated_desc');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -95,6 +108,20 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const reportQuery = useDeliveryReport(user?.role === 'admin');
 
   const rawRecords = (listQuery.data?.records || []) as DeliveryDetailDto[];
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && rawRecords.length > 0 && !selectedId) {
+      const params = new URLSearchParams(window.location.search);
+      const dId = params.get('deliveryId') || params.get('id');
+      const poId = params.get('poId');
+      if (dId && !isNaN(Number(dId))) {
+        setSelectedId(Number(dId));
+      } else if (poId) {
+        const found = rawRecords.find(r => String(r.purchaseOrderId) === poId || String(r.purchaseOrder?.id) === poId);
+        if (found) setSelectedId(found.id);
+      }
+    }
+  }, [rawRecords, selectedId]);
 
   const uniqueStatuses = useMemo(() => {
     const set = new Set(rawRecords.map(o => o.status).filter(Boolean));
@@ -125,15 +152,24 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
     }
 
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(o => 
-        String(o.trackingNumber || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.poNumber || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.title || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.seller?.name || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.buyer?.name || '').toLowerCase().includes(lower) ||
-        String(o.carrierName || o.logisticsPartnerName || '').toLowerCase().includes(lower)
-      );
+      const lower = searchTerm.toLowerCase().trim();
+      const cleanLower = lower.replace(/[\s-]/g, '');
+      result = result.filter(o => {
+        const poClean = String(o.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+        return (
+          String(o.id) === lower ||
+          `dlv-${o.id}`.toLowerCase() === lower ||
+          String(o.purchaseOrderId || '') === lower ||
+          String(o.purchaseOrder?.id || '') === lower ||
+          String(o.trackingNumber || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.poNumber || '').toLowerCase().includes(lower) ||
+          (cleanLower.length >= 3 && poClean.includes(cleanLower)) ||
+          String(o.purchaseOrder?.title || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.seller?.name || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.buyer?.name || '').toLowerCase().includes(lower) ||
+          String(o.carrierName || o.logisticsPartnerName || '').toLowerCase().includes(lower)
+        );
+      });
     }
 
     if (orderFilter !== 'All Orders') {

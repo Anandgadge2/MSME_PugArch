@@ -6860,40 +6860,15 @@ export function ProcurementDetailUnifiedView(
         width: "w-[24%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
-          const isDisq =
+          const isEvaluated =
+            ts === "QUALIFIED" ||
             ts === "DISQUALIFIED" ||
             ts === "NOT_QUALIFIED" ||
-            participation.isDisqualified;
-          const isQualified = !isDisq;
-          const canAward = Boolean(
-            isBuyerOrAdmin &&
-            isEvaluationReady &&
-            isQualified &&
-            (!activeAward || activeAward.awardStatus === "DECLINED") &&
-            !effectiveActiveOrder,
-          );
+            Boolean(participation.isDisqualified);
 
           return (
             <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-              {canAward && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    setAwardingParticipation(participation);
-                    setAwardJustification("");
-                    setAwardRemarks("");
-                  }}
-                  className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer rounded-lg shrink-0 whitespace-nowrap"
-                  title="Award contract to this qualified vendor"
-                >
-                  <Award className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    Award<span className="hidden xl:inline"> Contract</span>
-                  </span>
-                </Button>
-              )}
-              {isBuyerOrAdmin && isTwoPacketMode && (
+              {isBuyerOrAdmin && (
                 <Button
                   type="button"
                   size="sm"
@@ -6906,15 +6881,17 @@ export function ProcurementDetailUnifiedView(
                   className={cn(
                     "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
                     isEvaluationReady
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                      ? isEvaluated
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                        : "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer"
                       : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
                   )}
                   title={
                     isEvaluationReady
-                      ? isTechEvalCompleted
-                        ? "View technical evaluation decision and remarks"
-                        : "Evaluate technical proposal, compliance and eligibility"
-                      : "Technical scrutiny unlocks after bidding window closes"
+                      ? isEvaluated
+                        ? "View or edit evaluation decision, score, and remarks"
+                        : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
+                      : "Evaluation unlocks after bidding window closes"
                   }
                 >
                   {isEvaluationReady ? (
@@ -6923,14 +6900,7 @@ export function ProcurementDetailUnifiedView(
                     <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   )}
                   <span>
-                    {isTechEvalCompleted ? (
-                      <>
-                        <span className="hidden xl:inline">View </span>
-                        Evaluation
-                      </>
-                    ) : (
-                      "Evaluate Bid"
-                    )}
+                    {isEvaluated ? "View / Edit Eval" : "Evaluate Bid"}
                   </span>
                 </Button>
               )}
@@ -6945,11 +6915,9 @@ export function ProcurementDetailUnifiedView(
                 }
                 className={cn(
                   "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
-                  !isTwoPacketMode
-                    ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
-                    : isEvaluationReady
-                      ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                      : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
+                  isEvaluationReady
+                    ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
                 )}
                 title={
                   isEvaluationReady
@@ -6959,13 +6927,7 @@ export function ProcurementDetailUnifiedView(
               >
                 <Eye className="h-3.5 w-3.5 shrink-0" />
                 <span>
-                  {isTwoPacketMode ? (
-                    <>
-                      Review<span className="hidden xl:inline"> Quotation</span>
-                    </>
-                  ) : (
-                    "Review Quotation"
-                  )}
+                  Review<span className="hidden xl:inline"> Quotation</span>
                 </span>
               </Button>
             </div>
@@ -7432,6 +7394,33 @@ export function ProcurementDetailUnifiedView(
               !isAwardedToMe &&
               Boolean(activeAward && !effectiveActiveOrder)
             }
+            isSellerParticipated={isSellerParticipated}
+            myParticipation={effectiveMyParticipation}
+            canSubmitBid={
+              !isSellerParticipated &&
+              !isBiddingClosed &&
+              !isDeadlinePassed &&
+              !isBeforeSubmissionStart
+            }
+            submittedBidsCount={Math.max(
+              props.participantsCount || 0,
+              submittedParticipations.length,
+            )}
+            onSubmitClick={props.onSubmitClick}
+            onViewQuotationClick={() => {
+              if (effectiveMyParticipation) {
+                setSelectedQuotationForReview(effectiveMyParticipation);
+              } else if (props.onViewQuotationClick) {
+                props.onViewQuotationClick();
+              } else if (props.onSubmitClick) {
+                props.onSubmitClick();
+              } else {
+                setActiveTab("clarifications");
+                document
+                  .getElementById("tabs-navigation-section")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }}
             onViewEvaluation={() => {
               setActiveTab(isBuyerSide ? "evaluation" : "clarifications");
               const targetEl =
@@ -7452,14 +7441,27 @@ export function ProcurementDetailUnifiedView(
               }
             }}
             onNavigateDelivery={() => {
+              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
+              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
               if (isBuyerSide) {
-                router.push("/buyer/grn");
+                router.push(`/buyer/grn${searchParam}`);
               } else {
-                router.push("/seller/delivery-management");
+                router.push(`/seller/delivery-management${searchParam}`);
               }
             }}
             onNavigateInvoice={() => {
-              if (isBuyerSide) {
+              const allInvoices = [
+                ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+                ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+              ];
+              const existingInv = allInvoices.find(
+                (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
+              );
+              if (existingInv) {
+                const invNo = existingInv.invoiceNumber || existingInv.id;
+                const invParam = invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : '';
+                router.push(isBuyerSide ? `/buyer/invoices${invParam}` : `/seller/invoices${invParam}`);
+              } else if (isBuyerSide) {
                 router.push("/buyer/invoices");
               } else {
                 const amountVal =
@@ -7477,10 +7479,12 @@ export function ProcurementDetailUnifiedView(
               }
             }}
             onNavigateSettlement={() => {
+              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
+              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
               if (isBuyerSide) {
-                router.push("/buyer/payments");
+                router.push(`/buyer/payments${searchParam}`);
               } else {
-                router.push("/seller/invoices");
+                router.push(`/seller/invoices${searchParam}`);
               }
             }}
           />
@@ -10047,9 +10051,8 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
 
-                  {/* Two-Packet Stage 1 Technical Evaluation Progress Banner OR Single-Packet Header */}
-                  {isTwoPacketMode &&
-                    submittedParticipations.length > 0 &&
+                  {/* Evaluation Progress Banner for both Two-Packet and Single-Packet mode */}
+                  {submittedParticipations.length > 0 &&
                     isEvaluationReady && (
                       <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -10072,8 +10075,12 @@ export function ProcurementDetailUnifiedView(
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
                                   {isBidAwarded
-                                    ? "Two-Packet Procurement Concluded"
-                                    : "Two-Packet Procurement • Stage 1"}
+                                    ? isTwoPacketMode
+                                      ? "Two-Packet Procurement Concluded"
+                                      : "Procurement Concluded"
+                                    : isTwoPacketMode
+                                      ? "Two-Packet Procurement • Stage 1"
+                                      : "Single-Packet Evaluation"}
                                 </span>
                                 {isBidAwarded ? (
                                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
@@ -10090,13 +10097,17 @@ export function ProcurementDetailUnifiedView(
                               </div>
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
                                 {isBidAwarded
-                                  ? "Technical Packet Evaluations (Archived)"
-                                  : "Technical Packet Opening & Seller Qualification"}
+                                  ? "Evaluations Concluded & Contract Finalized"
+                                  : isTwoPacketMode
+                                    ? "Technical Packet Opening & Seller Qualification"
+                                    : "Quotation Scrutiny & Supplier Qualification"}
                               </h4>
                               <p className="text-[11px] text-slate-500">
                                 {isBidAwarded
-                                  ? "Technical proposal evaluations are concluded and archived. Contract has been awarded."
-                                  : "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."}
+                                  ? "Proposal evaluations are concluded and archived. Contract has been awarded."
+                                  : isTwoPacketMode
+                                    ? "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."
+                                    : "Review seller quotations and evaluate technical/commercial compliance below. Mark bidders as Qualified or Disqualified before finalizing award on Results page."}
                               </p>
                             </div>
                           </div>
@@ -10123,17 +10134,22 @@ export function ProcurementDetailUnifiedView(
                           <span className="text-[11px] font-semibold text-slate-600">
                             {isBidAwarded
                               ? `✅ Procurement Awarded. Contract finalized with ${awardedVendorName}.`
-                              : isTechEvalCompleted
-                                ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                              : isTwoPacketMode
+                                ? isTechEvalCompleted
+                                  ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                                  : techEvaluationStats.pending > 0
+                                    ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
+                                    : techEvaluationStats.qualified > 0
+                                      ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
+                                      : `⚠️ At least one seller must be technically qualified to proceed.`
                                 : techEvaluationStats.pending > 0
-                                  ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
-                                  : techEvaluationStats.qualified > 0
-                                    ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
-                                    : `⚠️ At least one seller must be technically qualified to proceed.`}
+                                  ? `⚠️ ${techEvaluationStats.pending} quotation(s) pending review. Evaluate and qualify/disqualify vendors below.`
+                                  : `✅ Evaluation complete. ${techEvaluationStats.qualified} vendor(s) qualified for commercial ranking & award.`}
                           </span>
 
                           <div className="flex items-center gap-2">
-                            {!isBidAwarded &&
+                            {isTwoPacketMode &&
+                              !isBidAwarded &&
                               !isTechEvalCompleted &&
                               techEvaluationStats.pending === 0 &&
                               techEvaluationStats.qualified > 0 && (
@@ -10169,20 +10185,24 @@ export function ProcurementDetailUnifiedView(
                                 type="button"
                                 size="sm"
                                 variant={
-                                  isTechEvalCompleted ? "primary" : "outline"
+                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
+                                    ? "primary"
+                                    : "outline"
                                 }
                                 onClick={() =>
                                   router.push(`/bids/${targetId}/results`)
                                 }
                                 className={cn(
                                   "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
-                                  isTechEvalCompleted
+                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
                                     ? "bg-indigo-600 hover:bg-indigo-700 text-white"
                                     : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50",
                                 )}
                               >
                                 <span>
-                                  View Stage 2 Financial Opening & Results
+                                  {isTwoPacketMode
+                                    ? "View Stage 2 Financial Opening & Results"
+                                    : "View Evaluation & Results"}
                                 </span>
                                 <ArrowRight className="h-3.5 w-3.5" />
                               </Button>
@@ -10275,19 +10295,7 @@ export function ProcurementDetailUnifiedView(
                   isTwoPacketMode={isTwoPacketMode}
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isBidAwarded={isBidAwarded}
-                  canAward={Boolean(
-                    isBuyerOrAdmin &&
-                    isEvaluationReady &&
-                    !isBidAwarded &&
-                    (!activeAward || activeAward.awardStatus === "DECLINED") &&
-                    !effectiveActiveOrder,
-                  )}
-                  onAwardVendor={(p) => {
-                    setSelectedQuotationForReview(null);
-                    setAwardingParticipation(p);
-                    setAwardJustification("");
-                    setAwardRemarks("");
-                  }}
+                  canAward={false}
                   onOpenCompare={() => {
                     setSelectedQuotationForReview(null);
                     setSelectedCompareIds(
@@ -10298,6 +10306,7 @@ export function ProcurementDetailUnifiedView(
                     setIsComparisonModalOpen(true);
                   }}
                   onOpenTechnicalEvaluation={(p) => {
+                    setSelectedQuotationForReview(null);
                     setSelectedForTechnicalEval(p);
                   }}
                 />
@@ -10778,21 +10787,24 @@ export function SellerQuotationReviewModal({
       {
         key: "itemName",
         header: "Line Item & Specifications",
+        width: "w-[40%] min-w-[280px]",
+        cellClassName: "align-top",
+        headerClassName: "w-[40%] min-w-[280px]",
         cell: (item, idx) => {
           const itemHsn = item.hsnCode || item.hsn_sac_code;
           const itemBrandPolicy = item.brandPolicy;
           const itemAttachments: any[] = Array.isArray(item.attachments) ? item.attachments : [];
           return (
-            <div className="space-y-1.5">
+            <div className="space-y-2 py-0.5">
               <div>
-                <span className="font-bold text-slate-900">
+                <span className="font-bold text-slate-900 text-xs">
                   {item.itemName ||
                     item.name ||
                     item.description ||
                     `Item #${idx + 1}`}
                 </span>
                 {item.remarks && (
-                  <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
+                  <p className="text-[10.5px] font-normal text-slate-500 mt-0.5 break-words">
                     {item.remarks}
                   </p>
                 )}
@@ -10800,12 +10812,12 @@ export function SellerQuotationReviewModal({
 
               <div className="flex flex-wrap items-center gap-1.5">
                 {itemHsn && (
-                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[10px] font-mono font-bold text-indigo-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-mono font-bold text-indigo-800">
                     HSN: {itemHsn}
                   </span>
                 )}
                 {itemBrandPolicy && (
-                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.2 text-[10px] font-bold ${
+                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold ${
                     itemBrandPolicy === "EQUIVALENT_ACCEPTED"
                       ? "bg-purple-50 text-purple-800 border-purple-200"
                       : "bg-amber-50 text-amber-800 border-amber-200"
@@ -10814,12 +10826,12 @@ export function SellerQuotationReviewModal({
                   </span>
                 )}
                 {item.model && (
-                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">
-                    Model: {item.model}
+                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 break-words max-w-full">
+                    <span className="font-bold text-slate-500">Model:</span> {item.model}
                   </span>
                 )}
                 {item.complianceStatus && (
-                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
                     {item.complianceStatus === "DEVIATION"
                       ? "⚠ Deviation"
                       : item.complianceStatus === "ALTERNATIVE"
@@ -10830,11 +10842,11 @@ export function SellerQuotationReviewModal({
               </div>
 
               {item.specifications && (
-                <div className="rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  <span className="text-[9.5px] font-bold uppercase text-slate-400 block">
+                <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                     Offered Specifications:
                   </span>
-                  {item.specifications}
+                  <span className="break-words font-medium">{item.specifications}</span>
                 </div>
               )}
 
@@ -10887,85 +10899,109 @@ export function SellerQuotationReviewModal({
       {
         key: "makeBrand",
         header: "Make / Brand",
+        width: "w-[14%] min-w-[100px]",
+        cellClassName: "align-top",
         cell: (item) => (
-          <span className="text-slate-700 font-medium">
-            {item.makeBrand || item.brand || "—"}
-          </span>
+          <div className="pt-0.5">
+            <span className="text-slate-800 font-medium break-words text-xs">
+              {item.makeBrand || item.brand || "—"}
+            </span>
+          </div>
         ),
       },
       {
         key: "quantity",
         header: "Qty",
+        width: "w-[10%] min-w-[80px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           const q = Number(item.quantity ?? item.qty ?? 1);
           return (
-            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1">
-              <span>{q}</span>{" "}
-              <span
-                className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
-                title={item.unitOfMeasure || item.unit || "Nos"}
-              >
-                {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
+            <div className="pt-0.5 flex justify-end">
+              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1 whitespace-nowrap">
+                <span>{q}</span>{" "}
+                <span
+                  className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
+                  title={item.unitOfMeasure || item.unit || "Nos"}
+                >
+                  {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
+                </span>
               </span>
-            </span>
+            </div>
           );
         },
       },
       {
         key: "unitRate",
         header: "Unit Rate (₹)",
+        width: "w-[14%] min-w-[100px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
-              </span>
+              <div className="pt-0.5 flex justify-end">
+                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+                </span>
+              </div>
             );
           }
           const uPrice = Number(
             item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
           );
           return (
-            <span className="tabular-nums font-bold text-slate-900">
-              ₹
-              {uPrice.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
+            <div className="pt-0.5">
+              <span className="tabular-nums font-bold text-slate-900 text-xs whitespace-nowrap">
+                ₹
+                {uPrice.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            </div>
           );
         },
       },
       {
         key: "gst",
         header: "GST %",
+        width: "w-[8%] min-w-[65px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="text-slate-400 font-medium text-xs">—</span>
+              <div className="pt-0.5">
+                <span className="text-slate-400 font-medium text-xs">—</span>
+              </div>
             );
           }
           const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
           return (
-            <span className="tabular-nums font-semibold text-slate-700">
-              {gst}%
-            </span>
+            <div className="pt-0.5">
+              <span className="tabular-nums font-semibold text-slate-700 text-xs">
+                {gst}%
+              </span>
+            </div>
           );
         },
       },
       {
         key: "lineTotal",
         header: "Line Total (₹)",
+        width: "w-[14%] min-w-[110px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
-              </span>
+              <div className="pt-0.5 flex justify-end">
+                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+                </span>
+              </div>
             );
           }
           const uPrice = Number(
@@ -10978,13 +11014,15 @@ export function SellerQuotationReviewModal({
               ? Number(item.lineTotal ?? item.totalAmount)
               : uPrice * q * (1 + gst / 100);
           return (
-            <span className="font-black text-slate-900 tabular-nums">
-              ₹
-              {tot.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
+            <div className="pt-0.5">
+              <span className="font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
+                ₹
+                {tot.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            </div>
           );
         },
       },
@@ -11276,10 +11314,10 @@ export function SellerQuotationReviewModal({
       aria-labelledby="quotation-review-modal-title"
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn overflow-y-auto"
     >
-      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-4xl my-auto">
+      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-5xl xl:max-w-6xl my-auto">
         <div className="flex max-h-[92vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
           {/* Enhanced Header */}
-          <div className="relative border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
+          <div className="relative shrink-0 border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -11300,11 +11338,11 @@ export function SellerQuotationReviewModal({
                     </span>
                   )}
                 </div>
-                <h2 id="quotation-review-modal-title" className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                <h2 id="quotation-review-modal-title" className="text-base sm:text-lg font-black text-white mt-1 break-words">
                   {sellerOrg}
                 </h2>
                 {procurementTitle && (
-                  <p className="text-xs font-medium text-blue-200/90 truncate max-w-lg mt-0.5">
+                  <p className="text-xs font-medium text-blue-200/90 break-words max-w-2xl mt-0.5">
                     For: {procurementTitle}
                   </p>
                 )}
@@ -11341,7 +11379,7 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Total Quoted Value
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 break-words">
                   {isFinancialSealed ? (
                     <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-indigo-700">
                       <Lock className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
@@ -11353,7 +11391,7 @@ export function SellerQuotationReviewModal({
                     "Rates On File"
                   )}
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   {isFinancialSealed ? "Unlocks upon technical qualification" : "Total quoted value (incl. GST)"}
                 </p>
               </div>
@@ -11362,11 +11400,11 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Delivery Timeline SLA
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 flex items-center gap-1.5">
                   <Truck className="h-4 w-4 text-blue-600 shrink-0" />
-                  <span className="truncate">{deliveryTimeline}</span>
+                  <span className="break-words leading-tight">{deliveryTimeline}</span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   Promised fulfillment window
                 </p>
               </div>
@@ -11375,11 +11413,11 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Quoted Scope &amp; Qty
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 flex items-center gap-1.5">
                   <Package className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="truncate">{offeredQty}</span>
+                  <span className="break-words leading-tight">{offeredQty}</span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   {lineItems.length > 0 ? `${lineItems.length} line item(s) quoted` : "Offered delivery scope"}
                 </p>
               </div>
@@ -11388,7 +11426,7 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Technical Compliance
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black truncate">
+                <div className="mt-1 text-base sm:text-lg font-black break-words">
                   <span className={cn(
                     "inline-flex items-center gap-1 text-xs sm:text-sm font-bold",
                     complianceStatement === "WITH_DEVIATION"
@@ -11409,7 +11447,7 @@ export function SellerQuotationReviewModal({
                     )}
                   </span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   Seller declaration status
                 </p>
               </div>
@@ -11606,25 +11644,25 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Make / Brand
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{makeBrand}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight" title={makeBrand}>{makeBrand}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Model / Ref No
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{model}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight" title={model}>{model}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Offered Quantity
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{offeredQty}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight">{offeredQty}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Delivery Window
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{deliveryTimeline}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight">{deliveryTimeline}</p>
                   </div>
                 </div>
 
@@ -11633,7 +11671,7 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
                       Technical Specifications:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700 break-words">
                       {techSpecs}
                     </p>
                   </div>
@@ -11644,7 +11682,7 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
                       Supplier Remarks / Cover Note:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">
+                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed break-words">
                       "{message}"
                     </p>
                   </div>
@@ -11670,7 +11708,8 @@ export function SellerQuotationReviewModal({
                   columns={reviewLineItemsColumns}
                   keyExtractor={(item, idx) => String(item.id || idx)}
                   showSrNo={false}
-                  minWidth="min-w-[650px]"
+                  minWidth="w-full min-w-[720px]"
+                  tableClassName="table-fixed"
                   emptyTitle="No line items"
                   emptyDescription="No line items attached."
                   footer={
@@ -11806,7 +11845,7 @@ export function SellerQuotationReviewModal({
           </div>
 
           {/* Modal Footer Actions */}
-          <div className="flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
+          <div className="relative shrink-0 flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
             <Button
               type="button"
               variant="outline"
@@ -11833,8 +11872,8 @@ export function SellerQuotationReviewModal({
                 </Button>
               )}
 
-              {/* In Two-Packet mode ONLY: Stage 1 Evaluate Technical Packet button if pending/not awarded */}
-              {isTwoPacketMode && onOpenTechnicalEvaluation && !isBidAwarded && (
+              {/* Evaluate Bid / Technical Packet button for both single and two-packet mode */}
+              {onOpenTechnicalEvaluation && !isBidAwarded && (
                 <Button
                   type="button"
                   size="sm"
@@ -11845,26 +11884,25 @@ export function SellerQuotationReviewModal({
                 >
                   <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
                   {techStatus === "PENDING"
-                    ? "Evaluate Technical Packet"
-                    : "Update Technical Review"}
+                    ? "Evaluate Bid (Qualify / Disqualify)"
+                    : "Update Evaluation Decision"}
                 </Button>
               )}
 
-              {/* In Single-Packet mode: Allow direct awarding when eligible */}
-              {!isTwoPacketMode && canAward && onAwardVendor && !isBidAwarded && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    onClose();
-                    onAwardVendor(participation);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs cursor-pointer"
-                >
-                  <Award className="h-3.5 w-3.5 mr-1.5" />
-                  Award Quotation
-                </Button>
-              )}
+              {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  router.push(`/bids/${targetId}/results`);
+                }}
+                className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
+              >
+                <Trophy className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                View Results &amp; Award
+              </Button>
             </div>
           </div>
         </div>

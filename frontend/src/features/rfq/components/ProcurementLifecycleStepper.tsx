@@ -9,11 +9,11 @@ import {
   FileText,
   ShieldCheck,
   CheckCircle2,
-  ChevronRight,
   Sparkles,
-  ExternalLink,
   ArrowUpRight,
-  Eye
+  Eye,
+  FileSpreadsheet,
+  Clock
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -26,8 +26,6 @@ export interface StageConfig {
   description: string;
   buyerHint: string;
   sellerHint: string;
-  buyerActionLabel: string;
-  sellerActionLabel: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
@@ -42,6 +40,15 @@ export interface ProcurementLifecycleStepperProps {
   invoices?: any[];
   isBuyer?: boolean;
   isStandby?: boolean;
+
+  // Real participation / bid states for strictly conditional action rendering
+  isSellerParticipated?: boolean;
+  myParticipation?: any;
+  canSubmitBid?: boolean;
+  submittedBidsCount?: number;
+  onSubmitClick?: () => void;
+  onViewQuotationClick?: () => void;
+
   /** In-page or cross-route stage navigation handlers */
   onNavigateStage?: (stageId: LifecycleStageId) => void;
   onViewEvaluation?: () => void;
@@ -59,8 +66,6 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     description: 'Technical & Commercial Scrutiny',
     buyerHint: 'Evaluate bids and determine ranking',
     sellerHint: 'Proposal under evaluation and ranking',
-    buyerActionLabel: 'Evaluation',
-    sellerActionLabel: 'View Bids',
     icon: Scale
   },
   {
@@ -70,8 +75,6 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     description: 'Mutual Consent & Order Binding',
     buyerHint: 'Offer award & issue formal Purchase Order',
     sellerHint: 'Accept award offer & commit to PO',
-    buyerActionLabel: 'View PO',
-    sellerActionLabel: 'View PO Copy',
     icon: Award
   },
   {
@@ -81,8 +84,6 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     description: 'Dispatch & Physical Inspection',
     buyerHint: 'Inspect delivered items & approve GRN',
     sellerHint: 'Dispatch goods & submit delivery tracking',
-    buyerActionLabel: 'Inspect GRN',
-    sellerActionLabel: 'Dispatch Hub',
     icon: Truck
   },
   {
@@ -92,8 +93,6 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     description: 'GRN-Gated Tax Invoicing',
     buyerHint: 'Review and approve verified tax invoice',
     sellerHint: 'Create tax invoice capped to accepted GRN',
-    buyerActionLabel: 'Review Invoices',
-    sellerActionLabel: 'Create Invoice',
     icon: FileText
   },
   {
@@ -103,8 +102,6 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     description: 'Bank Payment & Contract Close',
     buyerHint: 'Record UTR transfer & upload bank slip',
     sellerHint: 'Verify funds receipt & close order',
-    buyerActionLabel: 'Payment Ledger',
-    sellerActionLabel: 'Settlement Status',
     icon: ShieldCheck
   }
 ];
@@ -227,6 +224,12 @@ export function ProcurementLifecycleStepper({
   invoices,
   isBuyer = true,
   isStandby = false,
+  isSellerParticipated = false,
+  myParticipation,
+  canSubmitBid = false,
+  submittedBidsCount,
+  onSubmitClick,
+  onViewQuotationClick,
   onNavigateStage,
   onViewEvaluation,
   onViewPO,
@@ -258,74 +261,223 @@ export function ProcurementLifecycleStepper({
       ? 'Award processing with primary bidder — You remain on standby reserve'
       : currentStageConfig.sellerHint;
 
-  // Extract contextual IDs
-  const effectivePoNumber = activeOrder?.poNumber || activeOrder?.id || purchaseOrders?.[0]?.poNumber || purchaseOrders?.[0]?.id;
+  // Extract contextual identifiers
+  const effectiveActiveOrder = activeOrder || purchaseOrders?.[0];
+  const effectivePoNumber = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
   const effectiveAmount = activeOrder?.amount || activeOrder?.totalValue || activeAward?.finalAmount;
 
-  // Central dispatch handler for stage actions
-  const handleStageAction = (stageId: LifecycleStageId, e?: React.MouseEvent) => {
-    if (e) {
-      e.stopPropagation();
-    }
-
-    if (onNavigateStage) {
-      onNavigateStage(stageId);
-      return;
-    }
-
+  // Compute strictly conditional action & status for each stage
+  const getStageAction = (stageId: LifecycleStageId): {
+    hasAction: boolean;
+    actionLabel?: string;
+    actionHint?: string;
+    idleStatusText?: string;
+    onClick?: () => void;
+    isPrimary?: boolean;
+  } => {
     switch (stageId) {
-      case 1:
-        if (onViewEvaluation) {
-          onViewEvaluation();
-        } else {
-          const tabSection = document.getElementById('tabpanel-clarifications') || document.getElementById('tabs-navigation-section');
-          if (tabSection) {
-            tabSection.scrollIntoView({ behavior: 'smooth' });
-          }
-        }
-        break;
-
-      case 2:
-        if (onViewPO) {
-          onViewPO();
-        } else if (effectivePoNumber) {
-          const poSection = document.getElementById('po-banner-section') || document.getElementById('tabs-navigation-section');
-          if (poSection) {
-            poSection.scrollIntoView({ behavior: 'smooth' });
+      case 1: {
+        // Stage 1: Evaluation / Quotation
+        if (!isBuyer) {
+          if (isSellerParticipated) {
+            return {
+              hasAction: true,
+              actionLabel: 'View My Quotation',
+              actionHint: 'Open your submitted quotation dialog modal',
+              onClick: () => {
+                if (onViewQuotationClick) onViewQuotationClick();
+                else if (onViewEvaluation) onViewEvaluation();
+              },
+              isPrimary: false
+            };
+          } else if (canSubmitBid && onSubmitClick) {
+            return {
+              hasAction: true,
+              actionLabel: 'Submit Quotation',
+              actionHint: 'Participate and submit formal quotation',
+              onClick: onSubmitClick,
+              isPrimary: true
+            };
           } else {
-            router.push(isBuyer ? '/buyer/orders' : '/seller/orders');
+            return {
+              hasAction: false,
+              idleStatusText: 'Awaiting Window'
+            };
           }
-        }
-        break;
-
-      case 3:
-        if (onNavigateDelivery) {
-          onNavigateDelivery();
         } else {
-          router.push(isBuyer ? '/buyer/grn' : '/seller/delivery-management');
-        }
-        break;
-
-      case 4:
-        if (onNavigateInvoice) {
-          onNavigateInvoice();
-        } else {
-          if (!isBuyer && activeOrder?.id) {
-            const amtParam = effectiveAmount ? `&amount=${effectiveAmount}` : '';
-            router.push(`/seller/invoices?convertPoId=${activeOrder.id}${amtParam}`);
+          // Buyer
+          const bidsCount = (submittedBidsCount !== undefined) ? submittedBidsCount : (awards?.length || 0);
+          if (bidsCount > 0) {
+            return {
+              hasAction: true,
+              actionLabel: `Review Bids (${bidsCount})`,
+              actionHint: 'Review submitted bidder proposals',
+              onClick: onViewEvaluation,
+              isPrimary: currentStageId === 1
+            };
           } else {
-            router.push(isBuyer ? '/buyer/invoices' : '/seller/invoices');
+            return {
+              hasAction: false,
+              idleStatusText: 'Awaiting Bids'
+            };
           }
         }
-        break;
+      }
 
-      case 5:
-        if (onNavigateSettlement) {
-          onNavigateSettlement();
+      case 2: {
+        // Stage 2: Award & PO
+        const poExists = Boolean(effectiveActiveOrder) || (purchaseOrders && purchaseOrders.length > 0);
+        if (poExists) {
+          return {
+            hasAction: true,
+            actionLabel: isBuyer ? (effectivePoNumber ? `View PO #${effectivePoNumber}` : 'View PO') : 'View PO Copy',
+            actionHint: 'Open purchase order dialog modal',
+            onClick: () => {
+              if (onViewPO) onViewPO();
+              else router.push(isBuyer ? '/buyer/orders' : '/seller/orders');
+            },
+            isPrimary: currentStageId === 2
+          };
         } else {
-          router.push(isBuyer ? '/buyer/payments' : '/seller/invoices');
+          return {
+            hasAction: false,
+            idleStatusText: currentStageId < 2 ? 'Pending Evaluation' : 'Pending PO Issue'
+          };
         }
-        break;
+      }
+
+      case 3: {
+        // Stage 3: Delivery & GRN
+        const isOrderActive = Boolean(effectiveActiveOrder);
+        const poStatus = String(effectiveActiveOrder?.poStatus || effectiveActiveOrder?.status || '').toLowerCase();
+        const isDeliveryPhase = isOrderActive && (
+          ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'grn_approved', 'grn_completed', 'invoiced', 'completed', 'paid'].includes(poStatus) ||
+          Boolean(hasApprovedGrn)
+        );
+
+        if (isDeliveryPhase) {
+          const grnApproved = Boolean(hasApprovedGrn) || poStatus === 'grn_approved' || poStatus === 'grn_completed';
+          return {
+            hasAction: true,
+            actionLabel: isBuyer
+              ? (grnApproved ? 'GRN Approved' : 'Inspect GRN')
+              : (grnApproved ? 'View GRN' : 'Track Dispatch'),
+            actionHint: 'View delivery dispatch / GRN inspection details',
+            onClick: () => {
+              if (onNavigateDelivery) onNavigateDelivery();
+              else {
+                const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
+                router.push(isBuyer ? `/buyer/grn${searchQ}` : `/seller/delivery-management${searchQ}`);
+              }
+            },
+            isPrimary: currentStageId === 3
+          };
+        } else {
+          return {
+            hasAction: false,
+            idleStatusText: 'Pending Acceptance'
+          };
+        }
+      }
+
+      case 4: {
+        // Stage 4: Invoicing
+        const allInvoicesList = [
+          ...(Array.isArray(invoices) ? invoices : []),
+          ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : [])
+        ];
+        const validInvoice = allInvoicesList.find(
+          inv => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
+        );
+
+        if (validInvoice) {
+          const invNo = validInvoice.invoiceNumber || validInvoice.id;
+          return {
+            hasAction: true,
+            actionLabel: invNo ? `Inv #${invNo}` : 'View Invoice',
+            actionHint: 'Open invoice details dialog',
+            onClick: () => {
+              if (onNavigateInvoice) onNavigateInvoice();
+              else {
+                const invParam = invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : '';
+                router.push(isBuyer ? `/buyer/invoices${invParam}` : `/seller/invoices${invParam}`);
+              }
+            },
+            isPrimary: currentStageId === 4
+          };
+        } else if (
+          !isBuyer &&
+          effectiveActiveOrder &&
+          currentStageId >= 3 &&
+          ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'grn_approved', 'grn_completed'].includes(
+            String(effectiveActiveOrder.status || effectiveActiveOrder.poStatus || '').toLowerCase()
+          )
+        ) {
+          const amtVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+          return {
+            hasAction: true,
+            actionLabel: '⚡ Create Invoice',
+            actionHint: 'Create tax invoice pre-filled from this Purchase Order',
+            onClick: () => {
+              if (onNavigateInvoice) onNavigateInvoice();
+              else router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amtVal}`);
+            },
+            isPrimary: true
+          };
+        } else {
+          return {
+            hasAction: false,
+            idleStatusText: 'GRN Required'
+          };
+        }
+      }
+
+      case 5: {
+        // Stage 5: Settlement
+        const statusUpper = String(status || '').toUpperCase().trim();
+        const poStatusUpper = String(activeOrder?.poStatus || activeOrder?.status || '').toUpperCase().trim();
+        const allInvoicesList = [
+          ...(Array.isArray(invoices) ? invoices : []),
+          ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : [])
+        ];
+        const hasSettled = allInvoicesList.some(inv => {
+          const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
+          return s === 'SETTLED' || s === 'PAID';
+        });
+        const hasPaymentSub = allInvoicesList.some(inv => {
+          const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
+          return s === 'PAYMENT_SUBMITTED' || Boolean(inv.paymentReference);
+        });
+
+        const isSettlementActive =
+          statusUpper === 'COMPLETED' ||
+          statusUpper === 'PAYMENT_COMPLETED' ||
+          poStatusUpper === 'COMPLETED' ||
+          poStatusUpper === 'PAID' ||
+          hasSettled ||
+          hasPaymentSub;
+
+        if (isSettlementActive) {
+          return {
+            hasAction: true,
+            actionLabel: isBuyer ? 'Payment Ledger' : 'Settlement Status',
+            actionHint: 'View UTR transaction and bank settlement record',
+            onClick: () => {
+              if (onNavigateSettlement) onNavigateSettlement();
+              else {
+                const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
+                router.push(isBuyer ? `/buyer/payments${searchQ}` : `/seller/invoices${searchQ}`);
+              }
+            },
+            isPrimary: currentStageId === 5
+          };
+        } else {
+          return {
+            hasAction: false,
+            idleStatusText: 'Pending Payment'
+          };
+        }
+      }
     }
   };
 
@@ -334,9 +486,9 @@ export function ProcurementLifecycleStepper({
       aria-label="Procurement Lifecycle Highway"
       className="w-full rounded-xl border border-slate-200/90 bg-white/95 p-2 sm:p-2.5 shadow-2xs transition-all relative overflow-hidden"
     >
-      {/* Background ambient glow for active progress */}
+      {/* Background ambient portal aura */}
       <div
-        className="pointer-events-none absolute -right-20 -top-20 h-44 w-44 rounded-full bg-gradient-to-br from-indigo-500/5 via-sky-400/5 to-transparent blur-2xl"
+        className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-gradient-to-br from-[#12335f]/8 via-sky-500/5 to-transparent blur-2xl"
         aria-hidden="true"
       />
 
@@ -347,12 +499,12 @@ export function ProcurementLifecycleStepper({
             <Sparkles className="h-3 w-3" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex flex-wrap items-baseline gap-1.5 sm:gap-2">
-            <h2 className="text-[10.5px] font-black uppercase tracking-wider text-slate-900 leading-tight">
+            <h2 className="text-[10.5px] font-black uppercase tracking-wider text-[#12335f] leading-tight">
               Procurement Highway
             </h2>
             <span className="hidden sm:inline-block text-[10px] text-slate-300 font-normal">|</span>
             <p className="text-[10px] sm:text-[10.5px] font-medium text-slate-500 leading-tight truncate">
-              Stage {currentStageId}/5: <strong className="font-extrabold text-[#12335f]">{currentStageConfig.name}</strong> — {stageHint}
+              Stage {currentStageId}/5: <strong className="font-extrabold text-slate-900">{currentStageConfig.name}</strong> — {stageHint}
             </p>
           </div>
         </div>
@@ -379,141 +531,172 @@ export function ProcurementLifecycleStepper({
         </div>
       </div>
 
-      {/* 5-Stage Stepper Grid with Interactive Action Buttons */}
-      <ol
-        role="list"
-        className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 relative"
-      >
-        {LIFECYCLE_STAGES.map((stage) => {
-          const isCompleted = currentStageId > stage.id;
-          const isActive = currentStageId === stage.id;
-          const isUpcoming = currentStageId < stage.id;
-          const Icon = stage.icon;
-          const actionLabel = isBuyer ? stage.buyerActionLabel : stage.sellerActionLabel;
+      {/* 5-Stage Stepper Grid with Flowing Connector Highway Track */}
+      <div className="relative">
+        {/* Animated Highway Progress Track (Desktop) */}
+        <div className="hidden sm:block absolute top-[13px] left-[8%] right-[8%] h-[2.5px] bg-slate-100 rounded-full overflow-hidden pointer-events-none z-0">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-[#12335f] transition-all duration-700 ease-out"
+            style={{
+              width: `${Math.min(100, Math.max(0, ((currentStageId - 1) / 4) * 100))}%`
+            }}
+          />
+        </div>
 
-          return (
-            <li
-              key={stage.id}
-              role="listitem"
-              aria-current={isActive ? 'step' : undefined}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  handleStageAction(stage.id);
-                }
-              }}
-              onClick={() => handleStageAction(stage.id)}
-              className={cn(
-                'group relative flex flex-col justify-between rounded-lg p-2 border transition-all duration-200 cursor-pointer outline-none select-none min-h-[56px] sm:min-h-[58px]',
-                'focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-offset-1',
-                // Completed State
-                isCompleted &&
-                  'border-emerald-200/90 bg-gradient-to-b from-emerald-50/70 to-emerald-50/20 text-emerald-950 hover:border-emerald-400 hover:shadow-xs hover:-translate-y-0.5',
-                // Active State (Command Focus)
-                isActive &&
-                  'border-[#12335f] bg-gradient-to-br from-[#12335f] via-[#102d54] to-[#0a1e38] text-white shadow-sm ring-1 ring-[#12335f]/30 hover:-translate-y-0.5 hover:shadow-md',
-                // Upcoming State
-                isUpcoming &&
-                  'border-slate-200/70 bg-slate-50/50 text-slate-600 hover:border-slate-300 hover:bg-slate-100/60 hover:-translate-y-0.5'
-              )}
-            >
-              {/* Top Row: Micro Stage Badge, Status Indicator, Icon */}
-              <div className="flex items-center justify-between gap-1">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span
-                    className={cn(
-                      'flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-black font-mono transition-transform group-hover:scale-105',
-                      isCompleted && 'bg-emerald-600 text-white shadow-2xs',
-                      isActive && 'bg-white text-[#12335f] shadow-2xs font-extrabold',
-                      isUpcoming && 'bg-slate-200 text-slate-600'
-                    )}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />
-                    ) : (
-                      stage.id
-                    )}
-                  </span>
+        <ol
+          role="list"
+          className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 relative z-10"
+        >
+          {LIFECYCLE_STAGES.map((stage) => {
+            const isCompleted = currentStageId > stage.id;
+            const isActive = currentStageId === stage.id;
+            const isUpcoming = currentStageId < stage.id;
+            const Icon = stage.icon;
+            const stageAction = getStageAction(stage.id);
 
-                  <span
+            return (
+              <li
+                key={stage.id}
+                role="listitem"
+                aria-current={isActive ? 'step' : undefined}
+                tabIndex={stageAction.hasAction ? 0 : -1}
+                onKeyDown={(e) => {
+                  if (stageAction.hasAction && (e.key === 'Enter' || e.key === ' ')) {
+                    e.preventDefault();
+                    if (stageAction.onClick) stageAction.onClick();
+                  }
+                }}
+                onClick={() => {
+                  if (stageAction.hasAction && stageAction.onClick) {
+                    stageAction.onClick();
+                  }
+                }}
+                className={cn(
+                  'group relative flex flex-col justify-between rounded-lg p-2 border transition-all duration-200 outline-none select-none min-h-[56px] sm:min-h-[58px]',
+                  stageAction.hasAction ? 'cursor-pointer' : 'cursor-default',
+                  'focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-offset-1',
+                  // Completed State
+                  isCompleted &&
+                    'border-emerald-200/90 bg-gradient-to-b from-emerald-50/70 to-emerald-50/20 text-emerald-950 hover:border-emerald-400 hover:shadow-xs hover:-translate-y-0.5',
+                  // Active State (Command Focus)
+                  isActive &&
+                    'border-[#12335f] bg-gradient-to-br from-[#12335f] via-[#102d54] to-[#0a1e38] text-white shadow-sm ring-1 ring-[#12335f]/30 hover:-translate-y-0.5 hover:shadow-md',
+                  // Upcoming State
+                  isUpcoming &&
+                    'border-slate-200/70 bg-slate-50/50 text-slate-600 hover:border-slate-300 hover:bg-slate-100/60 hover:-translate-y-0.5'
+                )}
+              >
+                {/* Top Row: Micro Stage Badge, Status Indicator, Icon */}
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span
+                      className={cn(
+                        'flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-black font-mono transition-transform group-hover:scale-105',
+                        isCompleted && 'bg-emerald-600 text-white shadow-2xs',
+                        isActive && 'bg-white text-[#12335f] shadow-2xs font-extrabold',
+                        isUpcoming && 'bg-slate-200 text-slate-600'
+                      )}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />
+                      ) : (
+                        stage.id
+                      )}
+                    </span>
+
+                    <span
+                      className={cn(
+                        'text-[8.5px] font-black uppercase tracking-wider truncate',
+                        isCompleted && 'text-emerald-700',
+                        isActive && 'text-emerald-300 font-extrabold flex items-center gap-1',
+                        isUpcoming && 'text-slate-400 font-semibold'
+                      )}
+                    >
+                      {isCompleted && 'Done'}
+                      {isActive && (
+                        <>
+                          <span className="relative flex h-1.5 w-1.5 shrink-0">
+                            <span
+                              className={cn(
+                                'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
+                                isStandby && stage.id === 2 ? 'bg-sky-400' : 'bg-emerald-400'
+                              )}
+                            />
+                            <span
+                              className={cn(
+                                'relative inline-flex rounded-full h-1.5 w-1.5',
+                                isStandby && stage.id === 2 ? 'bg-sky-400' : 'bg-emerald-400'
+                              )}
+                            />
+                          </span>
+                          <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'In Progress'}</span>
+                        </>
+                      )}
+                      {isUpcoming && 'Pending'}
+                    </span>
+                  </div>
+
+                  <Icon
                     className={cn(
-                      'text-[8.5px] font-black uppercase tracking-wider truncate',
-                      isCompleted && 'text-emerald-700',
-                      isActive && 'text-emerald-300 font-extrabold flex items-center gap-1',
-                      isUpcoming && 'text-slate-400 font-semibold'
+                      'h-3.5 w-3.5 shrink-0 transition-transform group-hover:scale-110',
+                      isCompleted && 'text-emerald-600',
+                      isActive && 'text-emerald-300',
+                      isUpcoming && 'text-slate-400'
                     )}
-                  >
-                    {isCompleted && 'Done'}
-                    {isActive && (
-                      <>
-                        <span
-                          className={cn(
-                            'h-1.5 w-1.5 rounded-full animate-ping shrink-0',
-                            isStandby && stage.id === 2 ? 'bg-sky-400' : 'bg-emerald-400'
-                          )}
-                          aria-hidden="true"
-                        />
-                        <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'In Progress'}</span>
-                      </>
-                    )}
-                    {isUpcoming && 'Pending'}
-                  </span>
+                    aria-hidden="true"
+                  />
                 </div>
 
-                <Icon
-                  className={cn(
-                    'h-3.5 w-3.5 shrink-0 transition-transform group-hover:scale-110',
-                    isCompleted && 'text-emerald-600',
-                    isActive && 'text-emerald-300',
-                    isUpcoming && 'text-slate-400'
-                  )}
-                  aria-hidden="true"
-                />
-              </div>
+                {/* Middle Row: Stage Title */}
+                <div className="my-0.5 min-w-0">
+                  <h3
+                    className={cn(
+                      'text-[11px] sm:text-[11.5px] font-extrabold tracking-tight leading-snug truncate',
+                      isCompleted && 'text-emerald-950',
+                      isActive && 'text-white',
+                      isUpcoming && 'text-slate-700'
+                    )}
+                  >
+                    {stage.name}
+                  </h3>
+                </div>
 
-              {/* Middle Row: Stage Title */}
-              <div className="my-0.5 min-w-0">
-                <h3
-                  className={cn(
-                    'text-[11px] sm:text-[11.5px] font-extrabold tracking-tight leading-snug truncate',
-                    isCompleted && 'text-emerald-950',
-                    isActive && 'text-white',
-                    isUpcoming && 'text-slate-700'
+                {/* Bottom Row: Strictly Conditional Action Button OR Clean Status Chip */}
+                <div className="flex items-center justify-between gap-1 pt-0.5 mt-auto">
+                  {stageAction.hasAction ? (
+                    <button
+                      type="button"
+                      aria-label={`${stage.name}: ${stageAction.actionLabel}`}
+                      title={stageAction.actionHint}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (stageAction.onClick) stageAction.onClick();
+                      }}
+                      className={cn(
+                        'w-full inline-flex items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-95',
+                        stageAction.isPrimary
+                          ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 shadow-xs font-black ring-1 ring-emerald-300/60'
+                          : isCompleted
+                            ? 'bg-white hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-300/80'
+                            : 'bg-white hover:bg-[#12335f] text-[#12335f] hover:text-white border border-slate-300'
+                      )}
+                    >
+                      <span className="truncate">{stageAction.actionLabel}</span>
+                      <ArrowUpRight className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <div className="w-full flex items-center justify-center py-0.5 rounded bg-slate-100/50 border border-slate-200/40">
+                      <span className="text-[8.5px] font-semibold text-slate-400 truncate">
+                        {stageAction.idleStatusText || 'Pending'}
+                      </span>
+                    </div>
                   )}
-                >
-                  {stage.name}
-                </h3>
-              </div>
-
-              {/* Bottom Row: Quick Navigation Action Button */}
-              <div className="flex items-center justify-between gap-1 pt-0.5 mt-auto">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={`Navigate to ${stage.name}`}
-                  onClick={(e) => handleStageAction(stage.id, e)}
-                  className={cn(
-                    'w-full inline-flex items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer',
-                    // Completed button style
-                    isCompleted &&
-                      'bg-white/80 text-emerald-800 border border-emerald-300/80 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 shadow-2xs',
-                    // Active button style
-                    isActive &&
-                      'bg-emerald-400 text-slate-950 hover:bg-emerald-300 hover:scale-[1.02] shadow-xs font-black ring-1 ring-emerald-300/50',
-                    // Upcoming button style
-                    isUpcoming &&
-                      'bg-white/60 text-slate-500 border border-slate-200/80 hover:bg-slate-200 hover:text-slate-800'
-                  )}
-                >
-                  <span className="truncate">{actionLabel}</span>
-                  <ArrowUpRight className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ol>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </nav>
   );
 }

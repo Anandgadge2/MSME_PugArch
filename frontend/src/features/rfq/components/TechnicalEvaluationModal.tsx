@@ -439,8 +439,8 @@ export function TechnicalEvaluationModal({
       if (success) {
         toast.success(
           decision === 'QUALIFIED'
-            ? `${sellerOrg} marked as Technically Qualified for Stage 2!`
-            : `${sellerOrg} marked as Technically Disqualified.`
+            ? `${sellerOrg} marked as Technically Qualified!`
+            : `${sellerOrg} marked as Disqualified.`
         );
 
         // Invalidate relevant React Query caches to trigger instant UI update
@@ -490,12 +490,12 @@ export function TechnicalEvaluationModal({
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Stage 1 Scrutiny
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" /> Technical Scrutiny
                       </span>
                     )}
                   </div>
                   <h3 id="technical-eval-modal-title" className="text-base sm:text-lg font-black text-white tracking-tight mt-0.5 truncate">
-                    {readOnly ? 'Technical Evaluation Record (Read-Only Audit Trail)' : 'Technical Packet Evaluation & Compliance Record'}
+                    {readOnly ? 'Technical Evaluation Record (Read-Only Audit Trail)' : 'Technical & Compliance Evaluation Record'}
                   </h3>
                  
                 </div>
@@ -524,7 +524,7 @@ export function TechnicalEvaluationModal({
               <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-900 font-medium flex items-center gap-2.5 shadow-2xs">
                 <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0" />
                 <span>
-                  <strong>Stage 1 Technical Scrutiny:</strong> Verify offered model conformity, technical parameters, and statutory eligibility. Bidders marked as Qualified will proceed to Stage 2 Commercial Opening / Reverse Auction.
+                  <strong>Technical &amp; Compliance Scrutiny:</strong> Verify offered model conformity, specifications, parameters, and statutory eligibility. Bidders marked as Qualified are eligible for commercial ranking and contract award.
                 </span>
               </div>
             )}
@@ -818,7 +818,7 @@ export function TechnicalEvaluationModal({
                         Technically Qualified (Pass)
                       </h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Admitted to Stage 2 (Financial Opening / Reverse Auction)
+                        Eligible for commercial ranking, L1 award, and reverse auction
                       </p>
                     </div>
                   </div>
@@ -852,7 +852,7 @@ export function TechnicalEvaluationModal({
                         Disqualified (Fail)
                       </h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        Eliminated; financial packet remains locked
+                        Marked ineligible for contract award
                       </p>
                     </div>
                   </div>

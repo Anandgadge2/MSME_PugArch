@@ -683,7 +683,7 @@ export function SupplierQuotationDetailView({
               <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800">
                 TOTAL EVALUATED PRICE (LANDED)
               </span>
-              <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
+              <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
                 INR (₹)
               </span>
             </div>
@@ -711,11 +711,11 @@ export function SupplierQuotationDetailView({
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
               Offered Landed Rate
             </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
+            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight break-words">
               {formatCurrency(totalEvaluatedPrice)}
             </p>
-            <p className="text-[10px] text-slate-500 font-medium leading-none mt-0.5 truncate">
-              Incl. GST {gstPercentage}% & Freight
+            <p className="text-[10px] text-slate-500 font-medium leading-normal mt-0.5 break-words">
+              Incl. GST {gstPercentage}% &amp; Freight
             </p>
           </div>
         </div>
@@ -729,10 +729,10 @@ export function SupplierQuotationDetailView({
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
               Supply Commitment
             </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
+            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight break-words">
               {totalCommittedUnits} Units Committed
             </p>
-            <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
+            <p className="text-[10px] text-emerald-700 font-bold leading-normal mt-0.5 break-words">
               Full Supply (100% Covered)
             </p>
           </div>
@@ -747,10 +747,10 @@ export function SupplierQuotationDetailView({
             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
               Delivery Turnaround
             </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
+            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight break-words">
               {deliveryTimeline}
             </p>
-            <p className="text-[10px] text-slate-500 font-medium leading-none mt-0.5 truncate">
+            <p className="text-[10px] text-slate-500 font-medium leading-normal mt-0.5 break-words">
               Direct Consignee Site Dispatch
             </p>
           </div>
@@ -766,10 +766,10 @@ export function SupplierQuotationDetailView({
               <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
                 Evaluation Standing
               </span>
-              <p className="text-xs font-black text-purple-900 mt-0.5 leading-tight truncate">
+              <p className="text-xs font-black text-purple-900 mt-0.5 leading-tight break-words">
                 Rank {rank} • {statusStr}
               </p>
-              <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
+              <p className="text-[10px] text-emerald-700 font-bold leading-normal mt-0.5 break-words">
                 Verified &amp; Qualified Bidder
               </p>
             </div>
@@ -808,13 +808,13 @@ export function SupplierQuotationDetailView({
             <thead className="bg-slate-50/90 border-b border-slate-200 text-[9px] font-black uppercase text-slate-500 tracking-wider">
               <tr>
                 <th className="px-3 py-2 w-10 text-center">#</th>
-                <th className="px-3 py-2 min-w-[200px]">Item Name & Specifications</th>
-                <th className="px-3 py-2 min-w-[130px]">Make / Brand</th>
-                <th className="px-3 py-2 min-w-[90px]">HSN / Tax</th>
-                <th className="px-3 py-2 w-20 text-center">Quantity</th>
-                <th className="px-3 py-2 w-28 text-right">Unit Rate (₹)</th>
-                <th className="px-3 py-2 w-32 text-right bg-emerald-50/50">Total Amount (₹)</th>
-                <th className="px-3 py-2 min-w-[110px] text-center">Status</th>
+                <th className="px-3 py-2 w-[34%] min-w-[220px]">Item Name &amp; Specifications</th>
+                <th className="px-3 py-2 w-[16%] min-w-[120px]">Make / Brand</th>
+                <th className="px-3 py-2 w-[11%] min-w-[90px]">HSN / Tax</th>
+                <th className="px-3 py-2 w-[10%] text-center">Quantity</th>
+                <th className="px-3 py-2 w-[13%] text-right">Unit Rate (₹)</th>
+                <th className="px-3 py-2 w-[16%] text-right bg-emerald-50/50">Total Amount (₹)</th>
+                <th className="px-3 py-2 min-w-[100px] text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -832,63 +832,69 @@ export function SupplierQuotationDetailView({
                 return (
                   <tr
                     key={idx}
-                    className="hover:bg-blue-50/20 transition-colors align-middle group"
+                    className="hover:bg-blue-50/20 transition-colors align-top group"
                   >
-                    <td className="px-3 py-2.5 text-center font-bold text-slate-400 font-mono text-[11px]">
+                    <td className="px-3 py-2.5 text-center font-bold text-slate-400 font-mono text-[11px] pt-3">
                       {idx + 1}
                     </td>
 
                     <td className="px-3 py-2.5">
-                      <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors leading-tight">
+                      <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors leading-tight break-words">
                         {line.itemName || `Item #${idx + 1}`}
                       </p>
                       {line.description && (
                         <p
                           title={line.description}
-                          className="text-[10px] text-slate-500 mt-0.5 line-clamp-1"
+                          className="text-[10.5px] text-slate-600 mt-1 break-words whitespace-pre-wrap leading-relaxed"
                         >
                           {line.description}
                         </p>
                       )}
-                      <span className="inline-block text-[9px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 mt-1">
-                        {line.technicalSpecs || line.specifications || 'As per tender requirements'}
-                      </span>
+                      {(line.technicalSpecs || line.specifications) && (
+                        <div className="mt-1.5 rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[10px] text-slate-700 leading-relaxed break-words whitespace-pre-wrap">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                            Specifications:
+                          </span>
+                          {line.technicalSpecs || line.specifications}
+                        </div>
+                      )}
                     </td>
 
-                    <td className="px-3 py-2.5 text-[11px] text-slate-700">
-                      <div>
-                        <span className="text-slate-400">Make:</span>{' '}
-                        <strong className="text-slate-800">{line.makeBrand || makeBrand || '—'}</strong>
+                    <td className="px-3 py-2.5 text-[11px] text-slate-700 pt-3">
+                      <div className="break-words">
+                        <span className="text-slate-400 font-bold text-[10px] uppercase">Make:</span>{' '}
+                        <strong className="text-slate-900">{line.makeBrand || makeBrand || '—'}</strong>
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        Model: {line.model || model || '—'}
+                      <div className="text-[10.5px] text-slate-600 mt-0.5 break-words">
+                        <span className="text-slate-400 font-bold text-[10px] uppercase">Model:</span>{' '}
+                        <span className="font-semibold text-slate-800">{line.model || model || '—'}</span>
                       </div>
                     </td>
 
-                    <td className="px-3 py-2.5 text-[11px] text-slate-700">
-                      <div className="font-mono text-slate-500 text-[10px]">{line.hsn || '—'}</div>
-                      <span className="inline-block px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200/70 font-bold text-[9px]">
+                    <td className="px-3 py-2.5 text-[11px] text-slate-700 pt-3">
+                      <div className="font-mono text-slate-600 font-bold text-[10px]">{line.hsn || '—'}</div>
+                      <span className="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/70 font-bold text-[9px] mt-0.5">
                         GST {gst}%
                       </span>
                     </td>
 
-                    <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
+                    <td className="px-3 py-2.5 text-center pt-3">
+                      <span className="inline-flex items-center gap-1 font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200 whitespace-nowrap">
                         <span>{qty}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{line.unitOfMeasure || 'Nos'}</span>
+                        <span className="text-[9px] font-bold text-slate-500 uppercase">{line.unitOfMeasure || 'Nos'}</span>
                       </span>
                     </td>
 
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-slate-800 text-xs">
+                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-slate-800 text-xs pt-3 whitespace-nowrap tabular-nums">
                       {unitPrice ? formatCurrency(unitPrice) : '—'}
                     </td>
 
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/50">
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/50 pt-3 whitespace-nowrap">
                       {lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'}
                     </td>
 
-                    <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
+                    <td className="px-3 py-2.5 text-center pt-3">
+                      <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px] whitespace-nowrap">
                         <Check className="h-3 w-3 text-emerald-600" /> Compliant
                       </span>
                     </td>
@@ -974,21 +980,21 @@ export function SupplierQuotationDetailView({
 
           {/* 4 Compact Parameter Chips */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-150 text-[11px]">
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
+            <div className="bg-slate-50 px-2 py-1.5 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Brand</span>
-              <span className="font-bold text-slate-900 truncate block">{makeBrand}</span>
+              <span className="font-bold text-slate-900 break-words leading-tight block" title={makeBrand}>{makeBrand}</span>
             </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
+            <div className="bg-slate-50 px-2 py-1.5 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Model</span>
-              <span className="font-bold text-slate-900 truncate block">{model}</span>
+              <span className="font-bold text-slate-900 break-words leading-tight block" title={model}>{model}</span>
             </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
+            <div className="bg-slate-50 px-2 py-1.5 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Delivery SLA</span>
-              <span className="font-bold text-slate-900 truncate block">{deliveryTimeline}</span>
+              <span className="font-bold text-slate-900 break-words leading-tight block" title={deliveryTimeline}>{deliveryTimeline}</span>
             </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
+            <div className="bg-slate-50 px-2 py-1.5 rounded border border-slate-200/70">
               <span className="text-[9px] font-bold text-slate-400 uppercase block">Validity</span>
-              <span className="font-bold text-slate-900 truncate block">{result.validity || result.details?.validity || '—'}</span>
+              <span className="font-bold text-slate-900 break-words leading-tight block" title={result.validity || result.details?.validity || '—'}>{result.validity || result.details?.validity || '—'}</span>
             </div>
           </div>
         </div>
@@ -1000,7 +1006,7 @@ export function SupplierQuotationDetailView({
               <div className="flex items-center gap-1.5">
                 <FileCheck2 className="h-3.5 w-3.5 text-emerald-700" />
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Compliance & Attached Documents
+                  Compliance &amp; Attached Documents
                 </h3>
               </div>
               <span className="text-[9px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-2xs uppercase">
@@ -1014,43 +1020,41 @@ export function SupplierQuotationDetailView({
                 <div
                   key={idx}
                   className={cn(
-                    "flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold transition-colors",
+                    "flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold transition-colors min-w-0",
                     item.verified
                       ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800"
                       : "border-slate-200 bg-slate-50 text-slate-500"
                   )}
                 >
                   <Check className={cn("h-3 w-3 shrink-0", item.verified ? "text-emerald-600 stroke-[3]" : "text-slate-300")} />
-                  <span className="truncate">{item.label}</span>
+                  <span className="break-words leading-tight text-[9.5px]">{item.label}</span>
                 </div>
               ))}
             </div>
 
             {/* Attached Files List */}
             {uniqueDocs.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                 {uniqueDocs.map((doc, idx) => (
                   <div
                     key={doc.id || idx}
-                    className="rounded-lg border border-slate-200 bg-slate-50/70 p-2 flex items-center justify-between gap-2 shadow-2xs hover:bg-slate-100/70 transition-colors"
+                    className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 flex items-start justify-between gap-2 shadow-2xs hover:bg-slate-100/70 transition-colors"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="h-7 w-7 rounded-md bg-blue-100/80 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/60">
+                    <div className="flex items-start gap-2 min-w-0 flex-1">
+                      <div className="h-7 w-7 rounded-md bg-blue-100/80 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/60 mt-0.5">
                         <FileText className="h-3.5 w-3.5" />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">
-                            {doc.name}
-                          </p>
-                          <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-1 py-0.2 rounded">
-                            {doc.category}
-                          </span>
-                        </div>
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <span className="inline-block text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-1.5 py-0.5 rounded">
+                          {doc.category}
+                        </span>
+                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight" title={doc.name}>
+                          {doc.name}
+                        </p>
                         {doc.fileName && doc.fileName !== doc.name && (
                           <p
                             title={doc.fileName}
-                            className="text-[9px] text-slate-500 font-mono truncate max-w-[170px] sm:max-w-[210px] leading-tight mt-0.5"
+                            className="text-[9px] text-slate-500 font-mono break-all leading-tight"
                           >
                             {doc.fileName}
                           </p>
@@ -1058,12 +1062,12 @@ export function SupplierQuotationDetailView({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 pt-0.5">
                       <button
                         type="button"
                         onClick={() => handlePreviewDoc(doc)}
                         disabled={previewLoadingId === doc.id}
-                        className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
+                        className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
                         title="Preview Document"
                       >
                         {previewLoadingId === doc.id ? (
