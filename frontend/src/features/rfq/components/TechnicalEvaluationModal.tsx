@@ -1185,14 +1185,7 @@ export function TechnicalEvaluationModal({
               </div>
             )}
 
-            {/* Note about 2-packet procurement rule */}
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-[11px] text-blue-800 leading-relaxed">
-              <strong>Two-Packet Procurement Notice:</strong> In accordance with
-              public procurement standards, marking a seller as Technically
-              Qualified permits their commercial bid to be opened in Stage 2 (or
-              admitted to the Stage 2 Reverse Auction). Disqualified vendors are
-              locked out of the financial stage.
-            </div>
+           
           </form>
 
           {/* Footer Actions */}
