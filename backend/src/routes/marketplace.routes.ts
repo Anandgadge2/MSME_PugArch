@@ -3956,15 +3956,21 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
             return apiResponse.error(res, 400, 'Clarifications are not enabled for this procurement.', 'CLARIFICATIONS_DISABLED');
         }
 
+        // Only enforce submission-start-date gate if the requirement is NOT already in an active/open status.
+        // If it's already PUBLISHED/OPEN/OPEN_FOR_BIDDING, the buyer explicitly opened it.
+        const activeStatuses = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'];
+        const reqStatus = String((requirement as any).status || '').toUpperCase();
         const sched = (requirement.payload as any)?.schedule;
-        const rawSubmissionStart = (requirement as any).submissionStartDate || sched?.submissionStartDate || sched?.startDate || (requirement.payload as any)?.tender?.bidStartDate || (requirement as any).startDate;
-        if (rawSubmissionStart) {
-            let startD = new Date(rawSubmissionStart);
-            if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
-                startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
-            }
-            if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
-                return apiResponse.error(res, 400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+        if (!activeStatuses.includes(reqStatus)) {
+            const rawSubmissionStart = (requirement as any).submissionStartDate || sched?.submissionStartDate || sched?.startDate || (requirement.payload as any)?.tender?.bidStartDate || (requirement as any).startDate;
+            if (rawSubmissionStart) {
+                let startD = new Date(rawSubmissionStart);
+                if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+                    startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+                }
+                if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+                    return apiResponse.error(res, 400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+                }
             }
         }
 

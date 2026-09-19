@@ -137,6 +137,19 @@ type RequestedDocUpload = {
   url?: string;
 };
 
+export type LineItemAttachment = {
+  id: string;
+  name: string;
+  fileName: string;
+  fileSize?: number;
+  fileUrl?: string;
+  url?: string;
+  fileAssetId?: number | null;
+  documentType: string;
+  customNote?: string;
+  uploadedAt: string;
+};
+
 // Seller's quote against each buyer line item.
 type LineQuote = {
   itemName: string;
@@ -149,6 +162,9 @@ type LineQuote = {
   model?: string;
   specifications?: string;
   complianceStatus?: string;
+  hsnCode?: string;
+  brandPolicy?: string;
+  attachments?: LineItemAttachment[];
 };
 
 const parseResponseData = (value: any) => {
@@ -348,6 +364,457 @@ const chooseOwnResponse = (primary: any, fallback: any) => {
   if (isFinalSubmittedResponse(normalizedFallback)) return normalizedFallback;
   return normalizedPrimary || normalizedFallback;
 };
+
+const getFileTypeDetails = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (['pdf'].includes(ext)) return { label: 'PDF', bg: 'bg-red-50 text-red-700 border-red-200' };
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return { label: 'IMG', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+  if (['doc', 'docx'].includes(ext)) return { label: 'DOC', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: 'XLS', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  return { label: ext.toUpperCase() || 'FILE', bg: 'bg-slate-50 text-slate-700 border-slate-200' };
+};
+
+function LineItemSpecsAndDocsPanel({
+  line,
+  idx,
+  itemsList,
+  isReadOnly,
+  updateLineQuote,
+  onUploadAttachment,
+  onRemoveAttachment,
+  onPreviewAttachment,
+  onClose,
+}: {
+  line: LineQuote;
+  idx: number;
+  itemsList: any[];
+  isReadOnly: boolean;
+  updateLineQuote: (idx: number, patch: Partial<LineQuote>) => void;
+  onUploadAttachment: (lineIdx: number, file: File, docType: string, customNote?: string) => Promise<void>;
+  onRemoveAttachment: (lineIdx: number, attachmentId: string) => void;
+  onPreviewAttachment: (item: any) => void;
+  onClose: () => void;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState('Technical Specification');
+  const [customDocName, setCustomDocName] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const buyerItem = idx < itemsList.length ? itemsList[idx] : null;
+  const buyerDesc = buyerItem?.description;
+
+  const qty = Number(line.quantity) || 1;
+  const unitRate = Number(line.unitPrice) || 0;
+  const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
+  const computedTotal = unitRate * qty * (1 + gstPercent / 100);
+
+  const attachments = Array.isArray(line.attachments) ? line.attachments : [];
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 10 MB limit`);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      await onUploadAttachment(idx, file, selectedCategory, customDocName.trim());
+      setCustomDocName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {
+      // Handled in parent
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (isReadOnly) return;
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 10 MB limit`);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      await onUploadAttachment(idx, file, selectedCategory, customDocName.trim());
+      setCustomDocName('');
+    } catch {
+      // Handled in parent
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200/80">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-5 w-5 rounded bg-slate-900 text-white font-mono text-[10px] font-black flex items-center justify-center shrink-0">
+                {idx + 1}
+              </span>
+              <h3 className="text-xs sm:text-sm font-black text-slate-900">
+                Technical Specifications &amp; Attachments: {line.itemName}
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Specify technical parameters, brand conformity, catalog references, and upload supporting cut-sheets.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {attachments.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+              <Paperclip className="h-3 w-3" /> {attachments.length} document{attachments.length > 1 ? 's' : ''} attached
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          >
+            Close Specs ▲
+          </button>
+        </div>
+      </div>
+
+      {/* Buyer Required Specification Banner */}
+      {buyerDesc && (
+        <div className="rounded-xl bg-blue-50/70 border border-blue-200/70 p-3 text-xs text-blue-950 shadow-2xs">
+          <span className="font-bold uppercase text-[10px] text-blue-700 block mb-0.5 tracking-wider">
+            Buyer Required Specification:
+          </span>
+          <p className="font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{buyerDesc}</p>
+        </div>
+      )}
+
+      {/* Form Fields Matching Image 2 Layout */}
+      <div className="space-y-4">
+        {/* Row 1: Item Name & HSN/SAC Code */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Item Name <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={line.itemName}
+              disabled
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs font-bold text-slate-700 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              HSN / SAC Code
+            </label>
+            <input
+              type="text"
+              value={line.hsnCode || ''}
+              onChange={e => updateLineQuote(idx, { hsnCode: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. 84713010, 998313"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-mono font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+        </div>
+
+        {/* Detailed Technical Specifications with 0/500 Counter */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider">
+              Detailed Technical Specifications &amp; Scope
+            </label>
+            <span className={cn(
+              "text-[10px] font-mono font-bold",
+              (line.specifications?.length || 0) > 500 ? "text-amber-600" : "text-slate-400"
+            )}>
+              {line.specifications?.length || 0}/500
+            </span>
+          </div>
+          <textarea
+            value={line.specifications || ''}
+            onChange={e => updateLineQuote(idx, { specifications: e.target.value })}
+            disabled={isReadOnly}
+            rows={3}
+            maxLength={1000}
+            placeholder="Detail technical parameters, dimensions, materials, tolerances, certifications, or deviations for this specific item..."
+            className="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500 leading-relaxed"
+          />
+        </div>
+
+        {/* Row 2: Make/Brand & Brand Policy */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Make / Brand
+            </label>
+            <input
+              type="text"
+              value={line.makeBrand || ''}
+              onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. Tata, Schneider, Havells, Dell, Custom"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Brand Policy
+            </label>
+            <select
+              value={line.brandPolicy || 'EQUIVALENT_ACCEPTED'}
+              onChange={e => updateLineQuote(idx, { brandPolicy: e.target.value })}
+              disabled={isReadOnly}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              <option value="EQUIVALENT_ACCEPTED">Equivalent Make Accepted</option>
+              <option value="STRICT_BRAND_LOCK">Strict - Exact Make Required</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Row 3: Model & Compliance Status */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Offered Model / Catalog / Part Number
+            </label>
+            <input
+              type="text"
+              value={line.model || ''}
+              onChange={e => updateLineQuote(idx, { model: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. MOD-2026-X, Series 5, Part #7842"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Technical Compliance Status
+            </label>
+            <select
+              value={line.complianceStatus || 'COMPLIANT'}
+              onChange={e => updateLineQuote(idx, { complianceStatus: e.target.value })}
+              disabled={isReadOnly}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              <option value="COMPLIANT">✓ 100% Fully Compliant</option>
+              <option value="DEVIATION">⚠ Minor Technical Deviation</option>
+              <option value="ALTERNATIVE">✦ Equivalent Alternative Offered</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Live Commercials Summary */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <span className="font-bold uppercase text-[10px] tracking-wider">Offered Commercials:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
+            <span className="text-slate-700">
+              Qty: <span className="text-slate-900">{qty} {line.unitOfMeasure || 'Nos'}</span>
+            </span>
+            <span className="text-slate-700">
+              Unit Rate: <span className="text-slate-900">₹{unitRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </span>
+            <span className="text-slate-700">
+              GST: <span className="text-slate-900">{gstPercent}%</span>
+            </span>
+            <span className="text-slate-900 font-extrabold bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+              Line Total: ₹{computedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* DOCUMENT UPLOAD SECTION FOR THIS SPECIFIC ITEM */}
+      <div className="rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 pb-2">
+          <div className="flex items-center gap-2">
+            <FileUp className="h-4 w-4 text-blue-700" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-950">
+              Attach Technical Documents for this Item
+            </h4>
+          </div>
+          <span className="text-[10.5px] text-slate-500 font-medium">
+            Upload spec sheets, product brochures, test certificates (PDF/DOC/Images up to 10MB)
+          </span>
+        </div>
+
+        {!isReadOnly && (
+          <div className="space-y-3">
+            {/* Document metadata inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10.5px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                  Document Type
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                >
+                  <option value="Technical Specification">Technical Specification Sheet</option>
+                  <option value="Brochure / Catalog">Product Brochure / Catalog</option>
+                  <option value="Test Certificate">Test Certificate / Lab Report</option>
+                  <option value="OEM Authorization">OEM Authorization (MAF)</option>
+                  <option value="Warranty Certificate">Warranty Certificate</option>
+                  <option value="Compliance Sheet">Compliance Matrix Sheet</option>
+                  <option value="Other">Other Supporting Document</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10.5px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                  Custom Title / Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={customDocName}
+                  onChange={e => setCustomDocName(e.target.value)}
+                  placeholder="e.g. BIS Certificate, Datasheet v2"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                />
+              </div>
+            </div>
+
+            {/* Drop Zone & File Browser */}
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200",
+                isDragOver ? "border-blue-500 bg-blue-50/80 scale-[1.01]" : "border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50/50",
+                isUploading ? "opacity-60 pointer-events-none" : ""
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.xls,.xlsx"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <div className="flex flex-col items-center justify-center gap-1.5">
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                    <span className="text-xs font-bold text-blue-700">Uploading document...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Upload className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 hover:text-blue-700">
+                        Click to upload specification document
+                      </span>
+                      <span className="text-xs text-slate-500"> or drag &amp; drop file here</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      PDF, DOC, DOCX, JPG, PNG up to 10MB
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Uploaded Documents List for This Item */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-600">
+              Attached Documents for Item #{idx + 1} ({attachments.length}):
+            </span>
+            {attachments.length === 0 && (
+              <span className="text-[10px] text-slate-400 font-medium italic">
+                Optional: Upload cut-sheets or compliance files
+              </span>
+            )}
+          </div>
+
+          {attachments.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-3 text-center text-xs text-slate-400">
+              No documents attached yet for this item. Upload technical cut-sheets, certificates, or brochures above.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {attachments.map((att: any, attIdx: number) => {
+                const typeInfo = getFileTypeDetails(att.fileName || att.name || '');
+                return (
+                  <div
+                    key={att.id || attIdx}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-xs shadow-2xs hover:border-slate-300 transition"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-black border uppercase shrink-0", typeInfo.bg)}>
+                        {typeInfo.label}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate text-[11px]" title={att.fileName || att.name}>
+                          {att.fileName || att.name}
+                        </p>
+                        <p className="text-[9.5px] font-medium text-slate-500">
+                          {att.documentType}
+                          {att.customNote ? ` • ${att.customNote}` : ''}
+                          {att.fileSize ? ` • ${formatBytes(att.fileSize)}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onPreviewAttachment(att)}
+                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200 px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                        title="Preview document"
+                      >
+                        <Eye className="h-3 w-3 text-blue-600" />
+                        View
+                      </button>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveAttachment(idx, att.id)}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          title="Remove document"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SubmitQuotationPage() {
   const router = useRouter();
@@ -1523,10 +1990,13 @@ export default function SubmitQuotationPage() {
           unitOfMeasure: sanitizeUom(line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos'),
           unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
           gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
-          makeBrand: line?.makeBrand || line?.brand || '',
+          makeBrand: line?.makeBrand || line?.brand || (matchingBuyerItem as any)?.makeBrand || '',
           model: line?.model || line?.modelNumber || line?.partNumber || '',
           specifications: line?.specifications || line?.technicalSpecs || line?.itemDescription || '',
           complianceStatus: line?.complianceStatus || line?.compliance || '',
+          hsnCode: line?.hsnCode || line?.hsn_sac_code || (matchingBuyerItem as any)?.hsnCode || '',
+          brandPolicy: line?.brandPolicy || (matchingBuyerItem as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+          attachments: Array.isArray(line?.attachments) ? line.attachments : [],
           remarks: line?.remarks || ''
         };
       });
@@ -1542,10 +2012,13 @@ export default function SubmitQuotationPage() {
               unitOfMeasure: sanitizeUom(buyerItem.unitOfMeasure || 'Nos'),
               unitPrice: '',
               gstPercent: '18',
-              makeBrand: '',
+              makeBrand: (buyerItem as any)?.makeBrand || '',
               model: '',
               specifications: '',
               complianceStatus: '',
+              hsnCode: (buyerItem as any)?.hsnCode || '',
+              brandPolicy: (buyerItem as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+              attachments: [],
               remarks: ''
             });
           }
@@ -1560,10 +2033,13 @@ export default function SubmitQuotationPage() {
         unitOfMeasure: sanitizeUom(item.unitOfMeasure || 'Nos'),
         unitPrice: '',
         gstPercent: '18',
-        makeBrand: '',
+        makeBrand: (item as any)?.makeBrand || '',
         model: '',
         specifications: '',
         complianceStatus: '',
+        hsnCode: (item as any)?.hsnCode || '',
+        brandPolicy: (item as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+        attachments: [],
         remarks: ''
       })));
     }
@@ -1640,20 +2116,24 @@ export default function SubmitQuotationPage() {
           model: (line.model || '').trim() || null,
           specifications: (line.specifications || '').trim() || null,
           complianceStatus: line.complianceStatus || null,
+          hsnCode: (line.hsnCode || '').trim() || null,
+          brandPolicy: line.brandPolicy || null,
+          attachments: Array.isArray(line.attachments) ? line.attachments : [],
           remarks: line.remarks.trim() || null,
           lineTotal: Math.round(lineTotal * 100) / 100,
           totalAmount: Math.round(lineTotal * 100) / 100,
         };
       });
+    const primaryLine = lines[0];
     const hasAnyContent = docs.length > 0 || lines.length > 0 || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim();
     if (!hasAnyContent) return undefined;
     return {
       documents: docs,
       lineItems: lines,
-      makeBrand: offeredMakeBrand.trim() || undefined,
-      model: offeredModel.trim() || undefined,
-      technicalSpecifications: technicalSpecifications.trim() || undefined,
-      complianceStatement: complianceStatement || undefined,
+      makeBrand: (offeredMakeBrand.trim() || primaryLine?.makeBrand || undefined),
+      model: (offeredModel.trim() || primaryLine?.model || undefined),
+      technicalSpecifications: (technicalSpecifications.trim() || primaryLine?.specifications || undefined),
+      complianceStatement: (complianceStatement || (primaryLine?.complianceStatus === 'DEVIATION' ? 'WITH_DEVIATION' : primaryLine?.complianceStatus === 'ALTERNATIVE' ? 'ALTERNATIVE_OFFERED' : 'FULL_COMPLIANCE')),
     };
   }
 
@@ -1751,6 +2231,67 @@ export default function SubmitQuotationPage() {
   const updateLineQuote = (index: number, patch: Partial<LineQuote>) => {
     if (isReadOnly) return;
     setLineQuotes(prev => prev.map((line, i) => i === index ? { ...line, ...patch } : line));
+  };
+
+  const handleUploadItemAttachment = async (
+    lineIdx: number,
+    file: File,
+    docType: string,
+    customNote?: string
+  ) => {
+    try {
+      const res = await uploadFile(file);
+      const newAttachment: LineItemAttachment = {
+        id: `line-att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: customNote ? `${customNote} (${file.name})` : file.name,
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: res.url,
+        url: res.url,
+        fileAssetId: res.id || null,
+        documentType: docType || 'Technical Specification',
+        customNote: customNote || '',
+        uploadedAt: new Date().toISOString(),
+      };
+
+      setLineQuotes(prev => {
+        const next = [...prev];
+        if (next[lineIdx]) {
+          const currentAtts = Array.isArray(next[lineIdx].attachments)
+            ? next[lineIdx].attachments
+            : [];
+          next[lineIdx] = {
+            ...next[lineIdx],
+            attachments: [...currentAtts, newAttachment],
+          };
+        }
+        return next;
+      });
+
+      toast.success(`${file.name} uploaded for item #${lineIdx + 1}`);
+    } catch (err: any) {
+      console.error('Failed to upload line item attachment:', err);
+      toast.error(`Failed to upload ${file.name}: ${err?.message || 'Unknown error'}`);
+      throw err;
+    }
+  };
+
+  const handleRemoveItemAttachment = (lineIdx: number, attachmentId: string) => {
+    if (isReadOnly) return;
+    setLineQuotes(prev => {
+      const next = [...prev];
+      if (next[lineIdx]) {
+        const currentAtts = Array.isArray(next[lineIdx].attachments)
+          ? next[lineIdx].attachments
+          : [];
+        next[lineIdx] = {
+          ...next[lineIdx],
+          attachments: currentAtts.filter(a => a.id !== attachmentId),
+        };
+      }
+      return next;
+    });
+    toast.info('Document removed from item.');
   };
 
   const handleAddCustomLine = () => {
@@ -2576,92 +3117,7 @@ export default function SubmitQuotationPage() {
               {fieldError('deliveryTimeline')}
             </div>
 
-            {/* Technical Specifications & Brand/Model Details */}
-            <div className="rounded-2xl border border-slate-200/90 bg-slate-50/50 p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#12335f]/10 text-[#12335f]">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                      Technical Specifications &amp; Compliance Details
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Specify your offered technical parameters, make/brand, model number, and compliance status.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Offered Make / Brand */}
-                <div>
-                  <label htmlFor="quotation-make-brand" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                    Offered Make / Brand
-                  </label>
-                  <input
-                    id="quotation-make-brand"
-                    type="text"
-                    value={offeredMakeBrand}
-                    onChange={e => setOfferedMakeBrand(e.target.value)}
-                    disabled={isReadOnly}
-                    placeholder="e.g. Tata, Havells, Schneider Electric, Custom"
-                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
-                  />
-                </div>
-
-                {/* Offered Model / Part Number */}
-                <div>
-                  <label htmlFor="quotation-model" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                    Model / Catalog / Part Number
-                  </label>
-                  <input
-                    id="quotation-model"
-                    type="text"
-                    value={offeredModel}
-                    onChange={e => setOfferedModel(e.target.value)}
-                    disabled={isReadOnly}
-                    placeholder="e.g. MOD-500X / Series 3B / Standard"
-                    className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
-                  />
-                </div>
-              </div>
-
-              {/* Technical Compliance Declaration */}
-              <div>
-                <label htmlFor="quotation-compliance" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                  Technical Compliance Declaration
-                </label>
-                <select
-                  id="quotation-compliance"
-                  value={complianceStatement}
-                  onChange={e => setComplianceStatement(e.target.value as any)}
-                  disabled={isReadOnly}
-                  className="w-full rounded-xl border border-slate-200 h-11 px-3.5 text-xs font-bold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition disabled:bg-slate-50 disabled:text-slate-500"
-                >
-                  <option value="FULL_COMPLIANCE">✓ 100% Fully Compliant with Buyer Technical Specifications</option>
-                  <option value="WITH_DEVIATION">⚠ Compliant with Minor Commercial/Technical Deviations</option>
-                  <option value="ALTERNATIVE_OFFERED">✦ Equivalent or Superior Alternative Product Offered</option>
-                </select>
-              </div>
-
-              {/* Offered Technical Specifications & Scope of Work */}
-              <div>
-                <label htmlFor="quotation-tech-specs" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                  Offered Technical Specifications &amp; Parameters
-                </label>
-                <textarea
-                  id="quotation-tech-specs"
-                  value={technicalSpecifications}
-                  onChange={e => setTechnicalSpecifications(e.target.value)}
-                  disabled={isReadOnly}
-                  placeholder="Detail your offered specifications: capacity, material grade, dimensions, voltage/power, standards compliance (ISO/BIS/CE), operating tolerances, warranty term, and any deviations or special highlights."
-                  rows={4}
-                  className="w-full rounded-xl border border-slate-200 p-3.5 text-xs font-semibold text-slate-700 placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500"
-                />
-              </div>
-            </div>
+          
 
             {/* Terms & Conditions */}
             <div>
@@ -3027,14 +3483,7 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
-            {/* Two-Cover Bidding Secrecy Notice */}
-            <div className="flex items-center gap-2.5 rounded-xl border border-indigo-150 bg-indigo-50/60 px-3.5 py-2.5 text-xs text-indigo-950 shadow-2xs">
-              <Lock className="h-4 w-4 text-indigo-600 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <span className="font-bold">Two-Cover Rule Commercial Bid Secrecy: </span>
-                <span className="text-slate-600 font-medium">Your unit rates and financial schedules are cryptographically sealed and masked until Stage 1 Technical Evaluation is completed by the buyer.</span>
-              </div>
-            </div>
+
 
             {lineQuotes.length === 0 ? (
               <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
@@ -3143,21 +3592,31 @@ export default function SubmitQuotationPage() {
                                   onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: !prev[idx] }))}
                                   className={cn(
                                     "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition cursor-pointer border",
-                                    (line.model || line.specifications)
+                                    (line.model || line.specifications || (Array.isArray(line.attachments) && line.attachments.length > 0))
                                       ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
                                       : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
                                   )}
-                                  title="Add or view offered model number and technical specifications for this item"
+                                  title="Add or view offered model number, technical specifications, and documents for this item"
                                 >
                                   <FileText className="h-3 w-3" />
                                   <span>
-                                    {(line.model || line.specifications) ? 'Specs & Model' : '+ Specs & Model'}
+                                    {(line.model || line.specifications || (Array.isArray(line.attachments) && line.attachments.length > 0)) ? 'Specs & Docs' : '+ Specs & Docs'}
                                     {' '}{expandedLineSpecs[idx] ? '▲' : '▼'}
                                   </span>
                                 </button>
+                                {line.hsnCode && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    HSN: {line.hsnCode}
+                                  </span>
+                                )}
                                 {line.model && !expandedLineSpecs[idx] && (
                                   <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
                                     Model: {line.model}
+                                  </span>
+                                )}
+                                {Array.isArray(line.attachments) && line.attachments.length > 0 && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <Paperclip className="h-2.5 w-2.5" /> {line.attachments.length} doc{line.attachments.length > 1 ? 's' : ''}
                                   </span>
                                 )}
                                 {line.complianceStatus && !expandedLineSpecs[idx] && (
@@ -3263,98 +3722,19 @@ export default function SubmitQuotationPage() {
 
                           {/* Expandable Specifications Sub-Row */}
                           {expandedLineSpecs[idx] && (
-                            <tr key={`specs-${idx}`} className="bg-slate-50/80 border-b border-slate-200">
-                              <td colSpan={7} className="px-5 py-3.5">
-                                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                                    <div className="flex items-center gap-2">
-                                      <ShieldCheck className="h-4 w-4 text-blue-600" />
-                                      <span className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                                        Specifications &amp; Compliance for Item #{idx + 1}: {line.itemName}
-                                      </span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: false }))}
-                                      className="text-[11px] font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
-                                    >
-                                      Close Specs ▲
-                                    </button>
-                                  </div>
-
-                                  {idx < itemsList.length && itemsList[idx]?.description && (
-                                    <div className="rounded-lg bg-blue-50/70 border border-blue-100 p-2.5 text-xs text-blue-900">
-                                      <span className="font-bold uppercase text-[10px] text-blue-700 block mb-0.5">
-                                        Buyer Required Specification:
-                                      </span>
-                                      <p className="font-medium text-slate-800 leading-relaxed">{itemsList[idx].description}</p>
-                                    </div>
-                                  )}
-
-                                  {isReadOnly ? (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                                      <div>
-                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Offered Model / Part No.:</span>
-                                        <span className="font-bold text-slate-800">{line.model || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block">Technical Compliance:</span>
-                                        <span className="font-bold text-emerald-800">
-                                          {line.complianceStatus === 'DEVIATION' ? '⚠ Minor Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative Offered' : line.complianceStatus === 'COMPLIANT' ? '✓ 100% Fully Compliant' : '—'}
-                                        </span>
-                                      </div>
-                                      <div className="sm:col-span-2">
-                                        <span className="text-[10.5px] font-bold uppercase text-slate-400 block mb-1">Offered Technical Specifications:</span>
-                                        <p className="font-medium text-slate-700 whitespace-pre-wrap bg-slate-50 border border-slate-200 rounded p-2.5">{line.specifications || 'No detailed specifications entered.'}</p>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <div className="space-y-3">
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                        <div>
-                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
-                                            Offered Model / Catalog / Part Number
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={line.model || ''}
-                                            onChange={e => updateLineQuote(idx, { model: e.target.value })}
-                                            placeholder="e.g. MOD-2026-X, Part #7842"
-                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                                          />
-                                        </div>
-
-                                        <div>
-                                          <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
-                                            Technical Compliance Status
-                                          </label>
-                                          <select
-                                            value={line.complianceStatus || 'COMPLIANT'}
-                                            onChange={e => updateLineQuote(idx, { complianceStatus: e.target.value })}
-                                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
-                                          >
-                                            <option value="COMPLIANT">✓ 100% Fully Compliant</option>
-                                            <option value="DEVIATION">⚠ Minor Technical Deviation</option>
-                                            <option value="ALTERNATIVE">✦ Equivalent Alternative Offered</option>
-                                          </select>
-                                        </div>
-                                      </div>
-
-                                      <div>
-                                        <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1">
-                                          Detailed Technical Specifications &amp; Compliance Notes
-                                        </label>
-                                        <textarea
-                                          value={line.specifications || ''}
-                                          onChange={e => updateLineQuote(idx, { specifications: e.target.value })}
-                                          rows={2}
-                                          placeholder="Detail technical parameters, dimensions, materials, tolerances, certifications, or deviations for this specific item..."
-                                          className="w-full rounded-lg border border-slate-200 p-2.5 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y"
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
+                            <tr key={`specs-${idx}`} className="bg-slate-50/70 border-b border-slate-200">
+                              <td colSpan={7} className="p-3 sm:p-4">
+                                <LineItemSpecsAndDocsPanel
+                                  line={line}
+                                  idx={idx}
+                                  itemsList={itemsList}
+                                  isReadOnly={isReadOnly}
+                                  updateLineQuote={updateLineQuote}
+                                  onUploadAttachment={handleUploadItemAttachment}
+                                  onRemoveAttachment={handleRemoveItemAttachment}
+                                  onPreviewAttachment={handlePreviewDocument}
+                                  onClose={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: false }))}
+                                />
                               </td>
                             </tr>
                           )}
@@ -3815,30 +4195,7 @@ export default function SubmitQuotationPage() {
               )}
             </div>
 
-            {/* Commercial Bid Secrecy Guarantee (Two-Cover Rule) */}
-            <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-slate-50 p-4 sm:p-5 shadow-2xs space-y-2">
-              <div className="flex items-start gap-3.5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
-                  <Lock className="h-5 w-5" />
-                </div>
-                <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded">
-                      Two-Cover Bidding Standard • Rule 160 Compliance
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3" /> Sealed Envelope
-                    </span>
-                  </div>
-                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                    Commercial Bid Secrecy &amp; Price Protection Guarantee
-                  </h4>
-                  <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                    Your financial quote, line-item pricing, and commercial schedules remain <strong>cryptographically sealed in the database</strong> until the buyer completes <strong>Stage 1 Technical Evaluation</strong>. The evaluation committee scrutinizes only specifications, quality, and eligibility to ensure 100% fair and unbiased technical qualification.
-                  </p>
-                </div>
-              </div>
-            </div>
+          
 
             {(() => {
               const coveredDocNames = new Set(
@@ -4050,15 +4407,7 @@ export default function SubmitQuotationPage() {
                       </div>
                     </div>
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleBackToRfq}
-                    className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 w-full sm:w-auto cursor-pointer flex items-center gap-1.5"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    <span>{backButtonLabelText}</span>
-                  </Button>
+                
                 </>
               ) : (
                 <>
@@ -4119,21 +4468,7 @@ export default function SubmitQuotationPage() {
         )}
       </div>
 
-      {/* EMD Payment Gateway Modal (Commented out as requested) */}
-      {/* <EmdPaymentModal
-        isOpen={isEmdModalOpen}
-        onClose={() => setIsEmdModalOpen(false)}
-        requirementId={targetReqId}
-        rfqTitle={subject}
-        rfqNumber={rfqNumber}
-        emdAmount={emdInfo?.emdAmount || 0}
-        onSuccess={() => {
-          setIsEmdModalOpen(false);
-          refetchEmd();
-          toast.success("EMD Payment verified successfully!");
-        }}
-      /> */}
-
+     
       <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );

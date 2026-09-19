@@ -1594,7 +1594,11 @@ export const listPublicBids = async (query: any, actor?: any) => {
           }
         }
       },
-      orderBy: query.sort === 'value' ? { estimatedValue: 'desc' } : { endDate: 'asc' },
+      orderBy: query.sort === 'value' 
+        ? { estimatedValue: 'desc' } 
+        : (query.sort === 'latest' || query.sort === 'newest') 
+        ? { createdAt: 'desc' } 
+        : { endDate: 'asc' },
       take: takeForMergedPage
     }),
     db.tender.findMany({
@@ -1627,7 +1631,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
         },
         _count: { select: { bids: { where: { status: { not: 'withdrawn' }, withdrawnAt: null } } } }
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: (query.sort === 'latest' || query.sort === 'newest') ? { createdAt: 'desc' } : { updatedAt: 'desc' },
       take: takeForMergedPage
     })
   ]);
@@ -1674,6 +1678,11 @@ export const listPublicBids = async (query: any, actor?: any) => {
   ]
     .sort((a: any, b: any) => {
       if (query.sort === 'value') return Number(b.estimatedValue || 0) - Number(a.estimatedValue || 0);
+      if (query.sort === 'latest' || query.sort === 'newest') {
+        const timeB = new Date(b.createdAt || b.publishedAt || b.startDate || 0).getTime();
+        const timeA = new Date(a.createdAt || a.publishedAt || a.startDate || 0).getTime();
+        return timeB - timeA;
+      }
       return new Date(a.endDate || a.updatedAt || a.createdAt).getTime() - new Date(b.endDate || b.updatedAt || b.createdAt).getTime();
     })
     .slice((page - 1) * pageSize, page * pageSize);
@@ -2348,15 +2357,21 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
     throw new ApiError(400, 'Questions can only be asked when the bidding opportunity is open.', 'INVALID_BID_STATUS');
   }
 
+  // Only enforce submission-start-date gate when the bid is NOT yet in an active/open status.
+  // If the bid is already PUBLISHED/OPEN/OPEN_FOR_BIDDING, clarifications must be allowed
+  // regardless of the schedule dates (the bid was explicitly opened by the buyer).
   const sched = (bid.technicalPacket as any)?.schedule || (bid.payload as any)?.schedule;
-  const rawSubmissionStart = sched?.submissionStartDate || sched?.startDate || bid.startDate;
-  if (rawSubmissionStart) {
-    let startD = new Date(rawSubmissionStart);
-    if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
-      startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
-    }
-    if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
-      throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+  const bidIsActive = allowedStatuses.includes(bid.status);
+  if (!bidIsActive) {
+    const rawSubmissionStart = sched?.submissionStartDate || sched?.startDate || bid.startDate;
+    if (rawSubmissionStart) {
+      let startD = new Date(rawSubmissionStart);
+      if (typeof rawSubmissionStart === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(rawSubmissionStart.trim())) {
+        startD = new Date(`${rawSubmissionStart.trim()}T00:00:00.000`);
+      }
+      if (!isNaN(startD.getTime()) && startD.getTime() > Date.now()) {
+        throw new ApiError(400, 'The clarification window has not opened yet. Submissions and clarifications will begin at the scheduled start time.', 'CLARIFICATION_NOT_STARTED');
+      }
     }
   }
 
@@ -3243,11 +3258,11 @@ export const sendPriceMatchCounterOffer = async (req: AuthRequest, bidId: string
       });
     }
 
-    // Set target seller participation to COUNTER_OFFER_PENDING
+    // Set target seller participation to AWARD_OFFERED
     await tx.procurementBidParticipation.update({
       where: { id: targetParticipation.id },
       data: {
-        finalStatus: 'COUNTER_OFFER_PENDING'
+        finalStatus: 'AWARD_OFFERED'
       }
     });
 
@@ -3293,17 +3308,55 @@ export const acceptPriceMatchCounterOffer = async (req: AuthRequest, bidId: stri
   logger.info({ bidId, user: req.user?.id }, '[ACCEPT_COUNTER_OFFER] Seller accepting price match offer');
   const bid = await resolveBid(bidId, {});
   const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = req.body?.awardId ? Number(req.body.awardId) : undefined;
 
-  const award = await db.procurementBidAward.findFirst({
+  let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
-      sellerId: { in: sellerUserIds },
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
       counterOfferStatus: 'PENDING'
     },
     include: { participation: true }
   });
 
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (specificAward.counterOfferStatus === 'PENDING') {
+          award = specificAward;
+        } else if (specificAward.counterOfferStatus === 'ACCEPTED') {
+          const acceptedAmount = specificAward.priceMatchTargetPrice ? Number(specificAward.priceMatchTargetPrice) : Number(specificAward.awardedAmount);
+          return { award: specificAward, status: 'AWARD_ACCEPTED', acceptedAmount, message: 'Price match counter-offer has already been accepted.' };
+        }
+      }
+    }
+  }
+
+  // Idempotent recovery: If counter offer is already accepted for this bid and seller, return success rather than 404
   if (!award) {
+    const alreadyAccepted = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        counterOfferStatus: 'ACCEPTED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyAccepted) {
+      const acceptedAmount = alreadyAccepted.priceMatchTargetPrice ? Number(alreadyAccepted.priceMatchTargetPrice) : Number(alreadyAccepted.awardedAmount);
+      return { award: alreadyAccepted, status: 'AWARD_ACCEPTED', acceptedAmount, message: 'Price match counter-offer has already been accepted.' };
+    }
     throw new ApiError(404, 'No pending price-match counter-offer found for your account on this bid.', 'COUNTER_OFFER_NOT_FOUND');
   }
 
@@ -3369,17 +3422,52 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
   logger.info({ bidId, user: req.user?.id, reason }, '[DECLINE_COUNTER_OFFER] Seller declining price match offer');
   const bid = await resolveBid(bidId, {});
   const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const awardIdFilter = body?.awardId ? Number(body.awardId) : undefined;
 
-  const award = await db.procurementBidAward.findFirst({
+  let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
-      sellerId: { in: sellerUserIds },
+      ...(awardIdFilter ? { id: awardIdFilter } : {}),
+      sellerId: { in: validSellerIds },
       counterOfferStatus: 'PENDING'
     },
     include: { participation: true }
   });
 
+  if (!award && awardIdFilter) {
+    const specificAward = await db.procurementBidAward.findFirst({
+      where: { id: awardIdFilter, bidId: bid.id },
+      include: { participation: true }
+    });
+    if (specificAward) {
+      const isAuthorized =
+        validSellerIds.includes(Number(specificAward.sellerId)) ||
+        (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
+      if (isAuthorized) {
+        if (specificAward.counterOfferStatus === 'PENDING') {
+          award = specificAward;
+        } else if (specificAward.counterOfferStatus === 'DECLINED') {
+          return { award: specificAward, status: 'AWARD_DECLINED', message: 'Price match counter-offer has already been declined.' };
+        }
+      }
+    }
+  }
+
   if (!award) {
+    const alreadyDeclined = await db.procurementBidAward.findFirst({
+      where: {
+        bidId: bid.id,
+        ...(awardIdFilter ? { id: awardIdFilter } : {}),
+        sellerId: { in: validSellerIds },
+        counterOfferStatus: 'DECLINED'
+      },
+      include: { participation: true }
+    });
+    if (alreadyDeclined) {
+      return { award: alreadyDeclined, status: 'AWARD_DECLINED', message: 'Price match counter-offer has already been declined.' };
+    }
     throw new ApiError(404, 'No pending price-match counter-offer found for your account on this bid.', 'COUNTER_OFFER_NOT_FOUND');
   }
 
@@ -3398,7 +3486,7 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
     await tx.procurementBidParticipation.update({
       where: { id: award.participationId },
       data: {
-        finalStatus: 'COUNTER_OFFER_DECLINED',
+        finalStatus: 'AWARD_DECLINED',
         rejectionReason: reason
       }
     });
@@ -3424,7 +3512,7 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
 
-  return { award: updated, status: 'COUNTER_OFFER_DECLINED', reason };
+  return { award: updated, status: 'AWARD_DECLINED', reason };
 };
 
 export const generatePOForBid = async (req: AuthRequest, bidId: string, body: any = {}) => {

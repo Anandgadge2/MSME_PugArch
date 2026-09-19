@@ -727,10 +727,10 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         ]
                     };
                     const now = new Date();
+                    const publicBidStatusesList = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED', 'EXPIRED'];
                     const sellerBaseBidWhere: any = {
                         approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                        status: { in: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED'] as any },
-                        OR: [{ endDate: null }, { endDate: { gt: now } }],
+                        status: { in: publicBidStatusesList as any },
                         ...restrictedBidsCondition
                     };
 
@@ -777,10 +777,19 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         select: { id: true, requirementNumber: true, procurementMethod: true }
                     }).catch(() => []);
 
-                    const isTenderMethod = (m?: string | null) => ['OPEN_TENDER', 'TENDER', 'open_tender', 'tender'].includes(String(m || ''));
-                    const isRfqMethod = (m?: string | null) => ['RFQ', 'rfq', 'DIRECT_RFQ', 'direct_rfq', 'Product', 'product'].includes(String(m || ''));
+                    const isAuctionMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('AUCTION') || s === 'REVERSE_AUCTION';
+                    };
+                    const isTenderMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('TENDER') || s === 'OPEN_TENDER';
+                    };
+                    const isRfqMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('RFQ') || s === 'DIRECT_RFQ' || s === 'PRODUCT' || s === 'SERVICE' || (!isTenderMethod(m) && !isAuctionMethod(m));
+                    };
                     const isRfpMethod = (m?: string | null) => ['RFP', 'rfp'].includes(String(m || ''));
-                    const isAuctionMethod = (m?: string | null) => ['REVERSE_AUCTION', 'reverse_auction'].includes(String(m || ''));
                     const isRateContractMethod = (m?: string | null) => ['RATE_CONTRACT', 'rate_contract'].includes(String(m || ''));
 
                     const tenderBids = sellerBids.filter((b: any) => isTenderMethod(b.procurementType) || isTenderMethod(b.bidType)).length;
@@ -798,14 +807,14 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     const rateContractBids = sellerBids.filter((b: any) => isRateContractMethod(b.procurementType) || isRateContractMethod(b.bidType)).length;
                     const rateContractReqs = sellerUnlinkedReqs.filter((r: any) => isRateContractMethod(r.procurementMethod)).length;
 
-                    const totalAuctions = liveAuctionsCount + auctionBids + auctionReqs;
+                    const totalAuctions = Math.max(liveAuctionsCount, 0) + auctionBids + auctionReqs;
                     const totalOpenTenders = tenderBids + tenderReqs + tendersCount;
                     const totalRfps = rfpBids + rfpReqs;
                     const totalRfqs = rfqBids + rfqReqs;
                     const totalRateContracts = rateContractBids + rateContractReqs;
 
                     sellerOppsData = {
-                        total: sellerBids.length + sellerUnlinkedReqs.length + tendersCount + liveAuctionsCount,
+                        total: totalOpenTenders + totalRfqs + totalAuctions,
                         openTenders: totalOpenTenders,
                         rfps: totalRfps,
                         rfqs: totalRfqs,

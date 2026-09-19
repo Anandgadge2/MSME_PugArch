@@ -39,12 +39,14 @@ interface OpportunityItem {
   location: string;
   estimatedValue: number;
   closingDate: string;
+  createdAt?: string;
   daysLeft: number;
   isEmdExempt: boolean;
   category: string;
   actionHref: string;
   actionLabel: string;
   urgent?: boolean;
+  isNew?: boolean;
 }
 
 export function LiveOpportunityRadar() {
@@ -56,8 +58,8 @@ export function LiveOpportunityRadar() {
     queryKey: ['dashboard-live-opportunities'],
     queryFn: async () => {
       const [bidsRes, auctionsRes] = await Promise.allSettled([
-        procurementBidApi.list({ take: 8 }),
-        reverseAuctionApi.list({ pageSize: 6 })
+        procurementBidApi.list({ sort: 'latest', pageSize: 20 }),
+        reverseAuctionApi.list({ pageSize: 12 })
       ]);
 
       const bids = bidsRes.status === 'fulfilled' && bidsRes.value
@@ -105,6 +107,9 @@ export function LiveOpportunityRadar() {
           actionLabel = 'Bid Now';
         }
 
+        const createdDate = bid.createdAt || bid.publishedAt || bid.startDate || null;
+        const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
+
         list.push({
           id: String(bid.id || `bid-${idx}`),
           refId: bid.bidNumber || (bid.id ? `BID-${bid.id}` : `TND-${1000 + idx}`),
@@ -115,12 +120,14 @@ export function LiveOpportunityRadar() {
           location: bid.deliveryLocation || bid.location || [bid.district, bid.state].filter(Boolean).join(', ') || 'National',
           estimatedValue: Number(bid.estimatedValue || bid.budget || 0),
           closingDate: bid.endDate ? new Date(bid.endDate).toISOString().split('T')[0] : 'Open',
+          createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
           daysLeft: diffDays,
           isEmdExempt: Boolean(bid.emdExempt),
           category: bid.category || 'General',
           actionHref,
           actionLabel,
-          urgent: diffDays <= 3
+          urgent: diffDays <= 3,
+          isNew: isRecentlyCreated
         });
       });
     }
@@ -131,6 +138,8 @@ export function LiveOpportunityRadar() {
         if (!auction) return;
         const closing = auction.endTime ? new Date(auction.endTime) : null;
         const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
+        const createdDate = auction.createdAt || auction.startTime || null;
+        const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
         list.push({
           id: `ra-${auction.id}`,
@@ -142,15 +151,25 @@ export function LiveOpportunityRadar() {
           location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'National',
           estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || 0),
           closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
+          createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
           daysLeft: diffDays,
           isEmdExempt: true,
           category: auction.category || 'Dynamic Auction',
           actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
           actionLabel: 'Join Auction',
-          urgent: diffDays <= 3
+          urgent: diffDays <= 3,
+          isNew: isRecentlyCreated
         });
       });
     }
+
+    // Strictly sort newest / latest opportunities first so they appear at the top
+    list.sort((a, b) => {
+      const timeB = a.createdAt ? new Date(b.createdAt || 0).getTime() : 0;
+      const timeA = b.createdAt ? new Date(a.createdAt || 0).getTime() : 0;
+      if (timeB !== timeA) return timeB - timeA;
+      return (a.daysLeft || 0) - (b.daysLeft || 0);
+    });
 
     return list;
   }, [data, isShg]);
@@ -314,6 +333,11 @@ export function LiveOpportunityRadar() {
                     <span className="text-[9px] font-bold text-slate-500 font-mono">
                       {item.refId}
                     </span>
+                    {item.isNew && (
+                      <span className="inline-flex items-center gap-0.5 text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 animate-in fade-in duration-300">
+                        <Sparkles className="h-2.5 w-2.5 text-emerald-600" /> New
+                      </span>
+                    )}
                     {item.isEmdExempt && (
                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                         <ShieldCheck className="h-2.5 w-2.5" /> EMD Exempt
