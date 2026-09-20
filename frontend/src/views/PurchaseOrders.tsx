@@ -2429,8 +2429,49 @@ export default function PurchaseOrders() {
                     const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
                     const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
                     const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
+                    const isDeliveredModal = viewingStatusLower === 'delivered';
+                    const isCancelledModal = viewingStatusLower === 'cancelled' || viewingStatusLower === 'rejected';
+
+                    const activeInvoice = (viewingOrder as any).invoices?.[0] || (viewingOrder as any).invoice;
+                    const approvedGrn = hasApprovedGrn(viewingOrder);
+
+                    const hasSlip = Boolean(
+                      (viewingOrder as any).paymentProofUrl ||
+                      (viewingOrder as any).paymentProofDocumentUrl ||
+                      (viewingOrder as any).paymentSlipUrl ||
+                      (viewingOrder as any).bankSlipUrl ||
+                      (viewingOrder as any).receiptUrl ||
+                      activeInvoice?.paymentProofUrl ||
+                      activeInvoice?.paymentSlipUrl ||
+                      (viewingOrder as any).paymentSlip ||
+                      (viewingOrder as any).offlineProof ||
+                      (viewingOrder as any).paymentProof
+                    );
+
+                    const isPaid = Boolean(
+                      viewingStatusLower.includes('paid') ||
+                      String(activeInvoice?.status || '').toLowerCase() === 'paid'
+                    );
+
+                    const hasPaymentRecorded = Boolean(
+                      isPaid ||
+                      activeInvoice?.paymentReference ||
+                      String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
+                      String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+                      ((viewingOrder as any).payments && (viewingOrder as any).payments.length > 0)
+                    );
+
+                    const isSettled = Boolean(
+                      activeInvoice?.settledAt ||
+                      viewingStatusLower === 'settled' ||
+                      viewingStatusLower === 'closed' ||
+                      viewingStatusLower === 'completed' ||
+                      (isPaid && !hasSlip)
+                    );
+
                     return (
                       <>
+                        {/* Seller: Accept / Reject when newly issued */}
                         {isSeller && isIssuedModal && (
                           <>
                             <Button
@@ -2454,7 +2495,9 @@ export default function PurchaseOrders() {
                             </Button>
                           </>
                         )}
-                        {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
+
+                        {/* Seller: Invoicing & Delivery tracking */}
+                        {isSeller && (isAcceptedModal || isDeliveredModal) && (
                           <>
                             {(() => {
                               const hasInvoice = Boolean(
@@ -2498,6 +2541,8 @@ export default function PurchaseOrders() {
                             </Button>
                           </>
                         )}
+
+                        {/* Linked Quotation */}
                         {(viewingOrder as any)?.bidId && (
                           <Button
                             variant="outline"
@@ -2511,32 +2556,23 @@ export default function PurchaseOrders() {
                             <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Quotation
                           </Button>
                         )}
-                        {(() => {
-                          const approvedGrn = hasApprovedGrn(viewingOrder);
-                          const isPaid = viewingStatusLower.includes('paid');
-                          if (approvedGrn && !isPaid) {
-                            if (!isBuyer) {
-                              return (
-                                <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
-                                  <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                  <span>Payment Pending from Buyer</span>
-                                </span>
-                              );
-                            }
-                            return (
+
+                        {/* BUYER WORKFLOW */}
+                        {isBuyer && !isCancelledModal && (
+                          <>
+                            {/* Cancel PO (only if not yet delivered/settled) */}
+                            {!['delivered', 'completed', 'settled', 'closed'].includes(viewingStatusLower) && (
                               <Button
-                                onClick={() => {
-                                  setViewingOrder(null);
-                                  router.push('/buyer/payments');
-                                }}
-                                className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                variant="outline"
+                                onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
+                                className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                               >
-                                <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Proof
+                                <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
                               </Button>
-                            );
-                          }
-                          if (!approvedGrn && !isPaid && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(viewingStatusLower)) {
-                            return (
+                            )}
+
+                            {/* GRN Required Gate: If goods delivered/in fulfillment but GRN not approved */}
+                            {!approvedGrn && ['delivered', 'in_fulfillment', 'accepted'].includes(viewingStatusLower) && (
                               <Button
                                 onClick={() => {
                                   const poId = viewingOrder.id;
@@ -2547,35 +2583,10 @@ export default function PurchaseOrders() {
                               >
                                 <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
                               </Button>
-                            );
-                          }
-                          if (isPaid) {
-                            return (
-                              <Button
-                                onClick={() => {
-                                  setViewingOrder(null);
-                                  router.push(isBuyer ? '/buyer/payments' : '/seller/payments');
-                                }}
-                                className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                              >
-                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-400" /> View Payment Proof
-                              </Button>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
-                          <Button
-                            variant="outline"
-                            onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
-                            className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                          >
-                            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
-                          </Button>
-                        )}
-                        {isBuyer && viewingStatusLower !== 'cancelled' && (
-                          <>
-                            {hasApprovedGrn(viewingOrder) && (
+                            )}
+
+                            {/* Payment Actions: ONLY enabled after GRN is approved and order not settled */}
+                            {approvedGrn && !isSettled && (
                               <>
                                 <Button
                                   onClick={() => {
@@ -2595,42 +2606,84 @@ export default function PurchaseOrders() {
                                 </Button>
                               </>
                             )}
-                            <Button
-                              variant="outline"
-                              onClick={() => setViewProofOrder(viewingOrder)}
-                              className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                            >
-                              <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
-                            </Button>
+
+                            {/* View Payment Slip: ONLY visible if slip is uploaded */}
+                            {hasSlip && (
+                              <Button
+                                variant="outline"
+                                onClick={() => setViewProofOrder(viewingOrder)}
+                                className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                              >
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
+                              </Button>
+                            )}
+
+                            {/* Repeat Order for Buyer on completed/delivered orders */}
+                            {(isDeliveredModal || isSettled) && (
+                              <Button
+                                onClick={() => handleOpenRepeatModal(viewingOrder)}
+                                className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
+                              </Button>
+                            )}
                           </>
                         )}
-                        {isSeller && viewingStatusLower !== 'cancelled' && (
-                          <Button
-                            onClick={() => {
-                              const target = viewingOrder;
-                              setViewingOrder(null);
-                              setConfirmSettlementOrder(target);
-                            }}
-                            className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                          >
-                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
-                          </Button>
+
+                        {/* SELLER WORKFLOW */}
+                        {isSeller && !isCancelledModal && (
+                          <>
+                            {/* GRN approved, but buyer has not yet paid */}
+                            {approvedGrn && !hasPaymentRecorded && !hasSlip && !isSettled && (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Awaiting Buyer Payment & Bank Slip</span>
+                              </span>
+                            )}
+
+                            {/* View Payment Slip: ONLY if slip is actually uploaded */}
+                            {hasSlip && (
+                              <Button
+                                variant="outline"
+                                onClick={() => setViewProofOrder(viewingOrder)}
+                                className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                              >
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
+                              </Button>
+                            )}
+
+                            {/* Confirm Settlement & Close: ONLY when payment recorded or slip uploaded, and NOT already settled */}
+                            {(hasPaymentRecorded || hasSlip) && !isSettled && (
+                              <Button
+                                onClick={() => {
+                                  const target = viewingOrder;
+                                  setViewingOrder(null);
+                                  setConfirmSettlementOrder(target);
+                                }}
+                                className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
+                              </Button>
+                            )}
+
+                            {/* Settled Badge */}
+                            {isSettled && (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Settled & Closed</span>
+                              </span>
+                            )}
+                          </>
                         )}
-                        {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
+
+                        {/* Admin / Master Admin: View Payment Slip if uploaded */}
+                        {(user?.role === 'admin' || user?.role === 'master_admin') && hasSlip && (
                           <Button
                             variant="outline"
                             onClick={() => setViewProofOrder(viewingOrder)}
                             className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                           >
                             <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
-                          </Button>
-                        )}
-                        {isBuyer && viewingStatusLower === 'delivered' && (
-                          <Button
-                            onClick={() => handleOpenRepeatModal(viewingOrder)}
-                            className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                          >
-                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
                           </Button>
                         )}
                       </>

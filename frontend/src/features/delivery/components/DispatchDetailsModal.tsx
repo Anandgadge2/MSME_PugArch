@@ -93,6 +93,24 @@ export function DispatchDetailsModal({
   const activeDelivery = freshDelivery || delivery;
   const po = activeDelivery?.purchaseOrder || delivery?.purchaseOrder;
 
+  // Determine if dispatch details have already been submitted / consignment is dispatched
+  const isAlreadyDispatched = useMemo(() => {
+    const statusUpper = String(activeDelivery?.status || delivery?.status || '').toUpperCase();
+    const hasDispatchedStatus = [
+      'DISPATCHED',
+      'IN_TRANSIT',
+      'AT_HUB',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+      'COMPLETED',
+      'CLOSED'
+    ].includes(statusUpper);
+    const hasSavedTracking = Boolean(
+      (activeDelivery?.trackingNumber || delivery?.trackingNumber)?.trim()
+    );
+    return hasDispatchedStatus || hasSavedTracking;
+  }, [activeDelivery, delivery]);
+
   // Form states
   const [trackingNumber, setTrackingNumber] = useState(delivery?.trackingNumber || '');
   const [carrierName, setCarrierName] = useState(delivery?.carrierName || '');
@@ -124,17 +142,20 @@ export function DispatchDetailsModal({
   // Sync state when authoritative fresh delivery loads
   useEffect(() => {
     if (freshDelivery) {
-      if (!trackingNumber && freshDelivery.trackingNumber) setTrackingNumber(freshDelivery.trackingNumber);
-      if (!carrierName && freshDelivery.carrierName) setCarrierName(freshDelivery.carrierName);
-      if (!eta && freshDelivery.expectedDelivery) setEta(freshDelivery.expectedDelivery.slice(0, 10));
-      if (!ewayBillNumber && freshDelivery.ewayBillNumber) setEwayBillNumber(freshDelivery.ewayBillNumber);
-      if (!remarks && freshDelivery.remarks) setRemarks(freshDelivery.remarks);
-      if (!driverName && (freshDelivery as any).metadata?.driverName) setDriverName((freshDelivery as any).metadata.driverName);
-      if (!driverPhone && ((freshDelivery as any).logisticsContact || (freshDelivery as any).metadata?.driverPhone)) {
+      if (freshDelivery.trackingNumber) setTrackingNumber(freshDelivery.trackingNumber);
+      if (freshDelivery.carrierName) setCarrierName(freshDelivery.carrierName);
+      if (freshDelivery.expectedDelivery) setEta(freshDelivery.expectedDelivery.slice(0, 10));
+      if (freshDelivery.ewayBillNumber) setEwayBillNumber(freshDelivery.ewayBillNumber);
+      if (freshDelivery.remarks) setRemarks(freshDelivery.remarks);
+      if ((freshDelivery as any).metadata?.driverName) setDriverName((freshDelivery as any).metadata.driverName);
+      if ((freshDelivery as any).logisticsContact || (freshDelivery as any).metadata?.driverPhone) {
         setDriverPhone((freshDelivery as any).logisticsContact || (freshDelivery as any).metadata?.driverPhone);
       }
-      if (!vehicleNumber && (freshDelivery as any).metadata?.vehicleNumber) setVehicleNumber((freshDelivery as any).metadata.vehicleNumber);
+      if ((freshDelivery as any).metadata?.vehicleNumber) setVehicleNumber((freshDelivery as any).metadata.vehicleNumber);
       if ((freshDelivery as any).metadata?.transportMode) setTransportMode((freshDelivery as any).metadata.transportMode);
+      if ((freshDelivery as any).metadata?.dispatchTimestamp) {
+        setDispatchTimestamp(String((freshDelivery as any).metadata.dispatchTimestamp).slice(0, 16));
+      }
     }
   }, [freshDelivery]);
 
@@ -418,6 +439,11 @@ export function DispatchDetailsModal({
   };
 
   const handleSave = async () => {
+    if (isAlreadyDispatched) {
+      toast.error('Dispatch details have already been submitted. Further modifications are locked.');
+      return;
+    }
+
     if (!trackingNumber.trim()) {
       toast.error('Please enter a Tracking / AWB / LR number');
       return;
@@ -499,9 +525,16 @@ export function DispatchDetailsModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
-                  Dispatch & Fulfillment Console
-                </span>
+                {isAlreadyDispatched ? (
+                  <span className="rounded bg-emerald-500/30 border border-emerald-400/50 px-2 py-0.5 text-[10px] font-bold text-emerald-200 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-300" />
+                    Dispatched & Locked
+                  </span>
+                ) : (
+                  <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                    Dispatch & Fulfillment Console
+                  </span>
+                )}
                 <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
                   DLV-{delivery.id}
                 </span>
@@ -529,6 +562,21 @@ export function DispatchDetailsModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto bg-slate-50/60 p-5 sm:p-6 space-y-6 text-left">
+          {/* Dispatch Already Confirmed Locked Banner */}
+          {isAlreadyDispatched && (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50/90 p-4 flex items-start gap-3.5 shadow-2xs">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                <p className="font-black text-emerald-950 text-sm">
+                  Dispatch Details Confirmed & Locked
+                </p>
+                <p className="text-emerald-800 text-[11px] leading-relaxed font-medium">
+                  Waybill credentials, carrier partner, driver contacts, and consignment logistics have already been submitted and synchronized with the buyer portal. To preserve logistics chain-of-custody and statutory compliance, dispatch details cannot be submitted or edited twice.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* A. Top Commercial & Consignee Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
@@ -616,7 +664,13 @@ export function DispatchDetailsModal({
                   onChange={e => setTrackingNumber(e.target.value)}
                   placeholder="e.g. AWB-98765432 or LR-88219"
                   required
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-bold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-900"
+                  )}
                 />
                 <p className="text-[9px] text-slate-400 mt-1">Air Waybill or Lorry Receipt reference from your carrier</p>
               </div>
@@ -630,16 +684,24 @@ export function DispatchDetailsModal({
                   value={carrierName}
                   onChange={e => setCarrierName(e.target.value)}
                   placeholder="e.g. Blue Dart / Delhivery"
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {POPULAR_CARRIERS.map(c => (
                     <button
                       key={c}
                       type="button"
+                      disabled={isAlreadyDispatched}
                       onClick={() => setCarrierName(c)}
                       className={cn(
-                        'rounded px-2 py-0.5 text-[9px] font-bold transition border cursor-pointer',
+                        'rounded px-2 py-0.5 text-[9px] font-bold transition border',
+                        isAlreadyDispatched && 'cursor-not-allowed opacity-60',
                         carrierName.toLowerCase() === c.toLowerCase()
                           ? 'bg-[#12335f] text-white border-[#12335f]'
                           : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
@@ -664,7 +726,13 @@ export function DispatchDetailsModal({
                   value={driverName}
                   onChange={e => setDriverName(e.target.value)}
                   placeholder="e.g. Rajesh Kumar"
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
 
@@ -678,7 +746,13 @@ export function DispatchDetailsModal({
                   value={driverPhone}
                   onChange={e => setDriverPhone(e.target.value)}
                   placeholder="e.g. +91 98765 43210"
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
 
@@ -691,7 +765,13 @@ export function DispatchDetailsModal({
                   value={vehicleNumber}
                   onChange={e => setVehicleNumber(e.target.value)}
                   placeholder="e.g. MH 04 AB 1234"
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
             </div>
@@ -704,7 +784,13 @@ export function DispatchDetailsModal({
                 <select
                   value={transportMode}
                   onChange={e => setTransportMode(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-2.5 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 >
                   {TRANSPORT_MODES.map(mode => (
                     <option key={mode} value={mode}>
@@ -723,7 +809,13 @@ export function DispatchDetailsModal({
                   type="datetime-local"
                   value={dispatchTimestamp}
                   onChange={e => setDispatchTimestamp(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
 
@@ -736,7 +828,13 @@ export function DispatchDetailsModal({
                   type="date"
                   value={eta}
                   onChange={e => setEta(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
             </div>
@@ -751,7 +849,13 @@ export function DispatchDetailsModal({
                 onChange={e => setEwayBillNumber(e.target.value)}
                 placeholder="e.g. 121009876543 (12 digits)"
                 maxLength={16}
-                className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                disabled={isAlreadyDispatched}
+                className={cn(
+                  "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                  isAlreadyDispatched
+                    ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                    : "bg-white text-slate-800"
+                )}
               />
             </div>
           </div>
@@ -803,7 +907,13 @@ export function DispatchDetailsModal({
                   value={challanNumber}
                   onChange={e => setChallanNumber(e.target.value)}
                   placeholder="e.g. DC-2026-001"
-                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  disabled={isAlreadyDispatched}
+                  className={cn(
+                    "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
 
@@ -818,8 +928,11 @@ export function DispatchDetailsModal({
                     const f = e.target.files?.[0];
                     if (f) void validateAndProcessChallan(f);
                   }}
-                  disabled={isUploadingChallan}
-                  className="block w-full text-xs text-slate-500 file:mr-2.5 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#12335f]/10 file:text-[#12335f] hover:file:bg-[#12335f]/20 cursor-pointer"
+                  disabled={isUploadingChallan || isAlreadyDispatched}
+                  className={cn(
+                    "block w-full text-xs text-slate-500 file:mr-2.5 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[#12335f]/10 file:text-[#12335f] hover:file:bg-[#12335f]/20",
+                    isAlreadyDispatched ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+                  )}
                 />
                 {challanUploadedFile && (
                   <p className="mt-1 text-[10px] text-emerald-700 font-bold flex items-center gap-1">
@@ -880,8 +993,14 @@ export function DispatchDetailsModal({
                   value={remarks}
                   onChange={e => setRemarks(e.target.value)}
                   rows={2}
+                  disabled={isAlreadyDispatched}
                   placeholder="e.g. Carrier collected 2 sealed boxes, driver instructed for express priority…"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+                  className={cn(
+                    "w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
                 />
               </div>
             </div>
@@ -890,9 +1009,16 @@ export function DispatchDetailsModal({
 
         {/* Modal Footer */}
         <div className="flex items-center justify-between border-t border-slate-200 bg-white px-6 py-3.5 shrink-0">
-          <div className="text-[11px] text-slate-500 font-medium">
-            Saves logistics tracking credentials and advances consignment to <strong className="text-slate-800 font-black">DISPATCHED</strong>.
-          </div>
+          {isAlreadyDispatched ? (
+            <div className="text-[11px] text-emerald-800 font-bold flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              Dispatch details have already been submitted. Consignment is locked in transit.
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-500 font-medium">
+              Saves logistics tracking credentials and advances consignment to <strong className="text-slate-800 font-black">DISPATCHED</strong>.
+            </div>
+          )}
           <div className="flex items-center gap-2">
             <Button
               type="button"
@@ -901,26 +1027,37 @@ export function DispatchDetailsModal({
               disabled={updateDispatchMut.isPending || markDispatchedMut.isPending}
               className="h-9 rounded-xl border-slate-200 px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
             >
-              Cancel
+              {isAlreadyDispatched ? 'Close' : 'Cancel'}
             </Button>
-            <Button
-              type="button"
-              onClick={handleSave}
-              disabled={updateDispatchMut.isPending || markDispatchedMut.isPending || isUploadingChallan}
-              className="h-9 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-xs cursor-pointer"
-            >
-              {updateDispatchMut.isPending || markDispatchedMut.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving Dispatch...
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Save & Confirm Dispatch
-                </>
-              )}
-            </Button>
+            {isAlreadyDispatched ? (
+              <Button
+                type="button"
+                disabled
+                className="h-9 rounded-xl bg-slate-100 border border-slate-200 px-5 text-xs font-bold text-slate-400 cursor-not-allowed shadow-none flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                Dispatch Already Confirmed
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={updateDispatchMut.isPending || markDispatchedMut.isPending || isUploadingChallan}
+                className="h-9 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-xs cursor-pointer"
+              >
+                {updateDispatchMut.isPending || markDispatchedMut.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving Dispatch...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Save & Confirm Dispatch
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

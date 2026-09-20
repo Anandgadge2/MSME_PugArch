@@ -831,6 +831,12 @@ export const deliveryService = {
     const delivery = await loadDelivery(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
+    if (
+      Boolean(delivery.trackingNumber?.trim()) ||
+      ['DISPATCHED', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(delivery.status))
+    ) {
+      throw new ApiError(400, 'Dispatch credentials have already been recorded and cannot be submitted twice.', 'DELIVERY_ALREADY_DISPATCHED');
+    }
     if (body.trackingNumber) {
       const existing = await db.deliveryTracking.findFirst({
         where: { trackingNumber: body.trackingNumber, NOT: { id } }
@@ -898,6 +904,9 @@ export const deliveryService = {
     const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'logistics', 'admin']);
     ensureNotTerminal(delivery);
+    if (['DISPATCHED', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(delivery.status))) {
+      throw new ApiError(400, 'Consignment has already been dispatched and cannot be dispatched twice.', 'DELIVERY_ALREADY_DISPATCHED');
+    }
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, 'DISPATCHED', actor, {
         location: body?.location,
