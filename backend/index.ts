@@ -208,6 +208,25 @@ app.use('/api', (req, res, next) => {
   return next();
 });
 
+// RFC 6455 compliant HTTP endpoint for WebSocket route:
+// When a plain HTTP request arrives at /api/ws (e.g. from browser navigation, health checks, or misconfigured reverse proxies),
+// respond with 426 Upgrade Required instead of falling through to a 404 handler.
+app.get('/api/ws', (req, res) => {
+  res.status(426).set({
+    'Upgrade': 'WebSocket',
+    'Connection': 'Upgrade',
+  }).json({
+    status: 'UPGRADE_REQUIRED',
+    code: 426,
+    message: 'This is a WebSocket endpoint. Connect using ws:// or wss:// with Upgrade headers.',
+    transport: 'websocket',
+  });
+});
+
+app.get('/api/ws/health', (req, res) => {
+  res.json({ status: 'OK', transport: 'websocket' });
+});
+
 app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
   try {
     if (!isPusherConfigured()) {
