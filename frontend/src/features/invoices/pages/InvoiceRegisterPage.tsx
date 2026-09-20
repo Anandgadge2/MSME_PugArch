@@ -1770,7 +1770,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                         {(() => {
                           const isPaid = statusOf(selectedInvoice) === 'paid';
-                          const payRoute = role === 'buyer' ? '/buyer/payments' : '/payments';
+                          const isBuyer = role === 'buyer' || user?.role === 'buyer';
+                          const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
                           if (isPaid) {
                             return (
                               <Button
@@ -1784,16 +1785,24 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                               </Button>
                             );
                           }
+                          if (isBuyer) {
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => router.push(`${payRoute}?search=${encodeURIComponent(selectedInvoice.invoiceNumber || '')}`)}
+                                className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                <span>Pay Now / Upload Payment Proof</span>
+                              </Button>
+                            );
+                          }
                           return (
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => router.push(`${payRoute}?search=${encodeURIComponent(selectedInvoice.invoiceNumber || '')}`)}
-                              className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                            >
-                              <CreditCard className="h-3 w-3" />
-                              <span>Pay Now / Upload Payment Proof</span>
-                            </Button>
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                              <Clock className="h-3 w-3 text-amber-600" />
+                              <span>Payment Pending from Buyer</span>
+                            </span>
                           );
                         })()}
                       </div>

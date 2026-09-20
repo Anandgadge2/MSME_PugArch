@@ -232,6 +232,8 @@ export interface DeliveryDetailDto {
       createdAt?: string;
       invoiceFile?: { id: number; originalName?: string; mimeType?: string } | null;
       invoiceFileId?: number | null;
+      paymentSlipFile?: { id: number; originalName?: string; mimeType?: string } | null;
+      paymentSlipFileId?: number | null;
     }>;
   };
   events?: DeliveryEventDto[];

@@ -138,6 +138,46 @@ const assertPoOwnership = async (poId: number, organizationId: number, userId: n
     return po;
 };
 
+const hasSeparateGrnApprover = async (organizationId: number, currentUserId: number): Promise<boolean> => {
+    try {
+        const otherActiveMembers = await prisma.orgMembership.findMany({
+            where: {
+                organizationId,
+                isActive: true,
+                userId: { not: currentUserId }
+            },
+            include: {
+                customRole: {
+                    include: {
+                        permissions: {
+                            where: {
+                                permissionKey: { in: ['grn.approve', 'GRN_APPROVE', 'GRN.APPROVE'] },
+                                allowed: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (otherActiveMembers.length === 0) {
+            return false;
+        }
+
+        return otherActiveMembers.some(m => {
+            if (['ORG_ADMIN', 'TECHNICAL_OFFICER', 'LOGISTICS_OFFICER'].includes(m.orgRole)) {
+                return true;
+            }
+            if (m.customRole && m.customRole.permissions && m.customRole.permissions.length > 0) {
+                return true;
+            }
+            return false;
+        });
+    } catch {
+        return false;
+    }
+};
+
 // ─── GET /api/grn — list ─────────────────────────────────────────────────────
 
 router.get(
@@ -260,7 +300,8 @@ router.get(
             include: grnIncludes
         });
         if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
-        ok(res, grn);
+        const requiresApprovalWorkflow = await hasSeparateGrnApprover(grn.organizationId, uId);
+        ok(res, { ...grn, requiresApprovalWorkflow });
     })
 );
 
@@ -325,6 +366,47 @@ router.post(
             throw new ApiError(400, 'GRN has no items', 'GRN_EMPTY');
         }
 
+        const separateApproverExists = await hasSeparateGrnApprover(grn.organizationId, userId(req));
+        if (!separateApproverExists) {
+            const hasRejection = grn.items.some(i => Number(i.rejectedQty) > 0);
+            const newStatus = hasRejection ? 'PARTIAL' : 'APPROVED';
+
+            const updated = await prisma.goodsReceiptNote.update({
+                where: { id },
+                data: {
+                    status: newStatus,
+                    approvedById: userId(req),
+                    approvedAt: new Date()
+                },
+                include: grnIncludes
+            });
+
+            try {
+                const sellerId = updated.purchaseOrder?.sellerId;
+                if (sellerId) {
+                    await notificationService.notify(sellerId, {
+                        title: hasRejection ? 'GRN partially approved' : 'GRN approved',
+                        message: `${grn.grnNumber} for PO ${updated.purchaseOrder?.poNumber} has been verified and ${hasRejection ? 'partially approved' : 'approved'}.`,
+                        type: 'grn_approved',
+                        priority: 'medium',
+                        redirectUrl: '/seller/orders'
+                    });
+                }
+            } catch { /* non-fatal */ }
+
+            await auditLog({
+                actorUserId: userId(req),
+                actorRole: req.user!.role,
+                action: 'grn.approved',
+                entityType: 'grn',
+                entityId: id,
+                ipAddress: req.ip,
+                metadata: { status: newStatus, hasRejection, directApproval: true }
+            });
+
+            return ok(res, { ...updated, requiresApprovalWorkflow: false });
+        }
+
         const updated = await prisma.goodsReceiptNote.update({
             where: { id },
             data: { status: 'SUBMITTED' },
@@ -361,7 +443,7 @@ router.post(
             ipAddress: req.ip
         });
 
-        ok(res, updated);
+        ok(res, { ...updated, requiresApprovalWorkflow: true });
     })
 );
 
@@ -382,7 +464,11 @@ router.post(
             include: { items: true, purchaseOrder: { include: { items: true } } }
         });
         if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
-        if (grn.status !== 'SUBMITTED' && grn.status !== 'PARTIAL') {
+
+        const separateApproverExists = await hasSeparateGrnApprover(grn.organizationId, userId(req));
+        const canDirectApprove = !separateApproverExists && grn.status === 'DRAFT';
+
+        if (grn.status !== 'SUBMITTED' && grn.status !== 'PARTIAL' && !canDirectApprove) {
             throw new ApiError(409, 'Only SUBMITTED GRNs can be approved', 'GRN_INVALID_STATE');
         }
 
@@ -420,10 +506,10 @@ router.post(
             entityType: 'grn',
             entityId: id,
             ipAddress: req.ip,
-            metadata: { status: newStatus, hasRejection }
+            metadata: { status: newStatus, hasRejection, directApproval: canDirectApprove }
         });
 
-        ok(res, updated);
+        ok(res, { ...updated, requiresApprovalWorkflow: separateApproverExists });
     })
 );
 
@@ -444,7 +530,11 @@ router.post(
             include: { purchaseOrder: { select: { poNumber: true, sellerId: true } } }
         });
         if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
-        if (grn.status !== 'SUBMITTED') {
+
+        const separateApproverExists = await hasSeparateGrnApprover(grn.organizationId, userId(req));
+        const canDirectReject = !separateApproverExists && grn.status === 'DRAFT';
+
+        if (grn.status !== 'SUBMITTED' && !canDirectReject) {
             throw new ApiError(409, 'Only SUBMITTED GRNs can be rejected', 'GRN_INVALID_STATE');
         }
 

@@ -156,8 +156,13 @@ export default function GrnDetailPage({ id }: Props) {
         );
     }
 
-    const canSubmit = grn.status === 'DRAFT' && canCreateGrn;
-    const canApprove = grn.status === 'SUBMITTED' && canApproveGrn;
+    const requiresApprovalWorkflow = grn.requiresApprovalWorkflow ?? true;
+    const isSingleUserOrNoApprover = !requiresApprovalWorkflow;
+    const canSubmit = grn.status === 'DRAFT' && canCreateGrn && requiresApprovalWorkflow;
+    const canApprove = (canApproveGrn || (canCreateGrn && isSingleUserOrNoApprover)) && (
+        grn.status === 'SUBMITTED' ||
+        (grn.status === 'DRAFT' && isSingleUserOrNoApprover)
+    );
 
     const totalOrdered = grn.items.reduce((s, i) => s + Number(i.orderedQty || 0), 0);
     const totalReceived = grn.items.reduce((s, i) => s + Number(i.receivedQty || 0), 0);
@@ -302,9 +307,18 @@ export default function GrnDetailPage({ id }: Props) {
                     {(() => {
                         const poStatus = String(grn.purchaseOrder?.status || grn.status || '').toLowerCase();
                         const isPaid = poStatus.includes('paid');
-                        const payRoute = user?.role === 'buyer' ? '/buyer/payments' : '/payments';
+                        const isBuyer = user?.role === 'buyer';
+                        const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
                         const searchVal = grn.grnNumber || grn.purchaseOrder?.poNumber || '';
                         if (!isPaid) {
+                            if (!isBuyer) {
+                                return (
+                                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800">
+                                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                        <span>Payment Pending from Buyer</span>
+                                    </span>
+                                );
+                            }
                             return (
                                 <Button
                                     onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
@@ -373,7 +387,7 @@ export default function GrnDetailPage({ id }: Props) {
                                 className="bg-emerald-600 text-white hover:bg-emerald-700 h-9 sm:h-10 text-xs font-bold shadow-sm cursor-pointer"
                             >
                                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                                Approve
+                                {grn.status === 'DRAFT' ? 'Approve & Finalize GRN' : 'Approve'}
                             </Button>
                         </>
                     )}
@@ -381,6 +395,22 @@ export default function GrnDetailPage({ id }: Props) {
             </div>
 
             {/* Status Banners */}
+            {grn.status === 'DRAFT' && !requiresApprovalWorkflow && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3.5 text-xs font-medium text-indigo-950 flex items-start gap-2.5 shadow-2xs">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-700 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold">Direct Verification</span>: Single-user / sole-approver organization. Review line items below and directly approve or reject this Goods Receipt Note.
+                    </div>
+                </div>
+            )}
+            {grn.status === 'DRAFT' && requiresApprovalWorkflow && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs font-medium text-amber-950 flex items-start gap-2.5 shadow-2xs">
+                    <Clock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold">Draft Pending Submission</span>: Review all received and accepted quantities before submitting for approval by your organization's inspection team.
+                    </div>
+                </div>
+            )}
             {grn.status === 'APPROVED' && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs font-medium text-emerald-900 flex items-start gap-2.5 shadow-2xs">
                     <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
@@ -428,9 +458,13 @@ export default function GrnDetailPage({ id }: Props) {
                             {grn.status !== 'DRAFT' ? '✓' : '2'}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-900">2. Submitted for Review</p>
+                            <p className="text-xs font-bold text-slate-900">
+                                {requiresApprovalWorkflow ? '2. Submitted for Review' : '2. Quality Verification'}
+                            </p>
                             <p className="text-[11px] text-slate-500 truncate">
-                                {grn.status === 'DRAFT' ? 'Draft pending submission' : 'Quality verification requested'}
+                                {grn.status === 'DRAFT'
+                                    ? (requiresApprovalWorkflow ? 'Draft pending submission' : 'Ready for direct verification')
+                                    : (requiresApprovalWorkflow ? 'Quality verification requested' : 'Direct verification processed')}
                             </p>
                             <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
                                 {grn.status !== 'DRAFT' ? formatDateTime(grn.updatedAt) : 'Pending'}

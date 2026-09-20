@@ -14,6 +14,7 @@ import { queryKeys } from '../../shared/queryKeys';
 import {
   AlertTriangle,
   ArrowRight,
+  Box,
   Building2,
   Calendar,
   Check,
@@ -26,13 +27,16 @@ import {
   CreditCard,
   DollarSign,
   ExternalLink,
+  Eye,
   FileText,
   Key,
   Layers,
   MapPin,
   Package,
   Phone,
+  Receipt,
   RefreshCw,
+  Send,
   Share2,
   Shield,
   ShieldAlert,
@@ -75,10 +79,13 @@ import {
   useRequestDpExtension,
   useRespondDpExtension,
   useResolveDispute,
-  // useSendDeliveryOtp,
-  // useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
+import { PackedOrderDialog } from '../components/PackedOrderDialog';
+import { DispatchDetailsModal } from '../components/DispatchDetailsModal';
+import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
+import { TaxInvoiceRegistryModal } from '../../invoices/components/TaxInvoiceRegistryModal';
+import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { uploadDeliveryFile } from '../upload';
 import { openFileAsset } from '../../../lib/files';
 import type {
@@ -95,6 +102,8 @@ const inputBase = 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 
 const textareaBase = `${inputBase} h-24 py-2.5`;
 
 const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
+  'SELLER_ACCEPTED',
+  'PACKED',
   'READY_FOR_PICKUP',
   'PICKED_UP',
   'IN_TRANSIT',
@@ -103,6 +112,7 @@ const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
 ];
 
 const nextManualStatusFor = (status: DeliveryStatus): DeliveryStatus | null => {
+  if (status === 'CREATED' || (status as string) === 'PENDING_ACCEPTANCE') return 'SELLER_ACCEPTED';
   if (status === 'DISPATCHED') return 'IN_TRANSIT';
   const index = MANUAL_TRACKING_FLOW.indexOf(status);
   if (index < 0 || index >= MANUAL_TRACKING_FLOW.length - 1) return null;
@@ -250,10 +260,84 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const nextManualStatus = nextManualStatusFor(delivery.status);
   const isSellerTrackingView = accessRole === 'seller';
 
+  const [isPackModalOpen, setIsPackModalOpen] = useState(false);
+  const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
+
+  // Modals state for View PO, View Invoice, and View Payment Proof
+  const [viewingPoOrder, setViewingPoOrder] = useState<any | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
+  const [isInvoicePickerOpen, setIsInvoicePickerOpen] = useState(false);
+  const [isPaymentProofModalOpen, setIsPaymentProofModalOpen] = useState(false);
+
   const sellerName = po?.seller?.name || 'Seller';
   const buyerName = po?.buyer?.name || 'Buyer';
   const poNumber = po?.poNumber || `PO-${delivery.purchaseOrderId}`;
   const trackingNo = delivery.trackingNumber || `DLV-${delivery.id}`;
+
+  const invoices = useMemo(() => po?.invoices || [], [po?.invoices]);
+  const taxInvoiceDoc = useMemo(() => docs.find(d => d.documentType === 'TAX_INVOICE'), [docs]);
+  const paymentProofDoc = useMemo(() => docs.find(d => d.documentType === 'PAYMENT_PROOF'), [docs]);
+
+  const handleOpenPo = useCallback(() => {
+    setViewingPoOrder(po || { id: delivery.purchaseOrderId, poNumber });
+  }, [po, delivery.purchaseOrderId, poNumber]);
+
+  const handleOpenInvoice = useCallback(() => {
+    if (invoices.length === 1) {
+      setViewingInvoiceId(invoices[0].id);
+    } else if (invoices.length > 1) {
+      setIsInvoicePickerOpen(true);
+    } else if (taxInvoiceDoc) {
+      const fileTarget = taxInvoiceDoc.fileAsset || (taxInvoiceDoc as any).fileAssetId || taxInvoiceDoc.id;
+      openFileAsset(fileTarget, 'Tax Invoice').catch(err => {
+        notify.error(err?.message || 'Failed to open invoice document');
+      });
+    } else {
+      notify.info('No tax invoice has been generated or uploaded for this delivery yet.');
+    }
+  }, [invoices, taxInvoiceDoc]);
+
+  const handleOpenPaymentProof = useCallback(() => {
+    setIsPaymentProofModalOpen(true);
+  }, []);
+
+  const derivedInitialProof = useMemo(() => {
+    if (paymentProofDoc) {
+      const fileAsset = paymentProofDoc.fileAsset;
+      return {
+        id: paymentProofDoc.id,
+        amount: delivery.settlement?.netReleasedAmount || po?.amount || po?.totalValue || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: delivery.settlement?.transactionReference || `DOC-REF-${paymentProofDoc.id}`,
+        paymentDate: paymentProofDoc.createdAt || delivery.settlement?.releasedAt || new Date().toISOString(),
+        payerBankName: 'Linked Payer Account',
+        receiptFileId: fileAsset?.id,
+        receiptFileUrl: fileAsset?.url || (fileAsset?.id ? `/api/files/${fileAsset.id}/download` : undefined),
+        status: delivery.settlement?.status === 'RELEASED' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: paymentProofDoc.description || 'Payment proof attached to delivery'
+      };
+    }
+    const invoiceWithSlip = invoices.find(inv => Boolean((inv as any).paymentSlipFile || (inv as any).paymentSlipFileId));
+    if (invoiceWithSlip) {
+      const slip = (invoiceWithSlip as any).paymentSlipFile;
+      const slipId = slip?.id || (invoiceWithSlip as any).paymentSlipFileId;
+      return {
+        id: invoiceWithSlip.id,
+        amount: invoiceWithSlip.amount || po?.amount || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: (invoiceWithSlip as any).paymentReference || 'INVOICE_PAYMENT_SLIP',
+        paymentDate: (invoiceWithSlip as any).paymentDate || invoiceWithSlip.createdAt || new Date().toISOString(),
+        payerBankName: (invoiceWithSlip as any).bankName || 'Direct Transfer',
+        receiptFileId: slipId,
+        receiptFileUrl: slip?.url || (slipId ? `/api/files/${slipId}/download` : undefined),
+        status: invoiceWithSlip.status === 'paid' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: 'Payment slip attached to invoice'
+      };
+    }
+    return null;
+  }, [paymentProofDoc, delivery.settlement, po, delivery.purchaseOrderId, invoices]);
 
   return (
     <div className="space-y-4">
@@ -279,6 +363,15 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                   <span className="text-slate-400 font-semibold">PO:</span>
                   <span>{poNumber}</span>
                   <Copy className="h-2.5 w-2.5 text-slate-400 group-hover:text-slate-700" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenPo}
+                  className="group inline-flex items-center gap-1 rounded-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-700 transition-colors cursor-pointer"
+                  title="Open Purchase Order Dialog"
+                >
+                  <Eye className="h-2.5 w-2.5 text-indigo-600" />
+                  <span>View PO</span>
                 </button>
                 <SlaBadge slaStatus={delivery.slaStatus} />
               </div>
@@ -310,7 +403,66 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 self-start shrink-0">
+          <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
+            {/* View PO Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenPo}
+              className="h-8 rounded-lg border-indigo-200 bg-indigo-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 shadow-2xs cursor-pointer transition-all"
+              title="View Purchase Order details & line items"
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
+              View PO
+            </Button>
+
+            {/* View Invoice Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenInvoice}
+              className="h-8 rounded-lg border-emerald-200 bg-emerald-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs cursor-pointer transition-all"
+              title="View Tax Invoice & GST details"
+            >
+              <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+              View Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}
+            </Button>
+
+            {/* View Payment Proof Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenPaymentProof}
+              className="h-8 rounded-lg border-sky-200 bg-sky-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-100 hover:border-sky-300 shadow-2xs cursor-pointer transition-all"
+              title="View Payment proof, UTR & transaction receipt"
+            >
+              <CreditCard className="mr-1.5 h-3.5 w-3.5 text-sky-600" />
+              View Payment Proof
+            </Button>
+
+            {/* Prominent Mark Packed action if awaiting packing */}
+            {(accessRole === 'seller' || accessRole === 'admin') &&
+              (delivery.status === 'SELLER_ACCEPTED' || (delivery.status as string) === 'CREATED') && (
+                <Button
+                  type="button"
+                  onClick={() => setIsPackModalOpen(true)}
+                  className="h-8 rounded-lg bg-indigo-600 px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-2xs cursor-pointer"
+                >
+                  <Package className="mr-1.5 h-3.5 w-3.5" /> Mark Packed
+                </Button>
+            )}
+
+            {/* Manage Fulfillment button */}
+            {(accessRole === 'seller' || accessRole === 'admin' || accessRole === 'logistics') && (
+              <Button
+                type="button"
+                onClick={() => setIsFulfillmentModalOpen(true)}
+                className="h-8 rounded-lg bg-[#12335f] px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-2xs cursor-pointer"
+              >
+                <Truck className="mr-1.5 h-3.5 w-3.5" /> Manage Fulfillment
+              </Button>
+            )}
+
             <Button
               variant="outline"
               onClick={onClose || (() => window.history.back())}
@@ -403,6 +555,26 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                 {delivery.settlement?.status || 'FUNDS SECURED'}
               </span>
             </div>
+            <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-1.5">
+              <button
+                type="button"
+                onClick={handleOpenInvoice}
+                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-2 py-0.5 text-[9px] font-bold text-emerald-700 transition-colors cursor-pointer"
+                title="View Tax Invoice"
+              >
+                <Receipt className="h-2.5 w-2.5 text-emerald-600" />
+                <span>Invoice</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenPaymentProof}
+                className="inline-flex items-center gap-1 rounded-md bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2 py-0.5 text-[9px] font-bold text-sky-700 transition-colors cursor-pointer"
+                title="View Payment Proof"
+              >
+                <CreditCard className="h-2.5 w-2.5 text-sky-600" />
+                <span>Payment Proof</span>
+              </button>
+            </div>
           </div>
 
           {/* Tile 4: Next Milestone & Schedule */}
@@ -476,20 +648,35 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             </>
           )}
 
-          <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} />
+          <DocumentsPanel
+            docs={docs}
+            deliveryId={delivery.id}
+            accessRole={accessRole}
+            poNumber={poNumber}
+            invoices={invoices}
+            taxInvoiceDoc={taxInvoiceDoc}
+            paymentProofDoc={paymentProofDoc}
+            settlement={delivery.settlement}
+            onOpenPo={handleOpenPo}
+            onOpenInvoice={handleOpenInvoice}
+            onOpenPaymentProof={handleOpenPaymentProof}
+          />
         </div>
 
         {/* ─── Right Action Rail ─── */}
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          {accessRole === 'seller' && (
-            <ManualTrackingActions delivery={delivery} latestManual={latestManual} onRefresh={() => detailQuery.refetch()} />
+          {(accessRole === 'seller' || accessRole === 'admin') && (
+            <ManualTrackingActions
+              delivery={delivery}
+              latestManual={latestManual}
+              onRefresh={() => detailQuery.refetch()}
+              onOpenPackModal={() => setIsPackModalOpen(true)}
+              onOpenFulfillmentModal={() => setIsFulfillmentModalOpen(true)}
+            />
           )}
           {accessRole === 'seller' && (
             <DpExtensionSection delivery={delivery} accessRole={accessRole} />
           )}
-          
-          {/* Handover OTP Verification — Temporarily commented out as per request */}
-          {/* <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} /> */}
 
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
             <BuyerActions delivery={delivery} />
@@ -503,6 +690,144 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           )}
         </aside>
       </div>
+
+      {/* Fulfillment & Packing Modals */}
+      <PackedOrderDialog
+        isOpen={isPackModalOpen}
+        delivery={delivery}
+        onClose={() => setIsPackModalOpen(false)}
+        onSuccess={() => detailQuery.refetch()}
+      />
+
+      <DispatchDetailsModal
+        isOpen={isFulfillmentModalOpen}
+        delivery={delivery}
+        onClose={() => setIsFulfillmentModalOpen(false)}
+        onSuccess={() => detailQuery.refetch()}
+      />
+
+      {/* ─── Interactive Purchase Order Receipt Modal Dialog ─── */}
+      {viewingPoOrder && (
+        <PurchaseOrderReceiptModal
+          order={viewingPoOrder}
+          onClose={() => setViewingPoOrder(null)}
+          isBuyer={accessRole === 'buyer'}
+          isSeller={accessRole === 'seller'}
+        />
+      )}
+
+      {/* ─── Official Tax Invoice Registry Modal Dialog ─── */}
+      {viewingInvoiceId !== null && (
+        <TaxInvoiceRegistryModal
+          isOpen={viewingInvoiceId !== null}
+          onClose={() => setViewingInvoiceId(null)}
+          invoiceId={viewingInvoiceId}
+        />
+      )}
+
+      {/* ─── Multi-Invoice Selection Dialog (when multiple invoices exist) ─── */}
+      {isInvoicePickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invoice-picker-title"
+        >
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  <Receipt className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 id="invoice-picker-title" className="text-sm font-black text-slate-900">
+                    Select Tax Invoice to View
+                  </h3>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    {invoices.length} invoices generated for PO #{poNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInvoicePickerOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition cursor-pointer"
+                aria-label="Close invoice selector dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
+              {invoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between p-3 rounded-xl border border-slate-200/80 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 transition-all shadow-2xs"
+                >
+                  <div className="min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-slate-900">
+                        {inv.invoiceNumber || `Invoice #${inv.id}`}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">
+                        {inv.invoiceStatus || inv.status || 'Submitted'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-black text-emerald-800">
+                      {formatCurrency(inv.amount)}
+                      {inv.createdAt && (
+                        <span className="ml-2 font-normal text-[10px] text-slate-400">
+                          {formatDate(inv.createdAt)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setIsInvoicePickerOpen(false);
+                      setViewingInvoiceId(inv.id);
+                    }}
+                    className="h-7 rounded-lg bg-[#0f766e] px-3 text-[10px] font-bold text-white hover:bg-[#0d665f] cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="mr-1 h-3 w-3" /> View
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs">
+              <span className="text-[11px] font-medium text-slate-500">
+                Official GST Tax Invoices
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsInvoicePickerOpen(false)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Interactive Payment Receipt & Proof Dialog ─── */}
+      {isPaymentProofModalOpen && (
+        <PaymentReceiptViewModal
+          isOpen={isPaymentProofModalOpen}
+          onClose={() => setIsPaymentProofModalOpen(false)}
+          orderId={delivery.purchaseOrderId}
+          orderPoNumber={poNumber}
+          invoiceNumber={invoices[0]?.invoiceNumber}
+          invoiceId={invoices[0]?.id}
+          sellerName={sellerName}
+          buyerName={buyerName}
+          initialProof={derivedInitialProof}
+          onStatusChange={() => detailQuery.refetch()}
+        />
+      )}
     </div>
   );
 }
@@ -532,11 +857,27 @@ function SectionHeading({
 function DocumentsPanel({
   docs,
   deliveryId,
-  accessRole
+  accessRole,
+  poNumber,
+  invoices = [],
+  taxInvoiceDoc,
+  paymentProofDoc,
+  settlement,
+  onOpenPo,
+  onOpenInvoice,
+  onOpenPaymentProof
 }: {
   docs: DeliveryDetailDto['documents'];
   deliveryId: number;
   accessRole: string | null;
+  poNumber?: string;
+  invoices?: any[];
+  taxInvoiceDoc?: any;
+  paymentProofDoc?: any;
+  settlement?: any;
+  onOpenPo?: () => void;
+  onOpenInvoice?: () => void;
+  onOpenPaymentProof?: () => void;
 }) {
   const records = docs || [];
 
@@ -548,6 +889,82 @@ function DocumentsPanel({
         meta={<span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">{records.length} files attached</span>}
       />
       <div className="space-y-3">
+        {/* Linked Procurement Documents Quick-Access Ribbon */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          {/* PO Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
+                <FileText className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Purchase Order</p>
+                <p className="text-xs font-black text-slate-900 truncate">{poNumber || 'Official PO'}</p>
+              </div>
+            </div>
+            {onOpenPo && (
+              <button
+                type="button"
+                onClick={onOpenPo}
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 shadow-2xs cursor-pointer transition-colors"
+                title="View Purchase Order"
+              >
+                <Eye className="h-3 w-3" /> View
+              </button>
+            )}
+          </div>
+
+          {/* Tax Invoice Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                <Receipt className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tax Invoice</p>
+                <p className="text-xs font-black text-slate-900 truncate">
+                  {invoices?.[0]?.invoiceNumber || (taxInvoiceDoc ? 'Document Attached' : 'Tax Invoice')}
+                </p>
+              </div>
+            </div>
+            {onOpenInvoice && (
+              <button
+                type="button"
+                onClick={onOpenInvoice}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50 shadow-2xs cursor-pointer transition-colors"
+                title="View Tax Invoice"
+              >
+                <Eye className="h-3 w-3" /> View
+              </button>
+            )}
+          </div>
+
+          {/* Payment Proof Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                <CreditCard className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Payment Proof</p>
+                <p className="text-xs font-black text-slate-900 truncate">
+                  {settlement?.transactionReference || (paymentProofDoc ? 'Proof Attached' : 'Bank UTR Proof')}
+                </p>
+              </div>
+            </div>
+            {onOpenPaymentProof && (
+              <button
+                type="button"
+                onClick={onOpenPaymentProof}
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-50 shadow-2xs cursor-pointer transition-colors"
+                title="View Payment Proof"
+              >
+                <Eye className="h-3 w-3" /> View
+              </button>
+            )}
+          </div>
+        </div>
+
         {records.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-xs font-semibold text-slate-500">
             No shipping or tax documents uploaded yet.
@@ -671,22 +1088,33 @@ function RatingCTACard({
 function ManualTrackingActions({
   delivery,
   latestManual,
-  onRefresh
+  onRefresh,
+  onOpenPackModal,
+  onOpenFulfillmentModal
 }: {
   delivery: DeliveryDetailDto;
   latestManual?: ReturnType<typeof latestManualUpdateFor>;
   onRefresh?: () => void | Promise<any>;
+  onOpenPackModal?: () => void;
+  onOpenFulfillmentModal?: () => void;
 }) {
   const nextStatus = nextManualStatusFor(delivery.status);
   const latest = latestManual;
   const updateMut = useManualDeliveryStatusUpdate(delivery.id);
   const qc = useQueryClient();
 
+  const [locationCheckIn, setLocationCheckIn] = useState('');
+  const [milestoneRemarks, setMilestoneRemarks] = useState('');
+
   const updateStatus = async () => {
     if (!nextStatus) return;
     await runWithToast(
       async () => {
-        await updateMut.mutateAsync({ status: nextStatus });
+        await updateMut.mutateAsync({
+          status: nextStatus,
+          location: locationCheckIn.trim() || undefined,
+          remarks: milestoneRemarks.trim() || undefined
+        });
         const nowIso = new Date().toISOString();
         qc.setQueriesData({ queryKey: queryKeys.deliveries.detail(delivery.id) }, (old: any) =>
           old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
@@ -694,6 +1122,8 @@ function ManualTrackingActions({
         qc.setQueriesData({ queryKey: ['delivery', 'detail', delivery.id] }, (old: any) =>
           old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
         );
+        setLocationCheckIn('');
+        setMilestoneRemarks('');
         if (onRefresh) {
           void onRefresh();
         }
@@ -760,22 +1190,94 @@ function ManualTrackingActions({
           )}
         </div>
 
+        {/* Quick Action Triggers for Packing & Dispatch */}
+        {delivery.status === 'SELLER_ACCEPTED' && onOpenPackModal && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">Recommended Next Step</span>
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[8px] font-black uppercase text-amber-900">Required</span>
+            </div>
+            <p className="text-xs font-bold text-slate-900">Order Accepted — Prepare Packaging & Tare Metrics</p>
+            <Button
+              type="button"
+              onClick={onOpenPackModal}
+              className="w-full h-10 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider shadow-xs"
+            >
+              <Box className="mr-2 h-4 w-4" /> Open Packaging Console
+            </Button>
+          </div>
+        )}
+
+        {['PACKED', 'READY_FOR_PICKUP'].includes(delivery.status) && onOpenFulfillmentModal && (
+          <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">Dispatch & Carrier</span>
+              <span className="rounded-full bg-teal-200 px-2 py-0.5 text-[8px] font-black uppercase text-teal-900">Ready</span>
+            </div>
+            <p className="text-xs font-bold text-slate-900">Assign Driver, Vehicle, Transport Mode & Challan</p>
+            <Button
+              type="button"
+              onClick={onOpenFulfillmentModal}
+              className="w-full h-10 rounded-xl bg-[#0f766e] hover:bg-[#0d665f] text-white text-xs font-black uppercase tracking-wider shadow-xs"
+            >
+              <Send className="mr-2 h-4 w-4" /> Open Fulfillment & Dispatch
+            </Button>
+          </div>
+        )}
+
         {/* Next Action Box with prominent button */}
-        <div className="space-y-2.5 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3.5">
+        <div className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
-              {isCompleted ? 'Fulfillment Complete' : 'Next Milestone Action'}
+              {isCompleted ? 'Fulfillment Complete' : 'Sequential Milestone Advance'}
             </span>
           </div>
 
           {!isCompleted && nextStatus ? (
-            <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
-              <p className="text-[10px] font-bold text-slate-500">Advancing To:</p>
-              <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
-                <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
-                {DELIVERY_STATUS_LABELS[nextStatus]}
-              </p>
-            </div>
+            <>
+              <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
+                <p className="text-[10px] font-bold text-slate-500">Advancing To Next Step:</p>
+                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
+                  <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
+                  {DELIVERY_STATUS_LABELS[nextStatus]}
+                </p>
+              </div>
+
+              {/* Location and Remarks Inputs */}
+              <div className="space-y-2 pt-1">
+                <div>
+                  <label htmlFor="milestone-location" className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Checkpoint Location (Optional)
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                    <Input
+                      id="milestone-location"
+                      value={locationCheckIn}
+                      onChange={e => setLocationCheckIn(e.target.value)}
+                      placeholder="e.g. Pune Hub / Bhiwandi Depot / Gate 2"
+                      className="pl-8 text-xs h-9 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="milestone-remarks" className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Milestone Remarks / Notes (Optional)
+                  </label>
+                  <div className="relative">
+                    <FileText className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                    <Input
+                      id="milestone-remarks"
+                      value={milestoneRemarks}
+                      onChange={e => setMilestoneRemarks(e.target.value)}
+                      placeholder="e.g. Inspection cleared, dispatched on truck"
+                      className="pl-8 text-xs h-9 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
           ) : null}
 
           <Button
@@ -804,7 +1306,7 @@ function ManualTrackingActions({
 
           {!isCompleted && nextStatus && (
             <p className="text-[10px] text-center text-slate-500 font-medium">
-              Clicking updates the tracking timeline and notifies the buyer in real time.
+              Updates tracking timeline and notifies buyer in real-time. Direct completion without OTP barrier.
             </p>
           )}
         </div>
@@ -1567,122 +2069,5 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
     </CollapsibleSection>
   );
 }
-
-/* ================== Handover OTP Verification (Temporarily Commented Out) ================== */
-/*
-function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
-  const sendOtpMut = useSendDeliveryOtp(delivery.id);
-  const verifyOtpMut = useVerifyDeliveryOtp(delivery.id);
-  const [otp, setOtp] = useState('');
-
-  const isVerified = Boolean(delivery.deliveryOtpVerifiedAt);
-  const isSellerOrCourier = accessRole === 'seller' || accessRole === 'logistics' || accessRole === 'admin';
-  const canVerifyRole = ['buyer', 'seller', 'consignee', 'logistics', 'admin'].includes(accessRole || '');
-
-  const handleSend = () => {
-    runWithToast(() => sendOtpMut.mutateAsync(undefined), {
-      loading: 'Sending OTP to buyer...',
-      success: '6-digit OTP emailed to buyer!',
-      error: 'Failed to send OTP'
-    });
-  };
-
-  const handleVerify = () => {
-    if (!otp || otp.length !== 6) return;
-    runWithToast(() => verifyOtpMut.mutateAsync({ otp }), {
-      loading: 'Verifying OTP...',
-      success: 'Delivery receipt verified successfully!',
-      error: 'Invalid or expired OTP'
-    });
-  };
-
-  if (!canVerifyRole && !isVerified) return null;
-
-  return (
-    <CollapsibleSection title="Handover OTP Verification" icon={Key} defaultOpen>
-      <div className="space-y-3 dt-fade-in-up">
-        {isVerified ? (
-          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-emerald-900">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div>
-              <p className="text-xs font-black uppercase tracking-wider">Physical Handover Verified</p>
-              <p className="text-[11px] font-semibold text-emerald-700">
-                Receipt confirmed on {formatDate(delivery.deliveryOtpVerifiedAt)}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {isSellerOrCourier ? (
-              <>
-                <p className="text-xs font-semibold text-slate-600 leading-relaxed">
-                  Verify physical delivery handover: Click to email the 6-digit OTP to the buyer, then enter the OTP upon handover.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
-                    onClick={handleSend}
-                    disabled={sendOtpMut.isPending}
-                  >
-                    {sendOtpMut.isPending ? (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
-                    )}
-                    Send OTP to Buyer
-                  </Button>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    placeholder="6-digit OTP"
-                    value={otp}
-                    maxLength={6}
-                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                    className="font-mono text-center tracking-widest text-base font-bold rounded-xl"
-                  />
-                  <Button
-                    className="h-10 rounded-xl bg-[#0f766e] text-xs font-black uppercase tracking-wider text-white shrink-0 px-4 hover:bg-[#0d665f] shadow-xs"
-                    disabled={otp.length !== 6 || verifyOtpMut.isPending}
-                    onClick={handleVerify}
-                  >
-                    Verify Handover
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3.5 space-y-1 text-xs text-slate-700">
-                  <p className="font-bold text-[#0f766e] flex items-center gap-1.5">
-                    <Key className="h-4 w-4" /> Handover Instructions
-                  </p>
-                  <p className="text-slate-600 font-semibold leading-relaxed">
-                    A 6-digit OTP is emailed when delivery is initiated. Share this OTP with the delivery agent upon receiving goods.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
-                    onClick={handleSend}
-                    disabled={sendOtpMut.isPending}
-                  >
-                    {sendOtpMut.isPending ? (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
-                    )}
-                    Resend OTP to My Email
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </CollapsibleSection>
-  );
-}
-*/
 
 export default DeliveryDetailPage;

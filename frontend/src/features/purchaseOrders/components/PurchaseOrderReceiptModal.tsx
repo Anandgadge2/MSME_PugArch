@@ -1616,8 +1616,16 @@ export function PurchaseOrderReceiptModal({
             {(() => {
               const hasGrn = Boolean((order as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'completed'].includes(viewingStatusLower));
               const isPaid = viewingStatusLower.includes('paid');
-              const payRoute = isBuyer ? '/buyer/payments' : '/payments';
+              const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
               if (hasGrn && !isPaid) {
+                if (!isBuyer) {
+                  return (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Payment Pending from Buyer</span>
+                    </span>
+                  );
+                }
                 return (
                   <Button
                     onClick={() => {

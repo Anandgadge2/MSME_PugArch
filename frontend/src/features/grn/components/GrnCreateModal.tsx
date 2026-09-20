@@ -32,36 +32,18 @@ interface PurchaseOrderOption {
 interface Props {
     onClose: () => void;
     onCreated: (grn: GrnDto) => void;
+    initialPoId?: number | null;
 }
 
-export function GrnCreateModal({ onClose, onCreated }: Props) {
+export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
     const [pos, setPos] = useState<PurchaseOrderOption[]>([]);
     const [loadingPos, setLoadingPos] = useState(true);
-    const [selectedPoId, setSelectedPoId] = useState<number | null>(null);
+    const [selectedPoId, setSelectedPoId] = useState<number | null>(initialPoId || null);
     const [items, setItems] = useState<Array<Omit<GrnItemDto, 'id' | 'grnId'>>>([]);
     const [remarks, setRemarks] = useState('');
     const [inspectionNote, setInspectionNote] = useState('');
     const createMut = useCreateGrn();
     const eligibility = useGrnEligibility(selectedPoId || undefined);
-
-    useEffect(() => {
-        void (async () => {
-            try {
-                const data = await getApi<any>('/api/purchase-orders');
-                const list = Array.isArray(data) ? data : data?.data || data?.records || [];
-                // Only show POs in active states
-                const active = list.filter((po: any) =>
-                    ['accepted', 'in_fulfillment', 'delivered', 'generated', 'inspection_accepted'].includes(String(po.status || '').toLowerCase())
-                );
-                setPos(active);
-            } catch {
-                toast.error('Failed to load Purchase Orders');
-            } finally {
-                setLoadingPos(false);
-            }
-        })();
-    }, []);
-
     const selectedPo = pos.find(p => p.id === selectedPoId);
 
     const handleSelectPo = (po: PurchaseOrderOption) => {
@@ -79,6 +61,31 @@ export function GrnCreateModal({ onClose, onCreated }: Props) {
         }));
         setItems(newItems);
     };
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                const data = await getApi<any>('/api/purchase-orders');
+                const list = Array.isArray(data) ? data : data?.data || data?.records || [];
+                // Only show POs in active states or the preselected initial PO
+                const active = list.filter((po: any) =>
+                    ['accepted', 'in_fulfillment', 'delivered', 'completed', 'generated', 'inspection_accepted'].includes(String(po.status || '').toLowerCase()) ||
+                    (initialPoId && po.id === initialPoId)
+                );
+                setPos(active);
+                if (initialPoId) {
+                    const match = active.find((p: any) => p.id === initialPoId);
+                    if (match) {
+                        handleSelectPo(match);
+                    }
+                }
+            } catch {
+                toast.error('Failed to load Purchase Orders');
+            } finally {
+                setLoadingPos(false);
+            }
+        })();
+    }, [initialPoId]);
 
     const updateItem = (idx: number, patch: Partial<typeof items[0]>) => {
         setItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));

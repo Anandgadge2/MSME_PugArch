@@ -126,7 +126,8 @@ const loadDelivery = async (id: number) => {
           invoices: {
             orderBy: { createdAt: 'desc' },
             include: {
-              invoiceFile: { select: { id: true, originalName: true, mimeType: true } }
+              invoiceFile: { select: { id: true, originalName: true, mimeType: true } },
+              paymentSlipFile: { select: { id: true, originalName: true, mimeType: true } }
             }
           }
         }
@@ -158,7 +159,8 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
           invoices: {
             orderBy: { createdAt: 'desc' },
             include: {
-              invoiceFile: { select: { id: true, originalName: true, mimeType: true } }
+              invoiceFile: { select: { id: true, originalName: true, mimeType: true } },
+              paymentSlipFile: { select: { id: true, originalName: true, mimeType: true } }
             }
           }
         }
@@ -447,6 +449,8 @@ export const calculateLiquidatedDamages = (delivery: any) => {
 };
 
 const MANUAL_DELIVERY_FLOW: DeliveryStatus[] = [
+  'SELLER_ACCEPTED',
+  'PACKED',
   'READY_FOR_PICKUP',
   'PICKED_UP',
   'IN_TRANSIT',
@@ -455,6 +459,7 @@ const MANUAL_DELIVERY_FLOW: DeliveryStatus[] = [
 ];
 
 const nextManualDeliveryStatus = (current: DeliveryStatus): DeliveryStatus | null => {
+  if (current === 'CREATED' || current === ('PENDING_ACCEPTANCE' as DeliveryStatus)) return 'SELLER_ACCEPTED';
   if (current === 'DISPATCHED') return 'IN_TRANSIT';
   const index = MANUAL_DELIVERY_FLOW.indexOf(current);
   if (index < 0 || index >= MANUAL_DELIVERY_FLOW.length - 1) return null;
@@ -462,7 +467,10 @@ const nextManualDeliveryStatus = (current: DeliveryStatus): DeliveryStatus | nul
 };
 
 const manualStatusExtraData = (next: DeliveryStatus, occurredAt?: Date) => {
+  if (next === 'SELLER_ACCEPTED') return { sellerAcceptedAt: occurredAt || new Date() };
+  if (next === 'PACKED') return { packedAt: occurredAt || new Date() };
   if (next === 'PICKED_UP') return { pickedUpAt: occurredAt || new Date() };
+  if (next === 'DELIVERED') return { actualDelivery: occurredAt || new Date() };
   return undefined;
 };
 
@@ -803,7 +811,14 @@ export const deliveryService = {
           packedAt: new Date(),
           packageWeightKg: body.packageWeightKg,
           packageDimensions: body.packageDimensions,
-          packageCount: body.packageCount
+          packageCount: body.packageCount,
+          metadata: {
+            ...(typeof (delivery as any).metadata === 'object' && (delivery as any).metadata ? (delivery as any).metadata : {}),
+            tareWeightKg: body.tareWeightKg,
+            volumetricWeightKg: body.volumetricWeightKg,
+            handlingFlags: body.handlingFlags,
+            packagingNotes: body.packagingNotes
+          }
         }
       })
       , TX_OPTIONS);
@@ -824,6 +839,17 @@ export const deliveryService = {
         throw new ApiError(409, 'Tracking number is already in use', 'DELIVERY_TRACKING_DUPLICATE');
       }
     }
+
+    const updatedMetadata = {
+      ...(typeof (delivery as any).metadata === 'object' && (delivery as any).metadata ? (delivery as any).metadata : {}),
+      ...(body.driverName ? { driverName: body.driverName } : {}),
+      ...(body.driverPhone ? { driverPhone: body.driverPhone } : {}),
+      ...(body.vehicleNumber ? { vehicleNumber: body.vehicleNumber } : {}),
+      ...(body.transportMode ? { transportMode: body.transportMode } : {}),
+      ...(body.dispatchTimestamp ? { dispatchTimestamp: body.dispatchTimestamp } : {}),
+      ...(body.specialInstructions ? { specialInstructions: body.specialInstructions } : {})
+    };
+
     const updated = await db.deliveryTracking.update({
       where: { id },
       data: {
@@ -831,11 +857,12 @@ export const deliveryService = {
         carrierName: body.carrierName ?? delivery.carrierName,
         logisticsPartnerId: body.logisticsPartnerId ?? delivery.logisticsPartnerId,
         logisticsPartnerName: body.logisticsPartnerName ?? delivery.logisticsPartnerName,
-        logisticsContact: body.logisticsContact ?? delivery.logisticsContact,
+        logisticsContact: body.driverPhone ?? body.logisticsContact ?? delivery.logisticsContact,
         ewayBillNumber: body.ewayBillNumber ?? delivery.ewayBillNumber,
         courierReceiptNumber: body.courierReceiptNumber ?? delivery.courierReceiptNumber,
         expectedDelivery: body.expectedDelivery ?? delivery.expectedDelivery,
-        remarks: body.remarks ?? delivery.remarks
+        remarks: body.remarks ?? delivery.remarks,
+        metadata: updatedMetadata
       }
     });
     await db.deliveryStatusLog.create({
@@ -848,7 +875,7 @@ export const deliveryService = {
         ipAddress: actor.ipAddress,
         userAgent: actor.userAgent,
         remarks: 'Dispatch details updated',
-        metadata: body
+        metadata: { ...body, ...updatedMetadata }
       }
     });
     void safeAudit(actor, 'delivery.dispatch_details_updated', 'deliveryTracking', id, body);
@@ -907,7 +934,7 @@ export const deliveryService = {
     if (!next) {
       throw new ApiError(
         409,
-        'Manual tracking updates start once the delivery is Ready for Pickup',
+        'Manual tracking update is not available for this delivery state',
         'DELIVERY_MANUAL_STATUS_NOT_AVAILABLE'
       );
     }
@@ -921,13 +948,14 @@ export const deliveryService = {
 
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, next, actor, {
+        location: body.location,
         remarks: body.remarks || `Manual seller update: ${next.replace(/_/g, ' ')}`,
         occurredAt: body.occurredAt,
         extraData: manualStatusExtraData(next, body.occurredAt),
-        poStatus: next === 'DELIVERED' ? 'delivered' : undefined
+        poStatus: next === 'DELIVERED' ? 'delivered' : next === 'SELLER_ACCEPTED' ? 'accepted' : next === 'IN_TRANSIT' ? 'in_fulfillment' : undefined
       })
       , TX_OPTIONS);
-    void safeAudit(actor, 'delivery.manual_status_update', 'deliveryTracking', id, { status: next });
+    void safeAudit(actor, 'delivery.manual_status_update', 'deliveryTracking', id, { status: next, location: body.location });
     void notifyOrderParties(delivery, next, actor, body.remarks);
     return updated;
   },

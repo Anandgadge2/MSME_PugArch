@@ -48,6 +48,9 @@ import {
     useSellerReject, useUpdateDispatchDetails
 } from '../hooks';
 import type { DeliveryDto } from '../api';
+import { PackedOrderDialog } from '../../delivery/components/PackedOrderDialog';
+import { DispatchDetailsModal } from '../../delivery/components/DispatchDetailsModal';
+import { GrnCreateModal } from '../../grn/components/GrnCreateModal';
 
 const STATUS_TONE: Record<string, string> = {
     CREATED: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -462,6 +465,35 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                                 <span>Fulfillment & Invoice</span>
                             </button>
                         </>
+                    )}
+
+                    {/* Generate GRN Action */}
+                    {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) ? (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpen(false);
+                                onAction('generate-grn');
+                            }}
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-800 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+                        >
+                            <FileText className="h-3.5 w-3.5 text-amber-600" />
+                            <span>Generate GRN</span>
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            role="menuitem"
+                            disabled
+                            title="GRN can only be generated once delivery is completed/delivered"
+                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 bg-slate-50/50 cursor-not-allowed text-left opacity-60"
+                        >
+                            <FileText className="h-3.5 w-3.5 text-slate-400" />
+                            <span>Generate GRN (Deliver First)</span>
+                        </button>
                     )}
                 </div>,
                 document.body
@@ -1072,55 +1104,38 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
 // ─── Action Dialog (multi-purpose modal) ─────────────────────────────────────
 
 function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: DeliveryDto; onClose: () => void }) {
+    if (kind === 'packed') {
+        return (
+            <PackedOrderDialog
+                isOpen={true}
+                delivery={delivery}
+                onClose={onClose}
+                onSuccess={onClose}
+            />
+        );
+    }
+
     if (kind === 'dispatch-details') {
         return (
-            <div 
-                className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-6 overflow-y-auto"
-                role="dialog"
-                aria-modal="true"
-                aria-label="Dispatch Order Fulfillment"
-            >
-                <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
-                                aria-label="Back to Deliveries"
-                                title="Back to Deliveries"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                                <span>Back to Deliveries</span>
-                            </button>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
-                                        DISPATCH ORDER FULFILLMENT
-                                    </span>
-                                    <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
-                                        DLV-{delivery.id}
-                                    </span>
-                                    {delivery.purchaseOrder?.poNumber && (
-                                        <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-mono font-semibold text-slate-200">
-                                            {delivery.purchaseOrder.poNumber}
-                                        </span>
-                                    )}
-                                </div>
-                                <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-                                    {delivery.purchaseOrder?.title || 'Order Dispatch Fulfillment'}
-                                </h2>
-                            </div>
-                        </div>
-                        <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40" aria-label="Close dialog" title="Close dialog">
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6">
-                        <DispatchDetailsForm delivery={delivery} onDone={onClose} />
-                    </div>
-                </div>
-            </div>
+            <DispatchDetailsModal
+                isOpen={true}
+                delivery={delivery}
+                onClose={onClose}
+                onSuccess={onClose}
+            />
+        );
+    }
+
+    if (kind === 'generate-grn') {
+        return (
+            <GrnCreateModal
+                initialPoId={delivery.purchaseOrder?.id || delivery.purchaseOrderId}
+                onClose={onClose}
+                onCreated={() => {
+                    toast.success('Goods Receipt Note (GRN) created successfully!');
+                    onClose();
+                }}
+            />
         );
     }
 
@@ -1202,7 +1217,8 @@ function kindToLabel(kind: string): string {
         ready: 'Ready for Pickup',
         'dispatch-details': 'Dispatch Order',
         'track-info': 'Tracking Details',
-        'upload-pod': 'UPLOAD PROOF OF DELIVERY (POD)'
+        'upload-pod': 'UPLOAD PROOF OF DELIVERY (POD)',
+        'generate-grn': 'Generate Goods Receipt Note (GRN)'
     };
     return map[kind] || 'Action';
 }

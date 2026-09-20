@@ -162,7 +162,7 @@ export const useLogisticsStatusUpdate = (id: number) =>
 
 export const useManualDeliveryStatusUpdate = (id: number) =>
     useDeliveryMutation(
-        (body: { status: DeliveryStatus; remarks?: string; occurredAt?: string }) =>
+        (body: { status: DeliveryStatus; location?: string; remarks?: string; occurredAt?: string }) =>
             manualDeliveryStatusUpdate(id, body),
         { invalidateId: id }
     );

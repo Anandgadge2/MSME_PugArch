@@ -42,6 +42,7 @@ export interface GrnDto {
     rejectedById?: number | null;
     rejectedAt?: string | null;
     rejectionReason?: string | null;
+    requiresApprovalWorkflow?: boolean;
     createdAt: string;
     updatedAt: string;
     items: GrnItemDto[];

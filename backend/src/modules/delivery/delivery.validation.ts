@@ -49,9 +49,13 @@ export const sellerRejectionBody = z.object({
 
 export const packingBody = z.object({
   packageWeightKg: z.coerce.number().positive().optional(),
+  tareWeightKg: z.coerce.number().nonnegative().optional(),
+  volumetricWeightKg: z.coerce.number().nonnegative().optional(),
   packageDimensions: z.string().trim().max(120).optional(),
   packageCount: z.coerce.number().int().positive().optional(),
-  remarks: z.string().trim().max(1000).optional()
+  handlingFlags: z.array(z.string().trim().max(50)).optional(),
+  remarks: z.string().trim().max(1000).optional(),
+  packagingNotes: z.string().trim().max(1000).optional()
 });
 
 export const dispatchDetailsBody = z.object({
@@ -60,6 +64,12 @@ export const dispatchDetailsBody = z.object({
   logisticsPartnerId: z.coerce.number().int().positive().optional(),
   logisticsPartnerName: z.string().trim().max(120).optional(),
   logisticsContact: z.string().trim().max(120).optional(),
+  driverName: z.string().trim().max(120).optional(),
+  driverPhone: z.string().trim().max(40).optional(),
+  vehicleNumber: z.string().trim().max(50).optional(),
+  transportMode: z.string().trim().max(50).optional(),
+  dispatchTimestamp: optionalDate,
+  specialInstructions: z.string().trim().max(1000).optional(),
   ewayBillNumber: z.string().trim().max(80).optional(),
   courierReceiptNumber: z.string().trim().max(80).optional(),
   expectedDelivery: optionalDate,

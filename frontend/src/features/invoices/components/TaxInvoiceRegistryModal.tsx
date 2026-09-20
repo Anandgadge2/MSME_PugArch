@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Stamp,
   Download,
-  ChevronDown
+  ChevronDown,
+  Clock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -403,7 +404,8 @@ export function TaxInvoiceRegistryModal({
                   size="sm"
                   onClick={() => {
                     const search = poNumber || invoice?.invoiceNumber || '';
-                    router.push(`/seller/delivery-management?search=${encodeURIComponent(search)}`);
+                    const delRoute = user?.role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
+                    router.push(`${delRoute}?search=${encodeURIComponent(search)}`);
                   }}
                   className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
                 >
@@ -425,31 +427,47 @@ export function TaxInvoiceRegistryModal({
                   <span>View GRN</span>
                 </Button>
 
-                {isPaid ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      router.push(`/seller/payments?search=${encodeURIComponent(invoice?.invoiceNumber || '')}`);
-                    }}
-                    className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                  >
-                    <ShieldCheck className="h-3 w-3" />
-                    <span>View Payment Proof (Paid)</span>
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      router.push(`/seller/payments?search=${encodeURIComponent(invoice?.invoiceNumber || '')}`);
-                    }}
-                    className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                  >
-                    <CreditCard className="h-3 w-3" />
-                    <span>Pay Now / Upload Payment Proof</span>
-                  </Button>
-                )}
+                {(() => {
+                  const isBuyer = user?.role === 'buyer';
+                  const payPath = isBuyer ? '/buyer/payments' : '/seller/payments';
+                  const searchParam = encodeURIComponent(invoice?.invoiceNumber || '');
+                  if (isPaid) {
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          router.push(`${payPath}?search=${searchParam}`);
+                        }}
+                        className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                      >
+                        <ShieldCheck className="h-3 w-3" />
+                        <span>View Payment Proof (Paid)</span>
+                      </Button>
+                    );
+                  }
+                  if (isBuyer) {
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          router.push(`${payPath}?search=${searchParam}`);
+                        }}
+                        className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                      >
+                        <CreditCard className="h-3 w-3" />
+                        <span>Pay Now / Upload Payment Proof</span>
+                      </Button>
+                    );
+                  }
+                  return (
+                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                      <Clock className="h-3 w-3 text-amber-600" />
+                      <span>Payment Pending from Buyer</span>
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Toolbar: Copy Type, Stamp & Signature, Download PDF */}

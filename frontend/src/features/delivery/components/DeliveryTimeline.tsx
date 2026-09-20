@@ -31,6 +31,8 @@ interface TimelineEntry {
 }
 
 const TRACKING_PATH: DeliveryStatus[] = [
+  'SELLER_ACCEPTED',
+  'PACKED',
   'READY_FOR_PICKUP',
   'PICKED_UP',
   'IN_TRANSIT',
@@ -43,15 +45,15 @@ const TRACKING_STATUSES = new Set<string>(TRACKING_PATH);
 const normalizeTrackingStatus = (status?: string) => (status === 'DISPATCHED' ? 'IN_TRANSIT' : status);
 
 const STEP_ICONS: Record<DeliveryStatus, React.ComponentType<{ className?: string }>> = {
+  SELLER_ACCEPTED: Check,
+  PACKED: Package,
   READY_FOR_PICKUP: Package,
   PICKED_UP: Truck,
   IN_TRANSIT: Truck,
   OUT_FOR_DELIVERY: Truck,
   DELIVERED: CheckCircle2,
   CREATED: Clock,
-  SELLER_ACCEPTED: Check,
   SELLER_REJECTED: Clock,
-  PACKED: Package,
   PICKUP_SCHEDULED: Clock,
   DISPATCHED: Truck,
   AT_HUB: MapPin,
@@ -74,7 +76,9 @@ const STEP_ICONS: Record<DeliveryStatus, React.ComponentType<{ className?: strin
 };
 
 const STEP_SUBTITLES: Record<string, string> = {
-  READY_FOR_PICKUP: 'Packed & Ready',
+  SELLER_ACCEPTED: 'Order Accepted by Seller',
+  PACKED: 'Goods Packed & Verified',
+  READY_FOR_PICKUP: 'Staged for Pickup',
   PICKED_UP: 'Collected by Courier',
   IN_TRANSIT: 'In Transit to Hub',
   OUT_FOR_DELIVERY: 'Out for Handover',

@@ -257,12 +257,27 @@ function PaymentRowActionCell({
               e.preventDefault();
               e.stopPropagation();
               onClose();
+              onViewReceipt();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-800 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
+            <span>View Receipt</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
               onViewProof();
             }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
           >
             <FileCheck className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-            <span>View Proof</span>
+            <span>View Slip / Proof</span>
           </button>
 
           <button
@@ -278,21 +293,6 @@ function PaymentRowActionCell({
           >
             <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
             <span>Upload Slip</span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-              onViewReceipt();
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-          >
-            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-            <span>View Receipt</span>
           </button>
 
           <button
@@ -437,8 +437,9 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             id={payment.id}
             size="sm"
             onClick={() => {
+              setViewProofPayment(payment);
               setDetailTab('receipt');
-              setSelected(payment);
+              setViewProofModalOpen(true);
             }}
           />
           <p className="mt-1 text-[10px] font-semibold text-slate-500">
@@ -583,6 +584,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           onClose={() => setOpenKebabId(null)}
           onViewProof={() => {
             setViewProofPayment(payment);
+            setDetailTab('receipt');
             setViewProofModalOpen(true);
           }}
           onUploadSlip={() => {
@@ -590,12 +592,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             setUploadProofModalOpen(true);
           }}
           onViewReceipt={() => {
+            setViewProofPayment(payment);
             setDetailTab('receipt');
-            setSelected(payment);
+            setViewProofModalOpen(true);
           }}
           onTrackTimeline={() => {
+            setViewProofPayment(payment);
             setDetailTab('timeline');
-            setSelected(payment);
+            setViewProofModalOpen(true);
           }}
         />
       )
@@ -833,7 +837,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                           {String(rowIndex).padStart(2, '0')}
                         </span>
-                        <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setDetailTab('receipt'); setSelected(payment); }} />
+                        <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }} />
                       </div>
                       <p className="mt-1.5 text-[10px] text-slate-500 font-semibold">Invoice: {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}</p>
                     </div>
@@ -866,7 +870,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           size="sm"
                           variant="outline"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
-                          onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }}
                         >
                           <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Proof
                         </Button>
@@ -882,6 +886,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           onClick={() => {
                             if (hasUploadedProof) {
                               setViewProofPayment(payment);
+                              setDetailTab('receipt');
                               setViewProofModalOpen(true);
                             } else {
                               setSelectedProofPayment(payment);
@@ -896,14 +901,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           size="sm"
                           variant="outline"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
-                          onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }}
                         >
                           <Receipt className="mr-1.5 h-3.5 w-3.5" /> Receipt
                         </Button>
                         <Button
                           size="sm"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2445]"
-                          onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('timeline'); setViewProofModalOpen(true); }}
                         >
                           <Clock3 className="mr-1.5 h-3.5 w-3.5" /> Track
                         </Button>
@@ -938,20 +943,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         />
       )}
 
-      {selected && (
-        <PaymentDetail
-          key={`${selected.id}-${detailTab}`}
-          payment={selected}
-          initialTab={detailTab}
-          onClose={() => setSelected(null)}
-          onOpenProof={(p) => {
-            setViewProofPayment(p);
-            setViewProofModalOpen(true);
-          }}
-        />
-      )}
-
-      {/* Offline Payment Proof Modals */}
+      {/* Offline Payment Proof & Receipt Modals */}
       <PaymentReceiptUploadModal
         isOpen={uploadProofModalOpen}
         onClose={() => { setUploadProofModalOpen(false); setSelectedProofPayment(null); }}
@@ -960,15 +952,25 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       />
 
       <PaymentReceiptViewModal
-        isOpen={viewProofModalOpen}
-        onClose={() => { setViewProofModalOpen(false); setViewProofPayment(null); }}
-        paymentId={viewProofPayment?.id}
-        orderId={viewProofPayment?.purchaseOrderId}
-        invoiceId={viewProofPayment?.invoiceId}
-        orderPoNumber={viewProofPayment?.purchaseOrder?.poNumber}
-        invoiceNumber={viewProofPayment?.invoice?.invoiceNumber}
-        sellerName={viewProofPayment?.payee?.name}
-        buyerName={viewProofPayment?.payer?.name}
+        isOpen={viewProofModalOpen || Boolean(selected)}
+        onClose={() => {
+          setViewProofModalOpen(false);
+          setViewProofPayment(null);
+          setSelected(null);
+        }}
+        payment={viewProofPayment || selected}
+        paymentId={viewProofPayment?.id || selected?.id}
+        orderId={viewProofPayment?.purchaseOrderId || selected?.purchaseOrderId}
+        invoiceId={viewProofPayment?.invoiceId || selected?.invoiceId}
+        orderPoNumber={viewProofPayment?.purchaseOrder?.poNumber || selected?.purchaseOrder?.poNumber}
+        invoiceNumber={viewProofPayment?.invoice?.invoiceNumber || selected?.invoice?.invoiceNumber}
+        sellerName={viewProofPayment?.payee?.name || selected?.payee?.name}
+        buyerName={viewProofPayment?.payer?.name || selected?.payer?.name}
+        initialTab={detailTab}
+        onUploadSlip={(p) => {
+          setSelectedProofPayment(p);
+          setUploadProofModalOpen(true);
+        }}
         onStatusChange={() => { void reload(); }}
       />
     </div>

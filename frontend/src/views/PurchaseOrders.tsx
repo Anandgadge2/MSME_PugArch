@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
@@ -9,6 +9,20 @@ import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/
 import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/RecordOrderPaymentModal';
 import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
+import { GrnCreateModal } from '../features/grn/components/GrnCreateModal';
+
+export const hasApprovedGrn = (order: any): boolean => {
+  if (!order) return false;
+  const status = String(order.status || '').toLowerCase();
+  if (['grn_approved', 'grn_completed', 'inspection_accepted'].includes(status)) return true;
+  if (Array.isArray(order.grns) && order.grns.length > 0) {
+    return order.grns.some((g: any) => {
+      const gs = String(g.status || '').toUpperCase();
+      return ['APPROVED', 'PARTIAL', 'VERIFIED', 'COMPLETED'].includes(gs);
+    });
+  }
+  return false;
+};
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -122,7 +136,8 @@ const OrderActionsMenu = ({
   onViewPaymentSlip,
   onViewReceipt,
   onRecordPayment,
-  onConfirmSettlement
+  onConfirmSettlement,
+  onOpenGrnModal
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -296,22 +311,36 @@ const OrderActionsMenu = ({
       )}
 
       {(() => {
-        const hasGrn = Boolean(
-          (order as any).grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(String(order.status || '').toLowerCase())
-        );
+        const approvedGrn = hasApprovedGrn(order);
         const isPaid = String(order.status || '').toLowerCase().includes('paid');
-        if (hasGrn && !isPaid) {
+        if (approvedGrn && !isPaid) {
+          if (!isBuyer) return null;
           return (
             <button
               type="button"
               onClick={() => {
                 onClose();
-                router.push('/payments');
+                router.push('/buyer/payments');
               }}
               className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
             >
               <CreditCard className="h-3.5 w-3.5 text-purple-600" />
               <span>Pay Now / Upload Payment Proof</span>
+            </button>
+          );
+        }
+        if (!approvedGrn && !isPaid && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(String(order.status || '').toLowerCase())) {
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenGrnModal?.(order.id);
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+              <span>Generate GRN (Pay Gate)</span>
             </button>
           );
         }
@@ -321,7 +350,7 @@ const OrderActionsMenu = ({
               type="button"
               onClick={() => {
                 onClose();
-                router.push('/payments');
+                router.push(isBuyer ? '/buyer/payments' : '/seller/payments');
               }}
               className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
             >
@@ -496,6 +525,7 @@ export default function PurchaseOrders() {
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [recordPaymentOrder, setRecordPaymentOrder] = useState<PurchaseOrderDto | null>(null);
   const [confirmSettlementOrder, setConfirmSettlementOrder] = useState<PurchaseOrderDto | null>(null);
+  const [grnModalPoId, setGrnModalPoId] = useState<number | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -920,6 +950,7 @@ export default function PurchaseOrders() {
             onViewReceipt={setReceiptModalOrder}
             onRecordPayment={setRecordPaymentOrder}
             onConfirmSettlement={setConfirmSettlementOrder}
+            onOpenGrnModal={(poId: number) => setGrnModalPoId(poId)}
           />
         )}
       </div>
@@ -2361,6 +2392,34 @@ export default function PurchaseOrders() {
                   );
                 })()}
 
+                {/* GRN Gating Warning Banner for Buyer */}
+                {isBuyer && !hasApprovedGrn(viewingOrder) && !String(viewingOrder.status || '').toLowerCase().includes('paid') && !['cancelled', 'draft'].includes(String(viewingOrder.status || '').toLowerCase()) && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-amber-900 shadow-2xs space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                        Statutory Payment Gate: Verified GRN Required
+                      </h4>
+                    </div>
+                    <p className="text-xs text-amber-800 font-semibold leading-relaxed">
+                      Payment Blocked: A verified Goods Receipt Note (GRN) must be generated and approved by the consignee/buyer before releasing escrow or uploading payment proof.
+                    </p>
+                    <div className="pt-1">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const poId = viewingOrder.id;
+                          setViewingOrder(null);
+                          setGrnModalPoId(poId);
+                        }}
+                        className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg shadow-2xs"
+                      >
+                        <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* Modal Sticky Action Footer - Harmonized & Professional */}
@@ -2453,20 +2512,40 @@ export default function PurchaseOrders() {
                           </Button>
                         )}
                         {(() => {
-                          const hasGrn = Boolean(
-                            (viewingOrder as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(viewingStatusLower)
-                          );
+                          const approvedGrn = hasApprovedGrn(viewingOrder);
                           const isPaid = viewingStatusLower.includes('paid');
-                          if (hasGrn && !isPaid) {
+                          if (approvedGrn && !isPaid) {
+                            if (!isBuyer) {
+                              return (
+                                <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                                  <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                  <span>Payment Pending from Buyer</span>
+                                </span>
+                              );
+                            }
                             return (
                               <Button
                                 onClick={() => {
                                   setViewingOrder(null);
-                                  router.push('/payments');
+                                  router.push('/buyer/payments');
                                 }}
                                 className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                               >
                                 <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Proof
+                              </Button>
+                            );
+                          }
+                          if (!approvedGrn && !isPaid && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(viewingStatusLower)) {
+                            return (
+                              <Button
+                                onClick={() => {
+                                  const poId = viewingOrder.id;
+                                  setViewingOrder(null);
+                                  setGrnModalPoId(poId);
+                                }}
+                                className="h-9 bg-amber-600 hover:bg-amber-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
                               </Button>
                             );
                           }
@@ -2475,7 +2554,7 @@ export default function PurchaseOrders() {
                               <Button
                                 onClick={() => {
                                   setViewingOrder(null);
-                                  router.push('/payments');
+                                  router.push(isBuyer ? '/buyer/payments' : '/seller/payments');
                                 }}
                                 className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                               >
@@ -2496,22 +2575,26 @@ export default function PurchaseOrders() {
                         )}
                         {isBuyer && viewingStatusLower !== 'cancelled' && (
                           <>
-                            <Button
-                              onClick={() => {
-                                const target = viewingOrder;
-                                setViewingOrder(null);
-                                setRecordPaymentOrder(target);
-                              }}
-                              className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                            >
-                              <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
-                            </Button>
-                            <Button
-                              onClick={() => setUploadProofOrder(viewingOrder)}
-                              className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                            >
-                              <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
-                            </Button>
+                            {hasApprovedGrn(viewingOrder) && (
+                              <>
+                                <Button
+                                  onClick={() => {
+                                    const target = viewingOrder;
+                                    setViewingOrder(null);
+                                    setRecordPaymentOrder(target);
+                                  }}
+                                  className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                                </Button>
+                                <Button
+                                  onClick={() => setUploadProofOrder(viewingOrder)}
+                                  className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
+                                </Button>
+                              </>
+                            )}
                             <Button
                               variant="outline"
                               onClick={() => setViewProofOrder(viewingOrder)}
@@ -2666,6 +2749,18 @@ export default function PurchaseOrders() {
             setConfirmSettlementOrder(null);
             toast.success('Settlement confirmed and order closed successfully.');
             reload();
+          }}
+        />
+      )}
+
+      {grnModalPoId && (
+        <GrnCreateModal
+          initialPoId={grnModalPoId}
+          onClose={() => setGrnModalPoId(null)}
+          onCreated={() => {
+            setGrnModalPoId(null);
+            toast.success('Goods Receipt Note (GRN) created successfully!');
+            refreshPurchaseOrders();
           }}
         />
       )}
