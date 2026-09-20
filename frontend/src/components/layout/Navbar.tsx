@@ -369,7 +369,7 @@ import { getResolvedOrgName } from '../../utils/organizationUtils';
 export { getResolvedOrgName };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const isShgAccount = isShgUser(user);
@@ -419,10 +419,13 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     };
   }, []);
 
+  const isAuthenticatedSeller = Boolean(!loading && token && user && (user?.role === 'seller' || user?.role === 'shg' || isShgAccount));
+
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],
     queryFn: async () => {
       const res = await api.get('/api/navigation/summary');
+      if (!res.ok) return {} as Record<string, number>;
       const body = await readJsonResponse(res);
       const data = unwrapApiData(body);
       if (!data) return {} as Record<string, number>;
@@ -449,9 +452,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/shg/opportunities/rate-contracts': rateContractsCount
       };
     },
-    enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
+    enabled: isAuthenticatedSeller,
     staleTime: 60000,
-    refetchInterval: 60000,
+    refetchInterval: isAuthenticatedSeller ? 60000 : false,
+    retry: false
   });
 
   const counts = countsData || {};
@@ -815,7 +819,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
-  const { user, token: authToken, logout, login } = useAuth();
+  const { user, token: authToken, loading: authLoading, logout, login } = useAuth();
   const { count: cartCount } = useMarketplaceCart();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
@@ -930,7 +934,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      if (!authToken) return;
+      if (authLoading || !user || !authToken) return;
       try {
         const res = await api.fetch('/api/notifications', {
           headers: { Authorization: `Bearer ${authToken}` }
@@ -940,25 +944,31 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           const body = unwrapApiData<any>(data);
           const items = Array.isArray(body) ? body : body?.notifications || body?.records || body?.items || [];
           setNotifications(Array.isArray(items) ? items : []);
+        } else if (res.status === 401) {
+          setNotifications([]);
         }
       } catch {
         setNotifications([]);
       }
     };
-    fetchNotifications();
+    if (!authLoading && user && authToken) {
+      fetchNotifications();
+    }
     const handleUpdate = () => { void fetchNotifications(); };
     window.addEventListener('notifications:updated', handleUpdate);
     const pollTimer = setInterval(() => {
-      void fetchNotifications();
+      if (!authLoading && user && authToken) {
+        void fetchNotifications();
+      }
     }, 30000);
     return () => {
       clearInterval(pollTimer);
       window.removeEventListener('notifications:updated', handleUpdate);
     };
-  }, [authToken]);
+  }, [authToken, user, authLoading]);
 
   useEffect(() => {
-    if (!authToken) return;
+    if (authLoading || !user || !authToken) return;
 
     const baseUrl = BASE_URL;
     const isRealToken = authToken && authToken !== COOKIE_SESSION_TOKEN && authToken !== 'cookie-session';

@@ -104,6 +104,7 @@ const shouldDispatchUnauthorized = (endpoint: string) =>
     '/api/auth/login',
     '/api/auth/logout',
     '/api/notifications',
+    '/api/navigation/summary',
   ].some((path) => endpoint.startsWith(path));
 
 const isUnsafeMethod = (method: string) => !['GET', 'HEAD', 'OPTIONS'].includes(method.toUpperCase());
