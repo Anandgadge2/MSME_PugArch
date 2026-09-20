@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   PieChart as PieChartIcon, 
@@ -76,7 +76,42 @@ export function SellerCreativeAnalytics({
   const isShg = isShgUser(user) || user?.role === 'shg';
   const rolePrefix = isShg ? '/shg' : '/seller';
 
-  const [activeTab, setActiveTab] = useState<'cashflow' | 'opportunities' | 'fulfillment'>('cashflow');
+  const [activeTab, setActiveTab] = useState<'cashflow' | 'opportunities' | 'fulfillment'>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('analyticsTab');
+      if (urlTab && ['cashflow', 'opportunities', 'fulfillment'].includes(urlTab)) {
+        return urlTab as 'cashflow' | 'opportunities' | 'fulfillment';
+      }
+      const saved = sessionStorage.getItem('dashboard_seller_analytics_tab');
+      if (saved && ['cashflow', 'opportunities', 'fulfillment'].includes(saved)) {
+        return saved as 'cashflow' | 'opportunities' | 'fulfillment';
+      }
+    }
+    return 'cashflow';
+  });
+
+  const handleTabChange = useCallback((newTab: 'cashflow' | 'opportunities' | 'fulfillment') => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dashboard_seller_analytics_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('analyticsTab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('analyticsTab');
+      if (urlTab && ['cashflow', 'opportunities', 'fulfillment'].includes(urlTab)) {
+        setActiveTab(urlTab as 'cashflow' | 'opportunities' | 'fulfillment');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 1. Cashflow calculations
   const totalInvoicesAmount = useMemo(
@@ -148,7 +183,7 @@ export function SellerCreativeAnalytics({
             type="button"
             role="tab"
             aria-selected={activeTab === 'cashflow'}
-            onClick={() => setActiveTab('cashflow')}
+            onClick={() => handleTabChange('cashflow')}
             className={`px-2.5 py-1 rounded-md transition-all ${
               activeTab === 'cashflow' 
                 ? 'bg-white text-[#12335f] shadow-xs' 
@@ -161,7 +196,7 @@ export function SellerCreativeAnalytics({
             type="button"
             role="tab"
             aria-selected={activeTab === 'opportunities'}
-            onClick={() => setActiveTab('opportunities')}
+            onClick={() => handleTabChange('opportunities')}
             className={`px-2.5 py-1 rounded-md transition-all ${
               activeTab === 'opportunities' 
                 ? 'bg-white text-[#12335f] shadow-xs' 
@@ -174,7 +209,7 @@ export function SellerCreativeAnalytics({
             type="button"
             role="tab"
             aria-selected={activeTab === 'fulfillment'}
-            onClick={() => setActiveTab('fulfillment')}
+            onClick={() => handleTabChange('fulfillment')}
             className={`px-2.5 py-1 rounded-md transition-all ${
               activeTab === 'fulfillment' 
                 ? 'bg-white text-[#12335f] shadow-xs' 

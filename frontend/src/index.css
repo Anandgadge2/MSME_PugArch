@@ -878,7 +878,7 @@ textarea.soft-field {
 .liquid-glass-header {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 40;
   width: 100%;
   background-color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);

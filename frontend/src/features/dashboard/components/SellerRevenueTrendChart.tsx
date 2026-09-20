@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   TrendingUp, 
@@ -64,7 +64,42 @@ export function SellerRevenueTrendChart({
   totalOrders = 0,
   isLoading = false
 }: SellerRevenueTrendChartProps) {
-  const [activeTab, setActiveTab] = useState<'revenue' | 'cashflow'>('revenue');
+  const [activeTab, setActiveTab] = useState<'revenue' | 'cashflow'>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('trendTab');
+      if (urlTab && ['revenue', 'cashflow'].includes(urlTab)) {
+        return urlTab as 'revenue' | 'cashflow';
+      }
+      const saved = sessionStorage.getItem('dashboard_seller_trend_tab');
+      if (saved && ['revenue', 'cashflow'].includes(saved)) {
+        return saved as 'revenue' | 'cashflow';
+      }
+    }
+    return 'revenue';
+  });
+
+  const handleTabChange = useCallback((newTab: 'revenue' | 'cashflow') => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dashboard_seller_trend_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('trendTab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('trendTab');
+      if (urlTab && ['revenue', 'cashflow'].includes(urlTab)) {
+        setActiveTab(urlTab as 'revenue' | 'cashflow');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const periodRevenue = revenueTrend.reduce((sum, item) => sum + (item.revenue || 0), 0);
   const periodOrders = revenueTrend.reduce((sum, item) => sum + (item.ordersCount || 0), 0);
@@ -99,7 +134,7 @@ export function SellerRevenueTrendChart({
             type="button"
             role="tab"
             aria-selected={activeTab === 'revenue'}
-            onClick={() => setActiveTab('revenue')}
+            onClick={() => handleTabChange('revenue')}
             className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition ${
               activeTab === 'revenue'
                 ? 'bg-[#12335f] text-white shadow-xs'
@@ -113,7 +148,7 @@ export function SellerRevenueTrendChart({
             type="button"
             role="tab"
             aria-selected={activeTab === 'cashflow'}
-            onClick={() => setActiveTab('cashflow')}
+            onClick={() => handleTabChange('cashflow')}
             className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition ${
               activeTab === 'cashflow'
                 ? 'bg-[#12335f] text-white shadow-xs'

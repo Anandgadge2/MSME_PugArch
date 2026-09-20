@@ -284,15 +284,11 @@ export default function Dashboard() {
     queryFn: async () => {
       const res = await api.fetch('/api/auth/me', { headers: authHeaders });
       if (!res.ok) {
-        if (res.status === 401) {
-          logout('/');
-          router.replace('/');
-        }
         throw new Error('Failed to fetch profile');
       }
       return res.json();
     },
-    enabled: !!token,
+    enabled: !!token && !isLoggingOut,
     staleTime: 10 * 60_000,
     initialData: user ? { user, profile: user.sellerProfile || user.buyerProfile } : undefined,
   });

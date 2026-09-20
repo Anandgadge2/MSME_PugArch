@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -53,7 +53,42 @@ interface OpportunityItem {
 export function LiveOpportunityRadar() {
   const { user } = useAuth();
   const isShg = isShgUser(user) || user?.role === 'shg';
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [activeTab, setActiveTab] = useState<FilterTab>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('radarTab');
+      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+        return urlTab as FilterTab;
+      }
+      const saved = sessionStorage.getItem('dashboard_radar_tab');
+      if (saved && ['all', 'tenders', 'rfqs', 'auctions'].includes(saved)) {
+        return saved as FilterTab;
+      }
+    }
+    return 'all';
+  });
+
+  const handleTabChange = useCallback((newTab: FilterTab) => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dashboard_radar_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('radarTab');
+      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+        setActiveTab(urlTab as FilterTab);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-live-opportunities'],
@@ -269,7 +304,7 @@ export function LiveOpportunityRadar() {
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 ${
                 isActive 
                   ? 'bg-[#12335f] text-white shadow-xs' 

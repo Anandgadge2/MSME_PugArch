@@ -19,6 +19,7 @@ import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
 import { CategoryHorizontalBar } from '../components/CategoryHorizontalBar';
 import { MarketplaceFilterPanel } from '../components/MarketplaceFilterPanel';
+import { MarketplaceSearchBar } from '../components/MarketplaceSearchBar';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { cn } from '../../../lib/utils';
@@ -100,7 +101,8 @@ export default function MarketplaceProductList() {
         setAccumulatedItems([]);
     }, [searchQuery, isServices]);
 
-    const handleToggleType = (type: 'products' | 'services') => {
+    const handleToggleType = (type: 'products' | 'services' | 'all') => {
+        const targetType = type === 'all' ? 'products' : type;
         setSelectedCategoryIds([]);
         setPage(1);
         setConditionFilter('');
@@ -108,7 +110,7 @@ export default function MarketplaceProductList() {
         
         if (isDashboardMarketplace) {
             const params = new URLSearchParams(searchParams?.toString() || '');
-            if (type === 'services') {
+            if (targetType === 'services') {
                 params.set('type', 'services');
             } else {
                 params.delete('type');
@@ -119,7 +121,7 @@ export default function MarketplaceProductList() {
             params.set('page', '1');
             router.replace(`${pathname}?${params.toString()}`, { scroll: false });
         } else {
-            const targetPath = type === 'services' ? '/marketplace/services' : '/marketplace/products';
+            const targetPath = targetType === 'services' ? '/marketplace/services' : '/marketplace/products';
             const params = new URLSearchParams(searchParams?.toString() || '');
             params.delete('type');
             params.delete('categoryId');
@@ -268,16 +270,23 @@ export default function MarketplaceProductList() {
 
     // Enhanced Multi-Category & Multi-Faceted filtering
     const filteredItems = useMemo(() => items.filter((item: any) => {
-        // Search query match
+        // Search query match (supports multi-token keywords & specifications, just like Amazon/Flipkart)
         const searchQueryLower = searchQuery.toLowerCase();
+        const searchTokens = searchQueryLower.split(/\s+/).filter(t => t.length > 1);
         const itemNameLower = String(item.name || '').toLowerCase();
+        const itemDescLower = String(item.description || '').toLowerCase();
+        const itemCatLower = String(item.category?.name || '').toLowerCase();
+        const itemBrandLower = String(item.brand || '').toLowerCase();
+        const itemOrgLower = String(item.organization?.organizationName || item.seller?.name || '').toLowerCase();
+        const itemSkuLower = String(item.sku || item.modelNumber || item.hsnCode || '').toLowerCase();
+        const itemSpecsLower = Array.isArray(item.specifications)
+            ? item.specifications.map((s: any) => `${s.name || ''} ${s.value || ''}`).join(' ').toLowerCase()
+            : '';
+        const itemFullText = `${itemNameLower} ${itemDescLower} ${itemCatLower} ${itemBrandLower} ${itemOrgLower} ${itemSkuLower} ${itemSpecsLower} ${String(item.tags || '').toLowerCase()}`;
+
         const matchesSearch = !searchQueryLower ||
-            itemNameLower.includes(searchQueryLower) ||
-            String(item.description || '').toLowerCase().includes(searchQueryLower) ||
-            String(item.category?.name || '').toLowerCase().includes(searchQueryLower) ||
-            String(item.brand || '').toLowerCase().includes(searchQueryLower) ||
-            String(item.organization?.organizationName || item.seller?.name || '').toLowerCase().includes(searchQueryLower) ||
-            String(item.tags || '').toLowerCase().includes(searchQueryLower);
+            itemFullText.includes(searchQueryLower) ||
+            (searchTokens.length > 1 && searchTokens.every(t => itemFullText.includes(t)));
 
         // Multi-category match
         const itemCatId = String(item.category?.id || item.categoryId || '');
@@ -315,7 +324,7 @@ export default function MarketplaceProductList() {
         const matchesMsme = !msmeOnlyFilter || Boolean(item.isMsmeMade || item.organization?.isMsmeVerified);
         const matchesBulk = isServices || !bulkDealFilter || Boolean(item.bulkDealAvailable);
         const matchesTaxRate = !taxRateFilter || String(item.taxRate || '') === taxRateFilter || Number(item.taxRate || 0) === Number(taxRateFilter);
-        const matchesBrand = !brandSearchFilter || String(item.brand || '').toLowerCase().includes(brandSearchFilter.toLowerCase()) || String(item.organization?.organizationName || '').toLowerCase().includes(brandSearchFilter.toLowerCase());
+        const matchesBrand = !brandSearchFilter || String(item.brand || '').toLowerCase().includes(brandSearchFilter.toLowerCase()) || String(item.organization?.organizationName || '').toLowerCase().includes(brandSearchFilter.toLowerCase()) || String(item.seller?.name || '').toLowerCase().includes(brandSearchFilter.toLowerCase());
 
         const matchesDistrict = !districtFilter || String(item.organization?.district || item.organization?.city || item.organization?.state || '').toLowerCase().includes(districtFilter.toLowerCase());
         const matchesDiscount = !discountFilter || (discountFilter === 'active' && Boolean(item.discountPercent || item.discountPrice || (item.originalPrice && item.price && Number(item.originalPrice) > Number(item.price))));
@@ -570,15 +579,26 @@ export default function MarketplaceProductList() {
         };
     };
 
-    // Extract unique sellers for sidebar
+    // Fetch all verified sellers on portal
+    const { data: verifiedSellersData } = useQuery({
+        queryKey: ['marketplaceVerifiedSellers'],
+        queryFn: () => marketplaceApi.getSellers({ pageSize: 500 }),
+        staleTime: 5 * 60_000
+    });
+
+    // Extract all verified sellers for sidebar
     const availableSellers = useMemo(() => {
         const set = new Set<string>();
+        (verifiedSellersData?.sellers || []).forEach((seller: any) => {
+            const sName = seller.organizationName || seller.name;
+            if (sName) set.add(sName);
+        });
         items.forEach((item: any) => {
             const sName = item.organization?.organizationName || item.seller?.name;
             if (sName) set.add(sName);
         });
-        return Array.from(set);
-    }, [items]);
+        return Array.from(set).sort((a, b) => a.localeCompare(b));
+    }, [verifiedSellersData, items]);
 
     // Extract unique locations (districts / cities / states) dynamically from portal items
     const availableLocations = useMemo(() => {
@@ -679,6 +699,89 @@ export default function MarketplaceProductList() {
 
                 <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8 py-6">
                     
+                    {/* Amazon / Flipkart Style Universal Search Bar */}
+                    <div className="mb-6">
+                        <MarketplaceSearchBar
+                            initialQuery={searchQuery}
+                            isServices={isServices}
+                            onSearch={(q, scope) => {
+                                setPage(1);
+                                const targetIsServices = scope === 'services';
+                                if (isDashboardMarketplace) {
+                                    const params = new URLSearchParams(searchParams?.toString() || '');
+                                    if (q) params.set('q', q);
+                                    else params.delete('q');
+                                    if (targetIsServices) params.set('type', 'services');
+                                    else if (scope === 'products') params.delete('type');
+                                    params.set('page', '1');
+                                    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+                                } else {
+                                    const targetPath = targetIsServices ? '/marketplace/services' : '/marketplace/products';
+                                    const params = new URLSearchParams(searchParams?.toString() || '');
+                                    if (q) params.set('q', q);
+                                    else params.delete('q');
+                                    params.set('page', '1');
+                                    const qs = params.toString();
+                                    router.push(qs ? `${targetPath}?${qs}` : targetPath);
+                                }
+                            }}
+                            onSelectCategory={(catId) => {
+                                setSelectedCategoryIds([catId]);
+                                setPage(1);
+                                syncUrl({ categoryId: catId, page: 1 });
+                            }}
+                            onSelectSeller={(sellerName) => {
+                                setBrandSearchFilter(sellerName);
+                                setPage(1);
+                                syncUrl({ brand: sellerName, page: 1 });
+                            }}
+                        />
+                    </div>
+
+                    {/* Offering Type Toggle (Products & Services Tabs) */}
+                    <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="inline-flex items-center p-1 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
+                            <button
+                                type="button"
+                                onClick={() => handleToggleType('products')}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none",
+                                    !isServices
+                                        ? "bg-[#0b2447] text-white shadow-sm"
+                                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                                )}
+                                aria-pressed={!isServices}
+                            >
+                                <Package className="h-4 w-4" />
+                                <span>Products</span>
+                                {!isServices && (
+                                    <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/30 text-white">
+                                        {total}
+                                    </span>
+                                )}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleToggleType('services')}
+                                className={cn(
+                                    "flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none",
+                                    isServices
+                                        ? "bg-[#0b2447] text-white shadow-sm"
+                                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                                )}
+                                aria-pressed={isServices}
+                            >
+                                <Wrench className="h-4 w-4" />
+                                <span>Services</span>
+                                {isServices && (
+                                    <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/30 text-white">
+                                        {total}
+                                    </span>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Category Catalogue Header Banner */}
                     <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
@@ -897,6 +1000,8 @@ export default function MarketplaceProductList() {
                                 activeFiltersCount={activeFiltersCount}
                                 totalResults={total}
                                 onClearAll={handleClearAllFilters}
+                                itemType={isServices ? 'services' : 'products'}
+                                onItemTypeChange={handleToggleType}
                                 isServices={isServices}
                             />
                         </aside>
@@ -1024,6 +1129,8 @@ export default function MarketplaceProductList() {
                                             activeFiltersCount={activeFiltersCount}
                                             totalResults={total}
                                             onClearAll={handleClearAllFilters}
+                                            itemType={isServices ? 'services' : 'products'}
+                                            onItemTypeChange={handleToggleType}
                                             isServices={isServices}
                                             isMobileDrawer={true}
                                             onCloseMobileDrawer={() => setMobileFiltersOpen(false)}

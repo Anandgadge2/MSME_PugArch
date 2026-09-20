@@ -54,7 +54,7 @@ export default function MISReports() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const tabParam = params.get('tab');
+      const tabParam = params.get('tab') || sessionStorage.getItem('mis_reports_active_tab');
       if (tabParam === 'procurement') setActiveTab('procurement');
       else if (tabParam === 'suppliers') setActiveTab('suppliers');
       else if (tabParam === 'finance' || tabParam === 'payments') setActiveTab('finance');
@@ -68,6 +68,7 @@ export default function MISReports() {
   const handleTabChange = (tab: ActiveTab) => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
+      sessionStorage.setItem('mis_reports_active_tab', tab);
       const url = new URL(window.location.href);
       url.searchParams.set('tab', tab);
       window.history.replaceState({}, '', url.toString());

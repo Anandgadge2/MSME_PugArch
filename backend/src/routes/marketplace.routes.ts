@@ -1975,13 +1975,36 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
 
         const where: any = productPublicWhere();
         if (query.q) {
-            where.OR = [
-                { name: { contains: query.q, mode: 'insensitive' } },
-                { description: { contains: query.q, mode: 'insensitive' } },
-                { brand: { contains: query.q, mode: 'insensitive' } },
-                { category: { name: { contains: query.q, mode: 'insensitive' } } },
-                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
+            const cleanQ = query.q.trim();
+            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+            const buildConditions = (term: string) => [
+                { name: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } },
+                { brand: { contains: term, mode: 'insensitive' } },
+                { modelNumber: { contains: term, mode: 'insensitive' } },
+                { sku: { contains: term, mode: 'insensitive' } },
+                { hsnCode: { contains: term, mode: 'insensitive' } },
+                { category: { name: { contains: term, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: term, mode: 'insensitive' } } },
+                { seller: { name: { contains: term, mode: 'insensitive' } } },
+                { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
+
+            if (tokens.length > 1) {
+                where.AND = [
+                    ...(where.AND || []),
+                    {
+                        OR: [
+                            ...buildConditions(cleanQ),
+                            {
+                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                            }
+                        ]
+                    }
+                ];
+            } else {
+                where.OR = buildConditions(cleanQ);
+            }
         }
         if (categoryId) where.categoryId = categoryId;
         const minPrice = query.priceMin ?? query.minPrice;
@@ -2016,7 +2039,17 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
             where.taxRate = Number(req.query.taxRate);
         }
         if (req.query.brand !== undefined && req.query.brand !== '') {
-            where.brand = { contains: String(req.query.brand), mode: 'insensitive' };
+            const brandTerm = String(req.query.brand).trim();
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { brand: { contains: brandTerm, mode: 'insensitive' } },
+                        { organization: { organizationName: { contains: brandTerm, mode: 'insensitive' } } },
+                        { seller: { name: { contains: brandTerm, mode: 'insensitive' } } }
+                    ]
+                }
+            ];
         }
         if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
             const offer = activeOfferWhere();
@@ -2083,12 +2116,35 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
 
         const where: any = servicePublicWhere();
         if (query.q) {
-            where.OR = [
-                { name: { contains: query.q, mode: 'insensitive' } },
-                { description: { contains: query.q, mode: 'insensitive' } },
-                { category: { name: { contains: query.q, mode: 'insensitive' } } },
-                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
+            const cleanQ = query.q.trim();
+            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+            const buildConditions = (term: string) => [
+                { name: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } },
+                { scopeOfWork: { contains: term, mode: 'insensitive' } },
+                { deliverables: { contains: term, mode: 'insensitive' } },
+                { serviceArea: { contains: term, mode: 'insensitive' } },
+                { category: { name: { contains: term, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: term, mode: 'insensitive' } } },
+                { seller: { name: { contains: term, mode: 'insensitive' } } },
+                { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
+
+            if (tokens.length > 1) {
+                where.AND = [
+                    ...(where.AND || []),
+                    {
+                        OR: [
+                            ...buildConditions(cleanQ),
+                            {
+                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                            }
+                        ]
+                    }
+                ];
+            } else {
+                where.OR = buildConditions(cleanQ);
+            }
         }
         if (categoryId) where.categoryId = categoryId;
         const minPrice = query.priceMin ?? query.minPrice;
@@ -2118,6 +2174,18 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
         }
         if (req.query.taxRate !== undefined && req.query.taxRate !== '') {
             where.taxRate = Number(req.query.taxRate);
+        }
+        if (req.query.brand !== undefined && req.query.brand !== '') {
+            const brandTerm = String(req.query.brand).trim();
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { organization: { organizationName: { contains: brandTerm, mode: 'insensitive' } } },
+                        { seller: { name: { contains: brandTerm, mode: 'insensitive' } } }
+                    ]
+                }
+            ];
         }
         if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
             const offer = activeOfferWhere();
@@ -4358,8 +4426,12 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
                         { name: { contains: q, mode: 'insensitive' } },
                         { description: { contains: q, mode: 'insensitive' } },
                         { brand: { contains: q, mode: 'insensitive' } },
+                        { modelNumber: { contains: q, mode: 'insensitive' } },
+                        { sku: { contains: q, mode: 'insensitive' } },
                         { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
+                        { seller: { name: { contains: q, mode: 'insensitive' } } },
+                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
                     ]
                 }),
                 take: 6,
@@ -4385,8 +4457,12 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
                     OR: [
                         { name: { contains: q, mode: 'insensitive' } },
                         { description: { contains: q, mode: 'insensitive' } },
+                        { scopeOfWork: { contains: q, mode: 'insensitive' } },
+                        { deliverables: { contains: q, mode: 'insensitive' } },
                         { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
+                        { seller: { name: { contains: q, mode: 'insensitive' } } },
+                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
                     ]
                 }),
                 take: 6,

@@ -529,7 +529,7 @@ export default function App({
   serverInitialLoadComplete?: boolean;
   initialSidebarCollapsed?: boolean;
 }) {
-  const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+  const { user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
@@ -570,7 +570,7 @@ export default function App({
     return initialSidebarCollapsed;
   });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-  const isEffectivelyCollapsed = isSidebarCollapsed;
+  const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
   const isFetchingQueries = useIsFetching();
   const [safetyTimeoutPassed, setSafetyTimeoutPassed] = useState(false);
@@ -599,11 +599,14 @@ export default function App({
   const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
   const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
-  const [hasCookie, setHasCookie] = useState(false);
+  const [hasCookie, setHasCookie] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    return Boolean(getCookieValue('csrfToken'));
+  });
 
   React.useEffect(() => {
     setHasCookie(Boolean(getCookieValue('csrfToken')));
-  }, []);
+  }, [loading, user]);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');
@@ -715,10 +718,11 @@ export default function App({
         return <RouteFallback />;
       }
     }
-    if (pathname === '/') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
-    if (pathname === '/login') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <Login />;
+    const isAuthedUser = Boolean(user && (hasCookie || token || (typeof window !== 'undefined' && localStorage.getItem('token'))));
+    if (pathname === '/') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
+    if (pathname === '/login') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <Login />;
     if (pathname === '/shg/login') return <Redirect to="/login" />;
-    if (pathname === '/forgot-password') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
+    if (pathname === '/forgot-password') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
     if (pathname === '/register') return <RegisterSelection />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
