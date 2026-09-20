@@ -3560,11 +3560,19 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
         const page = query.page || 1;
         const pageSize = query.pageSize || 20;
         const skip = (page - 1) * pageSize;
+        const currentYear = new Date().getFullYear();
+        const candidateYears = [currentYear, currentYear - 1, currentYear + 1];
+        const prefixes = ['RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA', 'REQ', 'TENDER'];
+
         const candidateNumbers = Array.from(new Set([
             rawToken,
-            rawToken.replace(/^[A-Z]{2,5}-/i, ''),
-            `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
-            `REQ_${id}`, `RFQ_${id}`, `RC_${id}`
+            rawToken.replace(/^[A-Z]{2,6}-/i, ''),
+            ...getCanonicalLookupVariants(rawToken),
+            ...(id > 0 ? [
+                `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
+                `REQ_${id}`, `RFQ_${id}`, `RC_${id}`,
+                ...prefixes.flatMap(pfx => candidateYears.map(yr => `${pfx}-${yr}-${id}`))
+            ] : [])
         ].filter(Boolean) as string[]));
         const candidateIds = Array.from(new Set([id].filter(i => i > 0 && i <= 2147483647)));
 
@@ -3574,11 +3582,23 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
                 select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
             }).catch(() => null),
             db.requirement.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
+                        ...(id > 0 ? [{ requirementNumber: { endsWith: `-${id}` } }] : [])
+                    ]
+                },
                 select: { id: true, requirementNumber: true, title: true, buyerId: true, organizationId: true, status: true }
             }).catch(() => null),
             db.procurementBid.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []) ] },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []),
+                        ...(id > 0 ? [{ bidNumber: { endsWith: `-${id}` } }] : [])
+                    ]
+                },
                 select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
             }).catch(() => null)
         ]);

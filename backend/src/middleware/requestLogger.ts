@@ -10,12 +10,13 @@ export const requestLogger = pinoHttp({
   customLogLevel: (req: any, res: any) => {
     const url = String(req.url || '');
     if (
-      res.statusCode === 401 &&
-      (url.includes('/auth/me') ||
-        url.includes('/auth/refresh') ||
-        url.includes('/auth/logout') ||
-        url.includes('/navigation/summary') ||
-        url.includes('/notifications'))
+      (res.statusCode === 401 &&
+        (url.includes('/auth/me') ||
+          url.includes('/auth/refresh') ||
+          url.includes('/auth/logout') ||
+          url.includes('/navigation/summary') ||
+          url.includes('/notifications'))) ||
+      (res.statusCode === 426 && url.startsWith('/api/ws'))
     ) {
       return 'silent';
     }

@@ -114,7 +114,9 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
 
     const isServerless = typeof window !== 'undefined' && (
       window.location.hostname.includes('vercel.app') ||
-      window.location.hostname.includes('.now.sh')
+      window.location.hostname.includes('.now.sh') ||
+      process.env.NODE_ENV === 'production' ||
+      (!window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1'))
     );
 
     if (isServerless) {
