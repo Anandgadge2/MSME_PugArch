@@ -651,6 +651,17 @@ export const procurementBidApi = {
     const res = await api.put(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}`, payload, { headers: authHeaders() });
     return readApiBody(res);
   },
+  async extendBidSchedule(bidId: string | number, payload: {
+    closingDate: string;
+    technicalOpeningDate?: string | null;
+    financialOpeningDate?: string | null;
+    requiredByDate?: string | null;
+    bidValidityDate?: string | null;
+    reason: string;
+  }) {
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(String(bidId))}/extend-schedule`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
   async uploadBuyerBidDocuments(
     bidId: string,
     files: File[],

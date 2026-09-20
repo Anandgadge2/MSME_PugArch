@@ -1459,6 +1459,21 @@ router.put('/buyer/procurement-bids/:bidId', authenticate, requireAccountType('b
   return apiResponse.success(res, bid, 200, 'Bid updated');
 }));
 
+const extendScheduleSchema = z.object({
+  closingDate: z.string().min(1, 'Closing date is required'),
+  technicalOpeningDate: z.string().nullable().optional(),
+  financialOpeningDate: z.string().nullable().optional(),
+  requiredByDate: z.string().nullable().optional(),
+  bidValidityDate: z.string().nullable().optional(),
+  reason: z.string().trim().min(5, 'Please provide an extension reason (min 5 characters)').max(500),
+});
+
+router.post('/buyer/procurement-bids/:bidId/extend-schedule', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), validate({ params: idParamSchema, body: extendScheduleSchema }), asyncRoute(async (req, res) => {
+  const bid = await service.extendBidSchedule(req, req.params.bidId, req.body);
+  await invalidateBidCaches(bid.id);
+  return apiResponse.success(res, bid, 200, 'Tender schedule extended and corrigendum issued');
+}));
+
 router.post('/buyer/procurement-bids/:bidId/documents', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), upload.single('file'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const doc = await service.uploadBuyerBidDocument(req, req.params.bidId, req.body);
   return apiResponse.created(res, doc, 'Bid document uploaded');

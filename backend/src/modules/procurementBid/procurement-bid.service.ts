@@ -1899,6 +1899,177 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
   return updated;
 };
 
+export interface ExtendScheduleInput {
+  closingDate: string;
+  technicalOpeningDate?: string | null;
+  financialOpeningDate?: string | null;
+  requiredByDate?: string | null;
+  bidValidityDate?: string | null;
+  reason: string;
+}
+
+export const extendBidSchedule = async (
+  req: AuthRequest,
+  bidId: string,
+  body: ExtendScheduleInput
+) => {
+  const bid = await resolveBid(bidId, {});
+  assertBuyerOwner(req.user!, bid);
+
+  const status = String(bid.status || '').toUpperCase();
+  const terminalStatuses = ['AWARDED', 'CANCELLED', 'CLOSED', 'COMPLETED'];
+  if (terminalStatuses.includes(status)) {
+    throw new ApiError(400, `Cannot extend schedule for a tender that is ${status.toLowerCase()}.`, 'TENDER_ALREADY_FINALIZED');
+  }
+
+  const newClosingDate = new Date(body.closingDate);
+  if (isNaN(newClosingDate.getTime())) {
+    throw new ApiError(400, 'Invalid submission closing date provided.', 'INVALID_CLOSING_DATE');
+  }
+
+  const now = new Date();
+  if (newClosingDate.getTime() <= now.getTime()) {
+    throw new ApiError(400, 'New submission closing date must be in the future.', 'CLOSING_DATE_IN_PAST');
+  }
+
+  const oldEndDate = bid.endDate ? new Date(bid.endDate) : null;
+  if (oldEndDate && newClosingDate.getTime() <= oldEndDate.getTime()) {
+    throw new ApiError(400, 'New submission closing date must be later than the current deadline.', 'CLOSING_DATE_NOT_EXTENDED');
+  }
+
+  // Validate technical opening date if provided
+  let newTechDate: Date | null = null;
+  if (body.technicalOpeningDate) {
+    newTechDate = new Date(body.technicalOpeningDate);
+    if (isNaN(newTechDate.getTime())) {
+      throw new ApiError(400, 'Invalid technical opening date provided.', 'INVALID_TECH_DATE');
+    }
+    if (newTechDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Technical opening date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  } else if (bid.technicalOpeningDate) {
+    // If existing technical date is prior to new closing date, auto-align it
+    const oldTech = new Date(bid.technicalOpeningDate);
+    if (oldTech.getTime() < newClosingDate.getTime()) {
+      newTechDate = newClosingDate;
+    }
+  }
+
+  // Validate financial opening date if provided
+  let newFinDate: Date | null = null;
+  if (body.financialOpeningDate) {
+    newFinDate = new Date(body.financialOpeningDate);
+    if (isNaN(newFinDate.getTime())) {
+      throw new ApiError(400, 'Invalid financial opening date provided.', 'INVALID_FIN_DATE');
+    }
+    const minFin = newTechDate || newClosingDate;
+    if (newFinDate.getTime() < minFin.getTime()) {
+      throw new ApiError(400, 'Financial opening date cannot be earlier than the technical opening / closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  } else if (bid.financialOpeningDate) {
+    const oldFin = new Date(bid.financialOpeningDate);
+    const minFin = newTechDate || newClosingDate;
+    if (oldFin.getTime() < minFin.getTime()) {
+      newFinDate = minFin;
+    }
+  }
+
+  // Validate requiredByDate / delivery date if provided
+  let newRequiredByDate: Date | null = null;
+  if (body.requiredByDate) {
+    newRequiredByDate = new Date(body.requiredByDate);
+    if (isNaN(newRequiredByDate.getTime())) {
+      throw new ApiError(400, 'Invalid delivery / required-by date provided.', 'INVALID_DELIVERY_DATE');
+    }
+    if (newRequiredByDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Required-by delivery date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  }
+
+  // Validate bid validity date
+  let newValidityDate: Date | null = null;
+  if (body.bidValidityDate) {
+    newValidityDate = new Date(body.bidValidityDate);
+    if (isNaN(newValidityDate.getTime())) {
+      throw new ApiError(400, 'Invalid bid validity date provided.', 'INVALID_VALIDITY_DATE');
+    }
+    if (newValidityDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Bid validity date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  }
+
+  // Sync technicalPacket JSON payload if present
+  let updatedTechnicalPacket = bid.technicalPacket as any;
+  if (updatedTechnicalPacket && typeof updatedTechnicalPacket === 'object') {
+    const schedule = updatedTechnicalPacket.schedule || {};
+    const basics = updatedTechnicalPacket.basics || {};
+    updatedTechnicalPacket = {
+      ...updatedTechnicalPacket,
+      schedule: {
+        ...schedule,
+        submissionClosingDate: newClosingDate.toISOString(),
+        ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
+        ...(newFinDate ? { financialOpeningDate: newFinDate.toISOString() } : {}),
+        ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
+      },
+      basics: {
+        ...basics,
+        ...(newRequiredByDate ? { requiredByDate: newRequiredByDate.toISOString() } : {}),
+      }
+    };
+  }
+
+  const updated = await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      endDate: newClosingDate,
+      ...(newTechDate ? { technicalOpeningDate: newTechDate } : {}),
+      ...(newFinDate ? { financialOpeningDate: newFinDate } : {}),
+      ...(newValidityDate ? { bidValidityDate: newValidityDate } : {}),
+      ...(updatedTechnicalPacket ? { technicalPacket: updatedTechnicalPacket } : {})
+    }
+  });
+
+  const changeSummary = {
+    oldDates: {
+      endDate: bid.endDate,
+      technicalOpeningDate: bid.technicalOpeningDate,
+      financialOpeningDate: bid.financialOpeningDate,
+      bidValidityDate: bid.bidValidityDate
+    },
+    newDates: {
+      endDate: newClosingDate,
+      technicalOpeningDate: newTechDate || bid.technicalOpeningDate,
+      financialOpeningDate: newFinDate || bid.financialOpeningDate,
+      bidValidityDate: newValidityDate || bid.bidValidityDate,
+      requiredByDate: newRequiredByDate
+    },
+    reason: body.reason,
+    extendedByUserId: req.user!.id
+  };
+
+  await procurementAudit(req, 'BID_SCHEDULE_EXTENDED', 'ProcurementBid', bid.id, changeSummary, bid);
+
+  // Notify all participating sellers without modifying their submission status
+  const participations = await db.procurementBidParticipation.findMany({
+    where: { bidId: bid.id }
+  });
+  for (const p of participations) {
+    try {
+      await notificationService.notifyUser(p.sellerId, {
+        title: 'Submission Deadline Extended (Corrigendum)',
+        message: `The submission deadline for "${bid.title}" has been extended to ${newClosingDate.toLocaleString()}. Reason: ${body.reason}`,
+        type: 'tender.deadline_extended',
+        redirectUrl: `/seller/procurement/events/${bid.id}`
+      }, ['in_app', 'email']);
+    } catch (err) {
+      logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');
+    }
+  }
+
+  return updated;
+};
+
 export const uploadBuyerBidDocument = async (req: AuthRequest & { file?: Express.Multer.File }, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);

@@ -78,6 +78,7 @@ import { EmdPaymentModal } from "./EmdPaymentModal";
 import StartReverseAuctionModal, {
   SubmittedVendorItem,
 } from "../../reverseAuctions/components/StartReverseAuctionModal";
+import { ExtendScheduleModal } from "./ExtendScheduleModal";
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
@@ -3997,6 +3998,7 @@ export function ProcurementDetailUnifiedView(
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -4020,6 +4022,12 @@ export function ProcurementDetailUnifiedView(
     (isBuyerOrAdmin &&
       !pathname.startsWith("/seller") &&
       !pathname.startsWith("/shg"));
+
+  const canExtendSchedule =
+    isBuyerSide &&
+    !["AWARDED", "CANCELLED", "CLOSED", "COMPLETED"].includes(
+      String(props.status || "").toUpperCase(),
+    );
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
@@ -8531,6 +8539,27 @@ export function ProcurementDetailUnifiedView(
             />
           )}
 
+          {isExtendScheduleOpen && (
+            <ExtendScheduleModal
+              isOpen={isExtendScheduleOpen}
+              onClose={() => setIsExtendScheduleOpen(false)}
+              bidId={props.id}
+              bidTitle={resolvedSubject}
+              bidNumber={props.displayId || String(props.id)}
+              currentSchedule={{
+                closingDate: closingDateValue || props.deadlineDate || props.closingDate,
+                technicalOpeningDate: technicalDateValue || props.technicalDate || props.technicalOpeningDate,
+                financialOpeningDate: financialDateValue || props.financialDate || props.financialOpeningDate,
+                requiredByDate: requiredByDateValue || props.requiredByDate || props.requiredBy,
+                bidValidityDate: bidValidityDateComputed || bidValidityDateValue || props.bidValidityDate,
+                validityDays: rawValidityDays || props.validityDays,
+              }}
+              onSuccess={() => {
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
           {/* Buyer: Award Contract Confirmation Modal */}
           {awardingParticipation && (
             <div
@@ -8933,6 +8962,22 @@ export function ProcurementDetailUnifiedView(
                   </Button>
                 )}
                 {isBuyerOrAdmin && props.buyerAuctionActions}
+                {canExtendSchedule && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsExtendScheduleOpen(true)}
+                    className="h-9 px-3.5 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                    aria-label="Extend tender schedule and submission deadline"
+                  >
+                    <CalendarDays
+                      className="h-3.5 w-3.5 text-indigo-600"
+                      aria-hidden="true"
+                    />
+                    Extend Schedule
+                  </Button>
+                )}
                 {props.onCancelClick && (
                   <Button
                     type="button"
@@ -9812,10 +9857,25 @@ export function ProcurementDetailUnifiedView(
               >
                 <div className="space-y-5">
                   <div className="space-y-2.5">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <Calendar className="h-4 w-4 text-indigo-600" />
-                      Milestones &amp; Critical Dates
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4 text-indigo-600" />
+                        Milestones &amp; Critical Dates
+                      </h3>
+                      {canExtendSchedule && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsExtendScheduleOpen(true)}
+                          className="h-7 px-2.5 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[11px] font-bold rounded-lg gap-1 flex items-center cursor-pointer shadow-2xs"
+                          aria-label="Extend schedule dates"
+                        >
+                          <CalendarDays className="h-3 w-3 text-indigo-600" aria-hidden="true" />
+                          Extend Schedule
+                        </Button>
+                      )}
+                    </div>
                     <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                       <PropertyGrid columns={3}>
                         <PropertyItem
