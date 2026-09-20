@@ -29,7 +29,7 @@ const bidTransitions: Record<string, string[]> = {
   DRAFT: ['PENDING_ADMIN_APPROVAL', 'PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING', 'CANCELLED'],
   PENDING_ADMIN_APPROVAL: ['APPROVED', 'PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING', 'DRAFT', 'CANCELLED'],
   APPROVED: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CANCELLED'],
-  PUBLISHED: ['OPEN', 'OPEN_FOR_BIDDING', 'CANCELLED'],
+  PUBLISHED: ['OPEN', 'OPEN_FOR_BIDDING', 'CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN_FOR_BIDDING: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   CLOSED: ['UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
@@ -415,7 +415,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 
   if (bid) {
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Direct hit on procurementBid.bidNumber');
-    return bid;
+    return await refreshBidStatus(bid);
   }
 
   // 2. Direct lookup by numeric ID if parameter is an integer
@@ -425,7 +425,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
       where: { id: Number(token) },
       include,
     });
-    if (bid) return bid;
+    if (bid) return await refreshBidStatus(bid);
   }
 
   // 3. Direct indexed lookup in buyerRequirement
@@ -489,7 +489,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
       where: { bidNumber: { in: variants } },
       include,
     });
-    if (bid) return bid;
+    if (bid) return await refreshBidStatus(bid);
   }
 
   if (bid) {
@@ -795,9 +795,24 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 };
 
 export const refreshBidStatus = async (bid: any) => {
-  const current = bid.status;
+  if (!bid || !bid.id || bid.isBuyerRequirement) return bid;
+  const current = String(bid.status || '').toUpperCase();
   const time = now();
-  if (current === 'OPEN' && new Date(bid.endDate) <= time) {
+
+  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+  const deadlineCandidate = firstPresent(
+    bid.endDate,
+    bid.bidClosingDate,
+    sched?.submissionDate,
+    sched?.submissionDeadline,
+    sched?.submissionEndDate,
+    sched?.bidClosingDate,
+    (bid.technicalPacket as any)?.submissionDeadline,
+    (bid.technicalPacket as any)?.bidClosingDate
+  );
+  const endDateTime = deadlineCandidate ? new Date(deadlineCandidate).getTime() : (bid.endDate ? new Date(bid.endDate).getTime() : null);
+
+  if (['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'ACTIVE'].includes(current) && endDateTime && endDateTime <= time.getTime()) {
     const expired = await db.procurementBid.update({
       where: { id: bid.id },
       data: { status: 'EXPIRED', lifecycleStage: 'TECHNICAL_EVALUATION' },
@@ -814,7 +829,7 @@ export const refreshBidStatus = async (bid: any) => {
     });
     return expired;
   }
-  if (current === 'APPROVED' && new Date(bid.startDate) <= time && new Date(bid.endDate) > time) {
+  if (['APPROVED', 'DRAFT'].includes(current) && bid.startDate && new Date(bid.startDate) <= time && endDateTime && endDateTime > time.getTime()) {
     return db.procurementBid.update({
       where: { id: bid.id },
       data: { status: 'OPEN', lifecycleStage: 'SELLER_PARTICIPATION' },
@@ -2756,10 +2771,34 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
     );
   }
 
-  if (!technicalEvaluationStatuses.includes(bid.status)) throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
+  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+  const deadlineCandidate = firstPresent(
+    bid.endDate,
+    bid.bidClosingDate,
+    sched?.submissionDate,
+    sched?.submissionDeadline,
+    sched?.submissionEndDate,
+    sched?.bidClosingDate,
+    (bid.technicalPacket as any)?.submissionDeadline,
+    (bid.technicalPacket as any)?.bidClosingDate,
+    bid.rawBuyerRequirement?.lastDate,
+    bid.rawBuyerRequirement?.requiredBy
+  );
+  const deadlinePassed = deadlineCandidate ? new Date(deadlineCandidate).getTime() <= Date.now() : false;
+  const isSubmissionClosed = technicalEvaluationStatuses.includes(bid.status) || deadlinePassed || Boolean(body?.closeBidIfOpen);
+
+  if (!isSubmissionClosed && !['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED'].includes(bid.status)) {
+    throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
+  }
+
   const updatedRows = await db.$transaction(async (tx: any) => {
     if (bid.status !== 'TECHNICAL_EVALUATION') assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
-    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
+    if (!bid.isBuyerRequirement) {
+      const exists = await tx.procurementBid.findUnique({ where: { id: bid.id }, select: { id: true } });
+      if (exists) {
+        await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
+      }
+    }
     const rows = [];
     for (const item of body.evaluations) {
       const targetIdNum = Number(item.participationId);

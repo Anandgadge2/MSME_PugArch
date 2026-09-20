@@ -10796,6 +10796,8 @@ export function ProcurementDetailUnifiedView(
                   isStage2Active={isTechEvalCompleted || isBidAwarded}
                   bidStatus={props.status || props.lifecycleStage}
                   procurementTitle={props.subject || props.procurementLabel}
+                  isTwoPacketMode={isTwoPacketMode}
+                  packetType={isTwoPacketMode ? "TWO_PACKET" : "SINGLE_PACKET"}
                   onEvaluationSuccess={() => {
                     queryClient.invalidateQueries({
                       queryKey: ["buyer-unified-participations"],

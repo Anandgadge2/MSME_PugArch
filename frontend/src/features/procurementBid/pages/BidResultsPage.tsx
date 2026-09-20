@@ -1473,6 +1473,8 @@ export default function BidResultsPage() {
             isFinancialStageOpened={true}
             isStage2Active={true}
             bidStatus={bid?.status}
+            isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
+            packetType={bid?.packetType}
             onSuccess={() => {
               loadBid();
             }}
@@ -2436,6 +2438,8 @@ export default function BidResultsPage() {
           isFinancialStageOpened={true}
           isStage2Active={true}
           bidStatus={bid?.status}
+          isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
+          packetType={bid?.packetType}
           onSuccess={() => {
             loadBid();
           }}

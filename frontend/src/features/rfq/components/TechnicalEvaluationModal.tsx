@@ -45,6 +45,8 @@ export interface TechnicalEvaluationModalProps {
   isFinancialStageOpened?: boolean;
   isStage2Active?: boolean;
   bidStatus?: string;
+  isTwoPacketMode?: boolean;
+  packetType?: string;
   onEvaluationSuccess?: () => void;
   onSuccess?: () => void;
 }
@@ -60,12 +62,31 @@ export function TechnicalEvaluationModal({
   isFinancialStageOpened = false,
   isStage2Active = false,
   bidStatus,
+  isTwoPacketMode,
+  packetType,
   onEvaluationSuccess,
   onSuccess,
 }: TechnicalEvaluationModalProps) {
   const effectiveBidId = String(bidId || procurementId || "");
   const handleSuccessCallback = onEvaluationSuccess || onSuccess;
   const queryClient = useQueryClient();
+
+  // Resolve packet type to correctly handle single packet vs two packet workflow
+  const resolvedPacketType = String(
+    packetType ||
+    participation?.packetType ||
+    participation?.bid?.packetType ||
+    participation?.procurementBid?.packetType ||
+    participation?.tender?.packetType ||
+    ""
+  ).toUpperCase();
+
+  const isSinglePacket =
+    isTwoPacketMode !== undefined
+      ? !isTwoPacketMode
+      : resolvedPacketType.includes("SINGLE") ||
+        resolvedPacketType === "1" ||
+        (!resolvedPacketType.includes("TWO") && resolvedPacketType !== "2" && !isStage2Active && !isFinancialStageOpened);
 
   const [decision, setDecision] = useState<"QUALIFIED" | "DISQUALIFIED">(
     "QUALIFIED",
@@ -567,6 +588,7 @@ export function TechnicalEvaluationModal({
             score: numScore,
           },
         ],
+        closeBidIfOpen: true,
       };
 
       // Try primary procurement bids technical evaluation endpoint first
@@ -654,7 +676,7 @@ export function TechnicalEvaluationModal({
                   <div className="flex items-center gap-2 flex-wrap">
                     {isEffectiveReadOnly ? (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 text-amber-200 border border-amber-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <Lock className="h-2.5 w-2.5" aria-hidden="true" /> {isAlreadyQualified ? "Stage 2 Locked • Qualified Record" : "Sealed Audit Record"}
+                        <Lock className="h-2.5 w-2.5" aria-hidden="true" /> {isAlreadyQualified ? (isSinglePacket ? "Qualified Record • Sealed" : "Stage 2 Locked • Qualified Record") : "Sealed Audit Record"}
                       </span>
                     ) : isAlreadyQualified ? (
                       <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
@@ -678,7 +700,9 @@ export function TechnicalEvaluationModal({
                     {isEffectiveReadOnly
                       ? "Technical Evaluation Record (Sealed Audit Trail)"
                       : isAlreadyQualified
-                        ? "Technical Evaluation Record • Stage 1 Qualified"
+                        ? isSinglePacket
+                          ? "Technical Evaluation Record • Qualified"
+                          : "Technical Evaluation Record • Stage 1 Qualified"
                         : "Technical & Compliance Evaluation Record"}
                   </h3>
                 </div>
@@ -716,17 +740,25 @@ export function TechnicalEvaluationModal({
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <strong className="text-emerald-950 font-black text-xs sm:text-sm">
-                      ✅ Technically Qualified • Eligible for Stage 2
+                      {isSinglePacket
+                        ? "✅ Technically Qualified"
+                        : "✅ Technically Qualified • Eligible for Stage 2"}
                     </strong>
                     <span className="inline-flex items-center rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-extrabold px-2 py-0.2">
-                      Stage 1 Cleared
+                      {isSinglePacket ? "Technical Cleared" : "Stage 1 Cleared"}
                     </span>
                   </div>
                   <p className="text-[11.5px] text-emerald-900/90 leading-relaxed">
-                    This quotation has successfully passed Stage 1 technical scrutiny, statutory eligibility, and specification checks.
+                    {isSinglePacket
+                      ? "This quotation has successfully passed technical scrutiny, statutory eligibility, and specification checks."
+                      : "This quotation has successfully passed Stage 1 technical scrutiny, statutory eligibility, and specification checks."}
                     {isEffectiveReadOnly
-                      ? " Stage 2 has opened, locking this evaluation decision against further modifications."
-                      : " You may update scoring or committee remarks below if needed before Stage 2 opening."}
+                      ? isSinglePacket
+                        ? " Evaluation decision is finalized and cannot be modified."
+                        : " Stage 2 has opened, locking this evaluation decision against further modifications."
+                      : isSinglePacket
+                        ? " You may update scoring or committee remarks below if needed."
+                        : " You may update scoring or committee remarks below if needed before Stage 2 opening."}
                   </p>
                   {(participation.score !== undefined && participation.score !== null && participation.score !== "") && (
                     <div className="flex items-center gap-3 text-[11px] text-emerald-800 font-bold pt-0.5">
@@ -749,7 +781,7 @@ export function TechnicalEvaluationModal({
                   </strong>
                   <p className="text-[11.5px] text-rose-900/90 leading-relaxed">
                     This vendor has been evaluated as disqualified due to non-conformity with technical specifications or compliance criteria.
-                    {isEffectiveReadOnly && " Decision is locked under active Stage 2."}
+                    {isEffectiveReadOnly && (isSinglePacket ? " Evaluation record is sealed." : " Decision is locked under active Stage 2.")}
                   </p>
                   {participation.technicalRemarks && (
                     <div className="text-[11px] text-rose-900 bg-white/80 rounded-lg p-2 border border-rose-200 mt-1">
@@ -762,7 +794,7 @@ export function TechnicalEvaluationModal({
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 font-medium flex items-center gap-2.5 shadow-2xs">
                 <Lock className="h-4 w-4 text-amber-700 shrink-0" />
                 <span>
-                  <strong>Audit Record Sealed:</strong> This procurement is in Stage 2 or finalized. Technical evaluation decisions, scoring, and committee notes are permanently preserved and cannot be altered.
+                  <strong>Audit Record Sealed:</strong> {isSinglePacket ? "This procurement technical evaluation is finalized. Technical evaluation decisions, scoring, and committee notes are permanently preserved and cannot be altered." : "This procurement is in Stage 2 or finalized. Technical evaluation decisions, scoring, and committee notes are permanently preserved and cannot be altered."}
                 </span>
               </div>
             ) : (
@@ -1371,7 +1403,9 @@ export function TechnicalEvaluationModal({
                 <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
                   <Lock className="h-3.5 w-3.5 text-slate-400" />
                   {isAlreadyQualified
-                    ? "Technically Qualified • Stage 2 Active (Read-Only)"
+                    ? isSinglePacket
+                      ? "Technically Qualified • Evaluation Finalized (Read-Only)"
+                      : "Technically Qualified • Stage 2 Active (Read-Only)"
                     : isAlreadyDisqualified
                       ? "Technically Disqualified • Evaluation Locked (Read-Only)"
                       : "Read-only audit record • Decision immutable"}
@@ -1433,13 +1467,13 @@ export function TechnicalEvaluationModal({
                         ) : (
                           <>
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            Reconsider &amp; Qualify for Stage 2
+                            {isSinglePacket ? "Reconsider & Qualify" : "Reconsider & Qualify for Stage 2"}
                           </>
                         )
                       ) : decision === "QUALIFIED" ? (
                         <>
                           <CheckCircle2 className="h-3.5 w-3.5" />
-                          Qualify for Stage 2
+                          {isSinglePacket ? "Qualify" : "Qualify for Stage 2"}
                         </>
                       ) : (
                         <>
