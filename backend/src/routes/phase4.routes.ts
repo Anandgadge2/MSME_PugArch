@@ -3053,11 +3053,20 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
         { receiptFileId: fileId },
         { receiptFileUrl: { contains: `/files/${fileId}/` } }
       ]
-    },
-    include: { purchaseOrder: true }
+    }
   }).catch(() => null);
   if (offlineProof) {
-    const actorId = offlineProof.uploadedByUserId || offlineProof.purchaseOrder?.buyerId || offlineProof.purchaseOrder?.sellerId;
+    let poBuyerId = null;
+    let poSellerId = null;
+    if (offlineProof.purchaseOrderId) {
+      const po = await db.purchaseOrder.findUnique({
+        where: { id: offlineProof.purchaseOrderId },
+        select: { buyerId: true, sellerId: true }
+      }).catch(() => null);
+      poBuyerId = po?.buyerId;
+      poSellerId = po?.sellerId;
+    }
+    const actorId = offlineProof.uploadedByUserId || poBuyerId || poSellerId;
     if (actorId) return { id: Number(actorId), role: 'buyer' };
   }
 
