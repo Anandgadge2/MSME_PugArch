@@ -395,13 +395,21 @@ export const fulfillmentWorkflow = {
   },
 
   async decideInvoice(actor: WorkflowActor, invoiceId: number, approved: boolean) {
-    const invoice = await db.invoice.findUnique({ where: { id: invoiceId } });
-    if (!invoice || (actor.role !== 'admin' && invoice.buyerId !== actor.id)) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { purchaseOrder: true } });
+    if (!invoice || (actor.role !== 'admin' && invoice.buyerId !== actor.id && invoice.purchaseOrder?.buyerId !== actor.id)) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
     statusTransitions.invoice(invoice.status, approved ? 'approved' : 'rejected');
     const updated = await db.invoice.update({
       where: { id: invoiceId },
       data: { status: approved ? 'approved' : 'rejected', invoiceStatus: invoiceStatusEnumFor(approved ? 'approved' : 'rejected'), approvedAt: approved ? new Date() : null, version: { increment: 1 } }
     });
+    if (approved && invoice.purchaseOrderId) {
+      await db.purchaseOrder.update({
+        where: { id: invoice.purchaseOrderId },
+        data: { status: 'payment_initiated', version: { increment: 1 } }
+      }).catch(() => {});
+    }
     await auditWorkflow(actor, approved ? 'workflow.invoice.approved' : 'workflow.invoice.rejected', 'invoice', invoiceId);
 
     // Notify seller when buyer approves/rejects invoice

@@ -31,6 +31,7 @@ import {
   FileText,
   Key,
   Layers,
+  Lock,
   MapPin,
   Package,
   Phone,
@@ -58,6 +59,7 @@ import { CardSkeleton, Skeleton } from '../../../components/ui/skeleton';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { runWithToast, notify } from '../../../lib/toast';
+import { postApi } from '../../shared/apiClient';
 import { DeliveryStatusBadge } from '../components/DeliveryStatusBadge';
 import { DeliveryTimeline } from '../components/DeliveryTimeline';
 import { DELIVERY_STATUS_LABELS, isLiveStatus, labelFor } from '../status';
@@ -213,6 +215,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
   const [isInvoicePickerOpen, setIsInvoicePickerOpen] = useState(false);
   const [isPaymentProofModalOpen, setIsPaymentProofModalOpen] = useState(false);
+  const [approvingInvoiceId, setApprovingInvoiceId] = useState<number | null>(null);
 
   const po = delivery?.purchaseOrder;
   const docs = useMemo(() => delivery?.documents || [], [delivery?.documents]);
@@ -220,8 +223,25 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   const trackingNo = delivery?.trackingNumber || (delivery ? `DLV-${delivery.id}` : '');
 
   const invoices = useMemo(() => po?.invoices || [], [po?.invoices]);
+  const pendingSubmittedInvoice = useMemo(() => {
+    return invoices.find(inv => String(inv.invoiceStatus || inv.status || '').toLowerCase() === 'submitted');
+  }, [invoices]);
   const taxInvoiceDoc = useMemo(() => docs.find(d => d.documentType === 'TAX_INVOICE'), [docs]);
   const paymentProofDoc = useMemo(() => docs.find(d => d.documentType === 'PAYMENT_PROOF'), [docs]);
+
+  const handleDirectApproveInvoice = useCallback(async (invId: number) => {
+    if (approvingInvoiceId) return;
+    setApprovingInvoiceId(invId);
+    try {
+      await postApi(`/api/invoices/${invId}/approve`, {});
+      notify.success('Tax invoice approved successfully! Payment is now unlocked.');
+      await detailQuery.refetch();
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to approve invoice');
+    } finally {
+      setApprovingInvoiceId(null);
+    }
+  }, [approvingInvoiceId, detailQuery]);
 
   const handleOpenPo = useCallback(() => {
     if (!delivery) return;
@@ -429,6 +449,24 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
               <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
               View Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}
             </Button>
+
+            {/* Approve Invoice Button for Buyer */}
+            {pendingSubmittedInvoice && (accessRole === 'buyer' || user?.role === 'buyer' || user?.role === 'admin') && (
+              <Button
+                type="button"
+                disabled={approvingInvoiceId === pendingSubmittedInvoice.id}
+                onClick={() => handleDirectApproveInvoice(pendingSubmittedInvoice.id)}
+                className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 text-[11px] font-black uppercase tracking-wider shadow-2xs cursor-pointer transition-all"
+                title={`Approve Invoice #${pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} to unlock payment`}
+              >
+                {approvingInvoiceId === pendingSubmittedInvoice.id ? (
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Approve Invoice
+              </Button>
+            )}
 
             {/* View Payment Proof Button */}
             <Button
@@ -662,6 +700,9 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             onOpenPo={handleOpenPo}
             onOpenInvoice={handleOpenInvoice}
             onOpenPaymentProof={handleOpenPaymentProof}
+            pendingSubmittedInvoice={pendingSubmittedInvoice}
+            onApproveInvoice={handleDirectApproveInvoice}
+            isApprovingInvoice={Boolean(approvingInvoiceId)}
           />
         </div>
 
@@ -681,10 +722,21 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           )}
 
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
-            <BuyerActions delivery={delivery} />
+            <BuyerActions
+              delivery={delivery}
+              invoices={invoices}
+              onOpenInvoice={handleOpenInvoice}
+              onOpenPaymentProof={handleOpenPaymentProof}
+              onApproveInvoice={handleDirectApproveInvoice}
+              isApprovingInvoice={Boolean(approvingInvoiceId)}
+            />
           )}
           {(accessRole === 'finance' || accessRole === 'admin') && (
-            <FinanceActions delivery={delivery} />
+            <FinanceActions
+              delivery={delivery}
+              onApproveInvoice={handleDirectApproveInvoice}
+              isApprovingInvoice={Boolean(approvingInvoiceId)}
+            />
           )}
           {accessRole === 'admin' && <AdminActions delivery={delivery} />}
           {accessRole && accessRole !== 'seller' && (
@@ -724,6 +776,9 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           isOpen={viewingInvoiceId !== null}
           onClose={() => setViewingInvoiceId(null)}
           invoiceId={viewingInvoiceId}
+          onInvoiceApproved={() => {
+            detailQuery.refetch();
+          }}
         />
       )}
 
@@ -867,7 +922,10 @@ function DocumentsPanel({
   settlement,
   onOpenPo,
   onOpenInvoice,
-  onOpenPaymentProof
+  onOpenPaymentProof,
+  pendingSubmittedInvoice,
+  onApproveInvoice,
+  isApprovingInvoice
 }: {
   docs: DeliveryDetailDto['documents'];
   deliveryId: number;
@@ -880,8 +938,17 @@ function DocumentsPanel({
   onOpenPo?: () => void;
   onOpenInvoice?: () => void;
   onOpenPaymentProof?: () => void;
+  pendingSubmittedInvoice?: any;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
 }) {
   const records = docs || [];
+  const primaryInvoice = invoices?.[0];
+  const rawStatus = String(primaryInvoice?.invoiceStatus || primaryInvoice?.status || '').toLowerCase();
+  const isInvSubmitted = rawStatus === 'submitted';
+  const isInvApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
+  const isInvPaid = rawStatus === 'paid';
+  const canApprove = accessRole === 'buyer' || accessRole === 'admin';
 
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
@@ -923,22 +990,53 @@ function DocumentsPanel({
                 <Receipt className="h-4 w-4" />
               </span>
               <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tax Invoice</p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tax Invoice</p>
+                  {isInvPaid && (
+                    <span className="rounded-md bg-emerald-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-emerald-800">
+                      Paid
+                    </span>
+                  )}
+                  {isInvApproved && !isInvPaid && (
+                    <span className="rounded-md bg-teal-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-[#0f766e]">
+                      Approved
+                    </span>
+                  )}
+                  {isInvSubmitted && (
+                    <span className="rounded-md bg-amber-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-amber-800">
+                      Submitted
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs font-black text-slate-900 truncate">
-                  {invoices?.[0]?.invoiceNumber || (taxInvoiceDoc ? 'Document Attached' : 'Tax Invoice')}
+                  {primaryInvoice?.invoiceNumber || (taxInvoiceDoc ? 'Document Attached' : 'Tax Invoice')}
                 </p>
               </div>
             </div>
-            {onOpenInvoice && (
-              <button
-                type="button"
-                onClick={onOpenInvoice}
-                className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50 shadow-2xs cursor-pointer transition-colors"
-                title="View Tax Invoice"
-              >
-                <Eye className="h-3 w-3" /> View
-              </button>
-            )}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {pendingSubmittedInvoice && canApprove && onApproveInvoice && (
+                <button
+                  type="button"
+                  disabled={isApprovingInvoice}
+                  onClick={() => onApproveInvoice(pendingSubmittedInvoice.id)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-2xs cursor-pointer transition-colors"
+                  title="Approve Tax Invoice"
+                >
+                  {isApprovingInvoice ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  Approve
+                </button>
+              )}
+              {onOpenInvoice && (
+                <button
+                  type="button"
+                  onClick={onOpenInvoice}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50 shadow-2xs cursor-pointer transition-colors"
+                  title="View Tax Invoice"
+                >
+                  <Eye className="h-3 w-3" /> View
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Payment Proof Card */}
@@ -966,6 +1064,39 @@ function DocumentsPanel({
             )}
           </div>
         </div>
+
+        {/* Payment Locked Informative Banner when invoice is pending approval */}
+        {pendingSubmittedInvoice && (
+          <div
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/95 p-3.5 text-amber-900 text-xs shadow-xs"
+            role="alert"
+          >
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 ring-1 ring-amber-300">
+                <Lock className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-amber-950 text-xs uppercase tracking-tight">
+                  Payment Locked &bull; Tax Invoice #{pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} Pending Approval
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed font-semibold">
+                  Payment disbursement and settlement release are locked because this tax invoice requires buyer approval. Please review the invoice details and click &ldquo;Approve Now&rdquo; to unlock payment.
+                </p>
+              </div>
+            </div>
+            {canApprove && onApproveInvoice && (
+              <button
+                type="button"
+                disabled={isApprovingInvoice}
+                onClick={() => onApproveInvoice(pendingSubmittedInvoice.id)}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-white shadow-2xs cursor-pointer transition-colors self-end sm:self-center"
+              >
+                {isApprovingInvoice ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                Approve Now
+              </button>
+            )}
+          </div>
+        )}
 
         {records.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-xs font-semibold text-slate-500">
@@ -1317,7 +1448,21 @@ function ManualTrackingActions({
   );
 }
 
-function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
+function BuyerActions({
+  delivery,
+  invoices = [],
+  onOpenInvoice,
+  onOpenPaymentProof,
+  onApproveInvoice,
+  isApprovingInvoice
+}: {
+  delivery: DeliveryDetailDto;
+  invoices?: any[];
+  onOpenInvoice?: () => void;
+  onOpenPaymentProof?: () => void;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
+}) {
   const [accept, setAccept] = useState(true);
   const [rejectReason, setRejectReason] = useState('');
   const [damageNotes, setDamageNotes] = useState('');
@@ -1354,124 +1499,226 @@ function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
     );
 
   return (
-    <CollapsibleSection title="Receipt & Acceptance" icon={CheckCircle2} defaultOpen>
-      <div className="space-y-4">
-        {!canAcceptStage && (
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs font-semibold text-slate-500 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-            <span>Acceptance becomes available once the shipment is marked as delivered.</span>
-          </div>
-        )}
-
-        {canAcceptStage && (
-          <div className="space-y-3">
-            <p className={fieldLabel}>Verification Decision</p>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setAccept(true)}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
-                  accept
-                    ? 'border-emerald-500 bg-emerald-50/80 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                )}
-              >
-                <CheckCircle2 className={cn('h-5 w-5', accept ? 'text-emerald-600' : 'text-slate-400')} />
-                <span>Accept Delivery</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAccept(false)}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
-                  !accept
-                    ? 'border-rose-500 bg-rose-50/80 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                )}
-              >
-                <AlertTriangle className={cn('h-5 w-5', !accept ? 'text-rose-600' : 'text-slate-400')} />
-                <span>Report / Reject</span>
-              </button>
+    <div className="space-y-4">
+      <CollapsibleSection title="Receipt & Acceptance" icon={CheckCircle2} defaultOpen>
+        <div className="space-y-4">
+          {!canAcceptStage && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs font-semibold text-slate-500 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+              <span>Acceptance becomes available once the shipment is marked as delivered.</span>
             </div>
+          )}
 
-            {!accept && (
-              <div className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/30 p-3 dt-fade-in-up">
-                <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Issue Details</p>
-                <textarea
-                  className={textareaBase}
-                  placeholder="State the reason for rejection (required)..."
-                  value={rejectReason}
-                  onChange={e => setRejectReason(e.target.value)}
-                />
-                <textarea
-                  className={textareaBase}
-                  placeholder="Damage / wrong item details (optional)..."
-                  value={damageNotes}
-                  onChange={e => setDamageNotes(e.target.value)}
-                />
-                <Input
-                  placeholder="Missing quantity (if applicable)"
-                  value={missingQty}
-                  onChange={e => setMissingQty(e.target.value)}
-                />
+          {canAcceptStage && (
+            <div className="space-y-3">
+              <p className={fieldLabel}>Verification Decision</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setAccept(true)}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                    accept
+                      ? 'border-emerald-500 bg-emerald-50/80 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  )}
+                >
+                  <CheckCircle2 className={cn('h-5 w-5', accept ? 'text-emerald-600' : 'text-slate-400')} />
+                  <span>Accept Delivery</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAccept(false)}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                    !accept
+                      ? 'border-rose-500 bg-rose-50/80 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  )}
+                >
+                  <AlertTriangle className={cn('h-5 w-5', !accept ? 'text-rose-600' : 'text-slate-400')} />
+                  <span>Report / Reject</span>
+                </button>
               </div>
-            )}
 
-            <Button
-              className={cn(
-                'w-full h-10.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-xs',
-                accept
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-rose-600 hover:bg-rose-700'
+              {!accept && (
+                <div className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/30 p-3 dt-fade-in-up">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Issue Details</p>
+                  <textarea
+                    className={textareaBase}
+                    placeholder="State the reason for rejection (required)..."
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                  />
+                  <textarea
+                    className={textareaBase}
+                    placeholder="Damage / wrong item details (optional)..."
+                    value={damageNotes}
+                    onChange={e => setDamageNotes(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Missing quantity (if applicable)"
+                    value={missingQty}
+                    onChange={e => setMissingQty(e.target.value)}
+                  />
+                </div>
               )}
-              disabled={(!accept && !rejectReason.trim()) || acceptanceMut.isPending}
-              onClick={submitDecision}
-            >
-              {acceptanceMut.isPending ? (
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              ) : accept ? (
-                <Check className="mr-2 h-4 w-4 stroke-[3]" />
-              ) : (
-                <AlertTriangle className="mr-2 h-4 w-4" />
-              )}
-              {accept ? 'Confirm & Accept Delivery' : 'Submit Rejection Report'}
-            </Button>
-          </div>
-        )}
 
-        {canReturnStage && (
-          <div className="space-y-2.5 border-t border-slate-100 pt-3">
-            <p className={fieldLabel}>Initiate Return / Replacement</p>
-            <Select value={returnType} onChange={e => setReturnType(e.target.value as any)}>
-              <option value="RETURN">Return Goods</option>
-              <option value="REPLACEMENT">Replacement Request</option>
-              <option value="REFUND">Full Refund Request</option>
-            </Select>
-            <textarea
-              className={textareaBase}
-              placeholder="State reason for return/replacement..."
-              value={returnReason}
-              onChange={e => setReturnReason(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50"
-              disabled={!returnReason.trim() || returnMut.isPending}
-              onClick={submitReturn}
-            >
-              {returnMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Initiate {returnType}
-            </Button>
+              <Button
+                className={cn(
+                  'w-full h-10.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-xs',
+                  accept
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                )}
+                disabled={(!accept && !rejectReason.trim()) || acceptanceMut.isPending}
+                onClick={submitDecision}
+              >
+                {acceptanceMut.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : accept ? (
+                  <Check className="mr-2 h-4 w-4 stroke-[3]" />
+                ) : (
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                )}
+                {accept ? 'Confirm & Accept Delivery' : 'Submit Rejection Report'}
+              </Button>
+            </div>
+          )}
+
+          {canReturnStage && (
+            <div className="space-y-2.5 border-t border-slate-100 pt-3">
+              <p className={fieldLabel}>Initiate Return / Replacement</p>
+              <Select value={returnType} onChange={e => setReturnType(e.target.value as any)}>
+                <option value="RETURN">Return Goods</option>
+                <option value="REPLACEMENT">Replacement Request</option>
+                <option value="REFUND">Full Refund Request</option>
+              </Select>
+              <textarea
+                className={textareaBase}
+                placeholder="State reason for return/replacement..."
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+              />
+              <Button
+                variant="outline"
+                className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50"
+                disabled={!returnReason.trim() || returnMut.isPending}
+                onClick={submitReturn}
+              >
+                {returnMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Initiate {returnType}
+              </Button>
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {invoices && invoices.length > 0 && (
+        <CollapsibleSection title="Invoice & Settlement (Buyer)" icon={Wallet} defaultOpen>
+          <div className="space-y-3">
+            {invoices.map((inv: any) => {
+              const status = String(inv.invoiceStatus || inv.status || '').toLowerCase();
+              const isInvSubmitted = status === 'submitted' || status === 'draft';
+              const isInvApproved = ['approved', 'payment_initiated'].includes(status);
+              const isInvPaid = status === 'paid';
+
+              return (
+                <div key={inv.id} className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-slate-900">{inv.invoiceNumber || `Invoice #${inv.id}`}</span>
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                      isInvPaid ? "bg-emerald-100 text-emerald-800" :
+                      isInvApproved ? "bg-teal-100 text-[#0f766e]" :
+                      "bg-amber-100 text-amber-800"
+                    )}>
+                      {isInvPaid ? 'Paid' : isInvApproved ? 'Approved' : 'Submitted'}
+                    </span>
+                  </div>
+
+                  {inv.amount !== undefined && (
+                    <div className="flex items-center justify-between text-slate-600 font-semibold">
+                      <span>Total Amount</span>
+                      <span className="font-black text-slate-900">{formatCurrency(inv.amount)}</span>
+                    </div>
+                  )}
+
+                  {isInvSubmitted && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50/90 p-2 text-amber-900 text-[11px] flex items-start gap-1.5" role="alert">
+                      <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-black text-amber-950">Payment Locked:</strong>
+                        <span> Tax invoice requires buyer approval before funds can be released.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isInvApproved && !isInvPaid && (
+                    <div className="rounded-lg border border-teal-200 bg-teal-50/80 p-2 text-[#0f766e] text-[11px] flex items-start gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#0f766e] shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-black text-teal-950">Payment Unlocked:</strong>
+                        <span> Invoice has been approved. You can proceed with settlement.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    {isInvSubmitted && onApproveInvoice && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isApprovingInvoice}
+                        onClick={() => onApproveInvoice(inv.id)}
+                        className="flex-1 h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black uppercase tracking-wider shadow-2xs"
+                      >
+                        {isApprovingInvoice ? <RefreshCw className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                        Approve Invoice
+                      </Button>
+                    )}
+                    {onOpenInvoice && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onOpenInvoice}
+                        className="flex-1 h-8 rounded-lg border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider hover:bg-slate-100"
+                      >
+                        <Eye className="mr-1 h-3 w-3" /> View Invoice
+                      </Button>
+                    )}
+                    {isInvApproved && onOpenPaymentProof && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={onOpenPaymentProof}
+                        className="flex-1 h-8 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase tracking-wider"
+                      >
+                        <CreditCard className="mr-1 h-3 w-3" /> Proof / Pay
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
-    </CollapsibleSection>
+        </CollapsibleSection>
+      )}
+    </div>
   );
 }
 
-function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
+function FinanceActions({
+  delivery,
+  onApproveInvoice,
+  isApprovingInvoice
+}: {
+  delivery: DeliveryDetailDto;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
+}) {
   const invoices = delivery.purchaseOrder?.invoices || [];
 
   const defaultInvoiceId = useMemo(() => {
@@ -1548,6 +1795,30 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                       >
                         <FileText className="h-3.5 w-3.5" /> Preview PDF Document
                       </button>
+                    )}
+
+                    {String(selectedInvoice.invoiceStatus || selectedInvoice.status || '').toLowerCase() === 'submitted' && (
+                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50/90 p-2.5 text-amber-900 text-[11px] space-y-2" role="alert">
+                        <div className="flex items-start gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="font-black text-amber-950">Payment Release Locked:</strong>
+                            <span> Invoice {selectedInvoice.invoiceNumber || `#${selectedInvoice.id}`} must be approved before settlement release decisions can proceed.</span>
+                          </div>
+                        </div>
+                        {onApproveInvoice && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isApprovingInvoice}
+                            onClick={() => onApproveInvoice(Number(selectedInvoice.id))}
+                            className="w-full h-7 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer"
+                          >
+                            {isApprovingInvoice ? <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+                            Approve Invoice Now
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}

@@ -8958,8 +8958,10 @@ for (const [path, data, action] of [
   router.post(path, authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
     const { id } = parse(idParams, req.params);
     await assertBuyerProcurementApproved(req);
-    const existing = await db.invoice.findUnique({ where: { id } });
-    if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req))) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    const existing = await db.invoice.findUnique({ where: { id }, include: { purchaseOrder: true } });
+    if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req) && existing.purchaseOrder?.buyerId !== userId(req))) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
     const invoice = await fulfillmentWorkflow.decideInvoice(actorFrom(req), id, data.invoiceStatus === 'APPROVED');
     await auditWrite(req, action, 'invoice', id);
     ok(res, invoice);

@@ -14,7 +14,8 @@ import {
   Stamp,
   Download,
   ChevronDown,
-  Clock
+  Clock,
+  Lock
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -22,7 +23,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { formatDate } from '../../shared/format';
-import { getApi } from '../../shared/apiClient';
+import { getApi, postApi } from '../../shared/apiClient';
 import { TaxInvoiceCard } from './TaxInvoiceCard';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 
@@ -31,13 +32,15 @@ export interface TaxInvoiceRegistryModalProps {
   onClose: () => void;
   invoiceId: number | null;
   initialInvoiceData?: any | null;
+  onInvoiceApproved?: (updatedInvoice: any) => void;
 }
 
 export function TaxInvoiceRegistryModal({
   isOpen,
   onClose,
   invoiceId,
-  initialInvoiceData = null
+  initialInvoiceData = null,
+  onInvoiceApproved
 }: TaxInvoiceRegistryModalProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -47,6 +50,31 @@ export function TaxInvoiceRegistryModal({
   const [copyType, setCopyType] = useState('Original Copy');
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+
+  // Approve invoice handler
+  const handleApproveInvoice = async () => {
+    const targetId = invoice?.id || invoiceId;
+    if (!targetId || isApproving) return;
+    setIsApproving(true);
+    try {
+      const res = await postApi<any>(`/api/invoices/${targetId}/approve`, {});
+      toast.success('Tax invoice approved successfully! Payment is now unlocked.');
+      const updated = {
+        ...(invoice || {}),
+        status: 'approved',
+        invoiceStatus: 'APPROVED',
+        approvedAt: new Date().toISOString(),
+        ...(res?.invoice || {})
+      };
+      setInvoice(updated);
+      onInvoiceApproved?.(updated);
+    } catch (err: any) {
+      toast.error(err?.message || 'Invoice approval failed');
+    } finally {
+      setIsApproving(false);
+    }
+  };
 
   // Seller/Buyer branding
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -284,7 +312,11 @@ export function TaxInvoiceRegistryModal({
 
   if (!isOpen) return null;
 
-  const isPaid = String(invoice?.invoiceStatus || invoice?.status || '').toLowerCase() === 'paid';
+  const rawStatus = String(invoice?.invoiceStatus || invoice?.status || '').toLowerCase();
+  const isPaid = rawStatus === 'paid';
+  const isSubmitted = rawStatus === 'submitted' || rawStatus === 'draft';
+  const isApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
+  const isBuyer = user?.role === 'buyer' || user?.role === 'admin';
   const bidId = invoice?.bidId || invoice?.purchaseOrder?.bidId || invoice?.purchaseOrder?.sourceId;
   const poNumber = invoice?.purchaseOrder?.poNumber || invoice?.poNumber;
 
@@ -325,6 +357,18 @@ export function TaxInvoiceRegistryModal({
                   Syncing ledger...
                 </span>
               )}
+              {isApproved && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                  {isPaid ? 'PAID & SETTLED' : 'APPROVED'}
+                </span>
+              )}
+              {isSubmitted && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                  <Clock className="h-3 w-3 text-amber-600" />
+                  SUBMITTED (PENDING APPROVAL)
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-500">
               Created on {invoice?.createdAt ? formatDate(invoice.createdAt) : formatDate(new Date())}
@@ -362,6 +406,56 @@ export function TaxInvoiceRegistryModal({
             </div>
           ) : (
             <>
+              {/* Payment Locked Alert Banner for Buyer */}
+              {isSubmitted && isBuyer && (
+                <div
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/95 p-3.5 sm:p-4 text-amber-900 shadow-xs"
+                  role="alert"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-amber-300">
+                      <Lock className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-tight">
+                          Payment Locked &bull; Invoice Pending Buyer Approval
+                        </h4>
+                        <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">
+                          Action Required
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs font-semibold text-amber-800 leading-relaxed">
+                        Payment disbursement and settlement release are locked while this invoice is in <strong className="font-black text-amber-950">SUBMITTED</strong> status. Review the items and click <strong className="font-black text-emerald-800">&ldquo;Approve Invoice&rdquo;</strong> to authorize settlement and unlock payment.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isApproving}
+                    onClick={handleApproveInvoice}
+                    className="shrink-0 h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-sm gap-1.5 cursor-pointer transition-all self-end sm:self-center"
+                  >
+                    {isApproving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                    <span>Approve Invoice</span>
+                  </Button>
+                </div>
+              )}
+
+              {/* Informative notice for Seller when invoice is submitted */}
+              {isSubmitted && !isBuyer && (
+                <div
+                  className="flex items-center gap-2.5 rounded-xl border border-amber-200 bg-amber-50/80 px-3.5 py-2.5 text-xs text-amber-800"
+                  role="status"
+                >
+                  <Clock className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>
+                    <strong>Invoice Submitted:</strong> Awaiting buyer review and approval. Payment options will be unlocked once approved by the buyer.
+                  </span>
+                </div>
+              )}
+
               {/* Connected Lifecycle Bar */}
               <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gradient-to-r from-slate-100 via-indigo-50/50 to-slate-100 rounded-2xl border border-slate-200/90">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-2 py-0.5">
@@ -428,7 +522,6 @@ export function TaxInvoiceRegistryModal({
                 </Button>
 
                 {(() => {
-                  const isBuyer = user?.role === 'buyer';
                   const payPath = isBuyer ? '/buyer/payments' : '/seller/payments';
                   const searchParam = encodeURIComponent(invoice?.invoiceNumber || '');
                   if (isPaid) {
@@ -447,18 +540,56 @@ export function TaxInvoiceRegistryModal({
                     );
                   }
                   if (isBuyer) {
+                    if (isSubmitted) {
+                      return (
+                        <div className="inline-flex items-center gap-1.5 flex-wrap">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isApproving}
+                            onClick={handleApproveInvoice}
+                            className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                            title="Approve this tax invoice to unlock payment disbursement"
+                          >
+                            {isApproving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                            <span>Approve Invoice</span>
+                          </Button>
+                          <span
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg"
+                            title="Payment is locked until the tax invoice is approved"
+                          >
+                            <Lock className="h-3 w-3 text-amber-700" />
+                            <span>Payment Locked</span>
+                          </span>
+                        </div>
+                      );
+                    }
                     return (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                          router.push(`${payPath}?search=${searchParam}`);
-                        }}
-                        className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                      >
-                        <CreditCard className="h-3 w-3" />
-                        <span>Pay Now / Upload Payment Proof</span>
-                      </Button>
+                      <div className="inline-flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          <span>Approved</span>
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            router.push(`${payPath}?search=${searchParam}`);
+                          }}
+                          className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        >
+                          <CreditCard className="h-3 w-3" />
+                          <span>Pay Now / Upload Payment Proof</span>
+                        </Button>
+                      </div>
+                    );
+                  }
+                  if (isSubmitted) {
+                    return (
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                        <Clock className="h-3 w-3 text-amber-600" />
+                        <span>Awaiting Buyer Approval</span>
+                      </span>
                     );
                   }
                   return (
@@ -492,6 +623,18 @@ export function TaxInvoiceRegistryModal({
 
                 {/* Right: Actions */}
                 <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
+                  {isBuyer && isSubmitted && (
+                    <Button
+                      type="button"
+                      disabled={isApproving}
+                      onClick={handleApproveInvoice}
+                      className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                      title="Approve this tax invoice"
+                    >
+                      {isApproving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      <span>Approve Invoice</span>
+                    </Button>
+                  )}
                   {/* Stamp & Signature Button */}
                   <Button
                     type="button"

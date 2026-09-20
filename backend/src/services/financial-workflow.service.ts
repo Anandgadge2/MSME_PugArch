@@ -280,17 +280,26 @@ export const approveInvoiceAndCreatePayment = async (invoiceId: number, actor: A
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { purchaseOrder: true } });
     if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    if (actor.role !== 'admin' && invoice.buyerId !== actor.id) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    if (!INVOICE_APPROVE_STATUSES.has(invoice.status)) {
+    if (actor.role !== 'admin' && invoice.buyerId !== actor.id && invoice.purchaseOrder?.buyerId !== actor.id) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
+    const invStatus = String(invoice.status || invoice.invoiceStatus || '').toLowerCase();
+    if (!INVOICE_APPROVE_STATUSES.has(invStatus) && invoice.invoiceStatus !== 'SUBMITTED') {
       throw new ApiError(409, 'Invoice must be submitted before approval', 'INVOICE_INVALID_STATUS');
     }
 
     const existingPayment = await tx.paymentTransaction.findFirst({ where: { invoiceId: invoice.id } });
-    if (existingPayment) return { invoice, payment: existingPayment, reused: true };
+    if (existingPayment) {
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoice.id, version: invoice.version },
+        data: { status: 'approved', invoiceStatus: 'APPROVED', approvedAt: new Date(), version: { increment: 1 } }
+      });
+      return { invoice: updatedInvoice, payment: existingPayment, reused: true };
+    }
 
     const updatedInvoice = await tx.invoice.update({
       where: { id: invoice.id, version: invoice.version },
-      data: { status: 'approved', approvedAt: new Date(), version: { increment: 1 } }
+      data: { status: 'approved', invoiceStatus: 'APPROVED', approvedAt: new Date(), version: { increment: 1 } }
     });
 
     const payment = await tx.paymentTransaction.create({

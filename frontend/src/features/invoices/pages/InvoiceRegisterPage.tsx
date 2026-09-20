@@ -836,6 +836,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     try {
       await postApi(`/api/invoices/${invoiceId}/approve`, {});
       await reload();
+      setSelectedInvoice(prev => (prev && prev.id === invoiceId ? { ...prev, status: 'approved', invoiceStatus: 'APPROVED' } : prev));
+      setDetailedInvoice(prev => (prev && prev.id === invoiceId ? { ...prev, status: 'approved', invoiceStatus: 'APPROVED' } : prev));
       toast.success('Invoice approved successfully.');
     } catch (err: any) {
       toast.error(err.message || 'Invoice approval failed');
@@ -1547,14 +1549,23 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                         </Button>
                       )}
                       {role === 'buyer' && isSubmitted && (
-                        <Button
-                          size="sm"
-                          disabled={submitting}
-                          onClick={() => handleApproveInvoice(invoice.id)}
-                          className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
-                        >
-                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
-                        </Button>
+                        <>
+                          <div className="w-full flex items-center justify-between gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold">
+                            <span className="flex items-center gap-1">
+                              <Lock className="h-3 w-3 text-amber-700 shrink-0" />
+                              Payment Locked
+                            </span>
+                            <span className="text-amber-700">Approval Required</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={submitting}
+                            onClick={() => handleApproveInvoice(invoice.id)}
+                            className="h-8 flex-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-[10px] font-black uppercase tracking-wide text-white shadow-2xs cursor-pointer"
+                          >
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
+                          </Button>
+                        </>
                       )}
                       {role === 'buyer' && isPayable && (
                         <>
@@ -1653,10 +1664,39 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
                   {invoiceModalMode === 'view' ? "Tax Invoice Registry" : "JsgSmile / PFMS Bill Status Tracker"}
                 </p>
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <h2 className="text-xl font-black text-slate-950">
                     {selectedInvoice.invoiceNumber || `INV-${selectedInvoice.id}`}
                   </h2>
+                  {(() => {
+                    const invState = statusOf(selectedInvoice);
+                    if (invState === 'paid') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                          <ShieldCheck className="h-3 w-3" /> Paid
+                        </span>
+                      );
+                    }
+                    if (invState === 'approved' || invState === 'payment_initiated') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 border border-teal-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
+                          <CheckCircle2 className="h-3 w-3" /> Approved
+                        </span>
+                      );
+                    }
+                    if (invState === 'submitted') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-900">
+                          <Lock className="h-3 w-3 text-amber-700" /> Submitted (Pending Approval)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        {invState}
+                      </span>
+                    );
+                  })()}
                   {detailedLoading && (
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
                       <RefreshCw className="h-3 w-3 animate-spin text-[#12335f]" />
@@ -1699,6 +1739,50 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                 {invoiceModalMode === 'view' && (
                   <div className="space-y-4">
+                    {/* Payment Locked Alert Banner for Buyer / Admin */}
+                    {statusOf(selectedInvoice) === 'submitted' && (role === 'buyer' || user?.role === 'buyer' || role === 'admin') && (
+                      <div
+                        className="rounded-2xl border border-amber-300 bg-amber-50/95 p-3.5 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs no-print"
+                        role="alert"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 ring-1 ring-amber-300">
+                            <Lock className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <p className="font-black text-amber-950 text-xs sm:text-sm flex items-center gap-1.5">
+                              Payment Release Locked • Invoice Approval Required
+                            </p>
+                            <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+                              This tax invoice was submitted by the supplier and requires official buyer approval before disbursements or escrow settlements can be processed. Approve the invoice to unlock payment.
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={submitting}
+                          onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                          className="shrink-0 h-8 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-2xs gap-1.5 cursor-pointer"
+                        >
+                          {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Approve Invoice Now
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Notice for Seller when Invoice is Submitted */}
+                    {statusOf(selectedInvoice) === 'submitted' && role === 'seller' && (
+                      <div
+                        className="rounded-2xl border border-blue-200 bg-blue-50/90 p-3 text-blue-900 text-xs flex items-center gap-2.5 no-print"
+                        role="status"
+                      >
+                        <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                        <p className="text-[11px] text-blue-800 font-medium">
+                          <strong>Invoice Submitted:</strong> Awaiting buyer verification and approval. Once approved, the buyer can initiate escrow payment release.
+                        </p>
+                      </div>
+                    )}
                     {/* Unified Connected Cross-Document Lifecycle Bar */}
                     {selectedInvoice && (
                       <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gradient-to-r from-slate-100 via-indigo-50/50 to-slate-100 rounded-2xl border border-slate-200/90 no-print">
@@ -1769,8 +1853,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                         </Button>
 
                         {(() => {
-                          const isPaid = statusOf(selectedInvoice) === 'paid';
+                          const invState = statusOf(selectedInvoice);
+                          const isPaid = invState === 'paid';
                           const isBuyer = role === 'buyer' || user?.role === 'buyer';
+                          const isSubmitted = invState === 'submitted';
                           const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
                           if (isPaid) {
                             return (
@@ -1786,6 +1872,26 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             );
                           }
                           if (isBuyer) {
+                            if (isSubmitted) {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-lg">
+                                    <Lock className="h-3 w-3 text-amber-700" />
+                                    <span>Payment Locked</span>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={submitting}
+                                    onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                                    className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                                  >
+                                    {submitting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                    <span>Approve Invoice</span>
+                                  </Button>
+                                </div>
+                              );
+                            }
                             return (
                               <Button
                                 type="button"
@@ -1801,7 +1907,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           return (
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
                               <Clock className="h-3 w-3 text-amber-600" />
-                              <span>Payment Pending from Buyer</span>
+                              <span>{isSubmitted ? 'Invoice Pending Buyer Approval' : 'Payment Pending from Buyer'}</span>
                             </span>
                           );
                         })()}
@@ -1830,6 +1936,18 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                       {/* Right: Actions */}
                       <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
+                        {statusOf(selectedInvoice) === 'submitted' && (role === 'buyer' || user?.role === 'buyer' || role === 'admin') && (
+                          <Button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                            className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                          >
+                            {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            <span>Approve Invoice</span>
+                          </Button>
+                        )}
+
                         {/* Stamp & Signature Redirect Button */}
                         <Button
                           type="button"
