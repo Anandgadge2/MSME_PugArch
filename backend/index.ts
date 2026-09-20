@@ -4674,12 +4674,16 @@ app.post('/api/purchase-orders/:id/invoices', authenticate, authorize('seller', 
 app.get('/api/invoices/summary', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
   try {
     const userId = Number(req.user?.id);
+    const orgId = req.user?.organizationId;
     const role = String(req.user?.role);
-    const where = role === 'admin'
-      ? {}
-      : role === 'buyer'
-        ? { buyerId: userId }
-        : { sellerId: userId };
+    let where: any = {};
+    if (role !== 'admin') {
+      if (role === 'buyer') {
+        where = orgId ? { OR: [{ buyerId: userId }, { buyer: { organizationId: orgId } }] } : { buyerId: userId };
+      } else {
+        where = orgId ? { OR: [{ sellerId: userId }, { seller: { organizationId: orgId } }] } : { sellerId: userId };
+      }
+    }
 
     const invoices = await prisma.invoice.findMany({
       where,
@@ -4691,7 +4695,8 @@ app.get('/api/invoices/summary', authenticate, authorize('buyer', 'seller', 'adm
     const pendingCount = invoices.filter(inv => ['draft', 'submitted', 'pending'].includes(statusOf(inv))).length;
     const approvedCount = invoices.filter(inv => ['approved', 'paid'].includes(statusOf(inv))).length;
 
-    res.json({ success: true, totalValue, pendingCount, approvedCount });
+    const payload = { totalValue, pendingCount, approvedCount };
+    res.json({ success: true, ...payload, data: payload });
   } catch (err: any) {
     return handleFinancialRouteError(res, err);
   }

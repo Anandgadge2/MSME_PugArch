@@ -8897,7 +8897,37 @@ router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
   ok(res, paged(invoices, total, query, 'invoices'));
 }));
 
-router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {
+router.get('/invoices/summary', authenticate, authorize('buyer', 'seller', 'admin'), asyncRoute(async (req, res) => {
+  const uid = userId(req);
+  const orgId = req.user?.organizationId;
+  let where: any = {};
+  if (!isAdmin(req)) {
+    if (req.user?.role === 'buyer') {
+      where = orgId ? { OR: [{ buyerId: uid }, { buyer: { organizationId: orgId } }] } : { buyerId: uid };
+    } else {
+      where = orgId ? { OR: [{ sellerId: uid }, { seller: { organizationId: orgId } }] } : { sellerId: uid };
+    }
+  }
+
+  const invoices = await db.invoice.findMany({
+    where,
+    select: { amount: true, status: true, invoiceStatus: true }
+  });
+
+  const statusOf = (inv: any) => String(inv.invoiceStatus || inv.status || 'draft').toLowerCase();
+  const totalValue = invoices.reduce((sum: number, inv: any) => sum + Number(inv.amount || 0), 0);
+  const pendingCount = invoices.filter((inv: any) => ['draft', 'submitted', 'pending'].includes(statusOf(inv))).length;
+  const approvedCount = invoices.filter((inv: any) => ['approved', 'paid'].includes(statusOf(inv))).length;
+
+  const payload = { totalValue, pendingCount, approvedCount };
+  res.json({
+    success: true,
+    ...payload,
+    data: payload
+  });
+}));
+
+router.get('/invoices/:id(\\d+)', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const invoice = await db.invoice.findUnique({
     where: { id },

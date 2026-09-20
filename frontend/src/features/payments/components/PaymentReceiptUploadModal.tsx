@@ -492,10 +492,14 @@ export function PaymentReceiptUploadModal({
                 type="text"
                 required
                 placeholder="e.g. UTR1234567890 or CHEQ-9812"
+                aria-describedby="utr-hint"
                 value={transactionReference}
                 onChange={e => setTransactionReference(e.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-mono font-bold outline-none focus:ring-2 focus:ring-[#12335f]/20 uppercase"
               />
+              <span id="utr-hint" className="text-[10px] text-slate-400 font-medium mt-1 block">
+                Must be the unique bank transaction reference or UTR for this payment transfer.
+              </span>
             </div>
           </div>
 
