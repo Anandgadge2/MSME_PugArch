@@ -4,7 +4,7 @@
  * are correctly interpreted in Indian Standard Time (IST, UTC+05:30).
  */
 
-export function parseDateIST(val: unknown): Date | null {
+export function parseDateIST(val: unknown, isEndOfDay = false): Date | null {
   if (!val) return null;
   if (val instanceof Date) return Number.isFinite(val.getTime()) ? val : null;
   if (typeof val !== 'string') {
@@ -20,9 +20,10 @@ export function parseDateIST(val: unknown): Date | null {
     return Number.isFinite(d.getTime()) ? d : null;
   }
 
-  // Pure calendar date: YYYY-MM-DD -> Start of day in IST (00:00:00+05:30)
+  // Pure calendar date: YYYY-MM-DD -> Start of day in IST (00:00:00+05:30) or End of day (23:59:59.999+05:30)
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-    const d = new Date(`${s}T00:00:00+05:30`);
+    const timeComponent = isEndOfDay ? '23:59:59.999' : '00:00:00.000';
+    const d = new Date(`${s}T${timeComponent}+05:30`);
     return Number.isFinite(d.getTime()) ? d : null;
   }
 

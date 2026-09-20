@@ -1187,7 +1187,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           state: requirement.organization?.state || '',
           district: requirement.organization?.district || '',
           startDate: schedule.publishDate ? parseDateIST(schedule.publishDate) : (schedule.submissionStartDate ? parseDateIST(schedule.submissionStartDate) : requirement.createdAt),
-          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy) : requirement.createdAt),
+          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate, true) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy, true) : requirement.createdAt),
           submissionStartDate: (schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) ? parseDateIST(schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) : null,
           technicalOpeningDate: (schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) ? parseDateIST(schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) : null,
           financialOpeningDate: (schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) ? parseDateIST(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) : null,

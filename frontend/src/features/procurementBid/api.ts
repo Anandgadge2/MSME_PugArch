@@ -333,6 +333,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     || raw.buyer?.name
     || raw.contactPerson
     || (raw.buyerName && raw.buyerName !== raw.buyerOrganizationName ? raw.buyerName : '')
+    || raw.buyerName
+    || internal.contactPerson
+    || raw.buyerContact?.contactPerson
     || '';
 
   // Organization name: prefer direct organization name
@@ -341,6 +344,7 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     || raw.buyer?.buyerProfile?.organizationName
     || raw.organization?.organizationName
     || internal.orgName
+    || raw.buyerContact?.orgName
     || basics.buyerOrganizationName
     || '';
 
@@ -393,10 +397,13 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   }
 
   const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
-  const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
-  const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const techDate = String(schedule.technicalOpeningDate || raw.technicalOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const finDate = String(schedule.financialOpeningDate || raw.financialOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
+  const startDate = rawStartDate ? String(rawStartDate) : new Date().toISOString();
+  const endDate = rawEndDate ? String(rawEndDate) : (rawStartDate ? String(rawStartDate) : new Date().toISOString());
+  const scheduleSubmissionStartDate = schedule.submissionStartDate || schedule.bidStartDate || null;
+  const rawSubmissionStartDate = scheduleSubmissionStartDate || raw.submissionStartDate || raw.startDate || null;
+  const submissionStartDate = rawSubmissionStartDate ? String(rawSubmissionStartDate) : startDate;
+  const techDate = schedule.technicalOpeningDate || raw.technicalOpeningDate ? String(schedule.technicalOpeningDate || raw.technicalOpeningDate) : endDate;
+  const finDate = schedule.financialOpeningDate || raw.financialOpeningDate ? String(schedule.financialOpeningDate || raw.financialOpeningDate) : endDate;
 
   return {
     id: raw.bidNumber || String(raw.id || ''),
@@ -429,6 +436,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     endDate,
     rawStartDate,
     rawEndDate,
+    submissionStartDate,
+    rawSubmissionStartDate,
     publishedAt: authenticPublishedAt,
     approvedAt: raw.approvedAt || null,
     createdAt: raw.createdAt || undefined,

@@ -317,7 +317,7 @@ export const bidInclude: any = {
   buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, representativeName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } } } },
       documents: true,
       clarifications: { include: { files: true } },
       evaluations: true,
@@ -367,7 +367,7 @@ export const leanBidInclude = {
   documents: true,
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, representativeName: true } }, organization: { select: { organizationName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { organizationName: true } } } },
       documents: true
     }
   },
@@ -826,10 +826,20 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const rawPacketCopy = bid.technicalPacket && typeof bid.technicalPacket === 'object'
     ? { ...(bid.technicalPacket as any) }
     : {};
+  const rawInternal = (bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).internal)
+    ? (bid.technicalPacket as any).internal
+    : {};
 
   if (actorRole === 'seller') {
     delete rawPacketCopy.internal;
     delete rawPacketCopy.limitedTenderJustification;
+    rawPacketCopy.buyerContact = {
+      orgName: rawInternal.orgName || bid.buyerOrganizationName || bid.buyerOrganization?.organizationName || null,
+      contactPerson: rawInternal.contactPerson || bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || null,
+      department: rawInternal.department || bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
+      email: rawInternal.email || bid.buyer?.buyerProfile?.email || bid.buyer?.email || null,
+      mobile: rawInternal.mobile || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || null,
+    };
   }
 
   const sellerTechnicalPacket = {
@@ -846,9 +856,9 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     title: bid.title,
     description: bid.description,
     buyerId: bid.buyerId,
-    buyerName: bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
-    buyerEmail: bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
-    buyerMobile: bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
+    buyerName: rawInternal.contactPerson || bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
+    buyerEmail: rawInternal.email || bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
+    buyerMobile: rawInternal.mobile || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
     buyerAddress: [
       bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.corporateAddress || bid.buyer?.buyerProfile?.address || bid.buyerOrganization?.registeredAddress,
       bid.buyer?.buyerProfile?.city || bid.buyerOrganization?.city,
@@ -856,9 +866,9 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       bid.buyer?.buyerProfile?.state || bid.buyerOrganization?.state,
       bid.buyer?.buyerProfile?.pincode || bid.buyerOrganization?.pincode
     ].filter(Boolean).join(', ') || undefined,
-    buyerOrganizationName: bid.buyerOrganizationName,
+    buyerOrganizationName: bid.buyerOrganizationName || rawInternal.orgName || bid.buyer?.buyerProfile?.organizationName || bid.buyerOrganization?.organizationName || undefined,
     buyerType: bid.buyerType,
-    departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
+    departmentName: rawInternal.department || bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
     bidType: bid.bidType,
@@ -912,29 +922,72 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     updatedAt: bid.updatedAt,
     buyer: bid.buyer ? {
       id: bid.buyer.id,
-      name: bid.buyer.name,
-      email: bid.buyer.email,
-      mobile: bid.buyer.mobile,
+      name: bid.buyer.name || rawInternal.contactPerson || null,
+      email: bid.buyer.email || rawInternal.email || null,
+      mobile: bid.buyer.mobile || rawInternal.mobile || null,
       buyerProfile: bid.buyer.buyerProfile ? {
         id: bid.buyer.buyerProfile.id,
-        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName,
-        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
-        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName || rawInternal.orgName,
+        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || rawInternal.department || null,
+        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || rawInternal.department || null,
         designation: bid.buyer.buyerProfile.designation || null,
-        representativeName: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
-        contactPerson: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
-        email: bid.buyer.buyerProfile.email || bid.buyer.email || null,
-        mobile: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
-        phone: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        representativeName: bid.buyer.buyerProfile.representativeName || rawInternal.contactPerson || bid.buyer.name || null,
+        contactPerson: bid.buyer.buyerProfile.representativeName || rawInternal.contactPerson || bid.buyer.name || null,
+        email: bid.buyer.buyerProfile.email || rawInternal.email || bid.buyer.email || null,
+        mobile: bid.buyer.buyerProfile.mobile || rawInternal.mobile || bid.buyer.mobile || null,
+        phone: bid.buyer.buyerProfile.mobile || rawInternal.mobile || bid.buyer.mobile || null,
         registeredAddress: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
         address: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
         city: bid.buyer.buyerProfile.city || null,
         district: bid.buyer.buyerProfile.district || null,
         state: bid.buyer.buyerProfile.state || null,
         pincode: bid.buyer.buyerProfile.pincode || null,
-      } : null
-    } : null,
-    buyerOrganization: bid.buyerOrganization,
+      } : {
+        id: null,
+        organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+        department: rawInternal.department || null,
+        departmentName: rawInternal.department || null,
+        designation: null,
+        representativeName: rawInternal.contactPerson || bid.buyer.name || null,
+        contactPerson: rawInternal.contactPerson || bid.buyer.name || null,
+        email: rawInternal.email || bid.buyer.email || null,
+        mobile: rawInternal.mobile || bid.buyer.mobile || null,
+        phone: rawInternal.mobile || bid.buyer.mobile || null,
+        registeredAddress: null,
+        address: null,
+        city: null,
+        district: null,
+        state: null,
+        pincode: null,
+      }
+    } : (rawInternal.contactPerson || bid.buyerOrganizationName ? {
+      id: null,
+      name: rawInternal.contactPerson || bid.buyerOrganizationName,
+      email: rawInternal.email || null,
+      mobile: rawInternal.mobile || null,
+      buyerProfile: {
+        id: null,
+        organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+        department: rawInternal.department || null,
+        departmentName: rawInternal.department || null,
+        designation: null,
+        representativeName: rawInternal.contactPerson || null,
+        contactPerson: rawInternal.contactPerson || null,
+        email: rawInternal.email || null,
+        mobile: rawInternal.mobile || null,
+        phone: rawInternal.mobile || null,
+        registeredAddress: null,
+        address: null,
+        city: null,
+        district: null,
+        state: null,
+        pincode: null,
+      }
+    } : null),
+    buyerOrganization: bid.buyerOrganization || (bid.buyerOrganizationName ? {
+      id: null,
+      organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+    } : null),
     documents: publicDocuments.map((doc: any) => {
       let fileAssetId = doc.fileAssetId;
       if (!fileAssetId && doc.fileUrl) {

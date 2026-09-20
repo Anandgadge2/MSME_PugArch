@@ -109,18 +109,6 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
-  if (rawMethod.includes('OPEN') || title.includes('OPENTENDER') || title.includes('OPEN TENDER')) {
-    return <OpenTenderDetailPage initialData={validInitialData} />;
-  }
-
-  if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER')) {
-    return <LimitedTenderDetailPage initialData={validInitialData} />;
-  }
-
-  if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
-    return <RateContractDetailPage initialData={validInitialData} />;
-  }
-
   const isRfq =
     queryType.includes('RFQ') ||
     rawMethod.includes('RFQ') ||
@@ -147,6 +135,27 @@ export default function BidDetailsPage() {
 
   if (isExplicitRfp) {
     return <RfpDetailPage initialData={validInitialData} />;
+  }
+
+  const isOpenTender =
+    rawMethod.includes('OPEN_TENDER') ||
+    rawMethod.includes('OPEN TENDER') ||
+    title.includes('OPENTENDER') ||
+    title.includes('OPEN TENDER') ||
+    reqNum.startsWith('TND-') ||
+    reqNum.startsWith('TENDER-') ||
+    ((rawMethod.includes('OPEN') || rawMethod.includes('TENDER')) && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP'));
+
+  if (isOpenTender) {
+    return <OpenTenderDetailPage initialData={validInitialData} />;
+  }
+
+  if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER') || reqNum.startsWith('LTND-')) {
+    return <LimitedTenderDetailPage initialData={validInitialData} />;
+  }
+
+  if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
+    return <RateContractDetailPage initialData={validInitialData} />;
   }
 
   // Default for standard procurement requirement/bid is Request for Quotation

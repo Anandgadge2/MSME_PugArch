@@ -1880,7 +1880,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
   const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
   const rawEndDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const effectiveEndDate = parseDateIST(rawEndDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const effectiveEndDate = parseDateIST(rawEndDate, true) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {

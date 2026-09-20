@@ -301,10 +301,14 @@ function hasExplicitDateTime(val?: string | Date | null): boolean {
   }
   if (val instanceof Date) {
     return !(
-      val.getUTCHours() === 0 &&
-      val.getUTCMinutes() === 0 &&
-      val.getUTCSeconds() === 0 &&
-      val.getUTCMilliseconds() === 0
+      (val.getUTCHours() === 0 &&
+        val.getUTCMinutes() === 0 &&
+        val.getUTCSeconds() === 0 &&
+        val.getUTCMilliseconds() === 0) ||
+      (val.getHours() === 0 &&
+        val.getMinutes() === 0 &&
+        val.getSeconds() === 0 &&
+        val.getMilliseconds() === 0)
     );
   }
   return false;
@@ -317,7 +321,11 @@ function formatDateString(
 ) {
   if (!dateVal) return null;
   try {
-    const d = new Date(dateVal);
+    let s = typeof dateVal === "string" ? dateVal.trim() : dateVal;
+    if (typeof s === "string") {
+      s = s.replace(/\bSept\b/i, "Sep");
+    }
+    const d = new Date(s);
     if (isNaN(d.getTime())) return String(dateVal);
     const day = String(d.getDate()).padStart(2, "0");
     const months = [
@@ -337,24 +345,37 @@ function formatDateString(
     const month = months[d.getMonth()];
     const year = d.getFullYear();
 
-    const shouldIncludeTime =
-      includeTime !== undefined ? includeTime : hasExplicitDateTime(dateVal);
-    if (!shouldIncludeTime) return `${day} ${month} ${year}`;
-
     const isDateOnlyStr =
       typeof dateVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
     const isMidnightUtc =
       d.getUTCHours() === 0 &&
       d.getUTCMinutes() === 0 &&
       d.getUTCSeconds() === 0;
-    if (isDateOnlyStr || (isMidnightUtc && !defaultMidnightTime)) {
+    const isMidnightLocal =
+      d.getHours() === 0 &&
+      d.getMinutes() === 0 &&
+      d.getSeconds() === 0;
+    const isMidnight = isMidnightUtc || isMidnightLocal;
+
+    const shouldIncludeTime =
+      includeTime !== undefined
+        ? includeTime
+        : (hasExplicitDateTime(dateVal) || Boolean(defaultMidnightTime));
+
+    if (!shouldIncludeTime) {
       return `${day} ${month} ${year}`;
     }
+
+    if ((isDateOnlyStr || isMidnight) && !defaultMidnightTime && !includeTime) {
+      return `${day} ${month} ${year}`;
+    }
+
     let hoursNum: number;
     let minutesStr: string;
-    if (isMidnightUtc && defaultMidnightTime) {
+    if ((isMidnight || isDateOnlyStr) && defaultMidnightTime) {
       if (defaultMidnightTime === "startOfDay") {
-        return `${day} ${month} ${year}`;
+        hoursNum = 0;
+        minutesStr = "00";
       } else {
         hoursNum = 23;
         minutesStr = "59";
@@ -654,13 +675,21 @@ function parseDateValue(
   isStart = false,
 ): Date | null {
   if (!dateVal) return null;
-  const d = new Date(dateVal);
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    return dateVal;
+  }
+  let s = String(dateVal).trim();
+  if (!s) return null;
+  s = s.replace(/\bSept\b/i, "Sep");
+  const d = new Date(s);
   if (isNaN(d.getTime())) return null;
-  const isDateOnlyStr =
-    typeof dateVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
+  const isDateOnlyStr = /^\d{4}-\d{2}-\d{2}$/.test(s);
   const isMidnightUtc =
     d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-  if (isMidnightUtc || isDateOnlyStr) {
+  const isMidnightLocal =
+    d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
+  if (isMidnightUtc || isMidnightLocal || isDateOnlyStr) {
     const adjusted = new Date(d.getTime());
     if (isStart) {
       adjusted.setHours(0, 0, 0, 0);
@@ -3841,6 +3870,7 @@ export interface ProcurementDetailUnifiedViewProps {
   priority?: string;
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
+  startDate?: Date | string | null;
   publishedDate?: string;
   submissionStartDate?: string;
   closingDate?: string;
@@ -4816,13 +4846,6 @@ export function ProcurementDetailUnifiedView(
       .includes("RATE CONTRACT") ||
     pathname.includes("/rate-contract");
 
-  const isBiddingClosed =
-    isPostBiddingStage ||
-    Boolean(props.isSubmitDisabled) ||
-    Boolean(
-      props.deadlineDate && new Date(props.deadlineDate).getTime() < Date.now(),
-    );
-
   const isReverseAuctionType =
     !isRateContractType &&
     (props.procurementType === "REVERSE_AUCTION" ||
@@ -5431,6 +5454,11 @@ export function ProcurementDetailUnifiedView(
 
   const rawSubmissionStartDate = firstPresent(
     props.submissionStartDate,
+    props.rawBid?.submissionStartDate,
+    props.rawBid?.rawSubmissionStartDate,
+    props.rawBid?.technicalPacket?.schedule?.submissionStartDate,
+    props.rawBid?.startDate,
+    props.startDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
@@ -5718,13 +5746,15 @@ export function ProcurementDetailUnifiedView(
       props.orgName && props.orgName !== "—" && props.orgName !== "N/A"
         ? props.orgName
         : undefined,
+      (props.rawBid as any)?.buyerOrganizationName,
+      (props.rawBid as any)?.buyerOrganization?.organizationName,
       internal.orgName,
       basics.organizationName,
       buyerOrg.organizationName,
       buyerProfile.organizationName,
       buyerProfile.companyName,
       props.buyer?.buyerProfile?.organizationName,
-      props.buyer?.name,
+      props.buyer?.organization?.organizationName,
     ) || "Buyer Organization";
 
   const isCandidateSameAsOrg = (candidate?: string | null) => {
@@ -6697,14 +6727,23 @@ export function ProcurementDetailUnifiedView(
 
   const effectiveDeadlineTarget = closingDateValue || props.deadlineDate;
   const isDeadlinePassed = Boolean(
+    !isBeforeSubmissionStart &&
     effectiveDeadlineTarget &&
     (() => {
-      const parsed = parseDateValue(effectiveDeadlineTarget);
+      const parsed = parseDateValue(effectiveDeadlineTarget, false);
       return parsed ? parsed.getTime() < nowMs : false;
     })(),
   );
 
+  const isBiddingClosed =
+    isPostBiddingStage ||
+    Boolean(props.isSubmitDisabled) ||
+    isDeadlinePassed;
+
   const effectiveStatusLabel = useMemo(() => {
+    if (isBeforeSubmissionStart) {
+      return "SUBMISSION OPENS SOON";
+    }
     if (isDeadlinePassed || isBiddingClosed) {
       const u = statusUpper;
       const l = String(statusLabel || "").toUpperCase();
@@ -6723,7 +6762,7 @@ export function ProcurementDetailUnifiedView(
       }
     }
     return statusLabel;
-  }, [statusUpper, isDeadlinePassed, isBiddingClosed, statusLabel]);
+  }, [statusUpper, isDeadlinePassed, isBiddingClosed, isBeforeSubmissionStart, statusLabel]);
 
   const isEvaluationReady = Boolean(
     isPostBiddingStage ||
@@ -7188,6 +7227,7 @@ export function ProcurementDetailUnifiedView(
           return "Submitted • Under Evaluation";
         return "Quotation Submitted";
       } else {
+        if (isBeforeSubmissionStart) return "Upcoming";
         if (isBiddingClosed || isDeadlinePassed) return "Submission Closed";
         return "Open for Quotation";
       }
@@ -7268,6 +7308,7 @@ export function ProcurementDetailUnifiedView(
     isAwardedToMe,
     activeAward,
     effectiveActiveOrder,
+    isBeforeSubmissionStart,
     isBiddingClosed,
     isDeadlinePassed,
     props.status,
@@ -7304,9 +7345,11 @@ export function ProcurementDetailUnifiedView(
           ? isAwardedToMe
             ? "emerald"
             : "sky"
-          : isBiddingClosed || isDeadlinePassed
-            ? "slate"
-            : "amber"
+          : isBeforeSubmissionStart
+            ? "sky"
+            : isBiddingClosed || isDeadlinePassed
+              ? "slate"
+              : "amber"
         : "slate") as Tone,
       subtext:
         !isBuyerSide && currentUser?.role === "seller"
@@ -7316,9 +7359,11 @@ export function ProcurementDetailUnifiedView(
               : isBiddingClosed || isDeadlinePassed
                 ? "Quotation under evaluation"
                 : "Bid received on time"
-            : isBiddingClosed || isDeadlinePassed
-              ? "Missed cutoff deadline"
-              : "Accepting proposals"
+            : isBeforeSubmissionStart
+              ? "Submission opens soon"
+              : isBiddingClosed || isDeadlinePassed
+                ? "Missed cutoff deadline"
+                : "Accepting proposals"
           : "Current lifecycle state",
     },
     {
@@ -8709,6 +8754,14 @@ export function ProcurementDetailUnifiedView(
                             : "Proposal Submitted"}
                         </span>
                       )
+                    ) : isBeforeSubmissionStart ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-900 shadow-2xs">
+                        <Clock
+                          className="h-3 w-3 text-sky-700"
+                          aria-hidden="true"
+                        />
+                        Submission Opens Soon
+                      </span>
                     ) : isBiddingClosed || isDeadlinePassed ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-800 shadow-2xs">
                         <Lock
@@ -8916,6 +8969,27 @@ export function ProcurementDetailUnifiedView(
                 )}
                 {!isBuyerOrAdmin &&
                   !isSellerParticipated &&
+                  isBeforeSubmissionStart && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled
+                      aria-disabled="true"
+                      title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
+                      className="h-8 px-3.5 bg-sky-50 text-sky-800 border border-sky-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-sky-600" />
+                      <span>
+                        Submission Opens{" "}
+                        {submissionStartDateFormatted
+                          ? `on ${submissionStartDateFormatted}`
+                          : "Soon"}
+                      </span>
+                    </Button>
+                  )}
+                {!isBuyerOrAdmin &&
+                  !isSellerParticipated &&
+                  !isBeforeSubmissionStart &&
                   (isBiddingClosed || isDeadlinePassed) && (
                     <Button
                       type="button"
@@ -8927,27 +9001,6 @@ export function ProcurementDetailUnifiedView(
                     >
                       <Lock className="h-3.5 w-3.5 text-slate-400" />
                       <span>Submission Window Closed</span>
-                    </Button>
-                  )}
-                {!isBuyerOrAdmin &&
-                  !props.hasSubmittedProposal &&
-                  !isBiddingClosed &&
-                  isBeforeSubmissionStart && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      aria-disabled="true"
-                      title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
-                      className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-slate-400" />
-                      <span>
-                        Submission Opens{" "}
-                        {submissionStartDateFormatted
-                          ? `on ${submissionStartDateFormatted}`
-                          : "Soon"}
-                      </span>
                     </Button>
                   )}
                 {isBuyerOrAdmin && !isEvaluationReady && (
@@ -9353,9 +9406,56 @@ export function ProcurementDetailUnifiedView(
                   </div>
                 )}
 
+              {/* Seller Notification Banner: Upcoming Procurement / Opens Soon */}
+              {!isBuyerOrAdmin &&
+                !isSellerParticipated &&
+                isBeforeSubmissionStart && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/90 via-blue-50/30 to-white p-3 sm:p-3.5 shadow-2xs transition-all"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
+                          <Clock className="h-4 w-4" aria-hidden="true" />
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-sky-900 bg-sky-100/90 border border-sky-300 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <Clock className="h-3 w-3 text-sky-700" aria-hidden="true" />
+                              Submission Window Opens Soon
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                              Upcoming Procurement
+                            </span>
+                          </div>
+                          <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                            Bidding Commences on {submissionStartDateFormatted || "Scheduled Start Time"}
+                          </h3>
+                          <p className="text-xs text-slate-700 max-w-2xl leading-relaxed">
+                            Quotation submissions have not opened yet. You will be able to submit your quotations and pricing as soon as the window officially commences.
+                          </p>
+                        </div>
+                      </div>
+                      {subStartDateObj && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <DeadlineCountdown
+                            targetDate={closingDateValue || props.deadlineDate || ""}
+                            startDate={subStartDateObj}
+                            label="Submission Closes in: "
+                            startLabel="Submission Opens in: "
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               {/* Seller Notification Banner: Did Not Participate / Missed Deadline */}
               {!isBuyerOrAdmin &&
                 !isSellerParticipated &&
+                !isBeforeSubmissionStart &&
                 (isBiddingClosed || isDeadlinePassed) && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-3.5 shadow-2xs transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -10797,6 +10897,31 @@ export function ProcurementDetailUnifiedView(
                           completed.
                         </p>
                       </div>
+                    </div>
+                  ) : isBeforeSubmissionStart ? (
+                    <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/40 p-8 text-center space-y-3">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                        <Clock className="h-6 w-6" aria-hidden="true" />
+                      </div>
+                      <div className="space-y-1 max-w-md mx-auto">
+                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">
+                          Quotation Submission Window Opens Soon
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Bidding for this procurement opens on{" "}
+                          <strong className="text-slate-800">{submissionStartDateFormatted || "the scheduled start time"}</strong>. You will be able to prepare and submit your technical response and commercial quotation as soon as the window commences.
+                        </p>
+                      </div>
+                      {subStartDateObj && (
+                        <div className="pt-2 flex justify-center">
+                          <DeadlineCountdown
+                            targetDate={closingDateValue || props.deadlineDate || ""}
+                            startDate={subStartDateObj}
+                            label="Submission Closes in: "
+                            startLabel="Submission Opens in: "
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : isBiddingClosed || isDeadlinePassed ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center space-y-3">
