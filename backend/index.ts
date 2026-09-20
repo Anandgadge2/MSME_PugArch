@@ -4589,7 +4589,8 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
         inspectionRecord: true,
         invoices: { orderBy: { createdAt: 'desc' } },
         buyer: { select: { id: true, name: true, email: true } },
-        seller: { select: { id: true, name: true, email: true } }
+        seller: { select: { id: true, name: true, email: true } },
+        grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
       },
       orderBy,
       skip,

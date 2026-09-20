@@ -23,8 +23,6 @@ import {
   ArrowRight,
   Printer,
   Clock3,
-  FileSpreadsheet,
-  Lock,
   Upload,
   RotateCcw
 } from 'lucide-react';
@@ -36,7 +34,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
 
-export type PaymentReceiptTab = 'receipt' | 'tax' | 'ledger' | 'timeline';
+export type PaymentReceiptTab = 'receipt' | 'timeline';
 
 export interface PaymentReceiptViewModalProps {
   isOpen: boolean;
@@ -237,6 +235,20 @@ export function PaymentReceiptViewModal({
           } catch {}
         }
 
+        if (proofData?.receiptFileId && !proofData?.receiptFileName) {
+          try {
+            const fileRes = await getApi<any>(`/api/files/${proofData.receiptFileId}/signed-url`);
+            const fileObj = fileRes?.file || fileRes?.data?.file;
+            if (fileObj) {
+              proofData = {
+                ...proofData,
+                receiptFileName: fileObj.originalName || proofData.receiptFileName,
+                receiptFileMimeType: fileObj.mimeType || proofData.receiptFileMimeType
+              };
+            }
+          } catch {}
+        }
+
         setProof(proofData || null);
 
         // Auto-fetch linked Purchase Order
@@ -284,6 +296,11 @@ export function PaymentReceiptViewModal({
     const isVerified = ['success', 'escrow_released', 'offline_proof_verified'].includes(rawStatus);
     const isRejected = ['failed', 'cancelled', 'rejected'].includes(rawStatus);
 
+    const resolvedFileName =
+      meta.receiptFileName ||
+      (slipFileUrl && !slipFileUrl.startsWith('/api/files/') ? slipFileUrl.split('/').pop() : undefined) ||
+      (slipFileId ? `Bank_Remittance_Receipt_${slipFileId}.pdf` : undefined);
+
     return {
       id: meta.offlineProofId || undefined,
       amount: activePayment.amount,
@@ -295,7 +312,8 @@ export function PaymentReceiptViewModal({
       payerAccountLast4: meta.payerAccountLast4 || (activePayment.payer?.id ? `84${String(activePayment.payer.id).padStart(2, '0')}` : undefined),
       receiptFileId: slipFileId,
       receiptFileUrl: slipFileUrl,
-      receiptFileName: meta.receiptFileName || (slipFileUrl ? 'Payment_Proof_Document.pdf' : undefined),
+      receiptFileName: resolvedFileName,
+      receiptFileMimeType: meta.receiptFileMimeType,
       status: isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : 'UPLOADED',
       purchaseOrderId: activePayment.purchaseOrderId,
       invoiceId: activePayment.invoiceId,
@@ -424,16 +442,17 @@ export function PaymentReceiptViewModal({
   const handleOpenFile = async () => {
     const resolvedUrl =
       resolvedProof?.receiptFileUrl ||
-      (resolvedProof?.receiptFileId ? `/api/files/${resolvedProof.receiptFileId}/download` : null);
+      (resolvedProof?.receiptFileId ? `/api/files/${resolvedProof.receiptFileId}/view` : null);
 
     if (!resolvedUrl && !resolvedProof?.receiptFileId) {
       toast.error('No attached receipt file found');
       return;
     }
     const fileName =
-      resolvedUrl && !resolvedUrl.startsWith('/api/files/')
-        ? resolvedUrl.split('/').pop() || 'Payment_Receipt.pdf'
-        : resolvedProof?.receiptFileName || 'Payment_Receipt.pdf';
+      resolvedProof?.receiptFileName ||
+      (resolvedUrl && !resolvedUrl.startsWith('/api/files/')
+        ? resolvedUrl.split('/').pop() || 'Payment_Proof_Document'
+        : 'Payment_Proof_Document');
 
     setPreviewingFile(true);
     try {
@@ -441,7 +460,7 @@ export function PaymentReceiptViewModal({
         {
           id: resolvedProof?.receiptFileId,
           fileUrl: resolvedUrl || undefined,
-          mimeType: 'application/pdf'
+          mimeType: resolvedProof?.receiptFileMimeType || undefined
         },
         fileName
       );
@@ -618,11 +637,6 @@ export function PaymentReceiptViewModal({
     gateway: resolvedProof?.method
   });
 
-  const tax = activePayment?.metadata?.taxSummary || {};
-  const hasTaxBreakdown = Boolean(tax.taxableAmount || tax.cgstAmount || tax.sgstAmount || tax.igstAmount || tax.tdsAmount);
-  const ledgerEntries = activePayment?.ledgerEntries || [];
-  const escrowAccount = activePayment?.escrowAccount;
-
   const hasAttachedFile = Boolean(
     resolvedProof?.receiptFileUrl ||
     resolvedProof?.receiptFileId ||
@@ -676,7 +690,7 @@ export function PaymentReceiptViewModal({
                 Payment Receipt &amp; Proof Details
               </h2>
               <p id="modal-proof-desc" className="sr-only">
-                Review official payment receipt, bank UTR transfer proof, commercial counterparty match, tax deductions, and transaction audit trail.
+                Review official payment receipt, bank UTR transfer proof, commercial counterparty match, and transaction audit trail.
               </p>
             </div>
           </div>
@@ -726,38 +740,6 @@ export function PaymentReceiptViewModal({
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === 'tax'}
-            onClick={() => setActiveTab('tax')}
-            className={cn(
-              "flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap",
-              activeTab === 'tax'
-                ? "border-[#12335f] text-[#12335f] bg-white rounded-t-lg shadow-2xs"
-                : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-t-lg"
-            )}
-          >
-            <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Tax &amp; Escrow</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'ledger'}
-            onClick={() => setActiveTab('ledger')}
-            className={cn(
-              "flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap",
-              activeTab === 'ledger'
-                ? "border-[#12335f] text-[#12335f] bg-white rounded-t-lg shadow-2xs"
-                : "border-transparent text-slate-600 hover:text-slate-900 hover:bg-white/50 rounded-t-lg"
-            )}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Ledger Entries ({ledgerEntries.length})</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
             aria-selected={activeTab === 'timeline'}
             onClick={() => setActiveTab('timeline')}
             className={cn(
@@ -779,173 +761,8 @@ export function PaymentReceiptViewModal({
               <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" aria-hidden="true" />
               <p className="text-xs font-bold text-slate-500">Loading banking payment receipt record...</p>
             </div>
-          ) : activeTab === 'tax' ? (
-            /* TAB 2: Tax Breakdown & Escrow */
-            <div className="space-y-4 animate-in fade-in duration-150">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Receipt className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Statutory GST &amp; TDS Deductions
-                    </h3>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Fiscal Assessment
-                  </span>
-                </div>
-
-                {hasTaxBreakdown ? (
-                  <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 overflow-hidden text-xs">
-                    <div className="flex items-center justify-between p-3 bg-slate-50/50">
-                      <span className="font-semibold text-slate-600">Taxable Contract Amount</span>
-                      <span className="font-mono font-bold text-slate-900">{formatCurrency(tax.taxableAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3">
-                      <span className="font-semibold text-slate-600">Central GST (CGST)</span>
-                      <span className="font-mono font-bold text-slate-900">{formatCurrency(tax.cgstAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3">
-                      <span className="font-semibold text-slate-600">State GST (SGST)</span>
-                      <span className="font-mono font-bold text-slate-900">{formatCurrency(tax.sgstAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3">
-                      <span className="font-semibold text-slate-600">Integrated GST (IGST)</span>
-                      <span className="font-mono font-bold text-slate-900">{formatCurrency(tax.igstAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-rose-50/40">
-                      <span className="font-semibold text-rose-700">TDS Withheld (Income Tax Act)</span>
-                      <span className="font-mono font-bold text-rose-700">-{formatCurrency(tax.tdsAmount || 0)}</span>
-                    </div>
-                    <div className="flex items-center justify-between p-3 bg-blue-50/60 font-black">
-                      <span className="text-[#12335f] text-sm">Net Remitted / Settled Value</span>
-                      <span className="font-mono text-sm text-[#12335f]">
-                        {formatCurrency(resolvedProof?.amount || activePayment?.amount || 0)}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center space-y-2">
-                    <p className="text-xs font-bold text-slate-700">Consolidated Transaction Value</p>
-                    <p className="text-2xl font-black text-[#12335f]">
-                      {formatCurrency(resolvedProof?.amount || activePayment?.amount || 0)}
-                    </p>
-                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                      Specific itemized GST and TDS breakdown will be recorded upon final invoice clearance and reconciliation.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Escrow Custody Section */}
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-emerald-700" aria-hidden="true" />
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Tripartite Escrow Custody Vault
-                    </h3>
-                  </div>
-                  <span className="rounded bg-emerald-50 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-emerald-800 border border-emerald-200">
-                    {escrowAccount ? `VAULT #${escrowAccount.id}` : 'Direct Remittance'}
-                  </span>
-                </div>
-
-                {escrowAccount ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/50 p-3.5 space-y-1">
-                      <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700 block">
-                        Escrow Account Status
-                      </span>
-                      <p className="text-sm font-black text-emerald-950 uppercase tracking-wide">
-                        {escrowAccount.status || 'Funds In Custody'}
-                      </p>
-                      <p className="text-[10.5px] text-emerald-800">
-                        Protected in designated nodal escrow till milestone release.
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-1">
-                      <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-500 block">
-                        Custody Balance
-                      </span>
-                      <p className="text-sm font-black text-slate-900 font-mono">
-                        {formatCurrency(escrowAccount.amount || activePayment?.amount || 0)}
-                      </p>
-                      <p className="text-[10.5px] text-slate-500">
-                        {escrowAccount.fundedAt ? `Funded on ${formatDate(escrowAccount.fundedAt)}` : 'Treasury funded'}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                    Direct commercial settlement record. No intermediary escrow vault account linked to this payment.
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : activeTab === 'ledger' ? (
-            /* TAB 3: Double-Entry Ledger Entries */
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
-                  <div>
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Double-Entry General Ledger
-                    </h3>
-                    <p className="text-[11px] text-slate-500 font-medium">
-                      Cryptographically verified, immutable transaction credits and debits.
-                    </p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-[9.5px] font-black uppercase">
-                  <ShieldCheck className="h-3 w-3" aria-hidden="true" />
-                  Audit Verified
-                </span>
-              </div>
-
-              {ledgerEntries.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                        <th className="p-3">Entry Type</th>
-                        <th className="p-3">Debit Account</th>
-                        <th className="p-3">Credit Account</th>
-                        <th className="p-3 text-right">Amount</th>
-                        <th className="p-3">Recorded On</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {ledgerEntries.map((entry: any) => (
-                        <tr key={entry.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="p-3 font-bold text-slate-800 uppercase tracking-wide">
-                            {String(entry.entryType || '').replace(/_/g, ' ')}
-                          </td>
-                          <td className="p-3 font-mono text-slate-600">{entry.debitAccount || '-'}</td>
-                          <td className="p-3 font-mono text-slate-600">{entry.creditAccount || '-'}</td>
-                          <td className="p-3 text-right font-mono font-black text-slate-900">
-                            {formatCurrency(entry.amount)}
-                          </td>
-                          <td className="p-3 text-slate-500 font-medium">{formatDate(entry.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center space-y-2">
-                  <FileSpreadsheet className="h-8 w-8 text-slate-300 mx-auto" aria-hidden="true" />
-                  <p className="text-xs font-bold text-slate-700">No Ledger Entries Generated Yet</p>
-                  <p className="text-[11px] text-slate-400 max-w-sm mx-auto">
-                    Double-entry bookkeeping journal entries are posted automatically upon formal treasury settlement and audit clearance.
-                  </p>
-                </div>
-              )}
-            </div>
           ) : activeTab === 'timeline' ? (
-            /* TAB 4: Transaction Timeline */
+            /* TAB 2: Transaction Timeline */
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4 animate-in fade-in duration-150">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -1187,8 +1004,8 @@ export function PaymentReceiptViewModal({
                         <FileText className="h-5 w-5" aria-hidden="true" />
                       </div>
                       <div className="min-w-0 space-y-0.5">
-                        <p className="text-xs font-bold text-slate-900 truncate" title={resolvedProof?.receiptFileName || 'Payment_Slip.pdf'}>
-                          {resolvedProof?.receiptFileName || 'Official_Payment_Slip.pdf'}
+                        <p className="text-xs font-bold text-slate-900 truncate" title={resolvedProof?.receiptFileName || 'Official_Payment_Slip'}>
+                          {resolvedProof?.receiptFileName || 'Official_Payment_Slip'}
                         </p>
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                           Official Bank Slip / Payment Proof Document

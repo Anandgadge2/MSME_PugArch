@@ -6,7 +6,7 @@
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -14,6 +14,7 @@ import {
     CheckCircle2,
     Clock,
     Copy,
+    CreditCard,
     Download,
     ExternalLink,
     FileText,
@@ -23,6 +24,7 @@ import {
     ShieldAlert,
     ShieldCheck,
     Truck,
+    Upload,
     X,
     XCircle
 } from 'lucide-react';
@@ -41,6 +43,9 @@ import { useApproveGrn, useGrn, useRejectGrn, useSubmitGrn } from '../hooks';
 import type { GrnStatus } from '../api';
 import { DataTable } from '../../../components/ui/data-table';
 import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
+import { RecordOrderPaymentModal } from '../../purchaseOrders/components/RecordOrderPaymentModal';
+import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
+import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { downloadGrnPdf } from '../lib/grnPdfGenerator';
 import { openFileAsset } from '../../../lib/files';
 import { getDeliveryByPurchaseOrder } from '../../delivery/api';
@@ -88,11 +93,26 @@ export default function GrnDetailPage({ id }: Props) {
     const submitMut = useSubmitGrn();
     const approveMut = useApproveGrn();
     const rejectMut = useRejectGrn();
+    const queryClient = useQueryClient();
     const [showReject, setShowReject] = useState(false);
     const [showApprove, setShowApprove] = useState(false);
     const [copied, setCopied] = useState(false);
     const [viewingOrder, setViewingOrder] = useState<any | null>(null);
+    const [recordPaymentOrder, setRecordPaymentOrder] = useState<any | null>(null);
+    const [uploadProofOrder, setUploadProofOrder] = useState<any | null>(null);
+    const [viewProofOrder, setViewProofOrder] = useState<any | null>(null);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+    const handlePaymentSuccess = () => {
+        setRecordPaymentOrder(null);
+        setUploadProofOrder(null);
+        notify.success('Payment recorded and updated successfully!');
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ['grn'] });
+        queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['delivery'] });
+        queryClient.invalidateQueries({ queryKey: ['payments'] });
+    };
 
     const { data: mappedDelivery } = useQuery({
         queryKey: ['delivery', 'by-po', grn?.purchaseOrderId],
@@ -303,40 +323,81 @@ export default function GrnDetailPage({ id }: Props) {
                         View / Create Invoice
                     </Button>
 
-                    {/* GRN Payment Gate: Pay Now / Upload Payment Proof */}
+                    {/* GRN Payment Gate: Pay Now / Upload Payment Proof via Modals */}
                     {(() => {
+                        const targetOrder = grn.purchaseOrder || (grn.purchaseOrderId ? { id: grn.purchaseOrderId, poNumber: grn.grnNumber, title: grn.grnNumber } : null);
                         const poStatus = String(grn.purchaseOrder?.status || grn.status || '').toLowerCase();
-                        const isPaid = poStatus.includes('paid');
-                        const isBuyer = user?.role === 'buyer';
-                        const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
-                        const searchVal = grn.grnNumber || grn.purchaseOrder?.poNumber || '';
-                        if (!isPaid) {
-                            if (!isBuyer) {
+                        const activeInvoice = (grn.purchaseOrder as any)?.invoices?.[0];
+                        const isPaid = poStatus.includes('paid') || String(activeInvoice?.status || '').toLowerCase() === 'paid';
+                        const isBuyer = (user?.role as string) === 'buyer' || (user?.role as string) === 'buyer_approver';
+                        const isSeller = user?.role === 'seller';
+                        const isGrnApproved = grn.status === 'APPROVED';
+
+                        const hasSlip = Boolean(
+                            (grn.purchaseOrder as any)?.paymentProofUrl ||
+                            (grn.purchaseOrder as any)?.paymentProofDocumentUrl ||
+                            (grn.purchaseOrder as any)?.paymentSlipUrl ||
+                            (grn.purchaseOrder as any)?.bankSlipUrl ||
+                            activeInvoice?.paymentProofUrl ||
+                            activeInvoice?.paymentSlipUrl ||
+                            activeInvoice?.paymentSlipFileId ||
+                            (grn.purchaseOrder as any)?.payments?.some((p: any) => p.status === 'completed' || p.status === 'SUCCESS')
+                        );
+
+                        if (!isGrnApproved) {
+                            if (isBuyer) {
                                 return (
+                                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800">
+                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                                        <span>Payment Gate: Awaiting GRN Approval</span>
+                                    </span>
+                                );
+                            }
+                            return null;
+                        }
+
+                        return (
+                            <>
+                                {isBuyer && !isPaid && targetOrder && (
+                                    <>
+                                        <Button
+                                            onClick={() => setRecordPaymentOrder(targetOrder)}
+                                            className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
+                                            title="Record payment and upload bank transfer slip"
+                                        >
+                                            <CreditCard className="h-3.5 w-3.5" />
+                                            Record Payment & Bank Slip
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setUploadProofOrder(targetOrder)}
+                                            className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 cursor-pointer"
+                                            title="Attach offline payment slip"
+                                        >
+                                            <Upload className="h-3.5 w-3.5 text-slate-600" />
+                                            Upload Slip
+                                        </Button>
+                                    </>
+                                )}
+
+                                {isSeller && !isPaid && !hasSlip && (
                                     <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800">
                                         <Clock className="h-3.5 w-3.5 text-amber-600" />
                                         <span>Payment Pending from Buyer</span>
                                     </span>
-                                );
-                            }
-                            return (
-                                <Button
-                                    onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
-                                    className="bg-[#12335f] text-white hover:bg-[#0e2a4f] h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
-                                >
-                                    <ShieldCheck className="h-3.5 w-3.5 text-blue-200" />
-                                    Pay Now / Upload Payment Proof
-                                </Button>
-                            );
-                        }
-                        return (
-                            <Button
-                                onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
-                                className="bg-emerald-700 text-white hover:bg-emerald-800 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
-                            >
-                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-100" />
-                                View Payment Proof (Paid)
-                            </Button>
+                                )}
+
+                                {(hasSlip || isPaid) && targetOrder && (
+                                    <Button
+                                        onClick={() => setViewProofOrder(targetOrder)}
+                                        className="bg-emerald-700 text-white hover:bg-emerald-800 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
+                                        title="View verified payment slip"
+                                    >
+                                        <Receipt className="h-3.5 w-3.5 text-emerald-100" />
+                                        View Payment Slip {isPaid && '(Paid)'}
+                                    </Button>
+                                )}
+                            </>
                         );
                     })()}
 
@@ -860,6 +921,40 @@ export default function GrnDetailPage({ id }: Props) {
                     onClose={() => setViewingOrder(null)}
                     isBuyer={user?.role === 'buyer'}
                     isSeller={user?.role === 'seller'}
+                />
+            )}
+
+            {/* Direct In-Place Record Payment Modal */}
+            {recordPaymentOrder && (
+                <RecordOrderPaymentModal
+                    isOpen={!!recordPaymentOrder}
+                    onClose={() => setRecordPaymentOrder(null)}
+                    order={recordPaymentOrder}
+                    invoiceId={recordPaymentOrder.invoices?.[0]?.id}
+                    onSuccess={handlePaymentSuccess}
+                />
+            )}
+
+            {/* Direct In-Place Payment Receipt Upload Modal */}
+            {uploadProofOrder && (
+                <PaymentReceiptUploadModal
+                    isOpen={!!uploadProofOrder}
+                    onClose={() => setUploadProofOrder(null)}
+                    order={uploadProofOrder}
+                    invoice={uploadProofOrder.invoices?.[0]}
+                    onSuccess={handlePaymentSuccess}
+                />
+            )}
+
+            {/* Direct In-Place Payment Receipt View Modal */}
+            {viewProofOrder && (
+                <PaymentReceiptViewModal
+                    isOpen={!!viewProofOrder}
+                    onClose={() => setViewProofOrder(null)}
+                    orderId={Number(viewProofOrder.id)}
+                    orderPoNumber={viewProofOrder.poNumber}
+                    sellerName={viewProofOrder.seller?.name}
+                    onStatusChange={handlePaymentSuccess}
                 />
             )}
         </div>

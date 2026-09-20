@@ -91,6 +91,40 @@ const handleError = (res: any, err: any) =>
     code: err?.code || 'PAYMENT_OPERATION_FAILED'
   });
 
+const enrichProofsWithFileMetadata = async (proofsList: any[]) => {
+  if (!Array.isArray(proofsList) || proofsList.length === 0) return proofsList;
+  const fileIds = proofsList
+    .map(p => {
+      if (p?.receiptFileId) return Number(p.receiptFileId);
+      const match = String(p?.receiptFileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
+      return match ? Number(match[1]) : null;
+    })
+    .filter((id): id is number => typeof id === 'number' && Number.isFinite(id) && id > 0);
+
+  if (fileIds.length === 0) return proofsList;
+
+  const files = await prisma.fileAsset.findMany({
+    where: { id: { in: fileIds } },
+    select: { id: true, originalName: true, mimeType: true, size: true }
+  }).catch(() => []);
+
+  const fileMap = new Map<number, any>();
+  files.forEach((f: any) => fileMap.set(f.id, f));
+  return proofsList.map(p => {
+    const fid = p?.receiptFileId || (() => {
+      const match = String(p?.receiptFileUrl || '').match(/\/api\/(?:public\/)?files\/(\d+)/);
+      return match ? Number(match[1]) : null;
+    })();
+    const fa = fid ? fileMap.get(fid) : null;
+    return {
+      ...p,
+      receiptFileName: fa?.originalName || (p.receiptFileUrl && !p.receiptFileUrl.startsWith('/api/files/') ? p.receiptFileUrl.split('/').pop() : null),
+      receiptFileMimeType: fa?.mimeType || null,
+      receiptFileSize: fa?.size || null
+    };
+  });
+};
+
 const listPaymentsForActor = async (where: Record<string, unknown>, window: { skip: number; take: number }) => {
   try {
     const [payments, total] = await Promise.all([
@@ -436,7 +470,8 @@ router.get('/invoice/:invoiceId/offline-proof', requirePermission('payment.view'
         })
       : null;
 
-    res.json({ success: true, proof: maskSensitive(proof) });
+    const enriched = await enrichProofsWithFileMetadata(proof ? [proof] : []);
+    res.json({ success: true, proof: maskSensitive(enriched[0] || null) });
   } catch (err: any) {
     return handleError(res, err);
   }
@@ -459,7 +494,8 @@ router.get('/offline-proofs', requirePermission('payment.view', orgScope), async
       orderBy: { createdAt: 'desc' },
       take: Math.min(100, Math.max(1, Number(req.query.take || req.query.pageSize || 50)))
     });
-    res.json({ success: true, proofs: maskSensitive(proofs), records: maskSensitive(proofs) });
+    const enriched = await enrichProofsWithFileMetadata(proofs);
+    res.json({ success: true, proofs: maskSensitive(enriched), records: maskSensitive(enriched) });
   } catch (err: any) {
     return handleError(res, err);
   }
@@ -604,7 +640,8 @@ router.get('/:orderId/offline-proof', requirePermission('payment.view', orgScope
     const allowed = isPlatformFinanceUser(req) || po.buyerId === req.user?.id || po.sellerId === req.user?.id;
     if (!allowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     const proofs = await (prisma as any).offlinePaymentProof.findMany({ where: { purchaseOrderId: orderId }, orderBy: { createdAt: 'desc' } });
-    res.json({ success: true, proofs: maskSensitive(proofs), proof: maskSensitive(proofs[0] || null) });
+    const enriched = await enrichProofsWithFileMetadata(proofs);
+    res.json({ success: true, proofs: maskSensitive(enriched), proof: maskSensitive(enriched[0] || null) });
   } catch (err: any) {
     return handleError(res, err);
   }

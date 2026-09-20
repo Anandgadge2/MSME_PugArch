@@ -4220,10 +4220,10 @@ export function ProcurementDetailUnifiedView(
     null;
 
   const { data: fetchedOrder } = useQuery({
-    queryKey: ["procurement-active-order", targetId],
+    queryKey: ["procurement-active-order", targetId, activeAward?.id],
     queryFn: async () => {
       try {
-        const res: any = await getApi(`/api/orders/procurement?take=50`);
+        const res: any = await getApi(`/api/orders/procurement?take=20${targetId ? `&bidId=${targetId}` : ""}`);
         const list = Array.isArray(res) ? res : res?.items || res?.data || [];
         return (
           list.find(
@@ -4237,16 +4237,85 @@ export function ProcurementDetailUnifiedView(
         return null;
       }
     },
-    enabled: Boolean(targetId) && !directActiveOrder,
-    staleTime: 5000,
+    enabled: Boolean(targetId),
+    staleTime: 4000,
+    refetchInterval: (query) => {
+      const ord = query.state.data;
+      const st = String(ord?.status || ord?.poStatus || "").toLowerCase();
+      if (["closed", "cancelled", "completed", "paid"].includes(st)) return false;
+      return 6000;
+    },
   });
   const effectiveActiveOrder = useMemo(() => {
-    const ord = localCreatedOrder || directActiveOrder || fetchedOrder || null;
+    const ord = fetchedOrder || localCreatedOrder || directActiveOrder || null;
     if (ord && localAcceptedPO) {
       return { ...ord, status: "accepted", poStatus: "ACCEPTED" };
     }
     return ord;
-  }, [localCreatedOrder, directActiveOrder, fetchedOrder, localAcceptedPO]);
+  }, [fetchedOrder, localCreatedOrder, directActiveOrder, localAcceptedPO]);
+
+  const rawOrderStatus = String(
+    effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || "",
+  ).toLowerCase();
+
+  const isPOAccepted = Boolean(
+    effectiveActiveOrder &&
+      (Boolean(effectiveActiveOrder.acceptedAt) ||
+        activeAward?.awardStatus === "ACCEPTED" ||
+        localAcceptedPO ||
+        [
+          "accepted",
+          "in_fulfillment",
+          "dispatched",
+          "in_transit",
+          "delivered",
+          "grn_created",
+          "grn_pending",
+          "grn_completed",
+          "grn_approved",
+          "invoice_submitted",
+          "invoiced",
+          "payment_initiated",
+          "paid",
+          "completed",
+          "closed",
+        ].includes(rawOrderStatus) ||
+        (rawOrderStatus &&
+          ![
+            "issued",
+            "generated",
+            "order_placed",
+            "pending_acceptance",
+            "cancelled",
+            "rejected",
+          ].includes(rawOrderStatus))),
+  );
+
+  const poStatusBadgeText = useMemo(() => {
+    if (["delivered", "grn_completed", "grn_pending"].includes(rawOrderStatus)) {
+      return "Supplier Accepted — Items Delivered (GRN Pending)";
+    }
+    if (
+      [
+        "grn_approved",
+        "invoiced",
+        "invoice_submitted",
+        "payment_initiated",
+        "paid",
+        "completed",
+        "closed",
+      ].includes(rawOrderStatus)
+    ) {
+      return "Supplier Accepted — Fulfilled & Progressing";
+    }
+    if (["in_fulfillment", "dispatched", "in_transit"].includes(rawOrderStatus)) {
+      return "Supplier Accepted — Delivery In Progress";
+    }
+    if (isPOAccepted) {
+      return "Supplier Accepted — Fulfillment Committed";
+    }
+    return "Awaiting Supplier Acceptance & Commitment";
+  }, [rawOrderStatus, isPOAccepted]);
 
   const handleAcceptPriceMatch = async (awardId: string) => {
     try {
@@ -7068,17 +7137,6 @@ export function ProcurementDetailUnifiedView(
                 String(activeAward.participationId) ===
                   String(participation.id))),
           );
-          const isPOAccepted = Boolean(
-            effectiveActiveOrder &&
-            [
-              "accepted",
-              "in_fulfillment",
-              "delivered",
-              "completed",
-              "invoice_submitted",
-              "paid",
-            ].includes(String(effectiveActiveOrder.status || "").toLowerCase()),
-          );
 
           if (isAwardWinner) {
             if (effectiveActiveOrder) {
@@ -7893,14 +7951,7 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             effectiveActiveOrder &&
-            [
-              "issued",
-              "generated",
-              "order_placed",
-              "pending_acceptance",
-            ].includes(
-              String(effectiveActiveOrder.status || "").toLowerCase(),
-            ) && (
+            !isPOAccepted && (
               <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950 p-5 text-white shadow-xl animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1.5">
@@ -7951,19 +8002,7 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             effectiveActiveOrder &&
-            [
-              "accepted",
-              "in_fulfillment",
-              "dispatched",
-              "grn_pending",
-              "invoiced",
-            ].includes(
-              String(
-                effectiveActiveOrder.status ||
-                  effectiveActiveOrder.poStatus ||
-                  "",
-              ).toLowerCase(),
-            ) && (
+            isPOAccepted && (
               <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-2.5">
@@ -8301,50 +8340,63 @@ export function ProcurementDetailUnifiedView(
                         <span
                           className={cn(
                             "rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border",
-                            ["accepted", "in_fulfillment", "dispatched"].includes(
-                              String(
-                                effectiveActiveOrder.status ||
-                                  effectiveActiveOrder.poStatus ||
-                                  "",
-                              ).toLowerCase(),
-                            )
+                            isPOAccepted
                               ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                               : "bg-amber-100 text-amber-800 border-amber-200",
                           )}
                         >
-                          {["accepted", "in_fulfillment", "dispatched"].includes(
-                            String(
-                              effectiveActiveOrder.status ||
-                                effectiveActiveOrder.poStatus ||
-                                "",
-                            ).toLowerCase(),
-                          )
-                            ? "Supplier Accepted — Delivery In Progress"
-                            : "Awaiting Supplier Acceptance & Commitment"}
+                          {poStatusBadgeText}
                         </span>
                       </div>
                       <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
-                        Official Purchase Order Released — Contract Binding Enacted
+                        {isPOAccepted
+                          ? "Purchase Order Accepted — Fulfillment & Delivery Active"
+                          : "Official Purchase Order Released — Contract Binding Enacted"}
                       </h3>
                       <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
-                        Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
-                        <strong className="text-slate-900 font-bold">
-                          {activeAward.sellerName ||
-                            activeAward.seller?.name ||
-                            activeAward.awardedSellerName ||
-                            activeAward.sellerOrganization?.name ||
-                            "Awarded Supplier"}
-                        </strong>{" "}
-                        for{" "}
-                        <strong className="text-emerald-700 font-bold">
-                          ₹{Number(
-                            effectiveActiveOrder.amount ||
-                              effectiveActiveOrder.totalValue ||
-                              activeAward?.finalAmount ||
-                              0,
-                          ).toLocaleString("en-IN")}
-                        </strong>
-                        . All participating bidders have been transitioned, and order binding is legally established.
+                        {isPOAccepted ? (
+                          <>
+                            Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally accepted by{" "}
+                            <strong className="text-slate-900 font-bold">
+                              {activeAward.sellerName ||
+                                activeAward.seller?.name ||
+                                activeAward.awardedSellerName ||
+                                activeAward.sellerOrganization?.name ||
+                                "Awarded Supplier"}
+                            </strong>{" "}
+                            for{" "}
+                            <strong className="text-emerald-700 font-bold">
+                              ₹{Number(
+                                effectiveActiveOrder.amount ||
+                                  effectiveActiveOrder.totalValue ||
+                                  activeAward?.finalAmount ||
+                                  0,
+                              ).toLocaleString("en-IN")}
+                            </strong>
+                            . Order binding is established and fulfillment progress is actively tracked under Stage 3 (Delivery &amp; GRN).
+                          </>
+                        ) : (
+                          <>
+                            Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
+                            <strong className="text-slate-900 font-bold">
+                              {activeAward.sellerName ||
+                                activeAward.seller?.name ||
+                                activeAward.awardedSellerName ||
+                                activeAward.sellerOrganization?.name ||
+                                "Awarded Supplier"}
+                            </strong>{" "}
+                            for{" "}
+                            <strong className="text-emerald-700 font-bold">
+                              ₹{Number(
+                                effectiveActiveOrder.amount ||
+                                  effectiveActiveOrder.totalValue ||
+                                  activeAward?.finalAmount ||
+                                  0,
+                              ).toLocaleString("en-IN")}
+                            </strong>
+                            . All participating bidders have been transitioned, and awaiting supplier acceptance &amp; commitment.
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>

@@ -51,7 +51,7 @@ import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.s
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
 import { ratingWorkflow } from '../services/workflow/rating-workflow.service.js';
 import { ratingsService } from '../modules/ratings/ratings.service.js';
-import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
+import { enrichBidsWithResponses, invalidateBidCaches } from '../modules/procurementBid/procurement-bid.routes.js';
 import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
@@ -3294,6 +3294,51 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   } else {
     res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
   }
+  return res.end(file.buffer);
+}));
+
+router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
+  const { id } = parse(idParams, req.params);
+  let actor: any = req.user;
+  if (!actor && typeof req.query.token === 'string' && req.query.token.trim()) {
+    try {
+      const decoded = verifyAccessToken(req.query.token.trim());
+      if (decoded?.id) {
+        const u = await db.user.findUnique({
+          where: { id: Number(decoded.id) },
+          select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
+        });
+        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+          actor = {
+            id: u.id,
+            role: u.role,
+            sessionVersion: u.sessionVersion,
+            permissions: [],
+            organizationId: u.organizationId,
+            enabledFeatures: []
+          };
+        }
+      }
+    } catch {
+      // ignore invalid query token
+    }
+  }
+  if (!actor) {
+    actor = (await getPublicFileActor(id)) || undefined;
+  }
+  if (!actor) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+
+  const file = await getFileContent(id, actor, {
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+  const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
+
+  res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+  res.setHeader('Content-Length', file.buffer.length);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'private, no-store');
   return res.end(file.buffer);
 }));
 
@@ -8524,7 +8569,8 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
       items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
       invoices: true,
       deliveryTrackings: true,
-      inspectionReports: true
+      inspectionReports: true,
+      grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
     }
   });
   
@@ -8581,6 +8627,8 @@ router.post('/purchase-orders/:id/acknowledge', authenticate, authorize('seller'
   if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
   const updated = await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id);
   await auditWrite(req, 'purchase_order.acknowledged', 'purchaseOrder', id);
+  const targetBidId = (updated as any)?.bidId || ((updated as any)?.metadata as any)?.bidId || (po as any)?.bidId || ((po as any)?.metadata as any)?.bidId;
+  if (targetBidId) await invalidateBidCaches(targetBidId).catch(() => null);
   ok(res, updated);
 }));
 

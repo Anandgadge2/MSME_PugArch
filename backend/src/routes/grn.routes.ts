@@ -68,7 +68,20 @@ const grnIncludes = {
             sellerId: true, buyerId: true, deliveryAddress: true, createdAt: true,
             seller: { select: { id: true, name: true, email: true, mobile: true } },
             buyer: { select: { id: true, name: true, email: true, mobile: true } },
-            items: { select: { id: true, productId: true, quantity: true, unitPrice: true } }
+            items: { select: { id: true, productId: true, quantity: true, unitPrice: true } },
+            invoices: {
+                select: {
+                    id: true, invoiceNumber: true, amount: true, status: true,
+                    paymentReference: true, bankName: true, paymentDate: true, settledAt: true,
+                    paymentSlipFileId: true,
+                    paymentSlipFile: { select: { id: true, originalName: true, mimeType: true } }
+                }
+            },
+            payments: {
+                select: {
+                    id: true, status: true, amount: true, referenceId: true, createdAt: true
+                }
+            }
         }
     },
     receivedBy: { select: { id: true, name: true, email: true, mobile: true } }

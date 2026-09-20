@@ -524,6 +524,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     results,
     participations: participations as ProcurementBidParticipation[],
     awards: raw.awards || [],
+    purchaseOrders: raw.purchaseOrders || [],
+    activeOrder: raw.activeOrder || null,
     bidDocuments: (raw.documents || []).map((doc: any) => ({
       id: doc.id,
       name: doc.fileName || doc.documentType || 'Bid document',

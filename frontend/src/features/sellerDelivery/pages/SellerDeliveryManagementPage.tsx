@@ -16,7 +16,7 @@ import {
     AlertCircle, ArrowLeft, ArrowRight, Boxes, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
     Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
     List, MapPin, MoreVertical, Package, Paperclip, Receipt, RefreshCw, Search,
-    Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
+    Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle, ClipboardCheck
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
@@ -467,34 +467,59 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </>
                     )}
 
-                    {/* Generate GRN Action */}
-                    {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) ? (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setOpen(false);
-                                onAction('generate-grn');
-                            }}
-                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-800 hover:bg-amber-50 transition-colors text-left cursor-pointer"
-                        >
-                            <FileText className="h-3.5 w-3.5 text-amber-600" />
-                            <span>Generate GRN</span>
-                        </button>
-                    ) : (
-                        <button
-                            type="button"
-                            role="menuitem"
-                            disabled
-                            title="GRN can only be generated once delivery is completed/delivered"
-                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 bg-slate-50/50 cursor-not-allowed text-left opacity-60"
-                        >
-                            <FileText className="h-3.5 w-3.5 text-slate-400" />
-                            <span>Generate GRN (Deliver First)</span>
-                        </button>
-                    )}
+                    {/* GRN Action: View GRN if already created, otherwise Generate GRN */}
+                    {(() => {
+                        const po = delivery.purchaseOrder as any;
+                        const grnId = (delivery as any).grnId || po?.grnId || po?.grns?.[0]?.id || (delivery as any).grn?.id;
+                        if (grnId) {
+                            return (
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpen(false);
+                                        router.push(`/grn/${grnId}`);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 transition-colors text-left cursor-pointer"
+                                >
+                                    <ClipboardCheck className="h-3.5 w-3.5 text-teal-600" />
+                                    <span>View GRN</span>
+                                </button>
+                            );
+                        }
+                        if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status)) {
+                            return (
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpen(false);
+                                        onAction('generate-grn');
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-800 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+                                >
+                                    <FileText className="h-3.5 w-3.5 text-amber-600" />
+                                    <span>Generate GRN</span>
+                                </button>
+                            );
+                        }
+                        return (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                disabled
+                                title="GRN can only be generated once delivery is completed/delivered"
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 bg-slate-50/50 cursor-not-allowed text-left opacity-60"
+                            >
+                                <FileText className="h-3.5 w-3.5 text-slate-400" />
+                                <span>Generate GRN (Deliver First)</span>
+                            </button>
+                        );
+                    })()}
                 </div>,
                 document.body
             )}

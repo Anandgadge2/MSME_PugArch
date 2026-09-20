@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowUp,
@@ -58,6 +59,7 @@ interface Props {
 export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -857,6 +859,7 @@ function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, on
 /* ---------- Grid (cards) view ---------- */
 
 function GridView({ records, startIndex, page, pageSize, total, onSelect, onOpenGrnModal, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
+  const router = useRouter();
   return (
     <div className={cn('space-y-4 transition-opacity', isFetching && 'opacity-90')}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -914,17 +917,35 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onOpen
                   <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
                 </Button>
                 {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase()) ? (
-                  <Button
-                    size="sm"
-                    type="button"
-                    onClick={() => {
-                      const pId = record.purchaseOrder?.id || record.purchaseOrderId;
-                      if (pId) onOpenGrnModal?.(pId);
-                    }}
-                    className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
-                  >
-                    <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Generate GRN
-                  </Button>
+                  (() => {
+                    const po = record.purchaseOrder as any;
+                    const grnId = (record as any).grnId || po?.grnId || po?.grns?.[0]?.id || (record as any).grn?.id;
+                    if (grnId) {
+                      return (
+                        <Button
+                          size="sm"
+                          type="button"
+                          onClick={() => router.push(`/grn/${grnId}`)}
+                          className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                        >
+                          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
+                        </Button>
+                      );
+                    }
+                    return (
+                      <Button
+                        size="sm"
+                        type="button"
+                        onClick={() => {
+                          const pId = record.purchaseOrder?.id || record.purchaseOrderId;
+                          if (pId) onOpenGrnModal?.(pId);
+                        }}
+                        className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                      >
+                        <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Generate GRN
+                      </Button>
+                    );
+                  })()
                 ) : (
                   <span
                     className="text-[10px] font-bold text-slate-400 italic"

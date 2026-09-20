@@ -1071,7 +1071,7 @@ export default function App({
     
     if (pathname === '/grn' || pathname === '/buyer/grn') return <PermissionRouteGuard permission="grn.view"><GrnListPage /></PermissionRouteGuard>;
     {
-      const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
+      const grnDetailMatch = pathname.match(/^\/(?:buyer\/|seller\/)?grn\/(\d+)$/);
       if (grnDetailMatch) {
         const id = Number(grnDetailMatch[1]);
         if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="grn.view"><GrnDetailPage id={id} /></PermissionRouteGuard>;

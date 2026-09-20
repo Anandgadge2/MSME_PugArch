@@ -2062,9 +2062,13 @@ router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/acce
   const targetId = Number(req.params.id || req.params.awardId);
   if (req.path.includes('purchase-orders')) {
     const data = await orderService.acceptPO(req, targetId, req.body || {});
+    const targetBidId = data?.purchaseOrder?.bidId || (data?.purchaseOrder?.metadata as any)?.bidId || req.body?.bidId;
+    if (targetBidId) await invalidateBidCaches(targetBidId);
     return apiResponse.success(res, data, 200, 'Purchase Order accepted and fulfillment committed');
   }
   const data = await orderService.acceptSellerAward(req, targetId, req.body || {});
+  const targetBidId = data?.award?.bidId || req.body?.bidId;
+  if (targetBidId) await invalidateBidCaches(targetBidId);
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 

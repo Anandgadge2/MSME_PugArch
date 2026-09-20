@@ -206,6 +206,86 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
     return null;
   }, [user, delivery]);
 
+  // Modals & interactive state - must be declared BEFORE any early returns
+  const [isPackModalOpen, setIsPackModalOpen] = useState(false);
+  const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
+  const [viewingPoOrder, setViewingPoOrder] = useState<any | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
+  const [isInvoicePickerOpen, setIsInvoicePickerOpen] = useState(false);
+  const [isPaymentProofModalOpen, setIsPaymentProofModalOpen] = useState(false);
+
+  const po = delivery?.purchaseOrder;
+  const docs = useMemo(() => delivery?.documents || [], [delivery?.documents]);
+  const poNumber = po?.poNumber || (delivery ? `PO-${delivery.purchaseOrderId}` : '');
+  const trackingNo = delivery?.trackingNumber || (delivery ? `DLV-${delivery.id}` : '');
+
+  const invoices = useMemo(() => po?.invoices || [], [po?.invoices]);
+  const taxInvoiceDoc = useMemo(() => docs.find(d => d.documentType === 'TAX_INVOICE'), [docs]);
+  const paymentProofDoc = useMemo(() => docs.find(d => d.documentType === 'PAYMENT_PROOF'), [docs]);
+
+  const handleOpenPo = useCallback(() => {
+    if (!delivery) return;
+    setViewingPoOrder(po || { id: delivery.purchaseOrderId, poNumber });
+  }, [po, delivery, poNumber]);
+
+  const handleOpenInvoice = useCallback(() => {
+    if (invoices.length === 1) {
+      setViewingInvoiceId(invoices[0].id);
+    } else if (invoices.length > 1) {
+      setIsInvoicePickerOpen(true);
+    } else if (taxInvoiceDoc) {
+      const fileTarget = taxInvoiceDoc.fileAsset || (taxInvoiceDoc as any).fileAssetId || taxInvoiceDoc.id;
+      openFileAsset(fileTarget, 'Tax Invoice').catch(err => {
+        notify.error(err?.message || 'Failed to open invoice document');
+      });
+    } else {
+      notify.info('No tax invoice has been generated or uploaded for this delivery yet.');
+    }
+  }, [invoices, taxInvoiceDoc]);
+
+  const handleOpenPaymentProof = useCallback(() => {
+    setIsPaymentProofModalOpen(true);
+  }, []);
+
+  const derivedInitialProof = useMemo(() => {
+    if (!delivery) return null;
+    if (paymentProofDoc) {
+      const fileAsset = paymentProofDoc.fileAsset;
+      return {
+        id: paymentProofDoc.id,
+        amount: delivery.settlement?.netReleasedAmount || po?.amount || po?.totalValue || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: delivery.settlement?.transactionReference || `DOC-REF-${paymentProofDoc.id}`,
+        paymentDate: paymentProofDoc.createdAt || delivery.settlement?.releasedAt || new Date().toISOString(),
+        payerBankName: 'Linked Payer Account',
+        receiptFileId: fileAsset?.id,
+        receiptFileUrl: fileAsset?.url || (fileAsset?.id ? `/api/files/${fileAsset.id}/download` : undefined),
+        status: delivery.settlement?.status === 'RELEASED' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: paymentProofDoc.description || 'Payment proof attached to delivery'
+      };
+    }
+    const invoiceWithSlip = invoices.find(inv => Boolean((inv as any).paymentSlipFile || (inv as any).paymentSlipFileId));
+    if (invoiceWithSlip) {
+      const slip = (invoiceWithSlip as any).paymentSlipFile;
+      const slipId = slip?.id || (invoiceWithSlip as any).paymentSlipFileId;
+      return {
+        id: invoiceWithSlip.id,
+        amount: invoiceWithSlip.amount || po?.amount || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: (invoiceWithSlip as any).paymentReference || 'INVOICE_PAYMENT_SLIP',
+        paymentDate: (invoiceWithSlip as any).paymentDate || invoiceWithSlip.createdAt || new Date().toISOString(),
+        payerBankName: (invoiceWithSlip as any).bankName || 'Direct Transfer',
+        receiptFileId: slipId,
+        receiptFileUrl: slip?.url || (slipId ? `/api/files/${slipId}/download` : undefined),
+        status: invoiceWithSlip.status === 'paid' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: 'Payment slip attached to invoice'
+      };
+    }
+    return null;
+  }, [paymentProofDoc, delivery, po, invoices]);
+
   if (detailQuery.isLoading && !detailQuery.data) {
     return (
       <div className="space-y-5 animate-in fade-in duration-150">
@@ -253,91 +333,13 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   }
   if (!delivery) return <EmptyState title="Delivery not found" />;
 
-  const po = delivery.purchaseOrder;
-  const docs = delivery.documents || [];
   const isFetching = detailQuery.isFetching;
   const latestManual = latestManualUpdateFor(delivery);
   const nextManualStatus = nextManualStatusFor(delivery.status);
   const isSellerTrackingView = accessRole === 'seller';
 
-  const [isPackModalOpen, setIsPackModalOpen] = useState(false);
-  const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
-
-  // Modals state for View PO, View Invoice, and View Payment Proof
-  const [viewingPoOrder, setViewingPoOrder] = useState<any | null>(null);
-  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
-  const [isInvoicePickerOpen, setIsInvoicePickerOpen] = useState(false);
-  const [isPaymentProofModalOpen, setIsPaymentProofModalOpen] = useState(false);
-
   const sellerName = po?.seller?.name || 'Seller';
   const buyerName = po?.buyer?.name || 'Buyer';
-  const poNumber = po?.poNumber || `PO-${delivery.purchaseOrderId}`;
-  const trackingNo = delivery.trackingNumber || `DLV-${delivery.id}`;
-
-  const invoices = useMemo(() => po?.invoices || [], [po?.invoices]);
-  const taxInvoiceDoc = useMemo(() => docs.find(d => d.documentType === 'TAX_INVOICE'), [docs]);
-  const paymentProofDoc = useMemo(() => docs.find(d => d.documentType === 'PAYMENT_PROOF'), [docs]);
-
-  const handleOpenPo = useCallback(() => {
-    setViewingPoOrder(po || { id: delivery.purchaseOrderId, poNumber });
-  }, [po, delivery.purchaseOrderId, poNumber]);
-
-  const handleOpenInvoice = useCallback(() => {
-    if (invoices.length === 1) {
-      setViewingInvoiceId(invoices[0].id);
-    } else if (invoices.length > 1) {
-      setIsInvoicePickerOpen(true);
-    } else if (taxInvoiceDoc) {
-      const fileTarget = taxInvoiceDoc.fileAsset || (taxInvoiceDoc as any).fileAssetId || taxInvoiceDoc.id;
-      openFileAsset(fileTarget, 'Tax Invoice').catch(err => {
-        notify.error(err?.message || 'Failed to open invoice document');
-      });
-    } else {
-      notify.info('No tax invoice has been generated or uploaded for this delivery yet.');
-    }
-  }, [invoices, taxInvoiceDoc]);
-
-  const handleOpenPaymentProof = useCallback(() => {
-    setIsPaymentProofModalOpen(true);
-  }, []);
-
-  const derivedInitialProof = useMemo(() => {
-    if (paymentProofDoc) {
-      const fileAsset = paymentProofDoc.fileAsset;
-      return {
-        id: paymentProofDoc.id,
-        amount: delivery.settlement?.netReleasedAmount || po?.amount || po?.totalValue || 0,
-        method: 'BANK_TRANSFER',
-        transactionReference: delivery.settlement?.transactionReference || `DOC-REF-${paymentProofDoc.id}`,
-        paymentDate: paymentProofDoc.createdAt || delivery.settlement?.releasedAt || new Date().toISOString(),
-        payerBankName: 'Linked Payer Account',
-        receiptFileId: fileAsset?.id,
-        receiptFileUrl: fileAsset?.url || (fileAsset?.id ? `/api/files/${fileAsset.id}/download` : undefined),
-        status: delivery.settlement?.status === 'RELEASED' ? 'VERIFIED' : 'UPLOADED',
-        purchaseOrderId: delivery.purchaseOrderId,
-        remarks: paymentProofDoc.description || 'Payment proof attached to delivery'
-      };
-    }
-    const invoiceWithSlip = invoices.find(inv => Boolean((inv as any).paymentSlipFile || (inv as any).paymentSlipFileId));
-    if (invoiceWithSlip) {
-      const slip = (invoiceWithSlip as any).paymentSlipFile;
-      const slipId = slip?.id || (invoiceWithSlip as any).paymentSlipFileId;
-      return {
-        id: invoiceWithSlip.id,
-        amount: invoiceWithSlip.amount || po?.amount || 0,
-        method: 'BANK_TRANSFER',
-        transactionReference: (invoiceWithSlip as any).paymentReference || 'INVOICE_PAYMENT_SLIP',
-        paymentDate: (invoiceWithSlip as any).paymentDate || invoiceWithSlip.createdAt || new Date().toISOString(),
-        payerBankName: (invoiceWithSlip as any).bankName || 'Direct Transfer',
-        receiptFileId: slipId,
-        receiptFileUrl: slip?.url || (slipId ? `/api/files/${slipId}/download` : undefined),
-        status: invoiceWithSlip.status === 'paid' ? 'VERIFIED' : 'UPLOADED',
-        purchaseOrderId: delivery.purchaseOrderId,
-        remarks: 'Payment slip attached to invoice'
-      };
-    }
-    return null;
-  }, [paymentProofDoc, delivery.settlement, po, delivery.purchaseOrderId, invoices]);
 
   return (
     <div className="space-y-4">

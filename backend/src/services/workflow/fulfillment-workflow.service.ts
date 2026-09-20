@@ -121,6 +121,14 @@ export const fulfillmentWorkflow = {
         }
       }).catch(() => undefined);
     }
+
+    const awardId = (po.metadata && (po.metadata as any).awardId) || (po.sourceType === 'procurement_bid_award' ? po.sourceId : null);
+    if (awardId && !isNaN(Number(awardId))) {
+      await db.procurementBidAward.update({
+        where: { id: Number(awardId) },
+        data: { awardStatus: 'ACCEPTED', acceptedAt: new Date() }
+      }).catch(() => undefined);
+    }
     await auditWorkflow(actor, 'workflow.po.acknowledged', 'purchaseOrder', purchaseOrderId);
     return updated;
   },
