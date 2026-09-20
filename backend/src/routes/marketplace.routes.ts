@@ -11,6 +11,7 @@ import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
+import { broadcastToProcurement } from '../services/websocket.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -3500,6 +3501,31 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
              }
         }
 
+        // Broadcast real-time event to all clients viewing this procurement or requirement
+        try {
+            const broadcastTarget = (response as any)?.requirementId || idToken;
+            broadcastToProcurement(broadcastTarget, {
+                type: 'QUOTATION_SUBMITTED',
+                requirementId: broadcastTarget,
+                responseId: (response as any)?.id,
+                offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
+                sellerOrgId: sellerOrganizationId || null,
+                timestamp: new Date().toISOString()
+            });
+            if (idToken && String(idToken) !== String(broadcastTarget)) {
+                broadcastToProcurement(idToken, {
+                    type: 'QUOTATION_SUBMITTED',
+                    requirementId: idToken,
+                    responseId: (response as any)?.id,
+                    offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
+                    sellerOrgId: sellerOrganizationId || null,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (bcErr) {
+            console.error('[Marketplace Response] Failed to broadcastToProcurement', bcErr);
+        }
+
         return ok(res, response);
     } catch (error: any) {
         if (error instanceof z.ZodError) {
@@ -3875,6 +3901,30 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             notifyPurchaseOrderCreated(createdPoId).catch(err => {
                 console.warn('[Marketplace] Failed to dispatch purchase order notification with PDF:', err);
             });
+        }
+
+        try {
+            const reqId = requirement.id;
+            broadcastToProcurement(reqId, {
+                type: 'QUOTATION_STATUS_CHANGED',
+                requirementId: reqId,
+                responseId,
+                status: 'ACCEPTED',
+                updatedBy: String(req.user?.id || 'Buyer'),
+                timestamp: new Date().toISOString()
+            });
+            if (rawToken && String(rawToken) !== String(reqId)) {
+                broadcastToProcurement(rawToken, {
+                    type: 'QUOTATION_STATUS_CHANGED',
+                    requirementId: rawToken,
+                    responseId,
+                    status: 'ACCEPTED',
+                    updatedBy: String(req.user?.id || 'Buyer'),
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (bcErr) {
+            console.error('[Accept Response] Failed to broadcastToProcurement', bcErr);
         }
 
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });

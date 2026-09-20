@@ -16,6 +16,11 @@ export type DisputeSocketEvent =
   | { type: 'DISPUTE_UPDATED'; disputeId: number; dispute: any }
   | { type: 'DISPUTE_EVIDENCE_ADDED'; disputeId: number; evidence: any };
 
+export type ProcurementSocketEvent =
+  | { type: 'QUOTATION_SUBMITTED'; requirementId: number | string; responseId?: number; offeredPrice?: number; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'QUOTATION_STATUS_CHANGED'; requirementId: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
+  | { type: 'PROCUREMENT_UPDATED'; requirementId: number | string; status?: string; timestamp: string };
+
 const wss = new WebSocketServer({ noServer: true });
 
 // Map of roomId (e.g. 'dispute:123') to Set of sockets
@@ -124,6 +129,18 @@ const handleSubscribe = async (socket: AuthenticatedWebSocket, disputeId: number
   }
 };
 
+const handleProcurementSubscribe = async (socket: AuthenticatedWebSocket, procurementId: string | number) => {
+  if (!socket.user) {
+    socket.send(JSON.stringify({ type: 'ERROR', message: 'Not authenticated' }));
+    return;
+  }
+  const cleanId = String(procurementId).trim();
+  if (!cleanId) return;
+
+  joinRoom(socket, `procurement:${cleanId}`);
+  socket.send(JSON.stringify({ type: 'SUBSCRIBE_PROCUREMENT_SUCCESS', procurementId: cleanId }));
+};
+
 wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
   logger.info(`[WS] New connection from ${req.socket.remoteAddress}`);
   socket.isAlive = true;
@@ -155,11 +172,25 @@ wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
         case 'SUBSCRIBE':
           if (message.disputeId) {
             await handleSubscribe(socket, Number(message.disputeId));
+          } else if (message.procurementId || message.requirementId) {
+            await handleProcurementSubscribe(socket, message.procurementId || message.requirementId);
           }
           break;
         case 'UNSUBSCRIBE':
           if (message.disputeId) {
             leaveRoom(socket, `dispute:${message.disputeId}`);
+          } else if (message.procurementId || message.requirementId) {
+            leaveRoom(socket, `procurement:${String(message.procurementId || message.requirementId).trim()}`);
+          }
+          break;
+        case 'SUBSCRIBE_PROCUREMENT':
+          if (message.procurementId || message.requirementId) {
+            await handleProcurementSubscribe(socket, message.procurementId || message.requirementId);
+          }
+          break;
+        case 'UNSUBSCRIBE_PROCUREMENT':
+          if (message.procurementId || message.requirementId) {
+            leaveRoom(socket, `procurement:${String(message.procurementId || message.requirementId).trim()}`);
           }
           break;
         case 'PING':
@@ -198,7 +229,7 @@ export const handleUpgrade = (request: IncomingMessage, socket: any, head: Buffe
   });
 };
 
-import { publishDisputeEvent } from './pusher.service.js';
+import { publishDisputeEvent, publishProcurementEvent } from './pusher.service.js';
 
 export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent) => {
   // Always push to Pusher if configured (serverless compatible)
@@ -223,3 +254,37 @@ export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent)
   
   logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
 };
+
+export const broadcastToProcurement = (procurementId: number | string, event: ProcurementSocketEvent) => {
+  const cleanId = String(procurementId).trim();
+  // Always push to Pusher if configured (serverless compatible)
+  void publishProcurementEvent(cleanId, event);
+
+  const roomId = `procurement:${cleanId}`;
+  const room = rooms.get(roomId);
+  const allRoom = rooms.get('procurement:all');
+  
+  const message = JSON.stringify(event);
+  let sentCount = 0;
+
+  if (room) {
+    room.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+        sentCount++;
+      }
+    });
+  }
+
+  if (allRoom) {
+    allRoom.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN && (!room || !room.has(client))) {
+        client.send(message);
+        sentCount++;
+      }
+    });
+  }
+
+  logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId} (and procurement:all)`);
+};
+

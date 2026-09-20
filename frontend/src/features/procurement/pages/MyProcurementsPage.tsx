@@ -63,6 +63,7 @@ import { DataTable, type ColumnDef, type SortDirection } from '../../../componen
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 
 const procurementSkeletonColumns: ColumnDef<any>[] = [
   { key: 'type', header: 'Type', width: 'w-[10.5%]', cell: () => null },
@@ -555,6 +556,9 @@ export default function MyProcurementsPage() {
   const manualRefreshRef = React.useRef(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
+  // Real-time synchronization across all procurements
+  useProcurementRealtime('all');
+
   const { data: queryData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
@@ -563,10 +567,11 @@ export default function MyProcurementsPage() {
       const result = await getApi<any>(url);
       return result || { kpis: null, procurements: [] };
     },
-    staleTime: 0,
+    staleTime: 5_000,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   const loadData = useCallback(async () => {

@@ -126,7 +126,7 @@ export function usePermissions() {
             return;
         }
 
-        if (user.role === 'master_admin') {
+        if (user.role === 'master_admin' || user.role === 'admin') {
             setRemotePermissions(['*']);
             setLoading(false);
             return;
@@ -173,7 +173,7 @@ export function usePermissions() {
     }, [load]);
 
     const permissions = useMemo(() => {
-        const isMasterOrAdmin = user?.role === 'master_admin';
+        const isMasterOrAdmin = user?.role === 'master_admin' || user?.role === 'admin';
         if (isMasterOrAdmin) return ['*'];
 
         const cached = Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : [];

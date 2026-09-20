@@ -24,6 +24,7 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 import { sanitizeUom, sanitizeHsn } from '../utils/quoteItemParser';
+import { useProcurementRealtime } from '../hooks/useProcurementRealtime';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITY HELPERS
@@ -368,6 +369,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       : (requestId || (rawBid as any)?.bidNumber || targetReqId || explicitReqId || requirementId || (rawBid as any)?.id || '')
   );
 
+  // Hybrid Real-Time Synchronization for Quotations & Responses
+  useProcurementRealtime(effectiveTargetId);
+
   const { data: buyerResponsesData } = useQuery({
     queryKey: ['rfq-buyer-responses-v2', effectiveTargetId, targetReqId, (rawBid as any)?.id],
     queryFn: async () => {
@@ -421,7 +425,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       return [];
     },
     enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
-    staleTime: 10_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
+    refetchOnWindowFocus: true,
   });
 
   const sellerResponses = React.useMemo(() => {

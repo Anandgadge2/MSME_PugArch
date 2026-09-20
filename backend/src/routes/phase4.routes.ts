@@ -22,6 +22,7 @@ import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { invalidateUserAuthCache } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
+import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -6610,6 +6611,18 @@ router.post('/quote-requests/:id/responses', authenticate, authorize('seller'), 
   if (!quote || quote.sellerId !== userId(req)) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
   const body = parse(quoteResponseBody, req.body);
   const response = await procurementWorkflow.createQuoteResponse(actorFrom(req), id, body);
+  try {
+    broadcastToProcurement(id, {
+      type: 'QUOTATION_SUBMITTED',
+      requirementId: id,
+      responseId: (response as any)?.id,
+      offeredPrice: (response as any)?.totalAmount,
+      sellerOrgId: (req.user as any)?.organizationId || null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[QuoteRequest Response] Failed to broadcast');
+  }
   ok(res, response, 201);
 }));
 

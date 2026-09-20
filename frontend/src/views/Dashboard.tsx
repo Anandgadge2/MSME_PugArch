@@ -532,6 +532,14 @@ export default function Dashboard() {
     //   tone: 'purple'
     // },
     {
+      label: 'Disputes & Grievances',
+      value: adminStats?.disputes ?? 0,
+      helper: 'Active cases & grievances',
+      icon: AlertTriangle,
+      path: '/admin/disputes',
+      tone: 'rose'
+    },
+    {
       label: 'Top Buyers',
       value: adminStats?.topBuyers && adminStats.topBuyers !== 'N/A' ? adminStats.topBuyers : 'None',
       helper: 'Top Buyer Name',
@@ -547,6 +555,12 @@ export default function Dashboard() {
       detail: 'Review seller and buyer onboarding, compliance exceptions, review queues, and approved stakeholder capacity.',
       path: '/admin/onboarding',
       icon: ClipboardCheck
+    },
+    {
+      title: 'Disputes & Grievances',
+      detail: 'Adjudicate commercial disputes, review citizen grievances, request clarifications, and resolve escalation tickets.',
+      path: '/admin/disputes',
+      icon: AlertTriangle
     },
     // {
     //   title: 'Onboarding Console',
@@ -618,7 +632,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {adminTiles.map(stat => <AdminKpiLink key={stat.label} stat={stat} isLoading={isAdminStatsLoading} />)}
         </div>
 
@@ -636,9 +650,9 @@ export default function Dashboard() {
             title="Operations Monitoring"
             description="Track marketplace, orders, delivery, payments, and compliance signals from one row."
             actions={[
-              // ['Catalogue moderation', '/admin/catalogue-moderation', Store],
-              // ['Orders & delivery', '/admin/delivery', Truck],
+              ['Orders & delivery', '/admin/delivery', Truck],
               ['Payments & escrow', '/payments/transactions', CreditCard],
+              ['Disputes & Grievances', '/admin/disputes', AlertTriangle],
             ]}
           />
           <AdminActionPanel

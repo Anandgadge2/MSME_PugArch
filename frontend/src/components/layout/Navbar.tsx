@@ -515,6 +515,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Email Setup', path: '/master-admin/email', icon: Mail, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Audit Logs', path: '/master-admin/audit', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
       { label: 'Stakeholder Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
@@ -525,6 +526,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
       { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
+      { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ] },
     { label: 'Marketplace & Content', icon: ShoppingCart, roles: ['admin'], children: [
       { label: 'Catalogue Moderation', path: '/admin/catalogue-moderation', icon: ShoppingCart, roles: ['admin'] },
@@ -613,7 +615,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Common items
     { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
     { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
-    { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'], permission: 'dispute.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -622,6 +623,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
     const hasRole = item.roles.includes(user.role)
+      || (user.role === 'master_admin' && item.roles.includes('admin'))
       || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {

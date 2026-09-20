@@ -25,7 +25,7 @@ configureGCS().then(ok => {
 import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
-import { handleUpgrade } from './src/services/websocket.service.js';
+import { handleUpgrade, broadcastToProcurement } from './src/services/websocket.service.js';
 import { authorizePusherChannel, isPusherConfigured, publishConversationEvent } from './src/services/pusher.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
@@ -6358,6 +6358,27 @@ app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', '
       totalAmount: finalAmount,
       responseNumber
     });
+
+    try {
+      broadcastToProcurement(quoteRequest.id, {
+        type: 'QUOTATION_SUBMITTED',
+        requirementId: quoteRequest.id,
+        responseId: quoteResponse.id,
+        offeredPrice: finalAmount,
+        sellerOrgId: (req.user as any)?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(conversation.id, {
+        type: 'QUOTATION_SUBMITTED',
+        requirementId: conversation.id,
+        responseId: quoteResponse.id,
+        offeredPrice: finalAmount,
+        sellerOrgId: (req.user as any)?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[Conversation Quotation] Failed to broadcastToProcurement');
+    }
 
     void notifyConversationParticipants({
       actor: req.user!,
