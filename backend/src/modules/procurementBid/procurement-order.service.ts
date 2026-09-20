@@ -561,13 +561,18 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
     }
   }) : [];
   const poByAwardId = new Map<number, any>(posForAwards.map((po: any) => [Number(po.sourceId), po]));
+  const awardPoIds = posForAwards.map((po: any) => Number(po.id)).filter(Boolean);
 
   // 2. Standalone or related Purchase Orders issued to this seller that are NOT yet accepted
   const pendingPOs = await db.purchaseOrder.findMany({
     where: {
       sellerId: { in: sellerIds },
+      ...(awardPoIds.length > 0 ? { id: { notIn: awardPoIds } } : {}),
       status: { in: ['issued', 'generated', 'pending_acceptance', 'placed'] },
-      poStatus: { notIn: ['ACCEPTED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REJECTED'] }
+      OR: [
+        { poStatus: null },
+        { poStatus: { in: ['GENERATED', 'ISSUED'] } }
+      ]
     },
     include: {
       buyer: {

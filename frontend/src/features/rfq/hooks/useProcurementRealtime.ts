@@ -111,7 +111,33 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       };
     }
 
-    // --- Mode 2: Native WebSocket Fallback (Local Development & Self-Hosted) ---
+    // --- Mode 2: Native WebSocket with Graceful Polling Fallback (Serverless/Vercel Safe) ---
+    let pollInterval: NodeJS.Timeout | null = null;
+    let failedAttempts = 0;
+
+    const startPollingFallback = () => {
+      setStatus('CONNECTED');
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(() => {
+        if (!isMounted) return;
+        void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
+      }, 15000);
+    };
+
+    const isServerless = typeof window !== 'undefined' && (
+      window.location.hostname.includes('vercel.app') ||
+      window.location.hostname.includes('.now.sh')
+    );
+
+    if (isServerless) {
+      // Vercel serverless functions do not support long-lived TCP WebSockets; use polling fallback
+      startPollingFallback();
+      return () => {
+        isMounted = false;
+        if (pollInterval) clearInterval(pollInterval);
+      };
+    }
+
     const connect = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
@@ -125,59 +151,74 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       }
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws';
 
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      try {
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-      ws.onopen = () => {
-        // Authenticate immediately using HttpOnly cookie handshake
-      };
+        ws.onopen = () => {
+          failedAttempts = 0;
+        };
 
-      ws.onmessage = (event) => {
-        if (!isMounted) return;
-        try {
-          const data = JSON.parse(event.data);
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(event.data);
 
-          if (data.type === 'AUTH_SUCCESS') {
-            setStatus('CONNECTED');
-            backoffRef.current = 1000;
-            // Subscribe to this specific procurement room
-            ws.send(JSON.stringify({ type: 'SUBSCRIBE_PROCUREMENT', procurementId: cleanId }));
-          } else if (data.type === 'SUBSCRIBE_PROCUREMENT_SUCCESS') {
-            // Subscription confirmed
-            void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
-          } else if (
-            data.type === 'QUOTATION_SUBMITTED' ||
-            data.type === 'QUOTATION_STATUS_CHANGED' ||
-            data.type === 'PROCUREMENT_UPDATED'
-          ) {
-            handleQuotationEvent(data);
+            if (data.type === 'AUTH_SUCCESS') {
+              setStatus('CONNECTED');
+              backoffRef.current = 1000;
+              ws.send(JSON.stringify({ type: 'SUBSCRIBE_PROCUREMENT', procurementId: cleanId }));
+            } else if (data.type === 'SUBSCRIBE_PROCUREMENT_SUCCESS') {
+              void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
+            } else if (
+              data.type === 'QUOTATION_SUBMITTED' ||
+              data.type === 'QUOTATION_STATUS_CHANGED' ||
+              data.type === 'PROCUREMENT_UPDATED'
+            ) {
+              handleQuotationEvent(data);
+            }
+          } catch (err) {
+            console.error('[WS Procurement] Failed to parse message', err);
           }
-        } catch (err) {
-          console.error('[WS Procurement] Failed to parse message', err);
-        }
-      };
+        };
 
-      ws.onclose = () => {
-        if (!isMounted) return;
-        setStatus('DISCONNECTED');
-        wsRef.current = null;
+        ws.onclose = () => {
+          if (!isMounted) return;
+          failedAttempts++;
+          wsRef.current = null;
 
-        if (backoffRef.current < 30000) {
-          backoffRef.current *= 2;
-        }
-        reconnectTimeoutRef.current = setTimeout(connect, backoffRef.current);
-      };
+          if (failedAttempts >= 2) {
+            // After 2 failures (e.g. serverless host without WS), gracefully fallback to polling
+            startPollingFallback();
+            return;
+          }
 
-      ws.onerror = () => {
-        if (!isMounted) return;
-        setStatus('ERROR');
-      };
+          setStatus('DISCONNECTED');
+          if (backoffRef.current < 30000) {
+            backoffRef.current *= 2;
+          }
+          reconnectTimeoutRef.current = setTimeout(connect, backoffRef.current);
+        };
+
+        ws.onerror = () => {
+          if (!isMounted) return;
+          failedAttempts++;
+          if (failedAttempts >= 2) {
+            startPollingFallback();
+          } else {
+            setStatus('ERROR');
+          }
+        };
+      } catch {
+        startPollingFallback();
+      }
     };
 
     connect();
 
     return () => {
       isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) {
         if (wsRef.current.readyState === WebSocket.OPEN) {
