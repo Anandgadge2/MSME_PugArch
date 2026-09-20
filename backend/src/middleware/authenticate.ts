@@ -26,14 +26,25 @@ export type AuthRequest = Request & {
   user?: AuthenticatedUser;
 };
 
-const isNoisyNotificationStream = (req: Request) =>
-  req.method === 'GET' && req.originalUrl.split('?')[0] === '/api/notifications/stream';
+const isExpectedUnauthenticatedProbe = (req: Request) => {
+  const path = (req.originalUrl || req.url || '').split('?')[0];
+  return (
+    path === '/api/notifications/stream' ||
+    path === '/api/auth/me' ||
+    path === '/api/auth/refresh' ||
+    path === '/api/auth/logout' ||
+    path.endsWith('/auth/me') ||
+    path.endsWith('/auth/refresh') ||
+    path.endsWith('/auth/logout')
+  );
+};
 
 // Native EventSource cannot attach an Authorization header. Keep query-string
 // bearer support limited to the single SSE endpoint; accepting it globally
 // exposes access tokens through URLs, logs, browser history, and referrers.
 const getNotificationStreamToken = (req: Request) => {
-  if (!isNoisyNotificationStream(req) || typeof req.query.token !== 'string') return '';
+  const path = (req.originalUrl || req.url || '').split('?')[0];
+  if (path !== '/api/notifications/stream' || typeof req.query.token !== 'string') return '';
   const queryToken = req.query.token.trim();
   if (!queryToken || ['cookie-session', 'null', 'undefined'].includes(queryToken)) {
     return '';
@@ -50,7 +61,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     : getNotificationStreamToken(req) || getAccessTokenFromRequest(req);
 
   if (!token) {
-    if (!isNoisyNotificationStream(req)) {
+    if (!isExpectedUnauthenticatedProbe(req)) {
       void auditLog({
         action: 'security.unauthorized_access',
         entityType: 'api',
@@ -158,7 +169,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       );
     } catch (err: any) {
       if (err.message === 'SESSION_INVALID') {
-        if (!isNoisyNotificationStream(req)) {
+        if (!isExpectedUnauthenticatedProbe(req)) {
           void auditLog({
             actorUserId: userId || undefined,
             actorRole: String(decoded.role || ''),
@@ -198,7 +209,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 
     return next();
   } catch {
-    if (!isNoisyNotificationStream(req)) {
+    if (!isExpectedUnauthenticatedProbe(req)) {
       void auditLog({
         action: 'security.unauthorized_access',
         entityType: 'api',

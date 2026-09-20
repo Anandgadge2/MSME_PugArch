@@ -19,7 +19,7 @@ interface DisputeSocketEvent {
 
 let isDisputeWsSupported = true;
 
-export const useDisputeWebSocket = (disputeId: number | undefined) => {
+export const useDisputeWebSocket = (disputeId: number | undefined, enabled: boolean = true) => {
   const [status, setStatus] = useState<WebSocketStatus>('DISCONNECTED');
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
@@ -27,7 +27,7 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
   const backoffRef = useRef(1000);
 
   useEffect(() => {
-    if (!disputeId) return;
+    if (!disputeId || !enabled) return;
 
     let isMounted = true;
 

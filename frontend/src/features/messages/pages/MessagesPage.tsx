@@ -634,7 +634,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     const router = useRouter();
     const queryClient = useQueryClient();
     const { data: conversation, isLoading, error, refetch } = useConversation(id);
-    useConversationRealtime(id);
+    useConversationRealtime(id, Boolean(user));
     const sendMut = useSendMessage();
     const deleteMut = useDeleteMessage();
     const markRead = useMarkConversationRead();
