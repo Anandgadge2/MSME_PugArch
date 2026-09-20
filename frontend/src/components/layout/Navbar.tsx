@@ -520,7 +520,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
       { label: 'Stakeholder Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
       { label: 'Tender Approvals', path: '/admin/bids', icon: FileText, roles: ['admin'], featureCode: 'admin-bid-approval' },
-      { label: 'Final Award Approvals', path: '/admin/procurement-orders', icon: Trophy, roles: ['admin'] },
+      { label: 'Final Award Approvals', path: '/admin/bids', icon: Trophy, roles: ['admin'] },
     ] },
     { label: 'Monitoring', icon: FileSearch, roles: ['admin'], children: [
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },

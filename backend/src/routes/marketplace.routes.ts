@@ -3545,7 +3545,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
     }
 });
 
-router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/responses'], authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
         const rawToken = String(req.params.id || '').trim();
         const pureNum = Number(rawToken);

@@ -42,6 +42,9 @@ export interface TechnicalEvaluationModalProps {
   procurementId?: string | number;
   procurementTitle?: string;
   readOnly?: boolean;
+  isFinancialStageOpened?: boolean;
+  isStage2Active?: boolean;
+  bidStatus?: string;
   onEvaluationSuccess?: () => void;
   onSuccess?: () => void;
 }
@@ -54,6 +57,9 @@ export function TechnicalEvaluationModal({
   procurementId,
   procurementTitle,
   readOnly = false,
+  isFinancialStageOpened = false,
+  isStage2Active = false,
+  bidStatus,
   onEvaluationSuccess,
   onSuccess,
 }: TechnicalEvaluationModalProps) {
@@ -64,8 +70,11 @@ export function TechnicalEvaluationModal({
   const [decision, setDecision] = useState<"QUALIFIED" | "DISQUALIFIED">(
     "QUALIFIED",
   );
+  const [initialDecision, setInitialDecision] = useState<"QUALIFIED" | "DISQUALIFIED">("QUALIFIED");
   const [score, setScore] = useState<string>("");
+  const [initialScore, setInitialScore] = useState<string>("");
   const [remarks, setRemarks] = useState<string>("");
+  const [initialRemarks, setInitialRemarks] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string>("");
   const [previewDocument, setPreviewDocument] =
@@ -75,6 +84,50 @@ export function TechnicalEvaluationModal({
   >(null);
   const formRef = React.useRef<HTMLFormElement>(null);
 
+  const rawTechStatus = String(
+    participation?.technicalStatus ||
+      participation?.rawParticipation?.technicalStatus ||
+      participation?.details?.technicalStatus ||
+      (participation?.isDisqualified ? "DISQUALIFIED" : "")
+  ).toUpperCase();
+
+  const isAlreadyQualified =
+    rawTechStatus === "QUALIFIED" ||
+    rawTechStatus === "ACCEPTED" ||
+    rawTechStatus === "SHORTLISTED";
+  const isAlreadyDisqualified =
+    rawTechStatus === "DISQUALIFIED" ||
+    rawTechStatus === "REJECTED" ||
+    Boolean(participation?.isDisqualified);
+  const isAlreadyEvaluated = isAlreadyQualified || isAlreadyDisqualified;
+
+  const rawBidStatus = String(
+    bidStatus ||
+      participation?.bidStatus ||
+      participation?.lifecycleStage ||
+      ""
+  ).toUpperCase();
+
+  const isStage2ActiveEffective = Boolean(
+    readOnly ||
+      isFinancialStageOpened ||
+      isStage2Active ||
+      [
+        "FINANCIAL_EVALUATION",
+        "L1_GENERATED",
+        "AWARD_RECOMMENDED",
+        "AWARDED",
+        "PO_GENERATED",
+        "PO_ISSUED",
+        "COMPLETED",
+        "TECHNICAL_EVALUATION_COMPLETED",
+        "REVERSE_AUCTION_ACTIVE",
+        "REVERSE_AUCTION_SCHEDULED",
+      ].includes(rawBidStatus)
+  );
+
+  const isEffectiveReadOnly = Boolean(readOnly || isStage2ActiveEffective);
+
   useEffect(() => {
     if (isOpen && formRef.current) {
       formRef.current.scrollTop = 0;
@@ -82,26 +135,34 @@ export function TechnicalEvaluationModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (participation) {
+    if (participation && isOpen) {
       const currentTechStatus = String(
         participation.technicalStatus ||
-          (participation.isDisqualified ? "DISQUALIFIED" : ""),
+          participation.rawParticipation?.technicalStatus ||
+          participation.details?.technicalStatus ||
+          (participation.isDisqualified ? "DISQUALIFIED" : "")
       ).toUpperCase();
 
-      if (currentTechStatus === "DISQUALIFIED") {
-        setDecision("DISQUALIFIED");
-      } else {
-        setDecision("QUALIFIED");
-      }
-
-      setRemarks(
-        participation.technicalRemarks || participation.rejectionReason || "",
-      );
-      setScore(
+      const initDec: "QUALIFIED" | "DISQUALIFIED" =
+        currentTechStatus === "DISQUALIFIED" || currentTechStatus === "REJECTED"
+          ? "DISQUALIFIED"
+          : "QUALIFIED";
+      const initRem =
+        participation.technicalRemarks ||
+        participation.rejectionReason ||
+        participation.remarks ||
+        "";
+      const initScore =
         participation.score !== undefined && participation.score !== null
           ? String(participation.score)
-          : "",
-      );
+          : "";
+
+      setDecision(initDec);
+      setInitialDecision(initDec);
+      setRemarks(initRem);
+      setInitialRemarks(initRem);
+      setScore(initScore);
+      setInitialScore(initScore);
       setValidationError("");
     }
   }, [participation, isOpen]);
@@ -447,6 +508,26 @@ export function TechnicalEvaluationModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (isEffectiveReadOnly) {
+      onClose();
+      return;
+    }
+
+    // Prevent redundant re-submission if user made no changes to an already evaluated quotation
+    if (isAlreadyEvaluated) {
+      const isDecisionUnchanged = decision === initialDecision;
+      const isRemarksUnchanged = remarks.trim() === initialRemarks.trim();
+      const isScoreUnchanged =
+        score.trim() === initialScore.trim() ||
+        (!score.trim() && !initialScore.trim());
+
+      if (isDecisionUnchanged && isRemarksUnchanged && isScoreUnchanged) {
+        toast.info("No changes were made to the technical evaluation.");
+        onClose();
+        return;
+      }
+    }
+
     if (decision === "DISQUALIFIED" && !remarks.trim()) {
       setValidationError(
         "Please provide mandatory justification remarks explaining the reason for technical disqualification.",
@@ -571,13 +652,21 @@ export function TechnicalEvaluationModal({
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {readOnly ? (
+                    {isEffectiveReadOnly ? (
                       <span className="inline-flex items-center gap-1 rounded bg-amber-400/20 text-amber-200 border border-amber-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <Lock className="h-2.5 w-2.5" aria-hidden="true" /> Sealed Audit Record
+                        <Lock className="h-2.5 w-2.5" aria-hidden="true" /> {isAlreadyQualified ? "Stage 2 Locked • Qualified Record" : "Sealed Audit Record"}
+                      </span>
+                    ) : isAlreadyQualified ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <CheckCircle2 className="h-2.5 w-2.5" aria-hidden="true" /> Verified Qualified
+                      </span>
+                    ) : isAlreadyDisqualified ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-rose-400/20 text-rose-200 border border-rose-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <XCircle className="h-2.5 w-2.5" aria-hidden="true" /> Recorded Disqualification
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded bg-emerald-400/20 text-emerald-200 border border-emerald-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />{" "}
+                      <span className="inline-flex items-center gap-1 rounded bg-blue-400/20 text-blue-200 border border-blue-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" aria-hidden="true" />{" "}
                         Technical Scrutiny
                       </span>
                     )}
@@ -586,9 +675,11 @@ export function TechnicalEvaluationModal({
                     id="technical-eval-modal-title"
                     className="text-base sm:text-lg font-black text-white tracking-tight leading-snug mt-1"
                   >
-                    {readOnly
-                      ? "Technical Evaluation Record (Read-Only Audit Trail)"
-                      : "Technical & Compliance Evaluation Record"}
+                    {isEffectiveReadOnly
+                      ? "Technical Evaluation Record (Sealed Audit Trail)"
+                      : isAlreadyQualified
+                        ? "Technical Evaluation Record • Stage 1 Qualified"
+                        : "Technical & Compliance Evaluation Record"}
                   </h3>
                 </div>
               </div>
@@ -608,7 +699,7 @@ export function TechnicalEvaluationModal({
           <form
             ref={formRef}
             onSubmit={
-              readOnly
+              isEffectiveReadOnly
                 ? (e) => {
                     e.preventDefault();
                     onClose();
@@ -617,14 +708,61 @@ export function TechnicalEvaluationModal({
             }
             className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5"
           >
-            {readOnly ? (
+            {isAlreadyQualified ? (
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50/95 p-3.5 text-xs text-emerald-950 font-medium flex items-start gap-3 shadow-2xs">
+                <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Check className="h-5 w-5 stroke-[3]" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <strong className="text-emerald-950 font-black text-xs sm:text-sm">
+                      ✅ Technically Qualified • Eligible for Stage 2
+                    </strong>
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 border border-emerald-300 text-emerald-800 text-[10px] font-extrabold px-2 py-0.2">
+                      Stage 1 Cleared
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-emerald-900/90 leading-relaxed">
+                    This quotation has successfully passed Stage 1 technical scrutiny, statutory eligibility, and specification checks.
+                    {isEffectiveReadOnly
+                      ? " Stage 2 has opened, locking this evaluation decision against further modifications."
+                      : " You may update scoring or committee remarks below if needed before Stage 2 opening."}
+                  </p>
+                  {(participation.score !== undefined && participation.score !== null && participation.score !== "") && (
+                    <div className="flex items-center gap-3 text-[11px] text-emerald-800 font-bold pt-0.5">
+                      <span>Technical Score: <strong className="text-emerald-950">{participation.score}/100</strong></span>
+                      {participation.evaluatedAt && (
+                        <span>Evaluated on: <strong>{new Date(participation.evaluatedAt).toLocaleDateString()}</strong></span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : isAlreadyDisqualified ? (
+              <div className="rounded-xl border border-rose-300 bg-rose-50/95 p-3.5 text-xs text-rose-950 font-medium flex items-start gap-3 shadow-2xs">
+                <div className="h-8 w-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <XCircle className="h-5 w-5 stroke-[2.5]" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <strong className="text-rose-950 font-black text-xs sm:text-sm block">
+                    ❌ Technically Disqualified • Ineligible
+                  </strong>
+                  <p className="text-[11.5px] text-rose-900/90 leading-relaxed">
+                    This vendor has been evaluated as disqualified due to non-conformity with technical specifications or compliance criteria.
+                    {isEffectiveReadOnly && " Decision is locked under active Stage 2."}
+                  </p>
+                  {participation.technicalRemarks && (
+                    <div className="text-[11px] text-rose-900 bg-white/80 rounded-lg p-2 border border-rose-200 mt-1">
+                      <strong>Recorded Justification:</strong> {participation.technicalRemarks}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : isEffectiveReadOnly ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 text-xs text-amber-900 font-medium flex items-center gap-2.5 shadow-2xs">
                 <Lock className="h-4 w-4 text-amber-700 shrink-0" />
                 <span>
-                  <strong>Audit Record Sealed:</strong> This procurement has
-                  been awarded or finalized. Technical evaluation decisions,
-                  scoring, and committee notes are permanently preserved and
-                  cannot be altered.
+                  <strong>Audit Record Sealed:</strong> This procurement is in Stage 2 or finalized. Technical evaluation decisions, scoring, and committee notes are permanently preserved and cannot be altered.
                 </span>
               </div>
             ) : (
@@ -992,9 +1130,9 @@ export function TechnicalEvaluationModal({
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
                   Technical Evaluation Decision{" "}
-                  {!readOnly && <span className="text-rose-500">*</span>}
+                  {!isEffectiveReadOnly && <span className="text-rose-500">*</span>}
                 </label>
-                {readOnly && (
+                {isEffectiveReadOnly && (
                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
                     Recorded &amp; Sealed
                   </span>
@@ -1006,14 +1144,14 @@ export function TechnicalEvaluationModal({
                 <div
                   role="radio"
                   aria-checked={decision === "QUALIFIED"}
-                  tabIndex={readOnly ? -1 : 0}
+                  tabIndex={isEffectiveReadOnly ? -1 : 0}
                   onClick={
-                    readOnly
+                    isEffectiveReadOnly
                       ? undefined
                       : () => handleDecisionChange("QUALIFIED")
                   }
                   onKeyDown={
-                    readOnly
+                    isEffectiveReadOnly
                       ? undefined
                       : (e) => {
                           if (e.key === " " || e.key === "Enter") {
@@ -1023,7 +1161,7 @@ export function TechnicalEvaluationModal({
                         }
                   }
                   className={`rounded-xl border p-4 transition-all focus:outline-none ${
-                    readOnly
+                    isEffectiveReadOnly
                       ? decision === "QUALIFIED"
                         ? "border-emerald-500 bg-emerald-50/80 shadow-2xs ring-1 ring-emerald-500/30"
                         : "border-slate-200 bg-slate-50/50 opacity-40 cursor-default"
@@ -1051,7 +1189,7 @@ export function TechnicalEvaluationModal({
                         <h4 className="text-xs font-extrabold text-emerald-900">
                           Technically Qualified (Pass)
                         </h4>
-                        {readOnly && decision === "QUALIFIED" && (
+                        {(isEffectiveReadOnly || isAlreadyQualified) && decision === "QUALIFIED" && (
                           <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
                             Recorded Decision
                           </span>
@@ -1069,14 +1207,14 @@ export function TechnicalEvaluationModal({
                 <div
                   role="radio"
                   aria-checked={decision === "DISQUALIFIED"}
-                  tabIndex={readOnly ? -1 : 0}
+                  tabIndex={isEffectiveReadOnly ? -1 : 0}
                   onClick={
-                    readOnly
+                    isEffectiveReadOnly
                       ? undefined
                       : () => handleDecisionChange("DISQUALIFIED")
                   }
                   onKeyDown={
-                    readOnly
+                    isEffectiveReadOnly
                       ? undefined
                       : (e) => {
                           if (e.key === " " || e.key === "Enter") {
@@ -1086,7 +1224,7 @@ export function TechnicalEvaluationModal({
                         }
                   }
                   className={`rounded-xl border p-4 transition-all focus:outline-none ${
-                    readOnly
+                    isEffectiveReadOnly
                       ? decision === "DISQUALIFIED"
                         ? "border-rose-500 bg-rose-50/80 shadow-2xs ring-1 ring-rose-500/30"
                         : "border-slate-200 bg-slate-50/50 opacity-40 cursor-default"
@@ -1114,7 +1252,7 @@ export function TechnicalEvaluationModal({
                         <h4 className="text-xs font-extrabold text-rose-900">
                           Disqualified (Fail)
                         </h4>
-                        {readOnly && decision === "DISQUALIFIED" && (
+                        {(isEffectiveReadOnly || isAlreadyDisqualified) && decision === "DISQUALIFIED" && (
                           <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-black bg-rose-100 text-rose-800 border border-rose-300">
                             Recorded Decision
                           </span>
@@ -1146,12 +1284,12 @@ export function TechnicalEvaluationModal({
                       min={0}
                       max={100}
                       step="0.5"
-                      disabled={readOnly}
-                      placeholder={readOnly ? "—" : "e.g. 85"}
+                      disabled={isEffectiveReadOnly}
+                      placeholder={isEffectiveReadOnly ? "—" : "e.g. 85"}
                       value={score}
                       onChange={(e) => setScore(e.target.value)}
                       className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-none ${
-                        readOnly
+                        isEffectiveReadOnly
                           ? "bg-slate-100/80 cursor-not-allowed text-slate-600"
                           : ""
                       }`}
@@ -1161,7 +1299,7 @@ export function TechnicalEvaluationModal({
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-400 block">
-                    {readOnly ? "Evaluation Score" : "Optional"}
+                    {isEffectiveReadOnly ? "Evaluation Score" : "Optional"}
                   </span>
                 </div>
 
@@ -1172,12 +1310,12 @@ export function TechnicalEvaluationModal({
                   >
                     <span>
                       Evaluation Justification &amp; Remarks{" "}
-                      {decision === "DISQUALIFIED" && !readOnly && (
+                      {decision === "DISQUALIFIED" && !isEffectiveReadOnly && (
                         <span className="text-rose-500">*</span>
                       )}
                     </span>
                     <span className="text-[10.5px] font-normal text-slate-400">
-                      {readOnly
+                      {isEffectiveReadOnly
                         ? "Committee remarks on file"
                         : decision === "DISQUALIFIED"
                           ? "Mandatory for audit trail"
@@ -1187,9 +1325,9 @@ export function TechnicalEvaluationModal({
                   <textarea
                     id="eval-remarks-input"
                     rows={3}
-                    disabled={readOnly}
+                    disabled={isEffectiveReadOnly}
                     placeholder={
-                      readOnly
+                      isEffectiveReadOnly
                         ? "No committee justification remarks on file."
                         : decision === "QUALIFIED"
                           ? "e.g. Technical proposal complies with technical specifications, certified ISO compliant, and warranty terms accepted."
@@ -1201,7 +1339,7 @@ export function TechnicalEvaluationModal({
                       if (validationError) setValidationError("");
                     }}
                     className={`w-full rounded-lg border p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 ${
-                      readOnly
+                      isEffectiveReadOnly
                         ? "bg-slate-100/80 cursor-not-allowed text-slate-700"
                         : decision === "DISQUALIFIED" &&
                             !remarks.trim() &&
@@ -1228,10 +1366,15 @@ export function TechnicalEvaluationModal({
 
           {/* Footer Actions */}
           <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 sm:px-6 py-3.5">
-            {readOnly ? (
+            {isEffectiveReadOnly ? (
               <div className="flex items-center justify-between w-full">
-                <span className="text-xs font-semibold text-slate-500">
-                  Read-only audit record • Decision immutable
+                <span className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
+                  <Lock className="h-3.5 w-3.5 text-slate-400" />
+                  {isAlreadyQualified
+                    ? "Technically Qualified • Stage 2 Active (Read-Only)"
+                    : isAlreadyDisqualified
+                      ? "Technically Disqualified • Evaluation Locked (Read-Only)"
+                      : "Read-only audit record • Decision immutable"}
                 </span>
                 <Button
                   type="button"
@@ -1269,7 +1412,31 @@ export function TechnicalEvaluationModal({
                     </>
                   ) : (
                     <>
-                      {decision === "QUALIFIED" ? (
+                      {isAlreadyQualified ? (
+                        decision === "QUALIFIED" ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                            Update Evaluation Remarks
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3.5 w-3.5" />
+                            Change Decision to Disqualified
+                          </>
+                        )
+                      ) : isAlreadyDisqualified ? (
+                        decision === "DISQUALIFIED" ? (
+                          <>
+                            <XCircle className="h-3.5 w-3.5" />
+                            Update Disqualification Remarks
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Reconsider &amp; Qualify for Stage 2
+                          </>
+                        )
+                      ) : decision === "QUALIFIED" ? (
                         <>
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Qualify for Stage 2

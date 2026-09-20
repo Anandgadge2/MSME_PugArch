@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
@@ -469,6 +469,8 @@ const OrderActionsMenu = ({
 export default function PurchaseOrders() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetParamProcessedRef = useRef<string | null>(null);
   const isSeller = user?.role === 'seller' || user?.role === 'shg';
   const isBuyer = user?.role === 'buyer';
 
@@ -539,6 +541,47 @@ export default function PurchaseOrders() {
 
   const reload = reloadAllOrders;
   const setPagedOrders = setAllOrders; // Alias for minimal changes to action handlers
+
+  useEffect(() => {
+    const targetId = searchParams?.get('orderId') || searchParams?.get('id') || searchParams?.get('poId');
+    const searchParam = searchParams?.get('search') || searchParams?.get('po');
+
+    if (searchParam && !searchTerm) {
+      setSearchTerm(searchParam);
+    }
+
+    if (!targetId || targetParamProcessedRef.current === targetId) return;
+
+    const numId = Number(targetId);
+    const found = allOrders.find(
+      (o) => o.id === numId || String(o.id) === targetId || o.poNumber?.toLowerCase() === targetId.toLowerCase()
+    );
+
+    if (found) {
+      setViewingOrder(found);
+      setActiveTab('All');
+      targetParamProcessedRef.current = targetId;
+      return;
+    }
+
+    if (!loading) {
+      targetParamProcessedRef.current = targetId;
+      let alive = true;
+      api.get(`/api/purchase-orders/${targetId}`)
+        .then(readJsonResponse)
+        .then((body: any) => {
+          const fullData = body?.data || body;
+          if (fullData && fullData.id && alive) {
+            setViewingOrder(fullData);
+            setActiveTab('All');
+          }
+        })
+        .catch(() => {
+          // Ignore if order not found
+        });
+      return () => { alive = false; };
+    }
+  }, [searchParams, allOrders, loading, searchTerm]);
 
   const uniqueStatuses = useMemo(() => {
     const statuses = new Set<string>();

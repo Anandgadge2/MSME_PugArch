@@ -35,13 +35,22 @@ function normalizeExplicitRoute(url: string, role?: string): string | null {
     return null;
   }
 
-  // Rewrite /orders/procurement/:id -> /procurement-orders/:id
-  const orderProcMatch = trimmed.match(/^\/orders\/procurement\/(\d+)/i);
+  // Rewrite legacy procurement orders -> canonical Purchase Order routes
+  const orderProcMatch = trimmed.match(/^\/(?:procurement-orders|orders\/procurement)\/(\d+)/i);
   if (orderProcMatch) {
-    return `/procurement-orders/${orderProcMatch[1]}`;
+    const id = orderProcMatch[1];
+    return role === 'seller' || role === 'shg'
+      ? `/seller/orders?orderId=${id}`
+      : role === 'buyer'
+      ? `/buyer/orders?orderId=${id}`
+      : `/orders?orderId=${id}`;
   }
-  if (trimmed === '/orders/procurement') {
-    return role === 'buyer' ? '/buyer/orders' : '/seller/awards';
+  if (trimmed === '/orders/procurement' || trimmed === '/procurement-orders') {
+    return role === 'seller' || role === 'shg'
+      ? '/seller/orders'
+      : role === 'buyer'
+      ? '/buyer/orders'
+      : '/orders';
   }
 
   // Rewrite /admin/bids/:id -> /bids/:id
@@ -86,9 +95,10 @@ function extractEntityReferences(item: PortalNotification): {
     combined.match(/\b(?:BID|PRC|TND)-([A-Za-z0-9-_]+)/i) ||
     combined.match(/\b(?:bid|requirement|tender)\s+#?([0-9]+)\b/i);
 
-  // Order references: e.g. /procurement-orders/123, PO-PB-123, PO-123, Purchase Order #123, /orders/123
+  // Order references: e.g. /procurement-orders/123, /orders?orderId=123, PO-PB-123, PO-123, Purchase Order #123, /orders/123
   const orderMatch =
-    combined.match(/\/(?:procurement-orders|orders\/procurement)\/(\d+)/i) ||
+    combined.match(/[?&]orderId=(\d+)/i) ||
+    combined.match(/\/(?:procurement-orders|orders\/procurement|purchase-orders|orders)\/(\d+)/i) ||
     combined.match(/\b(?:PO-PB-[A-Za-z0-9-_]+|PO-[A-Za-z0-9-_]+)/i) ||
     combined.match(/\b(?:purchase\s+order|order)\s+#?([0-9]+)\b/i);
 
@@ -158,10 +168,12 @@ export const routeForNotification = (
     type.includes('direct_purchase')
   ) {
     if (orderId && /^\d+$/.test(orderId)) {
-      return `/procurement-orders/${orderId}`;
+      if (userRole === 'seller' || userRole === 'shg') return `/seller/orders?orderId=${orderId}`;
+      if (userRole === 'buyer') return `/buyer/orders?orderId=${orderId}`;
+      return `/orders?orderId=${orderId}`;
     }
     if (userRole === 'seller' || userRole === 'shg') {
-      return '/seller/awards';
+      return '/seller/orders';
     }
     if (userRole === 'buyer') {
       return '/buyer/orders';
@@ -181,7 +193,8 @@ export const routeForNotification = (
     text.includes('dispatched')
   ) {
     if (orderId && /^\d+$/.test(orderId)) {
-      return `/procurement-orders/${orderId}`;
+      if (userRole === 'seller' || userRole === 'shg') return `/seller/delivery-management?search=${orderId}`;
+      return `/orders/tracking?search=${orderId}`;
     }
     if (userRole === 'seller' || userRole === 'shg') {
       return '/seller/delivery-management';

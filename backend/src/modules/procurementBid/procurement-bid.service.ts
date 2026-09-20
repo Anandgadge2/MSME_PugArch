@@ -2486,6 +2486,30 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
 export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
+
+  const stage2Statuses = [
+    'TECHNICAL_EVALUATION_COMPLETED',
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+    'AWARD_RECOMMENDED',
+    'AWARDED',
+    'PO_GENERATED',
+    'PO_ISSUED',
+    'COMPLETED',
+    'REVERSE_AUCTION_ACTIVE',
+    'REVERSE_AUCTION_SCHEDULED',
+  ];
+  if (
+    stage2Statuses.includes(bid.status) ||
+    stage2Statuses.includes(bid.lifecycleStage)
+  ) {
+    throw new ApiError(
+      409,
+      'Technical evaluation is finalized and cannot be modified once Stage 2 has opened.',
+      'TECHNICAL_EVALUATION_FINALIZED'
+    );
+  }
+
   if (!technicalEvaluationStatuses.includes(bid.status)) throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
   const updatedRows = await db.$transaction(async (tx: any) => {
     if (bid.status !== 'TECHNICAL_EVALUATION') assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
@@ -3683,7 +3707,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     title: 'Purchase Order Issued',
     message: `Buyer has issued Purchase Order #${po.purchaseOrder.poNumber} for "${bid.title}". Please accept the PO to commit to fulfillment.`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.purchaseOrder.id}`
+    redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
   }).catch(() => undefined);
 
   return {

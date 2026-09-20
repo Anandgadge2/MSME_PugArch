@@ -4566,10 +4566,6 @@ export function ProcurementDetailUnifiedView(
             `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
             true,
           ),
-          getApi(
-            `/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`,
-            true,
-          ),
         ]);
 
         const candidateLists: any[][] = [];
@@ -7127,11 +7123,14 @@ export function ProcurementDetailUnifiedView(
         width: "w-[24%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
-          const isEvaluated =
-            ts === "QUALIFIED" ||
+          const isQual =
+            ts === "QUALIFIED" || ts === "ACCEPTED" || ts === "SHORTLISTED";
+          const isDisq =
             ts === "DISQUALIFIED" ||
             ts === "NOT_QUALIFIED" ||
+            ts === "REJECTED" ||
             Boolean(participation.isDisqualified);
+          const isEvaluated = isQual || isDisq;
 
           return (
             <div className="flex items-center justify-end gap-1.5 flex-nowrap">
@@ -7148,26 +7147,44 @@ export function ProcurementDetailUnifiedView(
                   className={cn(
                     "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
                     isEvaluationReady
-                      ? isEvaluated
+                      ? isQual
                         ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
-                        : "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer"
+                        : isDisq
+                          ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 cursor-pointer"
+                          : "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer"
                       : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
                   )}
                   title={
                     isEvaluationReady
-                      ? isEvaluated
-                        ? "View or edit evaluation decision, score, and remarks"
-                        : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
+                      ? isQual
+                        ? isTechEvalCompleted
+                          ? "View technical evaluation record (Locked under Stage 2)"
+                          : "View or edit evaluation decision, score, and remarks"
+                        : isDisq
+                          ? "View disqualification record"
+                          : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
                       : "Evaluation unlocks after bidding window closes"
                   }
                 >
                   {isEvaluationReady ? (
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    isQual ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    ) : isDisq ? (
+                      <XCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                    ) : (
+                      <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    )
                   ) : (
                     <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   )}
                   <span>
-                    {isEvaluated ? "View / Edit Eval" : "Evaluate Bid"}
+                    {isQual
+                      ? isTechEvalCompleted
+                        ? "View Evaluation"
+                        : "Edit Remarks"
+                      : isDisq
+                        ? "View Disqualification"
+                        : "Evaluate Bid"}
                   </span>
                 </Button>
               )}
@@ -10651,6 +10668,9 @@ export function ProcurementDetailUnifiedView(
                   participation={selectedForTechnicalEval}
                   bidId={targetId}
                   readOnly={isBidAwarded}
+                  isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
+                  isStage2Active={isTechEvalCompleted || isBidAwarded}
+                  bidStatus={props.status || props.lifecycleStage}
                   procurementTitle={props.subject || props.procurementLabel}
                   onEvaluationSuccess={() => {
                     queryClient.invalidateQueries({

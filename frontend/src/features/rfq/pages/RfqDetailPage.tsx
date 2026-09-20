@@ -410,7 +410,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         const endpoints = [
           `/api/buyer/requirements/${encodeURIComponent(token)}/responses?pageSize=50`,
           `/api/buyer/procurement-bids/${encodeURIComponent(token)}/participants`,
-          `/api/marketplace/requirements/${encodeURIComponent(token)}/responses`,
         ];
 
         for (const ep of endpoints) {

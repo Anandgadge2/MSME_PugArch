@@ -400,7 +400,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
     message: `Your quotation for "${bidTitleStr}" has been accepted by the buyer! Purchase Order #${poNumberStr} has been generated. Official Purchase Order PDF is attached to this email.`,
     type: 'QUOTATION_ACCEPTED',
     priority: 'high',
-    redirectUrl: `/procurement-orders/${result.id}`,
+    redirectUrl: `/seller/orders?orderId=${result.id}`,
     emailSubject: `Quotation Accepted & Purchase Order #${poNumberStr} Generated - MSME Portal`,
     attachments: pdfAttachment ? [pdfAttachment] : undefined,
     emailHtml: `
@@ -442,7 +442,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
     message: `Your purchase order for "${bidTitleStr}" has been generated and issued to supplier ${sellerOrgName}. Official Purchase Order PDF is attached to this email.`,
     type: 'PO_GENERATED',
     priority: 'high',
-    redirectUrl: `/buyer/orders`,
+    redirectUrl: `/buyer/orders?orderId=${result.id}`,
     emailSubject: `[PO Confirmation] Purchase Order #${poNumberStr} Generated - MSME Portal`,
     attachments: pdfAttachment ? [pdfAttachment] : undefined,
     emailHtml: `
@@ -736,7 +736,7 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
     title: 'Purchase Order Accepted',
     message: `Seller has accepted Purchase Order #${po.poNumber}. Fulfillment has officially begun.`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   }).catch(() => undefined);
 
   return result;
@@ -762,7 +762,7 @@ export const acceptSellerAward = async (req: AuthRequest, awardId: number, body:
     title: 'Purchase Order Accepted',
     message: `Seller has accepted the purchase order for "${award.bid.title}".`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po?.id}`
+    redirectUrl: `/buyer/orders?orderId=${po?.id}`
   });
 
   return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
@@ -783,7 +783,7 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
     title: 'Purchase Order Rejected',
     message: `Seller has rejected the purchase order for "${award.bid.title}". Reason: ${reason}`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   });
 
   return { award: updatedAward, purchaseOrderId: po.id, delivery: updatedDelivery };
@@ -816,7 +816,7 @@ export const updateOrderDelivery = async (req: AuthRequest, orderId: number, bod
         title: 'Goods Delivered',
         message: `Seller has marked purchase order ${po.poNumber} as DELIVERED.`,
         type: 'delivery',
-        redirectUrl: `/orders/procurement/${po.id}`
+        redirectUrl: `/buyer/orders?orderId=${po.id}`
       });
     }
   }
@@ -905,7 +905,7 @@ export const approveOrderGrn = async (req: AuthRequest, orderId: number, grnId: 
     title: 'GRN Approved',
     message: `Buyer has approved the Goods Receipt Note for purchase order ${po.poNumber}.`,
     type: 'grn',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return updated;
@@ -1026,7 +1026,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
     title: 'Invoice Submitted',
     message: `Seller has submitted invoice ${invoice.invoiceNumber} for purchase order ${po.poNumber}.`,
     type: 'invoice',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   });
 
   return invoice;
@@ -1061,7 +1061,7 @@ export const approveOrderInvoice = async (req: AuthRequest, orderId: number, inv
     title: 'Invoice Approved',
     message: `Buyer has approved invoice ${invoice.invoiceNumber} for purchase order ${po.poNumber}.`,
     type: 'invoice',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return updated;
@@ -1147,7 +1147,7 @@ export const markSettlementConfirmed = async (req: AuthRequest, orderId: number,
     title: 'Payment Released',
     message: `Payment has been released and confirmed for purchase order ${po.poNumber}.`,
     type: 'payment',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return settlement;
@@ -1291,7 +1291,7 @@ export const confirmOrderSettlement = async (req: AuthRequest, invoiceId: number
     title: 'Order Completed & Settled',
     message: `Seller has confirmed receipt of funds for Invoice #${invoice.invoiceNumber}. Purchase Order #${invoice.purchaseOrder?.poNumber || invoice.purchaseOrderId} is now completed.`,
     type: 'order_completed',
-    redirectUrl: `/orders/procurement/${invoice.purchaseOrderId}`
+    redirectUrl: `/buyer/orders?orderId=${invoice.purchaseOrderId}`
   }).catch(() => undefined);
 
   return updatedInvoice;

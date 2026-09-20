@@ -20,15 +20,15 @@ test('Seller Award and PO Login Alert & Notification Deep-Linking Suite', async 
     assert.match(service, /hasPending:\s*formattedAwards\.length > 0 \|\| formattedPOs\.length > 0/);
   });
 
-  await t.test('3. Backend PO notification redirects directly to /procurement-orders/:id rather than unmapped path', () => {
+  await t.test('3. Backend PO notification redirects directly to /seller/orders?orderId=:id rather than unmapped path', () => {
     const service = readBackend('src/modules/procurementBid/procurement-order.service.ts');
-    assert.match(service, /redirectUrl:\s*`\/procurement-orders\/\$\{result\.id\}`/);
+    assert.match(service, /redirectUrl:\s*`\/seller\/orders\?orderId=\$\{result\.id\}`/);
   });
 
   await t.test('4. Frontend routeForNotification normalizes routes and avoids dashboard redirects', () => {
     const notifs = readFrontend('src/lib/notifications.ts');
     assert.match(notifs, /function normalizeExplicitRoute/);
-    assert.match(notifs, /\/procurement-orders\/\$\{orderProcMatch\[1\]\}/);
+    assert.match(notifs, /\/seller\/orders\?orderId=\$\{id\}/);
     assert.match(notifs, /extractEntityReferences/);
     assert.match(notifs, /bid_awarded/);
     assert.match(notifs, /quotation_accepted/);

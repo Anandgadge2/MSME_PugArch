@@ -6156,8 +6156,48 @@ router.get('/buyer/requirements', authenticate, authorize('buyer'), asyncRoute(a
   ok(res, paged(requirements, total, query));
 }));
 
+const resolveRequirementId = async (idParam: string | number): Promise<number | null> => {
+  const rawId = String(idParam || '').trim();
+  if (!rawId) return null;
+  const numId = Number(rawId);
+  if (!isNaN(numId) && Number.isFinite(numId) && numId > 0) {
+    return numId;
+  }
+  const variants = getCanonicalLookupVariants(rawId);
+  const found = await db.requirement.findFirst({
+    where: {
+      OR: [
+        { requirementNumber: { in: variants } },
+        { requirementNumber: rawId }
+      ]
+    },
+    select: { id: true }
+  });
+  if (found) return found.id;
+
+  const matchingBid = await db.procurementBid.findFirst({
+    where: {
+      OR: [
+        { bidNumber: { in: variants } },
+        { bidNumber: rawId }
+      ]
+    },
+    select: { id: true, technicalPacket: true }
+  });
+  if (matchingBid) {
+    const packet = typeof matchingBid.technicalPacket === 'object' && matchingBid.technicalPacket !== null
+      ? (matchingBid.technicalPacket as any)
+      : {};
+    const linkedId = Number(packet.sourceRequirementId || packet.requirementId || 0);
+    if (linkedId > 0) return linkedId;
+  }
+  return null;
+};
+
 router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   const requirement = await db.requirement.findUnique({
     where: { id },
     include: {
@@ -6197,7 +6237,9 @@ router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
@@ -6207,7 +6249,9 @@ router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRou
   ok(res, requirement);
 }));
 router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) }, include: { tenders: { select: { id: true } } } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
@@ -6226,7 +6270,9 @@ router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), async
 }));
 
 router.post('/buyer/requirements/:id/submit', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');

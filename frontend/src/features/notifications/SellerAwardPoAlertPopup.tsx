@@ -332,9 +332,9 @@ export default function SellerAwardPoAlertPopup() {
                     onClick={() => {
                       handleDismissSession();
                       if (po?.id) {
-                        router.push(`/procurement-orders/${po.id}`);
+                        router.push(`/seller/orders?orderId=${po.id}`);
                       } else {
-                        router.push(award.bidId ? `/bids/${award.bidId}` : '/seller/awards');
+                        router.push(award.bidId ? `/bids/${award.bidId}` : '/seller/orders');
                       }
                     }}
                     className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 hover:text-[#0b2447]"
@@ -403,7 +403,7 @@ export default function SellerAwardPoAlertPopup() {
                     type="button"
                     onClick={() => {
                       handleDismissSession();
-                      router.push(`/procurement-orders/${po.id}`);
+                      router.push(`/seller/orders?orderId=${po.id}`);
                     }}
                     className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 hover:text-[#0b2447]"
                   >

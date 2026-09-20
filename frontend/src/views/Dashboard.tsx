@@ -643,7 +643,7 @@ export default function Dashboard() {
             actions={[
               ['Stakeholder approvals', '/admin/onboarding', ShieldCheck],
               // ['Tender approvals', '/admin/bids', Gavel],
-              ['Final award approvals', '/admin/procurement-orders', Trophy],
+              ['Final award approvals', '/admin/bids', Trophy],
             ]}
           />
           <AdminActionPanel
