@@ -2646,19 +2646,7 @@ export default function PurchaseOrders() {
                   >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Official PO
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
-                    className="h-9 text-xs font-bold uppercase tracking-wider rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                  >
-                    <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Download PO
-                  </Button>
-                  <Button 
-                    onClick={() => setViewingOrder(null)} 
-                    className="h-9 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold uppercase tracking-wider rounded-lg px-4 whitespace-nowrap cursor-pointer"
-                  >
-                    Close
-                  </Button>
+                 
                 </div>
               </div>
 

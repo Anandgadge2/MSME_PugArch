@@ -444,6 +444,7 @@ model Organization {
 
 model BuyerRequirement {
   id                  Int                    @id @default(autoincrement())
+  referenceNumber     String?                @unique
   buyerOrganizationId Int?
   title               String
   requirementType     BuyerRequirementType
@@ -475,6 +476,7 @@ model BuyerRequirement {
   createdBy           User?                  @relation("BuyerRequirementCreator", fields: [createdById], references: [id])
   responses           RequirementResponse[]
 
+  @@index([referenceNumber])
   @@index([buyerOrganizationId])
   @@index([categoryId])
   @@index([status, lastDate])
@@ -486,6 +488,16 @@ model BuyerRequirement {
   @@index([isUrgent])
   @@index([createdById])
   @@index([approvedById])
+}
+
+model EntitySequence {
+  id        String   @id // e.g. "RFQ-2026", "TND-2026", "PO-2026"
+  prefix    String
+  year      Int
+  lastVal   Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@index([prefix, year])
 }
 
 model RequirementResponse {

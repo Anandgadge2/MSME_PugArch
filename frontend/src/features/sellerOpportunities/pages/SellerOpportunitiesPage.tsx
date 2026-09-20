@@ -848,7 +848,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
-        const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
+        const canonicalReqId = req.referenceNumber || req.bidNumber || req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
           if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
           if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
@@ -923,7 +923,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: isReqParticipated ? 'Track Status' : defaultReqAction,
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
+          sourceRef: req.referenceNumber || req.bidNumber || formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'RFQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
           publishedAt: req.approvedAt || req.publishedAt || req.createdAt,
           createdAt: req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),

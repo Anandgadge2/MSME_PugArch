@@ -56,6 +56,7 @@ import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations } from '../modules/procurementBid/procurement-bid.service.js';
+import { isValidCanonicalRef } from '../utils/refIdUtils.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
 import { createApprovalChain } from '../services/approval-chain.service.js';
 import { parseDateIST } from '../utils/dateUtils.js';
@@ -1968,7 +1969,9 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
       })
     : await db.procurementBid.create({
         data: {
-          bidNumber: requirement.requirementNumber || await nextBidNumber(),
+          bidNumber: (requirement.requirementNumber && isValidCanonicalRef(requirement.requirementNumber))
+            ? requirement.requirementNumber
+            : await nextBidNumber(requirement.procurementMethod),
           ...baseData
         }
       });
@@ -7021,7 +7024,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       return {
         id: req.id,
         subject: req.title,
-        requirementNumber: `REQ-${req.id}`,
+        requirementNumber: req.referenceNumber || `RFQ-${new Date(req.createdAt).getFullYear()}-${String(req.id).padStart(5, '0')}`,
         buyerId: req.createdById,
         buyerOrganizationId: (req as any).buyerOrganizationId || null,
         sellerId: null,

@@ -389,37 +389,19 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         return [];
       };
 
-      const trailingDigits = effectiveTargetId.match(/\d+/g);
-      const lastNumericPart = trailingDigits ? trailingDigits[trailingDigits.length - 1] : null;
-      const rawTargetReqId = targetReqId !== undefined && targetReqId !== null ? String(targetReqId) : null;
-      const absTargetReqId = rawTargetReqId && !isNaN(Number(rawTargetReqId)) && Number(rawTargetReqId) !== 0 ? String(Math.abs(Number(rawTargetReqId))) : null;
-      const rawBidId = (rawBid as any)?.id !== undefined && (rawBid as any)?.id !== null ? String((rawBid as any)?.id) : null;
+      const primaryToken = (rawBid as any)?.bidNumber || effectiveTargetId;
 
-      const candidateTokens = Array.from(new Set([
-        effectiveTargetId,
-        rawBidId,
-        (rawBid as any)?.bidNumber,
-        rawTargetReqId,
-        absTargetReqId,
-        requirementId ? String(requirementId) : null,
-        requestId,
-        lastNumericPart
-      ].filter(Boolean) as string[]));
+      try {
+        const res = await getApi<any>(`/api/buyer/procurement-bids/${encodeURIComponent(primaryToken)}/participants`, true);
+        const items = extractArray(res);
+        if (items.length > 0) return items;
+      } catch {}
 
-      for (const token of candidateTokens) {
-        const endpoints = [
-          `/api/buyer/requirements/${encodeURIComponent(token)}/responses?pageSize=50`,
-          `/api/buyer/procurement-bids/${encodeURIComponent(token)}/participants`,
-        ];
-
-        for (const ep of endpoints) {
-          try {
-            const res = await getApi<any>(ep, true);
-            const items = extractArray(res);
-            if (items.length > 0) return items;
-          } catch {}
-        }
-      }
+      try {
+        const res = await getApi<any>(`/api/buyer/requirements/${encodeURIComponent(primaryToken)}/responses?pageSize=50`, true);
+        const items = extractArray(res);
+        if (items.length > 0) return items;
+      } catch {}
 
       return [];
     },

@@ -17,6 +17,8 @@ interface DisputeSocketEvent {
   evidence?: any;
 }
 
+let isDisputeWsSupported = true;
+
 export const useDisputeWebSocket = (disputeId: number | undefined) => {
   const [status, setStatus] = useState<WebSocketStatus>('DISCONNECTED');
   const queryClient = useQueryClient();
@@ -112,14 +114,23 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
       }, 15000);
     };
 
+    let baseUrl = getBaseUrl().replace(/\/$/, '');
+    if (!baseUrl && typeof window !== 'undefined') {
+      baseUrl = window.location.origin;
+    } else if (baseUrl.startsWith('/') && typeof window !== 'undefined') {
+      baseUrl = window.location.origin + baseUrl;
+    }
+
     const isServerless = typeof window !== 'undefined' && (
+      baseUrl.includes('vercel.app') ||
+      baseUrl.includes('.now.sh') ||
       window.location.hostname.includes('vercel.app') ||
       window.location.hostname.includes('.now.sh') ||
       process.env.NODE_ENV === 'production' ||
       (!window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1'))
     );
 
-    if (isServerless) {
+    if (!isDisputeWsSupported || isServerless) {
       startPollingFallback();
       return () => {
         isMounted = false;
@@ -131,13 +142,6 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
       
       setStatus(backoffRef.current > 1000 ? 'RECONNECTING' : 'CONNECTING');
-
-      let baseUrl = getBaseUrl().replace(/\/$/, '');
-      if (!baseUrl && typeof window !== 'undefined') {
-        baseUrl = window.location.origin;
-      } else if (baseUrl.startsWith('/') && typeof window !== 'undefined') {
-        baseUrl = window.location.origin + baseUrl;
-      }
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws';
 
       try {
@@ -204,6 +208,7 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
           wsRef.current = null;
           
           if (failedAttempts >= 2) {
+            isDisputeWsSupported = false;
             startPollingFallback();
             return;
           }
@@ -219,12 +224,14 @@ export const useDisputeWebSocket = (disputeId: number | undefined) => {
           if (!isMounted) return;
           failedAttempts++;
           if (failedAttempts >= 2) {
+            isDisputeWsSupported = false;
             startPollingFallback();
           } else {
             setStatus('ERROR');
           }
         };
       } catch {
+        isDisputeWsSupported = false;
         startPollingFallback();
       }
     };

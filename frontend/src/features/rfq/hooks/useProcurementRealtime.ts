@@ -20,6 +20,8 @@ export interface ProcurementSocketEvent {
   timestamp?: string;
 }
 
+let isProcurementWsSupported = true;
+
 export const useProcurementRealtime = (procurementId: string | number | undefined | null) => {
   const [status, setStatus] = useState<WebSocketStatus>('DISCONNECTED');
   const queryClient = useQueryClient();
@@ -124,14 +126,23 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       }, 15000);
     };
 
+    let baseUrl = getBaseUrl().replace(/\/$/, '');
+    if (!baseUrl && typeof window !== 'undefined') {
+      baseUrl = window.location.origin;
+    } else if (baseUrl.startsWith('/') && typeof window !== 'undefined') {
+      baseUrl = window.location.origin + baseUrl;
+    }
+
     const isServerless = typeof window !== 'undefined' && (
+      baseUrl.includes('vercel.app') ||
+      baseUrl.includes('.now.sh') ||
       window.location.hostname.includes('vercel.app') ||
       window.location.hostname.includes('.now.sh') ||
       process.env.NODE_ENV === 'production' ||
       (!window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1'))
     );
 
-    if (isServerless) {
+    if (!isProcurementWsSupported || isServerless) {
       // In production/serverless, use Pusher (if keys provided) or clean HTTP polling fallback; never attempt raw WS
       startPollingFallback();
       return () => {
@@ -144,13 +155,6 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
       setStatus(backoffRef.current > 1000 ? 'RECONNECTING' : 'CONNECTING');
-
-      let baseUrl = getBaseUrl().replace(/\/$/, '');
-      if (!baseUrl && typeof window !== 'undefined') {
-        baseUrl = window.location.origin;
-      } else if (baseUrl.startsWith('/') && typeof window !== 'undefined') {
-        baseUrl = window.location.origin + baseUrl;
-      }
       const wsUrl = baseUrl.replace(/^http/, 'ws') + '/api/ws';
 
       try {
@@ -190,7 +194,8 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
           wsRef.current = null;
 
           if (failedAttempts >= 2) {
-            // After 2 failures (e.g. serverless host without WS), gracefully fallback to polling
+            // After 2 failures (e.g. serverless host without WS), gracefully fallback to polling permanently
+            isProcurementWsSupported = false;
             startPollingFallback();
             return;
           }
@@ -206,12 +211,14 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
           if (!isMounted) return;
           failedAttempts++;
           if (failedAttempts >= 2) {
+            isProcurementWsSupported = false;
             startPollingFallback();
           } else {
             setStatus('ERROR');
           }
         };
       } catch {
+        isProcurementWsSupported = false;
         startPollingFallback();
       }
     };

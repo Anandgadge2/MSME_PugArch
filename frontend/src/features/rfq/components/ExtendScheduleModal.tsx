@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   AlertCircle,
+  CheckCircle2,
   X,
   Loader2,
   ShieldAlert,
@@ -99,19 +100,64 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const isPastDeadline = Boolean(
+    initialClosing && new Date(initialClosing).getTime() <= Date.now()
+  );
+
   // Initialize or reset fields on modal open
   useEffect(() => {
     if (isOpen) {
-      setClosingDate(initialClosing);
-      setTechnicalOpeningDate(initialTech);
-      setFinancialOpeningDate(initialFin);
-      setRequiredByDate(initialReqBy);
-      setBidValidityDate(initialValidity);
+      if (isPastDeadline) {
+        const futureDate = new Date(Date.now() + 7 * 86400000);
+        futureDate.setHours(17, 0, 0, 0);
+        const defaultClosing = toInputDateTime(futureDate);
+        setClosingDate(defaultClosing);
+
+        const oldClosingMs = initialClosing ? new Date(initialClosing).getTime() : Date.now();
+        const deltaMs = futureDate.getTime() - oldClosingMs;
+
+        if (initialTech) {
+          const oldTechMs = new Date(initialTech).getTime();
+          setTechnicalOpeningDate(toInputDateTime(new Date(oldTechMs + deltaMs)));
+        } else {
+          setTechnicalOpeningDate(toInputDateTime(new Date(futureDate.getTime() + 30 * 60000)));
+        }
+
+        if (initialFin) {
+          const oldFinMs = new Date(initialFin).getTime();
+          setFinancialOpeningDate(toInputDateTime(new Date(oldFinMs + deltaMs)));
+        } else {
+          setFinancialOpeningDate("");
+        }
+
+        if (initialReqBy) {
+          const oldReqMs = new Date(initialReqBy).getTime();
+          setRequiredByDate(toInputDate(new Date(oldReqMs + deltaMs)));
+        } else {
+          setRequiredByDate("");
+        }
+
+        const valDays = Number(currentSchedule.validityDays);
+        if (!isNaN(valDays) && valDays > 0) {
+          setBidValidityDate(toInputDate(new Date(futureDate.getTime() + valDays * 86400000)));
+        } else if (initialValidity) {
+          const oldValMs = new Date(initialValidity).getTime();
+          setBidValidityDate(toInputDate(new Date(oldValMs + deltaMs)));
+        } else {
+          setBidValidityDate("");
+        }
+      } else {
+        setClosingDate(initialClosing);
+        setTechnicalOpeningDate(initialTech);
+        setFinancialOpeningDate(initialFin);
+        setRequiredByDate(initialReqBy);
+        setBidValidityDate(initialValidity);
+      }
       setReason("");
       setFormError(null);
       setAutoCascade(true);
     }
-  }, [isOpen, initialClosing, initialTech, initialFin, initialReqBy, initialValidity]);
+  }, [isOpen, initialClosing, initialTech, initialFin, initialReqBy, initialValidity, isPastDeadline]);
 
   // Handle closing date change with smart auto-cascade
   const handleClosingDateChange = (newClosingStr: string) => {
@@ -181,7 +227,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       return "The new submission closing date must be strictly in the future.";
     }
 
-    if (initialClosing) {
+    if (initialClosing && !isPastDeadline) {
       const oldClosingTime = new Date(initialClosing).getTime();
       if (!isNaN(oldClosingTime) && newClosingTime <= oldClosingTime) {
         return "The new submission closing date must be later than the current deadline.";
@@ -375,6 +421,21 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* Reopening Notification Banner for Closed/Expired Tenders */}
+          {isPastDeadline && (
+            <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-xs text-emerald-950 flex items-start gap-2.5 animate-fadeIn">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <span className="font-black text-emerald-900 block mb-0.5">
+                  Submission Reopening Mode
+                </span>
+                <span>
+                  The previous submission deadline has expired. Setting a new future deadline will automatically reactivate this tender back to <strong>OPEN</strong> status, allowing suppliers to submit new or revised proposals.
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Error Banner */}
           {formError && (

@@ -112,12 +112,52 @@ export function formatRefId(
   return `${p}-${finalYear}-${finalSeq}`;
 }
 
-export function formatRequirementNumber(
+export const formatRequirementNumber = (
   id?: number | string | null,
-  rawNum?: string | null,
-  method?: string | null
-): string {
-  const pfx = method ? deriveMethodPrefix(method, rawNum, 'RFQ') : 'RFQ';
-  return formatRefId(pfx, id, rawNum, method);
+  rawRef?: string | null,
+  method?: string | null,
+  year?: number | string | null
+): string => {
+  return formatRefId('RFQ', id, rawRef, method, year);
+};
+
+export const CANONICAL_REF_REGEX = /^[A-Z]{2,5}-\d{4}-\d{5}$/;
+
+/**
+ * Validates whether a given token matches the strict canonical pattern:
+ * [METHOD]-[YEAR]-[5-DIGIT-SEQUENCE] (e.g. RFQ-2026-00049, TND-2026-00084)
+ */
+export function isValidCanonicalRef(token: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  return CANONICAL_REF_REGEX.test(token.trim());
 }
+
+/**
+ * Parses and normalizes a token to canonical format if possible,
+ * or returns null if it cannot be parsed.
+ */
+export function normalizeToCanonicalRef(token: string, defaultMethod = 'RFQ'): string | null {
+  if (!token || typeof token !== 'string') return null;
+  const trimmed = token.trim().toUpperCase();
+  if (CANONICAL_REF_REGEX.test(trimmed)) return trimmed;
+
+  const match = trimmed.match(/^([A-Z]{2,5})-(\d{4})-(\d+)$/);
+  if (match) {
+    const pfx = deriveMethodPrefix(match[1], null, defaultMethod);
+    const year = match[2];
+    const seq = match[3].padStart(5, '0');
+    return `${pfx}-${year}-${seq}`;
+  }
+
+  const matchShort = trimmed.match(/^([A-Z]{2,5})-(\d+)$/);
+  if (matchShort) {
+    const pfx = deriveMethodPrefix(matchShort[1], null, defaultMethod);
+    const year = new Date().getFullYear();
+    const seq = matchShort[2].padStart(5, '0');
+    return `${pfx}-${year}-${seq}`;
+  }
+
+  return null;
+}
+
 

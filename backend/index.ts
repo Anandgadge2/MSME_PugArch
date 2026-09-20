@@ -210,8 +210,19 @@ app.use('/api', (req, res, next) => {
 
 // RFC 6455 compliant HTTP endpoint for WebSocket route:
 // When a plain HTTP request arrives at /api/ws (e.g. from browser navigation, health checks, or misconfigured reverse proxies),
-// respond with 426 Upgrade Required instead of falling through to a 404 handler.
+// respond with 200 OK on serverless environments (where WebSockets are not supported) to avoid false-positive 426 warnings in logs,
+// or respond with 426 Upgrade Required on persistent server runtimes.
 app.get('/api/ws', (req, res) => {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.LAMBDA_TASK_ROOT) {
+    return res.status(200).json({
+      status: 'SERVERLESS_ENVIRONMENT',
+      code: 200,
+      websocketSupported: false,
+      message: 'Persistent WebSockets are not supported in serverless functions. Real-time events are served via Pusher or HTTP polling.',
+      transport: 'polling',
+    });
+  }
+
   res.status(426).set({
     'Upgrade': 'WebSocket',
     'Connection': 'Upgrade',

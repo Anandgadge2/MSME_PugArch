@@ -162,7 +162,7 @@ function mapTender(t: MarketplaceTender): OpportunityData {
         startDate: t.publishedAt || t.createdAt,
         endDate: t.closesAt,
         isTender: true,
-        link: `/tenders?tender=${t.id}`,
+        link: `/tenders?tender=${encodeURIComponent(t.tenderId || t.id)}`,
         daysRemaining: days,
         deadlineLabel: status.deadlineLabel,
         statusCode: status.code,
@@ -441,7 +441,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             if (r.linkedAuctionId) {
                 link = sellerRoutes.detail('REVERSE_AUCTION', r.linkedAuctionId);
             } else if (method === 'OPEN_TENDER' || method === 'LIMITED_TENDER' || method.includes('TENDER')) {
-                link = `/tenders?tender=${r.sourceId || r.id}`;
+                link = `/tenders?tender=${encodeURIComponent(r.referenceNumber || r.bidNumber || r.sourceId || r.id)}`;
             } else {
                 const isLoggedIn = !!user;
                 const isSeller = user?.role === 'seller';

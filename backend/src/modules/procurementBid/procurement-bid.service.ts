@@ -8,6 +8,7 @@ import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
+import { getNextCanonicalSequence } from '../../services/sequence.service.js';
 
 const db = prisma as any;
 
@@ -384,12 +385,8 @@ export const leanBidInclude = {
   }
 };
 
-export const nextBidNumber = async () => {
-  const year = new Date().getFullYear();
-  const count = await db.procurementBid.count({
-    where: { bidNumber: { startsWith: `JSG-BID-${year}-` } }
-  });
-  return `JSG-BID-${year}-${String(count + 1).padStart(5, '0')}`;
+export const nextBidNumber = async (method = 'RFQ') => {
+  return getNextCanonicalSequence(method);
 };
 
 export const nextParticipationNumber = async (bidNumber: string) => {
@@ -408,43 +405,99 @@ export const nextClarificationNumber = async (bidNumber: string) => {
 
 export const resolveBid = async (bidIdOrNumber: string | number, include: any = leanBidInclude) => {
   const token = String(bidIdOrNumber).trim();
-  logger.info({ token }, '[RESOLVE_BID] Resolving bid for token');
+  logger.info({ token }, '[RESOLVE_BID] Resolving procurement record for token');
 
-  const isNum = /^\d+$/.test(token);
-  const numMatches = token.match(/\d+/g);
-  const lastDigits = numMatches ? numMatches[numMatches.length - 1] : null;
-  const cleanDigits = lastDigits ? (lastDigits.length > 5 ? lastDigits.slice(-5) : lastDigits) : null;
-  const parsedNum = (isNum && Number(token) <= 2147483647)
-    ? Number(token)
-    : (cleanDigits && !isNaN(Number(cleanDigits)) && Number(cleanDigits) <= 2147483647 ? Number(cleanDigits) : null);
-
-  const candidateTokens = new Set<string>(getCanonicalLookupVariants(token));
-  if (cleanDigits) {
-    const padded5 = cleanDigits.padStart(5, '0');
-    for (const p of CANONICAL_METHOD_PREFIXES) {
-      candidateTokens.add(`${p}-${cleanDigits}`);
-      candidateTokens.add(`${p}-${padded5}`);
-      candidateTokens.add(`${p}-2026-${padded5}`);
-      candidateTokens.add(`${p}-2026-${cleanDigits}`);
-    }
-  }
-
-  const whereConditions: any[] = Array.from(candidateTokens).map(t => ({ bidNumber: t }));
-  if (parsedNum) {
-    whereConditions.push({ id: parsedNum });
-    whereConditions.push({ technicalPacket: { path: ['sourceRequirementId'], equals: parsedNum } });
-    whereConditions.push({ technicalPacket: { path: ['requirementId'], equals: parsedNum } });
-  }
-
-  let bid = await db.procurementBid.findFirst({
-    where: { OR: whereConditions },
-    include
+  // 1. Direct indexed lookup in procurementBid
+  let bid = await db.procurementBid.findUnique({
+    where: { bidNumber: token },
+    include,
   });
+
+  if (bid) {
+    logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Direct hit on procurementBid.bidNumber');
+    return bid;
+  }
+
+  // 2. Direct lookup by numeric ID if parameter is an integer
+  const isNum = /^\d+$/.test(token) && Number(token) <= 2147483647;
+  if (isNum) {
+    bid = await db.procurementBid.findUnique({
+      where: { id: Number(token) },
+      include,
+    });
+    if (bid) return bid;
+  }
+
+  // 3. Direct indexed lookup in buyerRequirement
+  const buyerReq = await db.buyerRequirement.findFirst({
+    where: {
+      OR: [
+        { referenceNumber: token },
+        ...(isNum ? [{ id: Number(token) }] : []),
+      ],
+    },
+    include: {
+      responses: true,
+      category: true,
+      buyerOrganization: true,
+    },
+  });
+
+  if (buyerReq) {
+    logger.info({ token, reqId: buyerReq.id, ref: buyerReq.referenceNumber }, '[RESOLVE_BID] Found linked BuyerRequirement, returning resolved adapter');
+    return {
+      id: buyerReq.id,
+      bidNumber: buyerReq.referenceNumber || token,
+      title: buyerReq.title,
+      description: buyerReq.description,
+      buyerId: buyerReq.createdById,
+      buyerOrganizationId: buyerReq.buyerOrganizationId,
+      buyerOrganizationName: buyerReq.buyerOrganization?.organizationName || 'Buyer',
+      buyerType: 'COMMERCIAL_BUYER',
+      category: buyerReq.category?.name || 'General',
+      bidType: buyerReq.requirementType || 'RFQ',
+      procurementType: buyerReq.requirementType || 'RFQ',
+      quantity: buyerReq.quantity,
+      unit: buyerReq.unit,
+      estimatedValue: buyerReq.budgetMax || buyerReq.budgetMin || 0,
+      deliveryLocation: buyerReq.location || 'Pan-India',
+      startDate: buyerReq.createdAt,
+      endDate: buyerReq.lastDate,
+      status: buyerReq.status === 'PUBLISHED' ? 'OPEN' : 'DRAFT',
+      approvalStatus: 'APPROVED',
+      lifecycleStage: 'BID_PUBLISHED',
+      participations: (buyerReq.responses || []).map((r: any) => ({
+        id: r.id,
+        participationNumber: `${buyerReq.referenceNumber || token}-P${String(r.id).padStart(4, '0')}`,
+        bidId: buyerReq.id,
+        sellerId: r.sellerUserId,
+        sellerUserId: r.sellerUserId,
+        sellerOrganizationName: r.sellerOrganizationName || 'Supplier',
+        status: r.status === 'ACCEPTED' ? 'AWARDED' : 'SUBMITTED',
+        totalPrice: r.bidAmount,
+        submittedAt: r.createdAt,
+      })),
+      isBuyerRequirement: true,
+      rawBuyerRequirement: buyerReq,
+    };
+  }
+
+  // 4. Secondary lookup in canonical variants
+  const variants = getCanonicalLookupVariants(token);
+  if (variants.length > 0) {
+    bid = await db.procurementBid.findFirst({
+      where: { bidNumber: { in: variants } },
+      include,
+    });
+    if (bid) return bid;
+  }
 
   if (bid) {
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables concurrently...');
+    const parsedNum = isNum ? Number(token) : null;
+    const candidateTokens = new Set<string>([token, ...variants]);
     const legacyReqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
       legacyReqWhere.push({ id: parsedNum });
@@ -1917,9 +1970,28 @@ export const extendBidSchedule = async (
   assertBuyerOwner(req.user!, bid);
 
   const status = String(bid.status || '').toUpperCase();
-  const terminalStatuses = ['AWARDED', 'CANCELLED', 'CLOSED', 'COMPLETED'];
+  const terminalStatuses = [
+    'AWARDED',
+    'AWARD_ACCEPTED',
+    'AWARD_OFFERED',
+    'AWARD_RECOMMENDED',
+    'PO_GENERATED',
+    'IN_PROGRESS',
+    'DELIVERED',
+    'GRN_COMPLETED',
+    'INVOICE_SUBMITTED',
+    'PAYMENT_COMPLETED',
+    'COMPLETED',
+    'CANCELLED',
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+  ];
   if (terminalStatuses.includes(status)) {
-    throw new ApiError(400, `Cannot extend schedule for a tender that is ${status.toLowerCase()}.`, 'TENDER_ALREADY_FINALIZED');
+    throw new ApiError(
+      400,
+      `Cannot extend schedule for a tender in stage ${status.toLowerCase()} because financial bids have already been opened or contract awarded. Please issue a fresh re-tender instead.`,
+      'TENDER_POST_FINANCIAL_LOCKED'
+    );
   }
 
   const newClosingDate = new Date(body.closingDate);
@@ -2019,10 +2091,13 @@ export const extendBidSchedule = async (
     };
   }
 
+  const shouldReactivate = ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'].includes(status);
+
   const updated = await db.procurementBid.update({
     where: { id: bid.id },
     data: {
       endDate: newClosingDate,
+      ...(shouldReactivate ? { status: 'OPEN', lifecycleStage: 'SELLER_PARTICIPATION' } : {}),
       ...(newTechDate ? { technicalOpeningDate: newTechDate } : {}),
       ...(newFinDate ? { financialOpeningDate: newFinDate } : {}),
       ...(newValidityDate ? { bidValidityDate: newValidityDate } : {}),

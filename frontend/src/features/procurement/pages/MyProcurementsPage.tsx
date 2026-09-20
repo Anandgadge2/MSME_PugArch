@@ -523,7 +523,7 @@ export default function MyProcurementsPage() {
       const consolidated = getConsolidatedType(p);
       const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
-        route = `/tenders?tender=${p.id}`;
+        route = `/tenders?tender=${targetId}`;
       } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
         route = `/bids/${targetId}?type=RFQ`;
       } else if (consolidated === 'RFP' || methodLower === 'rfp') {

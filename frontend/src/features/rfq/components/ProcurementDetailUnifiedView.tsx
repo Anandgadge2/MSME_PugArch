@@ -4023,11 +4023,25 @@ export function ProcurementDetailUnifiedView(
       !pathname.startsWith("/seller") &&
       !pathname.startsWith("/shg"));
 
-  const canExtendSchedule =
-    isBuyerSide &&
-    !["AWARDED", "CANCELLED", "CLOSED", "COMPLETED"].includes(
-      String(props.status || "").toUpperCase(),
-    );
+  const statusUpper = String(props.status || "").toUpperCase();
+  const isPostFinancialOrAwarded = [
+    "AWARDED",
+    "AWARD_ACCEPTED",
+    "AWARD_OFFERED",
+    "AWARD_RECOMMENDED",
+    "PO_GENERATED",
+    "IN_PROGRESS",
+    "DELIVERED",
+    "GRN_COMPLETED",
+    "INVOICE_SUBMITTED",
+    "PAYMENT_COMPLETED",
+    "COMPLETED",
+    "CANCELLED",
+    "FINANCIAL_EVALUATION",
+    "L1_GENERATED",
+  ].includes(statusUpper);
+
+  const canExtendSchedule = isBuyerSide && !isPostFinancialOrAwarded;
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
@@ -4787,7 +4801,6 @@ export function ProcurementDetailUnifiedView(
     false,
   );
 
-  const statusUpper = String(props.status || "").toUpperCase();
   const lifecycleStageUpper = String(
     (props as any).lifecycleStage ||
       (props as any).rawBid?.lifecycleStage ||

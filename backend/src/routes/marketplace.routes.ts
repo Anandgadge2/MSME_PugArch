@@ -10,6 +10,7 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
+import { getNextCanonicalSequence } from '../services/sequence.service.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
 
@@ -2773,6 +2774,16 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 if (buyerReq) {
                     requirement = decorateRequirement(buyerReq);
                 }
+            } else {
+                const buyerReq = await db.buyerRequirement.findFirst({
+                    where: {
+                        OR: searchTokens.map(t => ({ referenceNumber: t }))
+                    },
+                    select: publicRequirementDetailSelect
+                });
+                if (buyerReq) {
+                    requirement = decorateRequirement(buyerReq);
+                }
             }
             if (!requirement) {
                 const legacyReq = await db.requirement.findFirst({
@@ -3020,8 +3031,15 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
         if (req.user?.role === 'buyer' && !isApproved) {
             return apiResponse.error(res, 403, 'Please complete buyer onboarding and organization verification to continue.', 'BUYER_VERIFICATION_REQUIRED');
         }
+        const referenceNumber = await getNextCanonicalSequence('RFQ');
         const requirement = await db.buyerRequirement.create({
-            data: { ...body,  buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null, createdById: req.user?.id, status: 'PENDING_APPROVAL' },
+            data: {
+                ...body,
+                referenceNumber,
+                buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null,
+                createdById: req.user?.id,
+                status: 'PENDING_APPROVAL'
+            },
             include: requirementIncludes
         });
         return ok(res, requirement);
@@ -3084,26 +3102,36 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 }
             }
         } else if (!Number.isFinite(id) || id === 0) {
-            const bid = await db.procurementBid.findFirst({
+            const modernByRef = await db.buyerRequirement.findFirst({
                 where: {
-                    OR: tokenVariants.map(t => ({ bidNumber: t }))
+                    OR: tokenVariants.map(t => ({ referenceNumber: t }))
                 },
-                select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+                select: { id: true }
             }).catch(() => null);
-            const bidResolved = await resolveFromProcurementBid(bid);
 
-            if (bidResolved) {
-                id = bidResolved;
-            } else if (bid) {
-                // Bid found but couldn't resolve to a BuyerRequirement — use bid.id directly
-                id = bid.id;
+            if (modernByRef) {
+                id = modernByRef.id;
             } else {
-                const legacy = await db.requirement.findFirst({
+                const bid = await db.procurementBid.findFirst({
                     where: {
-                        OR: tokenVariants.map(t => ({ requirementNumber: t }))
+                        OR: tokenVariants.map(t => ({ bidNumber: t }))
                     },
-                    select: { id: true }
+                    select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
                 }).catch(() => null);
+                const bidResolved = await resolveFromProcurementBid(bid);
+
+                if (bidResolved) {
+                    id = bidResolved;
+                } else if (bid) {
+                    // Bid found but couldn't resolve to a BuyerRequirement — use bid.id directly
+                    id = bid.id;
+                } else {
+                    const legacy = await db.requirement.findFirst({
+                        where: {
+                            OR: tokenVariants.map(t => ({ requirementNumber: t }))
+                        },
+                        select: { id: true }
+                    }).catch(() => null);
 
                 if (legacy) {
                     id = -legacy.id;
@@ -3151,6 +3179,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 }
             }
         }
+    }
 
         const body = responseSchema.parse(req.body);
         if (req.user?.role !== 'seller') {
@@ -3578,7 +3607,12 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
 
         const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
             db.buyerRequirement.findFirst({
-                where: candidateIds.length ? { id: { in: candidateIds } } : { id: -1 },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ referenceNumber: { in: candidateNumbers } }] : [])
+                    ]
+                },
                 select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
             }).catch(() => null),
             db.requirement.findFirst({
@@ -4036,7 +4070,13 @@ const findRequirementRecord = async (idParam: string | number) => {
 
     const tokenVariants = Array.from(new Set([token, ...getCanonicalLookupVariants(token)]));
 
-    const [bid, legacyMatch] = await Promise.all([
+    const [modernBuyerReq, bid, legacyMatch] = await Promise.all([
+        db.buyerRequirement.findFirst({
+            where: {
+                OR: tokenVariants.map(t => ({ referenceNumber: t }))
+            },
+            select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true, payload: true, startDate: true }
+        }).catch(() => null),
         db.procurementBid.findFirst({
             where: {
                 OR: tokenVariants.map(t => ({ bidNumber: t }))
@@ -4050,6 +4090,15 @@ const findRequirementRecord = async (idParam: string | number) => {
             select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null)
     ]);
+
+    if (modernBuyerReq) {
+        const sched = (modernBuyerReq.payload as any)?.schedule;
+        return {
+            ...modernBuyerReq,
+            submissionStartDate: sched?.submissionStartDate || sched?.startDate || modernBuyerReq.startDate || null,
+            allowClarification: sched?.clarificationAllowed !== false && (modernBuyerReq as any).allowClarification !== false
+        };
+    }
 
     if (bid) {
         const sched = (bid.technicalPacket as any)?.schedule;
