@@ -511,9 +511,22 @@ export function TaxInvoiceRegistryModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    const search = poNumber || invoice?.invoiceNumber || '';
-                    router.push(`/grn?search=${encodeURIComponent(search)}`);
+                  onClick={async () => {
+                    const po = invoice?.purchaseOrder;
+                    let grnId = invoice?.grnId || (invoice as any)?.goodsReceiptNoteId || po?.grnId || po?.grns?.[0]?.id;
+                    if (!grnId && po?.id) {
+                      try {
+                        const res: any = await getApi(`/api/grn/po/${po.id}/eligibility`, true);
+                        const existingList = res?.existing || res?.data?.existing || [];
+                        if (existingList?.[0]?.id) grnId = existingList[0].id;
+                      } catch {}
+                    }
+                    if (grnId) {
+                      router.push(`/grn/${grnId}`);
+                    } else {
+                      const search = poNumber || invoice?.invoiceNumber || '';
+                      router.push(`/grn?search=${encodeURIComponent(search)}`);
+                    }
                   }}
                   className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
                 >

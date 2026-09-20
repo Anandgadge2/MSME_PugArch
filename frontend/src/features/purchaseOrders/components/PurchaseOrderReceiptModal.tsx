@@ -1595,14 +1595,26 @@ export function PurchaseOrderReceiptModal({
               </Button>
             )}
 
-            {isSeller && isAccepted && (
-              <Button
-                onClick={handleCreateInvoiceAction}
-                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-              >
-                <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
-              </Button>
-            )}
+            {(() => {
+              const hasInvoice = Boolean(
+                (order as any)?.invoices?.length > 0 ||
+                (order as any)?.invoiceId ||
+                (order as any)?.invoiceNumber ||
+                (order as any)?.invoice ||
+                ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(viewingStatusLower)
+              );
+              if (isSeller && isAccepted && !hasInvoice) {
+                return (
+                  <Button
+                    onClick={handleCreateInvoiceAction}
+                    className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
+                  </Button>
+                );
+              }
+              return null;
+            })()}
 
             {isSeller && (isAccepted || viewingStatusLower === 'delivered') && (
               <Button

@@ -54,7 +54,7 @@ export interface ProcurementLifecycleStepperProps {
   onViewEvaluation?: () => void;
   onViewPO?: () => void;
   onNavigateDelivery?: () => void;
-  onNavigateInvoice?: () => void;
+  onNavigateInvoice?: (invoice?: any) => void;
   onNavigateSettlement?: () => void;
 }
 
@@ -366,8 +366,16 @@ export function ProcurementLifecycleStepper({
             onClick: () => {
               if (onNavigateDelivery) onNavigateDelivery();
               else {
-                const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
-                router.push(isBuyer ? `/buyer/grn${searchQ}` : `/seller/delivery-management${searchQ}`);
+                const grn = effectiveActiveOrder?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED') ||
+                            effectiveActiveOrder?.grns?.[0] ||
+                            effectiveActiveOrder?.grn;
+                const grnId = grn?.id || effectiveActiveOrder?.grnId;
+                if (grnApproved && grnId) {
+                  router.push(`/grn/${grnId}`);
+                } else {
+                  const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
+                  router.push(isBuyer ? `/buyer/grn${searchQ}` : `/seller/delivery-management${searchQ}`);
+                }
               }
             },
             isPrimary: currentStageId === 3
@@ -397,7 +405,7 @@ export function ProcurementLifecycleStepper({
             actionLabel: invNo ? `Inv #${invNo}` : 'View Invoice',
             actionHint: 'Open invoice details dialog',
             onClick: () => {
-              if (onNavigateInvoice) onNavigateInvoice();
+              if (onNavigateInvoice) onNavigateInvoice(validInvoice);
               else {
                 const invParam = invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : '';
                 router.push(isBuyer ? `/buyer/invoices${invParam}` : `/seller/invoices${invParam}`);

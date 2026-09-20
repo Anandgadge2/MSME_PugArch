@@ -10,6 +10,7 @@ import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components
 import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/RecordOrderPaymentModal';
 import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
 import { GrnCreateModal } from '../features/grn/components/GrnCreateModal';
+import { TaxInvoiceRegistryModal } from '../features/invoices/components/TaxInvoiceRegistryModal';
 
 export const hasApprovedGrn = (order: any): boolean => {
   if (!order) return false;
@@ -158,7 +159,8 @@ const OrderActionsMenu = ({
   onRecordPayment,
   onConfirmSettlement,
   onOpenGrnModal,
-  onViewGrn
+  onViewGrn,
+  onViewInvoice
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -284,16 +286,26 @@ const OrderActionsMenu = ({
         <>
           {(() => {
             const hasInvoice = Boolean(
-              (order as any).invoices?.length > 0 || (order as any).invoiceId || (order as any).invoiceNumber
+              (order as any).invoices?.length > 0 ||
+              (order as any).invoiceId ||
+              (order as any).invoiceNumber ||
+              (order as any).invoice ||
+              ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(String(order.status || '').toLowerCase())
             );
             if (hasInvoice) {
-              const invNo = (order as any).invoices?.[0]?.invoiceNumber || (order as any).invoiceNumber || order.id;
+              const inv = (order as any).invoices?.[0] || (order as any).invoice;
+              const invNo = inv?.invoiceNumber || (order as any).invoiceNumber || order.id;
+              const invId = inv?.id || (order as any).invoiceId;
               return (
                 <button
                   type="button"
                   onClick={() => {
                     onClose();
-                    router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                    if (invId && onViewInvoice) {
+                      onViewInvoice(Number(invId), inv || null);
+                    } else {
+                      router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                    }
                   }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                 >
@@ -566,6 +578,9 @@ export default function PurchaseOrders() {
   const [confirmSettlementOrder, setConfirmSettlementOrder] = useState<PurchaseOrderDto | null>(null);
   const [grnModalPoId, setGrnModalPoId] = useState<number | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+  const [taxInvoiceModalOpen, setTaxInvoiceModalOpen] = useState(false);
+  const [taxInvoiceModalId, setTaxInvoiceModalId] = useState<number | null>(null);
+  const [taxInvoiceModalData, setTaxInvoiceModalData] = useState<any | null>(null);
 
   useEffect(() => {
     if (!openKebabId) return;
@@ -947,7 +962,7 @@ export default function PurchaseOrders() {
 
   const handleViewGrn = async (targetOrder: any) => {
     const grn = getExistingGrn(targetOrder);
-    const grnId = grn?.id || targetOrder.grnId || targetOrder.grn?.id;
+    let grnId = grn?.id || targetOrder.grnId || targetOrder.grn?.id;
     if (grnId) {
       router.push(`/grn/${grnId}`);
       return;
@@ -961,7 +976,21 @@ export default function PurchaseOrders() {
         return;
       }
     } catch (err) {
-      console.warn('Failed to resolve GRN by eligibility, falling back to list', err);
+      console.warn('Failed to resolve GRN by eligibility, trying po detail', err);
+    }
+
+    try {
+      const poRes = await api.get(`/api/purchase-orders/${targetOrder.id}`).then(readJsonResponse);
+      const poData = poRes?.data || poRes;
+      const gId = poData?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')?.id ||
+                  poData?.grns?.[0]?.id ||
+                  poData?.grnId;
+      if (gId) {
+        router.push(`/grn/${gId}`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to resolve GRN by PO details', err);
     }
 
     router.push('/grn');
@@ -1013,6 +1042,11 @@ export default function PurchaseOrders() {
             onConfirmSettlement={setConfirmSettlementOrder}
             onOpenGrnModal={(poId: number) => setGrnModalPoId(poId)}
             onViewGrn={handleViewGrn}
+            onViewInvoice={(invId: number, invData: any) => {
+              setTaxInvoiceModalId(invId);
+              setTaxInvoiceModalData(invData);
+              setTaxInvoiceModalOpen(true);
+            }}
           />
         )}
       </div>
@@ -2579,15 +2613,27 @@ export default function PurchaseOrders() {
                           <>
                             {(() => {
                               const hasInvoice = Boolean(
-                                (viewingOrder as any)?.invoices?.length > 0 || (viewingOrder as any)?.invoiceId || (viewingOrder as any)?.invoiceNumber
+                                (viewingOrder as any)?.invoices?.length > 0 ||
+                                (viewingOrder as any)?.invoiceId ||
+                                (viewingOrder as any)?.invoiceNumber ||
+                                (viewingOrder as any)?.invoice ||
+                                ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(String(viewingOrder.status || '').toLowerCase())
                               );
                               if (hasInvoice) {
-                                const invNo = (viewingOrder as any)?.invoices?.[0]?.invoiceNumber || (viewingOrder as any)?.invoiceNumber || viewingOrder.id;
+                                const inv = (viewingOrder as any)?.invoices?.[0] || (viewingOrder as any)?.invoice;
+                                const invNo = inv?.invoiceNumber || (viewingOrder as any)?.invoiceNumber || viewingOrder.id;
+                                const invId = inv?.id || (viewingOrder as any)?.invoiceId;
                                 return (
                                   <Button
                                     onClick={() => {
-                                      setViewingOrder(null);
-                                      router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                                      if (invId) {
+                                        setTaxInvoiceModalId(Number(invId));
+                                        setTaxInvoiceModalData(inv || null);
+                                        setTaxInvoiceModalOpen(true);
+                                      } else {
+                                        setViewingOrder(null);
+                                        router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                                      }
                                     }}
                                     className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                                   >
@@ -2931,6 +2977,22 @@ export default function PurchaseOrders() {
                 }));
               }
             }
+            refreshPurchaseOrders();
+          }}
+        />
+      )}
+
+      {taxInvoiceModalOpen && (
+        <TaxInvoiceRegistryModal
+          isOpen={taxInvoiceModalOpen}
+          onClose={() => {
+            setTaxInvoiceModalOpen(false);
+            setTaxInvoiceModalId(null);
+            setTaxInvoiceModalData(null);
+          }}
+          invoiceId={taxInvoiceModalId}
+          initialInvoiceData={taxInvoiceModalData}
+          onInvoiceApproved={() => {
             refreshPurchaseOrders();
           }}
         />

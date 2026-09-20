@@ -8495,7 +8495,8 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
         },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
-        invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
+        invoices: { orderBy: { createdAt: 'desc' }, take: 5 },
+        grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true }, take: 5 }
       },
       orderBy: { updatedAt: 'desc' },
       ...window

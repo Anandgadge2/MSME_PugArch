@@ -67,6 +67,7 @@ import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
 import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
+import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceRegistryModal";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -3998,6 +3999,9 @@ export function ProcurementDetailUnifiedView(
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isTaxInvoiceModalOpen, setIsTaxInvoiceModalOpen] = useState(false);
+  const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
+  const [selectedInvoiceModalData, setSelectedInvoiceModalData] = useState<any | null>(null);
   const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -7795,7 +7799,38 @@ export function ProcurementDetailUnifiedView(
                 router.push("/seller/orders");
               }
             }}
-            onNavigateDelivery={() => {
+            onNavigateDelivery={async () => {
+              // Strictly open the GRN view details page (/grn/:id) of this order
+              const grn = effectiveActiveOrder?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED') ||
+                          effectiveActiveOrder?.grns?.[0] ||
+                          effectiveActiveOrder?.grn;
+              let grnId = grn?.id || effectiveActiveOrder?.grnId || effectiveActiveOrder?.grn?.id;
+
+              if (!grnId && effectiveActiveOrder?.id) {
+                try {
+                  const res: any = await getApi(`/api/purchase-orders/${effectiveActiveOrder.id}`);
+                  const poData = res?.data || res;
+                  grnId = poData?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')?.id ||
+                          poData?.grns?.[0]?.id ||
+                          poData?.grnId ||
+                          poData?.grn?.id;
+                  if (!grnId) {
+                    const eligRes: any = await getApi(`/api/grn/po/${effectiveActiveOrder.id}/eligibility`);
+                    const existingList = eligRes?.data?.existing || eligRes?.existing || [];
+                    if (existingList?.[0]?.id) {
+                      grnId = existingList[0].id;
+                    }
+                  }
+                } catch (err) {
+                  console.warn('Failed to resolve GRN for PO', err);
+                }
+              }
+
+              if (grnId) {
+                router.push(`/grn/${grnId}`);
+                return;
+              }
+
               const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
               const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
               if (isBuyerSide) {
@@ -7804,19 +7839,25 @@ export function ProcurementDetailUnifiedView(
                 router.push(`/seller/delivery-management${searchParam}`);
               }
             }}
-            onNavigateInvoice={() => {
+            onNavigateInvoice={(inv?: any) => {
               const allInvoices = [
                 ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
                 ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
               ];
-              const existingInv = allInvoices.find(
-                (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
-              );
+              const existingInv = inv || allInvoices.find(
+                (i: any) => !['CANCELLED', 'DRAFT'].includes(String(i.status || i.invoiceStatus || '').toUpperCase())
+              ) || (effectiveActiveOrder as any)?.invoice;
+
               if (existingInv) {
-                const invNo = existingInv.invoiceNumber || existingInv.id;
-                const invParam = invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : '';
-                router.push(isBuyerSide ? `/buyer/invoices${invParam}` : `/seller/invoices${invParam}`);
-              } else if (isBuyerSide) {
+                // Strictly open Tax Invoice Registry dialog box with NO page redirection (buyer & seller)
+                const invId = Number(existingInv.id) || (existingInv.invoiceId ? Number(existingInv.invoiceId) : null);
+                setSelectedInvoiceModalId(invId);
+                setSelectedInvoiceModalData(existingInv);
+                setIsTaxInvoiceModalOpen(true);
+                return;
+              }
+
+              if (isBuyerSide) {
                 router.push("/buyer/invoices");
               } else {
                 const amountVal =
@@ -8045,18 +8086,57 @@ export function ProcurementDetailUnifiedView(
                       <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View PO Copy
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
-                        router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
-                      }}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Create Invoice from PO
-                    </Button>
+                    {(() => {
+                      const allInvoices = [
+                        ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+                        ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+                      ];
+                      const existingInvoice = allInvoices.find(
+                        (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
+                      ) || (effectiveActiveOrder as any)?.invoice;
+                      const hasInvoiceCreated = Boolean(
+                        existingInvoice ||
+                        (effectiveActiveOrder as any)?.invoiceId ||
+                        (effectiveActiveOrder as any)?.invoiceNumber ||
+                        ['invoiced', 'invoice_submitted', 'payment_initiated', 'paid', 'completed'].includes(
+                          String(effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || '').toLowerCase()
+                        )
+                      );
+
+                      if (hasInvoiceCreated) {
+                        return (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              const invId = Number(existingInvoice?.id) || (existingInvoice?.invoiceId ? Number(existingInvoice.invoiceId) : null);
+                              setSelectedInvoiceModalId(invId);
+                              setSelectedInvoiceModalData(existingInvoice || null);
+                              setIsTaxInvoiceModalOpen(true);
+                            }}
+                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            View Tax Invoice
+                          </Button>
+                        );
+                      }
+
+                      return (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+                            router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
+                          }}
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          Create Invoice from PO
+                        </Button>
+                      );
+                    })()}
                     <Button
                       type="button"
                       size="sm"
@@ -8599,6 +8679,22 @@ export function ProcurementDetailUnifiedView(
                 const poNum = o.poNumber || o.id;
                 const targetRoute = isBuyerSide ? '/orders/tracking' : '/seller/delivery-management';
                 router.push(`${targetRoute}?search=${encodeURIComponent(poNum)}`);
+              }}
+            />
+          )}
+
+          {isTaxInvoiceModalOpen && (
+            <TaxInvoiceRegistryModal
+              isOpen={isTaxInvoiceModalOpen}
+              onClose={() => {
+                setIsTaxInvoiceModalOpen(false);
+                setSelectedInvoiceModalId(null);
+                setSelectedInvoiceModalData(null);
+              }}
+              invoiceId={selectedInvoiceModalId}
+              initialInvoiceData={selectedInvoiceModalData}
+              onInvoiceApproved={() => {
+                queryClient.invalidateQueries();
               }}
             />
           )}

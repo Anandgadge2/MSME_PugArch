@@ -139,13 +139,22 @@ const generateGrnNumber = async () => {
     return `GRN-${yyyymmdd}-${String(seq + 1).padStart(4, '0')}`;
 };
 
-const assertPoOwnership = async (poId: number, organizationId: number, userId: number) => {
+const assertPoOwnership = async (poId: number, organizationId: number, userId: number, allowSeller = false) => {
     const po = await prisma.purchaseOrder.findUnique({
         where: { id: poId },
-        select: { id: true, buyerId: true, status: true, buyer: { select: { organizationId: true } } }
+        select: {
+            id: true,
+            buyerId: true,
+            sellerId: true,
+            status: true,
+            buyer: { select: { organizationId: true } },
+            seller: { select: { organizationId: true } }
+        }
     });
     if (!po) throw new ApiError(404, 'Purchase Order not found', 'PO_NOT_FOUND');
-    if (po.buyer?.organizationId !== organizationId) {
+    const isBuyerOrg = po.buyer?.organizationId === organizationId;
+    const isSellerOrg = allowSeller && (po.sellerId === userId || (po.seller?.organizationId && po.seller.organizationId === organizationId));
+    if (!isBuyerOrg && !isSellerOrg) {
         throw new ApiError(403, 'PO does not belong to your organisation', 'PO_NOT_IN_ORG');
     }
     return po;
@@ -231,7 +240,7 @@ router.get(
     asyncRoute(async (req, res) => {
         ensureOrg(req);
         const poId = Number(req.params.poId);
-        const po = await assertPoOwnership(poId, orgId(req), userId(req));
+        const po = await assertPoOwnership(poId, orgId(req), userId(req), true);
 
         const existing = await prisma.goodsReceiptNote.findMany({
             where: { purchaseOrderId: poId },
