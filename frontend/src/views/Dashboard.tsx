@@ -20,7 +20,6 @@ import { formatGstVerificationError } from '../features/shared/gstVerification';
 import { LiveOpportunityRadar } from '../features/dashboard/components/LiveOpportunityRadar';
 import { SellerCreativeAnalytics } from '../features/dashboard/components/SellerCreativeAnalytics';
 import { UrgentActionsInbox } from '../features/dashboard/components/UrgentActionsInbox';
-import { RecentOrdersSnapshot } from '../features/dashboard/components/RecentOrdersSnapshot';
 import { BuyerProcurementMonitor } from '../features/dashboard/components/BuyerProcurementMonitor';
 import { BuyerUrgentActionsInbox } from '../features/dashboard/components/BuyerUrgentActionsInbox';
 import { formatDate } from '../features/shared/format';
@@ -301,14 +300,14 @@ export default function Dashboard() {
 
   // 2. Notifications Query
   const { data: notificationsData, isLoading: isNotifLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/notifications', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch notifications');
       const json = await res.json();
       return unwrapApiData<any[]>(json) || [];
     },
-    enabled: !!token,
+    enabled: !!token && !!user?.id,
     staleTime: 60_000,
     refetchInterval: 15000,
   });
@@ -316,14 +315,14 @@ export default function Dashboard() {
 
   // 3. Admin Stats Query (KPI Cards)
   const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
-    queryKey: ['adminStats'],
+    queryKey: ['adminStats', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/admin/reports/summary?kpiOnly=true', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch stats');
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token && (user?.role === 'admin' || user?.role === 'master_admin'),
+    enabled: !!token && !!user?.id && (user?.role === 'admin' || user?.role === 'master_admin'),
     staleTime: 5 * 60_000,
     refetchInterval: 15000,
   });
@@ -353,27 +352,27 @@ export default function Dashboard() {
   });
 
   const { data: summaryData, isLoading: isSummaryLoading } = useQuery({
-    queryKey: ['dashboard', 'summary'],
+    queryKey: ['dashboard', 'summary', user?.id, user?.organizationId],
     queryFn: async () => {
       const res = await api.fetch('/api/dashboard/summary', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch summary');
       const json = await res.json();
       return unwrapApiData<any>(json);
     },
-    enabled: !!token && user?.role !== 'admin',
+    enabled: !!token && !!user?.id && user?.role !== 'admin',
     staleTime: 5 * 60_000,
     refetchInterval: 15000,
   });
 
   const { data: analyticsData, isLoading: isAnalyticsLoading } = useQuery({
-    queryKey: ['dashboard', 'analytics', user?.role],
+    queryKey: ['dashboard', 'analytics', user?.id, user?.organizationId, user?.role],
     queryFn: async () => {
       const res = await api.fetch('/api/dashboard/analytics', { headers: authHeaders });
       if (!res.ok) return null;
       const json = await res.json();
       return unwrapApiData<any>(json);
     },
-    enabled: !!token && (user?.role === 'buyer' || user?.role === 'seller' || user?.role === 'shg'),
+    enabled: !!token && !!user?.id && (user?.role === 'buyer' || user?.role === 'seller' || user?.role === 'shg'),
     staleTime: 60_000,
     refetchOnWindowFocus: false
   });
@@ -834,8 +833,6 @@ export default function Dashboard() {
                 isLoading={isAnalyticsLoading}
               />
               <BuyerProcurementMonitor />
-              <RecentOrdersSnapshot />
-             
             </div>
 
             {/* Right Column (35% on large screens) */}
@@ -913,7 +910,6 @@ export default function Dashboard() {
                 isLoading={isAnalyticsLoading}
               />
               <LiveOpportunityRadar />
-              <RecentOrdersSnapshot />
             </div>
 
             {/* Right Column (35% on large screens) */}

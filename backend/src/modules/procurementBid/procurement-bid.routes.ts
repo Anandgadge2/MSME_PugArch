@@ -2033,12 +2033,17 @@ router.get('/orders/procurement/:orderId', authenticate, validate({ params: orde
   return apiResponse.success(res, data, 200, 'Procurement order fetched');
 }));
 
-router.get('/seller/awards', authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/pending-awards-and-pos', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
+  const data = await orderService.listPendingAwardsAndPOsForSeller(req.user!);
+  return apiResponse.success(res, data, 200, 'Pending awards and purchase orders fetched');
+}));
+
+router.get('/seller/awards', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
   const data = await orderService.listSellerAwards(req.user!);
   return apiResponse.success(res, data, 200, 'Seller awards fetched');
 }));
 
-router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
   const targetId = Number(req.params.id || req.params.awardId);
   if (req.path.includes('purchase-orders')) {
     const data = await orderService.acceptPO(req, targetId, req.body || {});
@@ -2048,7 +2053,7 @@ router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/acce
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 
-router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('seller'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('seller', 'shg'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
   const data = await orderService.rejectSellerAward(req, Number(req.params.awardId), req.body.reason);
   return apiResponse.success(res, data, 200, 'Award rejected');
 }));

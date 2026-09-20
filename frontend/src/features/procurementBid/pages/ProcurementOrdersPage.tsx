@@ -28,7 +28,7 @@ type OrderSortKey = 'poNumber' | 'title' | 'buyer' | 'seller' | 'status' | 'amou
 export default function ProcurementOrdersPage() {
   const { user } = useAuth();
   const pathname = usePathname() || '';
-  const detailMatch = pathname.match(/^\/procurement-orders\/(\d+)$/);
+  const detailMatch = pathname.match(/^\/(?:procurement-orders|orders\/procurement)\/(\d+)$/);
   const orderId = detailMatch ? Number(detailMatch[1]) : null;
   const [orders, setOrders] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);

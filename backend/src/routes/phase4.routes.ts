@@ -1260,6 +1260,17 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (!hasConsigneeLocation || totalItemQuantity <= 0 || totalItemQuantity !== totalConsigneeQuantity) {
     throw new ApiError(400, 'Total consignee quantity must equal total procurement quantity', 'PROCUREMENT_CONSIGNEE_QUANTITY_INVALID');
   }
+
+  // Ensure submission deadline is set in the future
+  const schedule = payload.schedule || {};
+  const rawSubDate = schedule.submissionDate || schedule.submissionDeadline || tender.bidClosingDate;
+  if (rawSubDate) {
+    const subTime = new Date(rawSubDate).getTime();
+    if (Number.isFinite(subTime) && subTime <= Date.now()) {
+      throw new ApiError(400, 'Submission deadline date and time must be set in the future', 'PROCUREMENT_DEADLINE_PAST');
+    }
+  }
+
   // Timeline validations for tender-family, BOQ, PAC, rate-contract, and bid-with-reverse-auction methods
   const timelineMethodSlugs = [
     'open-tender', 'sealed-tender', 'limited-tender', 'two-packet-bid',

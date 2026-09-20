@@ -386,8 +386,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
-  // When collapsed is explicitly chosen by user, sidebar stays solidly collapsed without hover-expansion flicker
-  const effectivelyCollapsed = isCollapsed;
+  // When collapsed, hovering over the sidebar smoothly opens/expands it
+  const effectivelyCollapsed = isCollapsed && !isHovered;
 
   // Reset hover state immediately when route changes
   useEffect(() => {
@@ -1107,7 +1107,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   const openNotification = async (item: PortalNotification) => {
     if (!item.isRead) await markNotificationAsRead(item.id);
-    router.push(routeForNotification(item, user?.role));
+    router.push(routeForNotification(item, user?.role, user));
     setIsNotificationsOpen(false);
   };
 

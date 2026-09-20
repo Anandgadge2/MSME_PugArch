@@ -26,6 +26,7 @@ export const shortCache = (ttlSeconds = 15) => {
             'Cache-Control',
             `private, max-age=${ttlSeconds}, must-revalidate, stale-while-revalidate=${ttlSeconds * 5}`
           );
+          res.setHeader('Vary', 'Authorization');
         }
       }
       return originalSend(body);

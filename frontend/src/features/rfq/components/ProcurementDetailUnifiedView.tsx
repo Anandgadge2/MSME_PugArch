@@ -787,12 +787,7 @@ function DeadlineCountdown({
   }
 
   if (timerState.isPassed) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
-        <Clock className="h-3 w-3 text-rose-600" />
-        Submission Closed
-      </span>
-    );
+    return null;
   }
 
   return (
@@ -824,6 +819,8 @@ function StatusBadge({ status }: { status?: string }) {
     "CANCELLED",
     "EXPIRED",
     "AWARDED",
+    "SUBMISSION CLOSED",
+    "SUBMISSION_CLOSED",
   ].includes(label);
 
   return (
@@ -6707,6 +6704,27 @@ export function ProcurementDetailUnifiedView(
     })(),
   );
 
+  const effectiveStatusLabel = useMemo(() => {
+    if (isDeadlinePassed || isBiddingClosed) {
+      const u = statusUpper;
+      const l = String(statusLabel || "").toUpperCase();
+      if (
+        u === "OPEN" ||
+        u === "ACTIVE" ||
+        u === "IN_PROGRESS" ||
+        u === "PENDING" ||
+        u === "PUBLISHED" ||
+        l === "OPEN" ||
+        l === "ACTIVE" ||
+        l === "IN PROGRESS" ||
+        l === "PENDING"
+      ) {
+        return "SUBMISSION CLOSED";
+      }
+    }
+    return statusLabel;
+  }, [statusUpper, isDeadlinePassed, isBiddingClosed, statusLabel]);
+
   const isEvaluationReady = Boolean(
     isPostBiddingStage ||
     isDeadlinePassed ||
@@ -8629,7 +8647,7 @@ export function ProcurementDetailUnifiedView(
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={statusLabel} />
+                  <StatusBadge status={effectiveStatusLabel} />
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
                       <Layers className="h-3 w-3" aria-hidden="true" />

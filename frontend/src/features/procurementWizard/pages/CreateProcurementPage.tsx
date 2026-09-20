@@ -1554,6 +1554,14 @@ export default function CreateProcurementPage() {
 
     // Step 5 Event timeline - Errors
     list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
+    if (d.schedule.submissionDate) {
+      list.push({
+        label: 'Submission deadline must be set in the future',
+        ok: new Date(d.schedule.submissionDate).getTime() > Date.now(),
+        severity: 'error',
+        stepIdx: 5
+      });
+    }
     if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
       list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
     }
@@ -1691,6 +1699,7 @@ export default function CreateProcurementPage() {
       if (!d.schedule.submissionDate) return false;
       const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       const endTime = new Date(d.schedule.submissionDate).getTime();
+      if (endTime <= Date.now()) return false;
       if (endTime <= nowTime) return false;
       if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
         if (!d.schedule.technicalOpeningDate) return false;
@@ -1942,8 +1951,12 @@ export default function CreateProcurementPage() {
         toast.error('Submission deadline date is required.');
         return false;
       }
-      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       const endTime = new Date(d.schedule.submissionDate).getTime();
+      if (endTime <= Date.now()) {
+        toast.error('Submission deadline must be set to a future date & time.');
+        return false;
+      }
+      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       if (endTime <= nowTime) {
         toast.error('Submission closing date must be after submission start date.');
         return false;
@@ -6738,12 +6751,12 @@ function ScheduleStepForm({
           />
         </Field>
 
-        <Field label="Submission End Date (Deadline)" required error={fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.')}>
+        <Field label="Submission End Date (Deadline)" required error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}>
           <DateTimePicker
             id="submission-end-datetime"
             value={draft.schedule.submissionDate || ''}
             onChange={val => updateSchedule('submissionDate', val)}
-            error={fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.')}
+            error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
             placeholder="Select submission deadline date & time"
           />
         </Field>

@@ -5,6 +5,7 @@ import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
 import { isShgUser } from '../lib/shg';
 import { clearPermissionsCache } from './useOrgRole';
+import { getQueryClient } from '../lib/queryClient';
 
 interface User {
   id: string;
@@ -122,6 +123,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setLoading(false);
     api.invalidate();
+    try {
+      getQueryClient().clear();
+    } catch {
+      // ignore
+    }
   }, []);
 
   const logout = useCallback(async (redirectPath?: string | any) => {

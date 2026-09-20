@@ -803,8 +803,8 @@ const responseSchema = z.object({
         if (!data.deliveryTimeline || !data.deliveryTimeline.trim()) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Delivery timeline is required for submission", path: ["deliveryTimeline"] });
         }
-        if (!data.message || data.message.trim().length < 10) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Quotation message must be at least 10 characters", path: ["message"] });
+        if (!data.message || !data.message.trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Quotation message is required", path: ["message"] });
         }
     }
 });

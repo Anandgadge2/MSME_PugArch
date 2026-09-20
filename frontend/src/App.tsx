@@ -131,6 +131,7 @@ const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedT
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
+const SellerAwardPoAlertPopup = lazy(() => import('./features/notifications/SellerAwardPoAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -1094,8 +1095,16 @@ export default function App({
         if (id) return <AuctionResultPage id={id} />;
       }
     }
-    if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
-    if (/^\/procurement-orders\/\d+$/.test(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
+    if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders', '/orders/procurement'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) return <ProcurementOrdersPage />;
+    if (/^\/(?:procurement-orders|orders\/procurement)\/\d+$/.test(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) return <ProcurementOrdersPage />;
+    {
+      const buyerProcEventMatch = pathname.match(/^\/buyer\/procurement\/events\/([^/?#]+)$/i);
+      if (buyerProcEventMatch) return <Redirect to={`/bids/${buyerProcEventMatch[1]}`} />;
+    }
+    {
+      const adminBidDetailMatch = pathname.match(/^\/admin\/bids\/([^/?#]+)$/i);
+      if (adminBidDetailMatch) return <Redirect to={`/bids/${adminBidDetailMatch[1]}`} />;
+    }
     if (pathname === '/settings/security') return <SecuritySettingsPage />;
     if (pathname === '/settings/notifications') return <NotificationPrefsPage />;
     if (pathname === '/onboarding/kyc') return <AadhaarKycPage />;
@@ -1205,6 +1214,9 @@ export default function App({
             <InviteLoginPopup />
             {user && (user.role === 'admin' || user.role === 'master_admin') && (
               <AdminCategoryAlertPopup />
+            )}
+            {user && (user.role === 'seller' || user.role === 'shg') && (
+              <SellerAwardPoAlertPopup />
             )}
           </Suspense>
         )}
