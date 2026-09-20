@@ -294,30 +294,84 @@ router.post('/initiate', requirePermission('payment.initiate', orgScope), async 
   }
 });
 
-router.post('/offline-proof/:proofId/verify', requirePermission('payment.verify', orgScope), async (req: AuthRequest, res) => {
+router.post('/offline-proof/:proofId/verify', async (req: AuthRequest, res) => {
   try {
     const proofId = Number(req.params.proofId);
     if (!Number.isInteger(proofId) || proofId <= 0) throw new ApiError(400, 'Invalid proof id', 'PAYMENT_PROOF_ID_INVALID');
+
+    const existingProof = await (prisma as any).offlinePaymentProof.findUnique({
+      where: { id: proofId },
+      include: {
+        paymentTransaction: true,
+        purchaseOrder: true
+      }
+    });
+    if (!existingProof) throw new ApiError(404, 'Offline payment proof not found', 'PAYMENT_PROOF_NOT_FOUND');
+
+    const isPlatformAdmin = isPlatformFinanceUser(req);
+    const isSellerPayee = (existingProof.sellerOrgId && (req.user as any)?.organizationId === existingProof.sellerOrgId) ||
+      (existingProof.paymentTransaction && existingProof.paymentTransaction.payeeId === req.user?.id) ||
+      (existingProof.purchaseOrder && existingProof.purchaseOrder.sellerId === req.user?.id);
+
+    if (!isPlatformAdmin && !isSellerPayee && req.user?.role !== 'admin' && req.user?.role !== 'seller') {
+      throw new ApiError(403, 'Permission denied to verify this payment proof', 'PERMISSION_DENIED');
+    }
+
     const proof = await (prisma as any).offlinePaymentProof.update({
       where: { id: proofId },
       data: { status: 'VERIFIED', verifiedByUserId: req.user?.id, verifiedAt: new Date(), rejectionReason: null }
     });
-    if (proof.paymentTransactionId) {
-      const paymentTx = await prisma.paymentTransaction.update({
-        where: { id: proof.paymentTransactionId },
+
+    let paymentTransactionId = proof.paymentTransactionId || existingProof.paymentTransaction?.id;
+    if (!paymentTransactionId && proof.purchaseOrderId) {
+      const tx = await prisma.paymentTransaction.findFirst({
+        where: { purchaseOrderId: proof.purchaseOrderId },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (tx) {
+        paymentTransactionId = tx.id;
+        await (prisma as any).offlinePaymentProof.update({
+          where: { id: proof.id },
+          data: { paymentTransactionId: tx.id }
+        }).catch(() => undefined);
+      }
+    }
+    if (!paymentTransactionId && proof.invoiceId) {
+      const tx = await prisma.paymentTransaction.findFirst({
+        where: { invoiceId: proof.invoiceId },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (tx) {
+        paymentTransactionId = tx.id;
+        await (prisma as any).offlinePaymentProof.update({
+          where: { id: proof.id },
+          data: { paymentTransactionId: tx.id }
+        }).catch(() => undefined);
+      }
+    }
+
+    let updatedTx: any = null;
+    if (paymentTransactionId) {
+      const existingTx = await prisma.paymentTransaction.findUnique({ where: { id: paymentTransactionId } });
+      updatedTx = await prisma.paymentTransaction.update({
+        where: { id: paymentTransactionId },
         data: {
           status: 'OFFLINE_PROOF_VERIFIED',
           paymentStatus: 'OFFLINE_PROOF_VERIFIED' as any,
           completedAt: new Date(),
-          paidAt: proof.paymentDate,
+          paidAt: proof.paymentDate || new Date(),
           version: { increment: 1 },
-          metadata: { offlineProofId: proof.id, method: proof.method }
+          metadata: {
+            ...((existingTx?.metadata as any) || {}),
+            offlineProofId: proof.id,
+            method: proof.method
+          }
         }
       }).catch(() => null);
 
-      if (paymentTx?.invoiceId) {
+      if (updatedTx?.invoiceId) {
         await prisma.invoice.update({
-          where: { id: paymentTx.invoiceId },
+          where: { id: updatedTx.invoiceId },
           data: { status: 'paid', invoiceStatus: 'PAID' as any }
         }).catch(() => undefined);
       }
@@ -328,37 +382,95 @@ router.post('/offline-proof/:proofId/verify', requirePermission('payment.verify'
         data: { status: 'paid_offline_verified', version: { increment: 1 } }
       }).catch(() => undefined);
     }
-    await auditPayment(req, 'payment.offline_proof_verified', 'offlinePaymentProof', proof.id, { purchaseOrderId: proof.purchaseOrderId });
-    res.json({ success: true, proof: maskSensitive(proof) });
+    await auditPayment(req, 'payment.offline_proof_verified', 'offlinePaymentProof', proof.id, { purchaseOrderId: proof.purchaseOrderId, paymentTransactionId });
+    res.json({ success: true, proof: maskSensitive(proof), payment: maskSensitive(updatedTx) });
   } catch (err: any) {
     return handleError(res, err);
   }
 });
 
-router.post('/offline-proof/:proofId/reject', requirePermission('payment.verify', orgScope), async (req: AuthRequest, res) => {
+router.post('/offline-proof/:proofId/reject', async (req: AuthRequest, res) => {
   try {
     const proofId = Number(req.params.proofId);
     const parsed = rejectProofSchema.parse(req.body);
     if (!Number.isInteger(proofId) || proofId <= 0) throw new ApiError(400, 'Invalid proof id', 'PAYMENT_PROOF_ID_INVALID');
+
+    const existingProof = await (prisma as any).offlinePaymentProof.findUnique({
+      where: { id: proofId },
+      include: {
+        paymentTransaction: true,
+        purchaseOrder: true
+      }
+    });
+    if (!existingProof) throw new ApiError(404, 'Offline payment proof not found', 'PAYMENT_PROOF_NOT_FOUND');
+
+    const isPlatformAdmin = isPlatformFinanceUser(req);
+    const isSellerPayee = (existingProof.sellerOrgId && (req.user as any)?.organizationId === existingProof.sellerOrgId) ||
+      (existingProof.paymentTransaction && existingProof.paymentTransaction.payeeId === req.user?.id) ||
+      (existingProof.purchaseOrder && existingProof.purchaseOrder.sellerId === req.user?.id);
+
+    if (!isPlatformAdmin && !isSellerPayee && req.user?.role !== 'admin' && req.user?.role !== 'seller') {
+      throw new ApiError(403, 'Permission denied to reject this payment proof', 'PERMISSION_DENIED');
+    }
+
     const proof = await (prisma as any).offlinePaymentProof.update({
       where: { id: proofId },
       data: { status: 'REJECTED', rejectedByUserId: req.user?.id, rejectedAt: new Date(), rejectionReason: parsed.reason }
     });
-    if (proof.paymentTransactionId) {
-      const paymentTx = await prisma.paymentTransaction.update({
-        where: { id: proof.paymentTransactionId },
-        data: { status: 'OFFLINE_PROOF_REJECTED', paymentStatus: 'OFFLINE_PROOF_REJECTED' as any, version: { increment: 1 } }
+
+    let paymentTransactionId = proof.paymentTransactionId || existingProof.paymentTransaction?.id;
+    if (!paymentTransactionId && proof.purchaseOrderId) {
+      const tx = await prisma.paymentTransaction.findFirst({
+        where: { purchaseOrderId: proof.purchaseOrderId },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (tx) {
+        paymentTransactionId = tx.id;
+        await (prisma as any).offlinePaymentProof.update({
+          where: { id: proof.id },
+          data: { paymentTransactionId: tx.id }
+        }).catch(() => undefined);
+      }
+    }
+    if (!paymentTransactionId && proof.invoiceId) {
+      const tx = await prisma.paymentTransaction.findFirst({
+        where: { invoiceId: proof.invoiceId },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (tx) {
+        paymentTransactionId = tx.id;
+        await (prisma as any).offlinePaymentProof.update({
+          where: { id: proof.id },
+          data: { paymentTransactionId: tx.id }
+        }).catch(() => undefined);
+      }
+    }
+
+    let updatedTx: any = null;
+    if (paymentTransactionId) {
+      const existingTx = await prisma.paymentTransaction.findUnique({ where: { id: paymentTransactionId } });
+      updatedTx = await prisma.paymentTransaction.update({
+        where: { id: paymentTransactionId },
+        data: {
+          status: 'OFFLINE_PROOF_REJECTED',
+          paymentStatus: 'OFFLINE_PROOF_REJECTED' as any,
+          version: { increment: 1 },
+          metadata: {
+            ...((existingTx?.metadata as any) || {}),
+            rejectionReason: parsed.reason
+          }
+        }
       }).catch(() => null);
 
-      if (paymentTx?.invoiceId) {
+      if (updatedTx?.invoiceId) {
         await prisma.invoice.update({
-          where: { id: paymentTx.invoiceId },
+          where: { id: updatedTx.invoiceId },
           data: { status: 'approved', invoiceStatus: 'APPROVED' as any }
         }).catch(() => undefined);
       }
     }
-    await auditPayment(req, 'payment.offline_proof_rejected', 'offlinePaymentProof', proof.id, { reason: parsed.reason });
-    res.json({ success: true, proof: maskSensitive(proof) });
+    await auditPayment(req, 'payment.offline_proof_rejected', 'offlinePaymentProof', proof.id, { reason: parsed.reason, paymentTransactionId });
+    res.json({ success: true, proof: maskSensitive(proof), payment: maskSensitive(updatedTx) });
   } catch (err: any) {
     return handleError(res, err);
   }
@@ -483,6 +595,8 @@ router.get('/offline-proofs', requirePermission('payment.view', orgScope), async
     if (req.query.status) where.status = String(req.query.status);
     if (req.query.buyerOrgId) where.buyerOrgId = Number(req.query.buyerOrgId);
     if (req.query.sellerOrgId) where.sellerOrgId = Number(req.query.sellerOrgId);
+    if (req.query.paymentId) where.paymentTransactionId = Number(req.query.paymentId);
+    if (req.query.orderId) where.purchaseOrderId = Number(req.query.orderId);
     if (req.query.dateFrom || req.query.dateTo) {
       where.paymentDate = {
         ...(req.query.dateFrom ? { gte: new Date(String(req.query.dateFrom)) } : {}),

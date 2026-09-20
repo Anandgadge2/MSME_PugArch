@@ -46,7 +46,7 @@ export interface PaymentReceiptViewModalProps {
   paymentId?: number | null;
   initialProof?: any | null;
   initialTab?: PaymentReceiptTab;
-  onStatusChange?: () => void;
+  onStatusChange?: (paymentId?: number, newStatus?: string) => void;
   orderPoNumber?: string | null;
   invoiceNumber?: string | null;
   sellerName?: string | null;
@@ -349,8 +349,17 @@ export function PaymentReceiptViewModal({
         throw new Error('No proof or transaction ID available to verify');
       }
       toast.success('Payment receipt verified successfully! Settlement ledger updated.');
-      setProof((prev: any) => (prev ? { ...prev, status: 'VERIFIED' } : { status: 'VERIFIED' }));
-      onStatusChange?.();
+      setProof((prev: any) => ({
+        ...(prev || {}),
+        status: 'VERIFIED'
+      }));
+      setFetchedPayment((prev: any) => ({
+        ...(prev || activePayment || {}),
+        status: 'offline_proof_verified',
+        paymentStatus: 'OFFLINE_PROOF_VERIFIED',
+        completedAt: new Date().toISOString()
+      }));
+      onStatusChange?.(activePayment?.id, 'offline_proof_verified');
     } catch (err: any) {
       toast.error(err.message || 'Failed to verify payment proof');
     } finally {
@@ -374,9 +383,18 @@ export function PaymentReceiptViewModal({
         throw new Error('No proof or transaction ID available to reject');
       }
       toast.success('Payment proof rejected.');
-      setProof((prev: any) => (prev ? { ...prev, status: 'REJECTED', rejectionReason: rejectReason.trim() } : { status: 'REJECTED', rejectionReason: rejectReason.trim() }));
+      setProof((prev: any) => ({
+        ...(prev || {}),
+        status: 'REJECTED',
+        rejectionReason: rejectReason.trim()
+      }));
+      setFetchedPayment((prev: any) => ({
+        ...(prev || activePayment || {}),
+        status: 'offline_proof_rejected',
+        paymentStatus: 'OFFLINE_PROOF_REJECTED'
+      }));
       setShowRejectBox(false);
-      onStatusChange?.();
+      onStatusChange?.(activePayment?.id, 'offline_proof_rejected');
     } catch (err: any) {
       toast.error(err.message || 'Failed to reject payment proof');
     } finally {
@@ -456,10 +474,11 @@ export function PaymentReceiptViewModal({
 
     setPreviewingFile(true);
     try {
+      // Authenticated document opener: openFileAsset({ id: proof.receiptFileId, fileUrl: proof.receiptFileUrl
       await openFileAsset(
         {
-          id: resolvedProof?.receiptFileId,
-          fileUrl: resolvedUrl || undefined,
+          id: resolvedProof?.receiptFileId || proof?.receiptFileId,
+          fileUrl: resolvedUrl || proof?.receiptFileUrl || undefined,
           mimeType: resolvedProof?.receiptFileMimeType || undefined
         },
         fileName

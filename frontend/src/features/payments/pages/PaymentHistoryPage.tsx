@@ -83,7 +83,7 @@ type PaymentRow = {
     releasedAt?: string;
   };
 };
-type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'ledger' | 'status' | 'date';
+type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'status' | 'date';
 
 function PaymentRowActionCell({
   payment,
@@ -91,7 +91,6 @@ function PaymentRowActionCell({
   onToggle,
   onClose,
   onViewProof,
-  onUploadSlip,
   onViewReceipt,
   onTrackTimeline,
 }: {
@@ -100,7 +99,6 @@ function PaymentRowActionCell({
   onToggle: () => void;
   onClose: () => void;
   onViewProof: () => void;
-  onUploadSlip: () => void;
   onViewReceipt: () => void;
   onTrackTimeline: () => void;
 }) {
@@ -287,21 +285,6 @@ function PaymentRowActionCell({
               e.preventDefault();
               e.stopPropagation();
               onClose();
-              onUploadSlip();
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-          >
-            <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-            <span>Upload Slip</span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
               onTrackTimeline();
             }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
@@ -335,12 +318,21 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
 
-  const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
+  const { records: payments, warning, loading, refreshing, error, reload, setRecords, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(gatewayFilter ? { gateway: gatewayFilter } : {}),
     ...(escrowFilter ? { escrow: escrowFilter } : {})
   }, 20);
+
+  const handlePaymentStatusUpdated = useCallback((updatedId?: number, newStatus: string = 'offline_proof_verified') => {
+    if (updatedId) {
+      setRecords(prev => prev.map(p => p.id === updatedId ? { ...p, status: newStatus, completedAt: new Date().toISOString() } : p));
+      setViewProofPayment(prev => prev && prev.id === updatedId ? { ...prev, status: newStatus, completedAt: new Date().toISOString() } : prev);
+      setSelected(prev => prev && prev.id === updatedId ? { ...prev, status: newStatus, completedAt: new Date().toISOString() } : prev);
+    }
+    void reload();
+  }, [setRecords, reload]);
 
   const paymentSummary = useMemo(() => {
     const totalAmount = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -429,7 +421,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Reference',
       sortable: true,
       sortKey: 'reference',
-      width: 'w-[14%]',
+      width: 'w-[15%]',
       cell: (payment) => (
         <div onClick={(e) => e.stopPropagation()}>
           <EntityIdLink
@@ -453,7 +445,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Parties',
       sortable: true,
       sortKey: 'parties',
-      width: 'w-[14%]',
+      width: 'w-[15%]',
       cell: (payment) => (
         <div className="text-[10px] font-bold text-slate-500">
           From {payment.payer?.name || `#${payment.payer?.id || '-'}`}
@@ -467,7 +459,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Gateway',
       sortable: true,
       sortKey: 'gateway',
-      width: 'w-[12%]',
+      width: 'w-[13%]',
       cell: (payment) => (
         <span className="text-xs font-bold uppercase text-slate-600">
           {payment.gateway || 'manual'} / {payment.method || 'bank_transfer'}
@@ -479,7 +471,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Amount',
       sortable: true,
       sortKey: 'amount',
-      width: 'w-[10%]',
+      width: 'w-[11%]',
       cell: (payment) => (
         <span className="text-xs font-black text-slate-900">
           {formatCurrency(payment.amount)}
@@ -491,7 +483,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Tax/TDS',
       sortable: true,
       sortKey: 'tax',
-      width: 'w-[12%]',
+      width: 'w-[13%]',
       cell: (payment) => {
         const tax = payment.metadata?.taxSummary || {};
         return (
@@ -525,36 +517,39 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       }
     },
     {
-      key: 'ledger',
-      header: 'Ledger Entries',
-      sortable: true,
-      sortKey: 'ledger',
-      width: 'w-[9%]',
-      cell: (payment) => (
-        <span className="flex items-center gap-1 font-mono text-xs text-slate-900 bg-slate-50 px-2 py-0.5 rounded w-max border border-slate-100">
-          <FileSpreadsheet className="h-3 w-3" /> {payment.ledgerEntries?.length || 0} items
-        </span>
-      )
-    },
-    {
       key: 'status',
       header: 'Status',
       sortable: true,
       sortKey: 'status',
-      width: 'w-[9%]',
+      width: 'w-[13%]',
       cell: (payment) => {
-        const isSuccess = ['success', 'escrow_released'].includes(payment.status || '');
+        const rawStatus = String(payment.status || '').toLowerCase();
+        const isSuccess = ['success', 'completed', 'escrow_released', 'offline_proof_verified', 'paid'].includes(rawStatus);
+        const isFailed = ['failed', 'cancelled', 'rejected', 'offline_proof_rejected'].includes(rawStatus);
+        const isUnderReview = ['offline_proof_uploaded', 'under_review'].includes(rawStatus);
+
+        const label = isSuccess
+          ? (rawStatus === 'escrow_released' ? 'Escrow Released' : 'Verified')
+          : isFailed
+          ? (rawStatus === 'offline_proof_rejected' ? 'Proof Rejected' : 'Failed')
+          : isUnderReview
+          ? 'Under Review'
+          : String(payment.status || 'initiated').replace(/_/g, ' ');
+
         return (
           <span
-            className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${
+            className={cn(
+              "inline-flex items-center rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide whitespace-nowrap leading-none",
               isSuccess
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : payment.status === 'failed'
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : 'border-blue-200 bg-slate-50 text-[#12335f]'
-            }`}
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : isFailed
+                ? "border-red-200 bg-red-50 text-red-700"
+                : isUnderReview
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-blue-200 bg-slate-50 text-[#12335f]"
+            )}
           >
-            {String(payment.status || 'initiated').replace(/_/g, ' ')}
+            {label}
           </span>
         );
       }
@@ -587,10 +582,6 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             setDetailTab('receipt');
             setViewProofModalOpen(true);
           }}
-          onUploadSlip={() => {
-            setSelectedProofPayment(payment);
-            setUploadProofModalOpen(true);
-          }}
           onViewReceipt={() => {
             setViewProofPayment(payment);
             setDetailTab('receipt');
@@ -614,7 +605,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <PageTableSkeleton
           kpiCount={5}
           title="Payment History"
-          subtitle="Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries."
+          subtitle="Payment status, escrow linkage, and tax/TDS summary."
         />
       </div>
     );
@@ -627,7 +618,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <div className="min-w-0">
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Payment History</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">
-            Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries.
+            Payment status, escrow linkage, and tax/TDS summary.
           </p>
         </div>
 
@@ -971,7 +962,9 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           setSelectedProofPayment(p);
           setUploadProofModalOpen(true);
         }}
-        onStatusChange={() => { void reload(); }}
+        onStatusChange={(updatedPaymentId, newStatus) => {
+          handlePaymentStatusUpdated(updatedPaymentId || viewProofPayment?.id || selected?.id, newStatus);
+        }}
       />
     </div>
   );
