@@ -738,49 +738,7 @@ export default function MarketplaceProductList() {
                         />
                     </div>
 
-                    {/* Offering Type Toggle (Products & Services Tabs) */}
-                    <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
-                        <div className="inline-flex items-center p-1 rounded-2xl bg-white border border-slate-200/90 shadow-2xs">
-                            <button
-                                type="button"
-                                onClick={() => handleToggleType('products')}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none",
-                                    !isServices
-                                        ? "bg-[#0b2447] text-white shadow-sm"
-                                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                                )}
-                                aria-pressed={!isServices}
-                            >
-                                <Package className="h-4 w-4" />
-                                <span>Products</span>
-                                {!isServices && (
-                                    <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/30 text-white">
-                                        {total}
-                                    </span>
-                                )}
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => handleToggleType('services')}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer select-none",
-                                    isServices
-                                        ? "bg-[#0b2447] text-white shadow-sm"
-                                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                                )}
-                                aria-pressed={isServices}
-                            >
-                                <Wrench className="h-4 w-4" />
-                                <span>Services</span>
-                                {isServices && (
-                                    <span className="ml-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-blue-500/30 text-white">
-                                        {total}
-                                    </span>
-                                )}
-                            </button>
-                        </div>
-                    </div>
+                    
 
                     {/* Category Catalogue Header Banner */}
                     <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
