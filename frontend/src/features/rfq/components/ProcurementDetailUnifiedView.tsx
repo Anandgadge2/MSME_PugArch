@@ -7778,11 +7778,10 @@ export function ProcurementDetailUnifiedView(
             onSubmitClick={props.onSubmitClick}
             onViewQuotationClick={handleOpenMyQuotationModal}
             onViewEvaluation={() => {
-              setActiveTab(isBuyerSide ? "evaluation" : "clarifications");
+              setActiveTab("clarifications");
               const targetEl =
                 document.getElementById("tabs-navigation-section") ||
-                document.getElementById("tabpanel-clarifications") ||
-                document.getElementById("tabpanel-evaluation");
+                document.getElementById("tabpanel-clarifications");
               if (targetEl) {
                 targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
               }

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { Button } from "../../../components/ui/button";
+import { DateTimePicker } from "../../../components/ui/DateTimePicker";
 import { procurementBidApi } from "../../procurementBid/api";
 import { toast } from "sonner";
 import { formatDateTime, formatDate } from "../../shared/format";
@@ -479,13 +480,13 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
               >
                 New Submission Closing Date &amp; Time <span className="text-rose-500">*</span>
               </label>
-              <input
+              <DateTimePicker
                 id="extend-closing-date-input"
-                type="datetime-local"
                 value={closingDate}
-                onChange={(e) => handleClosingDateChange(e.target.value)}
+                onChange={handleClosingDateChange}
                 required
-                className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                placeholder="Select submission closing date & time"
+                min={new Date().toISOString()}
               />
               <p className="text-[11px] text-slate-500 mt-1">
                 Vendors cannot submit new bids or revise existing proposals once this clock expires.
@@ -501,12 +502,12 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 >
                   Technical Opening Date &amp; Time
                 </label>
-                <input
+                <DateTimePicker
                   id="extend-tech-date-input"
-                  type="datetime-local"
                   value={technicalOpeningDate}
-                  onChange={(e) => setTechnicalOpeningDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                  onChange={setTechnicalOpeningDate}
+                  placeholder="Select technical opening date & time"
+                  min={closingDate || new Date().toISOString()}
                 />
                 <p className="text-[10.5px] text-slate-500 mt-0.5">
                   Must be on or after the new closing date.
@@ -520,12 +521,12 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 >
                   Financial Opening Date &amp; Time
                 </label>
-                <input
+                <DateTimePicker
                   id="extend-fin-date-input"
-                  type="datetime-local"
                   value={financialOpeningDate}
-                  onChange={(e) => setFinancialOpeningDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                  onChange={setFinancialOpeningDate}
+                  placeholder="Select financial opening date & time"
+                  min={technicalOpeningDate || closingDate || new Date().toISOString()}
                 />
                 <p className="text-[10.5px] text-slate-500 mt-0.5">
                   Must be on or after technical opening.
@@ -539,12 +540,13 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 >
                   Required-By / Delivery Date
                 </label>
-                <input
+                <DateTimePicker
                   id="extend-reqby-date-input"
-                  type="date"
+                  mode="date"
                   value={requiredByDate}
-                  onChange={(e) => setRequiredByDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                  onChange={setRequiredByDate}
+                  placeholder="Select required delivery date"
+                  min={closingDate ? closingDate.split("T")[0] : undefined}
                 />
                 <p className="text-[10.5px] text-slate-500 mt-0.5">
                   Contractual goods/services delivery deadline.
@@ -558,12 +560,13 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 >
                   Bid Validity Expiry Date
                 </label>
-                <input
+                <DateTimePicker
                   id="extend-validity-date-input"
-                  type="date"
+                  mode="date"
                   value={bidValidityDate}
-                  onChange={(e) => setBidValidityDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 px-3.5 py-2 text-xs font-semibold text-slate-900 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 outline-none"
+                  onChange={setBidValidityDate}
+                  placeholder="Select bid validity expiry date"
+                  min={closingDate ? closingDate.split("T")[0] : undefined}
                 />
                 <p className="text-[10.5px] text-slate-500 mt-0.5">
                   Validity guarantee period for submitted quotes.
