@@ -378,7 +378,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
   // Send in-app & email notification to the seller with attached Purchase Order PDF when quotation is accepted
   const sellerUserId = Number(participation.sellerId);
   const poNumberStr = result.poNumber || 'PO-PB';
-  const bidTitleStr = bid.title || bid.itemName || `Bid #${bid.id}`;
+  const bidTitleStr = bid.title || `Bid #${bid.id}`;
   const totalAmountStr = result.amount ? `₹${Number(result.amount).toLocaleString('en-IN')}` : '';
 
   let pdfAttachment: { filename: string; content: Buffer; contentType: string } | undefined = undefined;
@@ -522,7 +522,6 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
           id: true,
           bidNumber: true,
           title: true,
-          itemName: true,
           category: true,
           buyerOrganizationName: true,
           buyerId: true,
@@ -589,7 +588,7 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
       id: a.id,
       bidId: a.bidId,
       bidNumber: a.bid?.bidNumber || `BID-${a.bidId}`,
-      title: a.bid?.title || a.bid?.itemName || 'Procurement Bid Award',
+      title: a.bid?.title || 'Procurement Bid Award',
       amount: Number(a.awardedAmount || a.participation?.totalAmount || a.participation?.quotedAmount || 0),
       awardStatus: a.awardStatus,
       awardedAt: a.awardedAt || a.createdAt,

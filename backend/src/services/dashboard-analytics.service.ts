@@ -174,8 +174,8 @@ export class DashboardAnalyticsService {
       (prisma as any).procurementBid.count({
         where: orgId ? { buyerOrgId: orgId } : { buyerUserId: userIdNum }
       }).catch(() => 0),
-      (prisma as any).reverseAuction.count({
-        where: orgId ? { organizationId: orgId } : { createdById: userIdNum }
+      prisma.auction.count({
+        where: orgId ? { buyerOrgId: orgId } : { createdByUserId: userIdNum }
       }).catch(() => 0),
       prisma.purchaseOrder.count({
         where: { ...buyerRecordWhere, sourceType: 'direct_purchase' }
@@ -203,10 +203,10 @@ export class DashboardAnalyticsService {
           status: { in: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED'] } 
         } 
       }).catch(() => 0),
-      (prisma as any).reverseAuction.count({ 
+      prisma.auction.count({ 
         where: { 
-          ...(orgId ? { organizationId: orgId } : { createdById: userIdNum }), 
-          status: { in: ['LIVE', 'ACTIVE', 'SCHEDULED'] } 
+          ...(orgId ? { buyerOrgId: orgId } : { createdByUserId: userIdNum }), 
+          status: { in: ['LIVE', 'ACTIVE', 'SCHEDULED', 'live', 'active', 'scheduled'] } 
         } 
       }).catch(() => 0),
       (prisma as any).procurementBid.count({ 
