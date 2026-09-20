@@ -52,6 +52,7 @@ import {
   Activity,
   Repeat,
   Clock,
+  RefreshCw,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -803,6 +804,34 @@ const getTotalProcurementQty = (draft: Draft): number => {
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 };
 
+export const computeProcurementTotals = (items: ItemRow[]) => {
+  let baseValue = 0;
+  let gstAmount = 0;
+  let totalQty = 0;
+
+  for (const item of items) {
+    const qty = Math.max(0, Number(item.quantity || 0));
+    const rate = Math.max(0, Number(item.unitPrice || 0));
+    const gstPct = Math.max(0, Number(item.gst ?? 18));
+    const itemBase = qty * rate;
+    const itemGst = (itemBase * gstPct) / 100;
+
+    baseValue += itemBase;
+    gstAmount += itemGst;
+    totalQty += qty;
+  }
+
+  const grossValue = baseValue + gstAmount;
+
+  return {
+    baseValue,
+    gstAmount,
+    grossValue,
+    totalQty,
+    itemCount: items.length,
+  };
+};
+
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
@@ -1250,10 +1279,7 @@ export default function CreateProcurementPage() {
     if (!fromCart || draftIdParam || !activeCart?.items?.length) return;
 
     const importedItems = activeCart.items.map(cartItemToProcurementItem);
-    const estimatedValue = importedItems.reduce(
-      (sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0),
-      0
-    );
+    const totals = computeProcurementTotals(importedItems);
 
     setDraft(current => {
       const next = {
@@ -1262,7 +1288,7 @@ export default function CreateProcurementPage() {
         basics: {
           ...current.basics,
           title: current.basics.title || 'Request for Quotation from Cart',
-          estimatedValue,
+          estimatedValue: Math.round(totals.grossValue),
         },
         items: importedItems,
       };
@@ -2930,6 +2956,27 @@ function BasicsStepForm({
             className={inputClass}
             placeholder="0"
           />
+          {draft.items.length > 0 && (() => {
+            const itemTotals = computeProcurementTotals(draft.items);
+            const grossRounded = Math.round(itemTotals.grossValue);
+            if (grossRounded > 0 && grossRounded !== draft.basics.estimatedValue) {
+              return (
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-[10.5px] bg-blue-50 border border-blue-200/80 px-2.5 py-1.5 rounded-lg text-[#12335f]">
+                  <span>
+                    Schedule BOQ Total (Incl. GST): <strong>₹{grossRounded.toLocaleString('en-IN')}</strong> ({draft.items.length} line items)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: grossRounded } }))}
+                    className="font-bold underline hover:text-blue-900 cursor-pointer shrink-0"
+                  >
+                    Sync with Schedule Total
+                  </button>
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-md">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
             <span>Internal Benchmark — Used for financial validation, CFA approval tier, and EMD computation.</span>
@@ -4722,10 +4769,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(item);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4743,10 +4790,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(item);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4789,10 +4836,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(duplicated);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4802,10 +4849,10 @@ function ItemsDetailsForm({
   const handleRemoveItem = (id: string) => {
     updateDraft(current => {
       const nextItems = current.items.filter(item => item.id !== id);
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4918,12 +4965,12 @@ function ItemsDetailsForm({
 
       updateDraft(current => {
         const nextItems = [...current.items, ...importedItems];
-        const estimatedValue = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+        const totals = computeProcurementTotals(nextItems);
         return {
           ...current,
           basics: {
             ...current.basics,
-            estimatedValue,
+            estimatedValue: Math.round(totals.grossValue),
           },
           items: nextItems,
         };
@@ -4946,12 +4993,12 @@ function ItemsDetailsForm({
     updateDraft(current => {
       const manualItems = current.items.filter(item => !String(item.id).startsWith('cart:'));
       const nextItems = [...manualItems, ...importedItems];
-      const estimatedValue = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
         basics: {
           ...current.basics,
-          estimatedValue,
+          estimatedValue: Math.round(totals.grossValue),
         },
         items: nextItems,
       };
@@ -5071,8 +5118,8 @@ function ItemsDetailsForm({
         total: 0,
         remarks: ''
       }];
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -5085,16 +5132,16 @@ function ItemsDetailsForm({
         srNo: nextTable.length + 1
       });
       const reindexed = nextTable.map((row, i) => ({ ...row, srNo: i + 1 }));
-      const sum = reindexed.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: reindexed, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = reindexed.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: reindexed, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
   const handleRemoveBOQRow = (idx: number) => {
     updateDraft(c => {
       const nextTable = c.boqTable.filter((_, i) => i !== idx).map((row, i) => ({ ...row, srNo: i + 1 }));
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -5105,12 +5152,12 @@ function ItemsDetailsForm({
       if (key === 'quantity' || key === 'estimatedRate' || key === 'taxPercent') {
         const qty = Number(key === 'quantity' ? val : row.quantity || 0);
         const rate = Number(key === 'estimatedRate' ? val : row.estimatedRate || 0);
-        const tax = Number(key === 'taxPercent' ? val : row.taxPercent || 0);
+        const tax = Number(key === 'taxPercent' ? val : row.taxPercent ?? 18);
         row.total = qty * rate * (1 + tax / 100);
       }
       nextTable[idx] = row;
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -5169,16 +5216,43 @@ function ItemsDetailsForm({
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-[9%]',
+      width: 'w-[10%]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
-      cell: (item: any) => (
-        Number(item.unitPrice || 0) > 0 ? (
-          <span className="truncate">₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+      cell: (item: any) => {
+        const rate = Number(item.unitPrice || 0);
+        const gst = Number(item.gst ?? 18);
+        return rate > 0 ? (
+          <div className="text-right">
+            <div className="font-extrabold text-slate-900">₹{rate.toLocaleString('en-IN')}</div>
+            <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
+          </div>
         ) : (
           <span className="text-slate-400 font-normal">-</span>
-        )
-      )
+        );
+      }
+    },
+    {
+      key: 'total',
+      header: 'Line Total (Incl. GST)',
+      width: 'w-[11%]',
+      align: 'right',
+      cellClassName: 'font-extrabold text-slate-900',
+      cell: (item: any) => {
+        const qty = Number(item.quantity || 0);
+        const rate = Number(item.unitPrice || 0);
+        const gst = Number(item.gst ?? 18);
+        const base = qty * rate;
+        const total = base * (1 + gst / 100);
+        return total > 0 ? (
+          <div className="text-right">
+            <div className="font-black text-[#12335f]">₹{Math.round(total).toLocaleString('en-IN')}</div>
+            <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
+          </div>
+        ) : (
+          <span className="text-slate-400 font-normal">-</span>
+        );
+      }
     },
     {
       key: 'hsn',
@@ -5617,38 +5691,95 @@ function ItemsDetailsForm({
         }
       />
 
-      {/* Summary Metrics Bar */}
+      {/* Summary Metrics Bar with Full Financial Breakdown */}
       {(() => {
+        const totals = computeProcurementTotals(draft.items);
         const totalQty = getTotalProcurementQty(draft);
         const qtyOk = totalQty > 0;
+        const isSynced = Math.round(totals.grossValue) === draft.basics.estimatedValue;
+
         return (
-          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Total Items</span>
-              <span className="text-sm font-black text-slate-900">{draft.items.length} Lines</span>
+          <div className="space-y-3">
+            <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-900">{draft.items.length} Lines</span>
+                  <span className="text-xs font-bold text-slate-500">{totalQty.toLocaleString('en-IN')} Units</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Base Value (Excl. GST)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-800">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.baseValue)}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-400">Pre-tax</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Applicable GST (Taxes)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-purple-700">
+                    +{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.gstAmount)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Taxes</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">Total Est. Value (Gross)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-base font-black text-[#12335f]">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.grossValue)}
+                  </span>
+                  <span className="text-[9.5px] font-black text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded uppercase">Incl. GST</span>
+                </div>
+              </div>
             </div>
 
-            <div className={cn(
-              "flex items-center justify-between rounded-xl border p-3.5 text-xs font-bold shadow-3xs",
-              qtyOk
-                ? "bg-blue-50/80 border-blue-200 text-[#12335f]"
-                : "bg-rose-50 border-rose-300 text-rose-700"
-            )}>
-              <span className="text-[11px] font-black uppercase tracking-wider">
-                Total Qty &rarr; Consignee
-              </span>
-              <span className="text-sm font-black">{totalQty.toLocaleString('en-IN')} Units</span>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Total Est. Value</span>
-              <span className="text-base font-black text-[#12335f]">
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(draft.basics.estimatedValue)}
-              </span>
-            </div>
+            {/* Reconciliation Banner between Step 2 estimate & BOQ schedule */}
+            {draft.items.length > 0 && (
+              !isSynced ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>
+                      Step 2 initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but itemized schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      updateDraft(c => ({
+                        ...c,
+                        basics: { ...c.basics, estimatedValue: Math.round(totals.grossValue) }
+                      }));
+                      toast.success('Tender estimated budget synced with Schedule Total!');
+                    }}
+                    className="h-7.5 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap shadow-3xs"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync Tender Budget with BOQ
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Tender estimated budget is fully synchronized with schedule line items (Base + GST).</span>
+                  </div>
+                  <span className="text-[9.5px] font-black uppercase text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
+                    Synchronized
+                  </span>
+                </div>
+              )
+            )}
 
             {!qtyOk && (
-              <p className="sm:col-span-3 text-[11px] font-bold text-rose-600">
+              <p className="text-[11px] font-bold text-rose-600">
                 Add at least one line with a quantity greater than 0. Submission is blocked until total quantity is above 0.
               </p>
             )}
