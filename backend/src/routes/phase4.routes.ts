@@ -494,6 +494,9 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
 
   const isApproved =
     approvedProcurementStatuses.has(String(user.onboardingStatus)) ||
+    user.onboardingStatus === 'completed' ||
+    user.registrationStatus === 'completed' ||
+    user.accountStatus === 'ACTIVE' ||
     buyerProfileVerified ||
     organizationVerified ||
     allSectionsApproved;

@@ -9,6 +9,7 @@ export interface MessageUserDto {
     id: number;
     name: string;
     email?: string;
+    mobile?: string;
     role: MessageRole;
     lastLoginAt?: string | null;
     updatedAt?: string;

@@ -1291,7 +1291,18 @@ const enrichConversationPayload = async (conversation: any) => {
             subject: true,
             status: true,
             quoteResponses: {
-              select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+              select: {
+                id: true,
+                status: true,
+                totalAmount: true,
+                responseNumber: true,
+                createdAt: true,
+                deliveryDays: true,
+                notes: true,
+                documentUrl: true,
+                warrantyPeriod: true,
+                acknowledgement: true
+              }
             }
           }
         });

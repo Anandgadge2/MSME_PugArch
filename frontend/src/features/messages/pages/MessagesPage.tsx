@@ -33,6 +33,8 @@ import {
     ArrowRight,
     ExternalLink,
     AlertCircle,
+    Eye,
+    Package,
     X
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
@@ -67,6 +69,7 @@ import VoiceNoteRecorder from '../components/VoiceNoteRecorder';
 import EmojiPickerPopover from '../components/EmojiPickerPopover';
 import ForwardMessageModal from '../components/ForwardMessageModal';
 import { useConversationRealtime } from '../hooks/useConversationRealtime';
+import { SupplierQuotationDetailModal } from '../../procurementBid/components/SupplierQuotationDetailModal';
 import { cn } from '../../../lib/utils';
 
 export const roleLabel = (role?: string) => (role || 'user').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -664,6 +667,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
         notes?: string;
     } | null>(null);
     const [isAcceptingQuote, setIsAcceptingQuote] = useState(false);
+    const [viewQuotationModal, setViewQuotationModal] = useState<any | null>(null);
 
     const handleAcceptQuotation = async (quoteResponseId: number, title?: string) => {
         try {
@@ -741,6 +745,52 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
     const isUploading = uploadingFiles.length > 0;
     const lastSeenText = formatLastSeen(counterpart);
     const isCounterpartOnline = lastSeenText === 'Online';
+
+    const handleOpenQuotationDetails = (quote?: any, parsed?: ParsedQuoteData | null) => {
+        const rawAmt = quote?.totalAmount ?? (parsed?.amount ? Number(parsed.amount.replace(/[^0-9.]/g, '')) : 0);
+        const quoteRef = quote?.responseNumber || parsed?.ref || (quote?.id ? `QR-${quote.id}` : 'QUOTATION');
+        const quoteDelivery = quote?.deliveryDays ? `${quote.deliveryDays} Days` : (parsed?.timeline || 'As specified');
+        const quoteNotes = quote?.notes || parsed?.notes || (quote?.acknowledgement as any)?.notes || '';
+        const rawLineItems = quote?.acknowledgement?.lineItems || quote?.responseData?.lineItems || [
+            {
+                itemName: ((conversation.quoteRequest as any)?.subject || conversation.subject)?.replace(/^Quote Request #?\d*:?\s*/i, '').replace(/^Quote request:?\s*/i, '') || 'Requested Product / Service',
+                quantity: 1,
+                unitOfMeasure: 'Nos',
+                unitPrice: Number(rawAmt || 0),
+                totalPrice: Number(rawAmt || 0)
+            }
+        ];
+
+        const quotationDetailData = {
+            ...quote,
+            id: quote?.id || 1,
+            responseNumber: quoteRef,
+            referenceNumber: quoteRef,
+            totalAmount: Number(rawAmt || 0),
+            totalPrice: Number(rawAmt || 0),
+            quotedAmount: Number(rawAmt || 0),
+            deliveryTimeline: quoteDelivery,
+            terms: quoteNotes,
+            notes: quoteNotes,
+            message: quoteNotes,
+            sellerName: counterpart?.sellerProfile?.businessName || counterpart?.name || 'Seller',
+            companyName: counterpart?.sellerProfile?.businessName || counterpart?.name || 'Seller',
+            contactPerson: counterpart?.name || 'Supplier Representative',
+            sellerEmail: counterpart?.email || '',
+            sellerMobile: counterpart?.mobile || '',
+            sellerUser: counterpart,
+            seller: counterpart,
+            lineItems: rawLineItems,
+            status: isQuoteAccepted ? 'ACCEPTED' : (quote?.status || 'SUBMITTED'),
+            rawParticipation: {
+                ...quote,
+                totalAmount: Number(rawAmt || 0),
+                status: isQuoteAccepted ? 'ACCEPTED' : (quote?.status || 'SUBMITTED')
+            }
+        };
+
+        setViewQuotationModal(quotationDetailData);
+    };
 
     const handleAttachmentFiles = async (event: ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files || []);
@@ -1061,13 +1111,25 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                     </Button>
                                 )}
                                 {isBuyer && isAccepted && (
-                                    <Button
-                                        size="sm"
-                                        className="h-7 bg-[#12335f] text-[11px] font-bold text-white hover:bg-[#0b1f3a]"
-                                        onClick={() => router.push('/orders')}
-                                    >
-                                        <ShoppingCart className="mr-1 h-3.5 w-3.5" /> View Order (PO)
-                                    </Button>
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            className="h-7 bg-[#12335f] text-[11px] font-bold text-white hover:bg-[#0b1f3a]"
+                                            onClick={() => router.push('/orders')}
+                                        >
+                                            <ShoppingCart className="mr-1 h-3.5 w-3.5" /> View Order (PO)
+                                        </Button>
+                                        {submittedQuote && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 border-slate-300 text-[11px] font-semibold hover:bg-slate-100"
+                                                onClick={() => handleOpenQuotationDetails(submittedQuote, null)}
+                                            >
+                                                <Eye className="mr-1 h-3.5 w-3.5" /> View Details
+                                            </Button>
+                                        )}
+                                    </div>
                                 )}
                                 {isBuyer && !isAccepted && submittedQuote && (
                                     <>
@@ -1084,8 +1146,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                         notes: (submittedQuote as any).notes || undefined
                                                     });
                                                  } else {
-                                                    const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                    router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
+                                                    handleOpenQuotationDetails(submittedQuote, null);
                                                 }
                                             }}
                                         >
@@ -1095,12 +1156,9 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                             size="sm"
                                             variant="outline"
                                             className="h-7 border-slate-300 text-[11px] font-semibold hover:bg-slate-100"
-                                            onClick={() => {
-                                                const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
-                                            }}
+                                            onClick={() => handleOpenQuotationDetails(submittedQuote, null)}
                                         >
-                                            <FileText className="mr-1 h-3.5 w-3.5" /> Review
+                                            <Eye className="mr-1 h-3.5 w-3.5" /> View Details
                                         </Button>
                                     </>
                                 )}
@@ -1301,8 +1359,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                                             notes: parsedQuote.notes || undefined
                                                                                         });
                                                                                       } else {
-                                                                                        const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                                                        router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
+                                                                                        handleOpenQuotationDetails(submittedQuote, parsedQuote);
                                                                                     }
                                                                                 }}
                                                                             >
@@ -1312,12 +1369,9 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                                 size="sm"
                                                                                 variant="outline"
                                                                                 className={cn("h-8 text-[11px] font-bold", isMe ? "border-white/20 text-white hover:bg-white/10" : "border-slate-300 text-slate-700 hover:bg-slate-100")}
-                                                                                onClick={() => {
-                                                                                    const targetId = quoteReqId || conversation.quoteRequest?.id;
-                                                                                    router.push(targetId ? `/buyer/rfq/detail?requirementId=${targetId}&tab=clarifications` : '/buyer/my-procurements');
-                                                                                }}
+                                                                                onClick={() => handleOpenQuotationDetails(submittedQuote, parsedQuote)}
                                                                             >
-                                                                                <FileText className="mr-1.5 h-3.5 w-3.5" /> Review Comparison
+                                                                                <Eye className="mr-1.5 h-3.5 w-3.5" /> View Details
                                                                             </Button>
                                                                         </div>
                                                                         <p className={cn("text-[9.5px] font-medium leading-tight", isMe ? "text-indigo-200" : "text-slate-500")}>
@@ -1329,13 +1383,23 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                         <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
                                                                             <CheckCircle2 className="h-3.5 w-3.5" /> Purchase Order Generated
                                                                         </span>
-                                                                        <Button
-                                                                            size="sm"
-                                                                            className="h-7 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] font-bold"
-                                                                            onClick={() => router.push('/orders')}
-                                                                        >
-                                                                            <ShoppingCart className="mr-1 h-3 w-3" /> View Orders
-                                                                        </Button>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <Button
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                className={cn("h-7 text-[10px] font-bold", isMe ? "border-white/20 text-white hover:bg-white/10" : "border-slate-300 text-slate-700 hover:bg-slate-100")}
+                                                                                onClick={() => handleOpenQuotationDetails(submittedQuote, parsedQuote)}
+                                                                            >
+                                                                                <Eye className="mr-1 h-3 w-3" /> View Details
+                                                                            </Button>
+                                                                            <Button
+                                                                                size="sm"
+                                                                                className="h-7 bg-[#12335f] text-white hover:bg-[#0e2a4f] text-[10px] font-bold"
+                                                                                onClick={() => router.push('/orders')}
+                                                                            >
+                                                                                <ShoppingCart className="mr-1 h-3 w-3" /> View Orders
+                                                                            </Button>
+                                                                        </div>
                                                                     </div>
                                                                 )}
                                                             </div>
@@ -1716,6 +1780,28 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                     </div>
                 </div>
             )}
+
+            {/* Full Quotation Detail Modal for Buyer */}
+            {viewQuotationModal && (
+                <SupplierQuotationDetailModal
+                    isOpen={Boolean(viewQuotationModal)}
+                    onClose={() => setViewQuotationModal(null)}
+                    result={viewQuotationModal}
+                    onAcceptAndGeneratePo={(res) => {
+                        setViewQuotationModal(null);
+                        const targetId = submittedQuote?.id || res?.id;
+                        if (targetId) {
+                            setAcceptModalQuote({
+                                responseId: targetId,
+                                amount: Number(res?.totalAmount || submittedQuote?.totalAmount || 0),
+                                responseNumber: res?.responseNumber || submittedQuote?.responseNumber || undefined,
+                                deliveryTimeline: res?.deliveryTimeline || (submittedQuote?.deliveryDays ? `${submittedQuote.deliveryDays} Days` : undefined),
+                                notes: res?.notes || (submittedQuote as any)?.notes || undefined
+                            });
+                        }
+                    }}
+                />
+            )}
         </Card>
     );
 }
@@ -1770,6 +1856,11 @@ export function CreateConversationModal({
     const [filterQuery, setFilterQuery] = useState('');
     const [subject, setSubject] = useState(initialSubject);
     const [message, setMessage] = useState(initialMessage);
+    const [quoteQuantity, setQuoteQuantity] = useState<number>(1);
+    const [quoteUom, setQuoteUom] = useState<string>('Nos');
+    const [quoteLocation, setQuoteLocation] = useState<string>('');
+    const [quoteTimeline, setQuoteTimeline] = useState<string>('15 days');
+    const [quoteSpecifications, setQuoteSpecifications] = useState<string>('');
     const mut = useCreateConversation();
     const users = useMessageUserSearch({ role: recipientRole }, true);
     const isPrefilledCounterparty = Boolean(initialCounterpartyId);
@@ -1799,18 +1890,25 @@ export function CreateConversationModal({
         });
     }, [sortedUsers, filterQuery]);
 
+    const getFinalMessage = () => {
+        if (!isMarketplaceQuoteRequest) return message.trim();
+        const cleanedTitle = subject.replace(/^Quote request:?\s*/i, '').replace(/^Quote Request #?\d*:?\s*/i, '').trim() || 'Requested Product';
+        return `1. ${cleanedTitle}\n   Quantity: ${quoteQuantity} ${quoteUom}\n   Delivery Location: ${quoteLocation.trim() || 'Not specified'}\n   Required Timeline: ${quoteTimeline.trim() || 'Standard'}\n   Specifications: ${quoteSpecifications.trim() || 'Standard catalog specifications'}\n\n${message.trim() ? `Additional Notes:\n${message.trim()}\n\n` : ''}Please share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.`;
+    };
+
     const payloadForRole = () => {
         if (!counterpartyId) return null;
-        if (recipientRole === 'seller') return { sellerId: counterpartyId as number, subject: subject.trim(), initialMessage: message.trim() || undefined };
-        return { buyerId: counterpartyId as number, subject: subject.trim(), initialMessage: message.trim() || undefined };
+        const finalMsg = getFinalMessage();
+        if (recipientRole === 'seller') return { sellerId: counterpartyId as number, subject: subject.trim(), initialMessage: finalMsg || undefined };
+        return { buyerId: counterpartyId as number, subject: subject.trim(), initialMessage: finalMsg || undefined };
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs">
-            <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
+            <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest">{isMarketplaceQuoteRequest ? 'Request Quote' : 'New Conversation'}</h3>
+                        <h3 className="text-sm font-black uppercase tracking-widest">{isMarketplaceQuoteRequest ? 'Request Quote & Specifications' : 'New Conversation'}</h3>
                     </div>
                     <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10"><X className="h-4 w-4" /></button>
                 </div>
@@ -1872,25 +1970,112 @@ export function CreateConversationModal({
                         </div>
                     )}
                     <Input
-                        label="Subject"
+                        label="Subject / Product"
                         value={subject}
                         onChange={event => setSubject(event.target.value)}
-                        placeholder="Tender clarification, delivery issue, quote inquiry..."
+                        placeholder="e.g. Quote request: Industrial Safety Helmet Class-E"
                         maxLength={160}
                     />
-                    <div className="space-y-1.5">
-                        <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">First Message</label>
-                        <textarea
-                            value={message}
-                            onChange={event => setMessage(event.target.value)}
-                            rows={4}
-                            maxLength={2000}
-                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-semibold outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
-                        />
-                        <p className="text-right text-[10px] text-slate-400">{message.length}/2000</p>
-                    </div>
+
+                    {isMarketplaceQuoteRequest ? (
+                        <div className="space-y-3.5 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
+                            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[#12335f]">
+                                <Package className="h-4 w-4 text-blue-600" />
+                                <span>Requirements & Specifications for Seller</span>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                                        Required Quantity *
+                                    </label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        value={quoteQuantity}
+                                        onChange={e => setQuoteQuantity(Math.max(1, Number(e.target.value) || 1))}
+                                        placeholder="e.g. 50"
+                                    />
+                                </div>
+                                <div>
+                                    <Select
+                                        label="Unit of Measure (UOM)"
+                                        value={quoteUom}
+                                        onChange={e => setQuoteUom(e.target.value)}
+                                    >
+                                        <option value="Nos">Nos / Pieces</option>
+                                        <option value="PCS">PCS</option>
+                                        <option value="Sets">Sets</option>
+                                        <option value="Units">Units</option>
+                                        <option value="Kg">Kg</option>
+                                        <option value="Boxes">Boxes</option>
+                                        <option value="Meters">Meters</option>
+                                        <option value="Liters">Liters</option>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                                        Delivery Location / Pincode
+                                    </label>
+                                    <Input
+                                        value={quoteLocation}
+                                        onChange={e => setQuoteLocation(e.target.value)}
+                                        placeholder="e.g. Pune - 411001, Maharashtra"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                                        Required Delivery Timeline
+                                    </label>
+                                    <Input
+                                        value={quoteTimeline}
+                                        onChange={e => setQuoteTimeline(e.target.value)}
+                                        placeholder="e.g. Within 15 days"
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                                    Technical Specifications & Custom Requirements
+                                </label>
+                                <textarea
+                                    value={quoteSpecifications}
+                                    onChange={e => setQuoteSpecifications(e.target.value)}
+                                    rows={2}
+                                    placeholder="Enter color, grade, certification (e.g. ISI/ISO), ratchet adjustment, warranty terms, or special needs..."
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                                    Additional Remarks / Cover Note (Optional)
+                                </label>
+                                <textarea
+                                    value={message}
+                                    onChange={event => setMessage(event.target.value)}
+                                    rows={2}
+                                    maxLength={1000}
+                                    placeholder="Any payment terms, packaging instructions, or inquiry details..."
+                                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                                />
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-1.5">
+                            <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500">First Message</label>
+                            <textarea
+                                value={message}
+                                onChange={event => setMessage(event.target.value)}
+                                rows={4}
+                                maxLength={2000}
+                                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-xs font-semibold outline-none focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                            <p className="text-right text-[10px] text-slate-400">{message.length}/2000</p>
+                        </div>
+                    )}
                 </div>
-                <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-4">
+                <div className="sticky bottom-0 z-10 flex justify-end gap-2 border-t border-slate-100 bg-white px-5 py-4">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
                     <Button
                         onClick={async () => {
@@ -1898,13 +2083,15 @@ export function CreateConversationModal({
                             if (!payload) { toast.error('Select a recipient'); return; }
                             if (subject.trim().length < 3) { toast.error('Subject required (min 3 chars)'); return; }
 
+                            const finalMessage = getFinalMessage();
+
                             if (isMarketplaceQuoteRequest && recipientRole === 'seller') {
                                 try {
                                     const quotePayload = {
                                         sellerId: Number(counterpartyId),
                                         subject: subject.trim(),
-                                        message: message.trim(),
-                                        estimatedValue: initialPrice ? Number(initialPrice) : undefined
+                                        message: finalMessage,
+                                        estimatedValue: initialPrice ? Number(initialPrice) * (quoteQuantity || 1) : undefined
                                     };
                                     const createdQuote = await runWithToast(() => postApi<any>('/api/quote-requests', quotePayload), {
                                         loading: 'Submitting formal quote request...',
