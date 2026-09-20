@@ -219,6 +219,39 @@ export function PurchaseOrderReceiptModal({
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [sheetDims, setSheetDims] = useState<{ w: number; h: number }>({ w: 800, h: 650 });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [liveBranding, setLiveBranding] = useState<{
+    logoUrl: string | null;
+    stampUrl: string | null;
+    signatureUrl: string | null;
+  }>({
+    logoUrl: null,
+    stampUrl: null,
+    signatureUrl: null
+  });
+
+  useEffect(() => {
+    if (!order) return;
+    const fetchBranding = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await api.fetch('/api/user/invoice-branding', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveBranding({
+            logoUrl: data.logoUrl || null,
+            stampUrl: data.stampUrl || null,
+            signatureUrl: data.signatureUrl || null
+          });
+        }
+      } catch {
+        // non-blocking
+      }
+    };
+    void fetchBranding();
+  }, [order]);
 
   const currentTheme = NEUTRAL_MINIMAL_THEME;
 
@@ -462,14 +495,14 @@ export function PurchaseOrderReceiptModal({
   const buyerSignature = buyerReg.signatureUrl || null;
   const buyerStamp = buyerReg.stampUrl || null;
 
-  const effectiveSellerLogo = sellerLogo || (isViewingSeller ? (currentUserReg.logoUrl || lsLogo) : null);
-  const effectiveBuyerLogo = buyerLogo || (isViewingBuyer ? (currentUserReg.logoUrl || lsLogo) : null);
+  const effectiveSellerLogo = sellerLogo || (isViewingSeller ? (currentUserReg.logoUrl || liveBranding.logoUrl || lsLogo) : null);
+  const effectiveBuyerLogo = buyerLogo || (isViewingBuyer ? (currentUserReg.logoUrl || liveBranding.logoUrl || lsLogo) : null);
 
-  const effectiveSellerSignature = sellerSignature || (isViewingSeller ? (currentUserReg.signatureUrl || lsSig) : null);
-  const effectiveSellerStamp = sellerStamp || (isViewingSeller ? (currentUserReg.stampUrl || lsStamp) : null);
+  const effectiveSellerSignature = sellerSignature || (isViewingSeller ? (currentUserReg.signatureUrl || liveBranding.signatureUrl || lsSig) : null);
+  const effectiveSellerStamp = sellerStamp || (isViewingSeller ? (currentUserReg.stampUrl || liveBranding.stampUrl || lsStamp) : null);
 
-  const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || lsSig) : null);
-  const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || lsStamp) : null);
+  const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || liveBranding.signatureUrl || lsSig) : null);
+  const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || liveBranding.stampUrl || lsStamp) : null);
 
   const topLogo = effectiveSellerLogo || effectiveBuyerLogo;
   const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');

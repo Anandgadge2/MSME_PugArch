@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, BASE_URL, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -36,6 +36,8 @@ import {
   Check,
   KeyRound,
   RefreshCw,
+  Stamp,
+  FileSignature,
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
@@ -48,6 +50,7 @@ import { BuyerProfileSkeleton, BuyerShowcaseFormSkeleton } from '../components/u
 import { DataTable, ColumnDef } from '../components/ui/data-table';
 import { FocusTrap } from '../components/ui/FocusTrap';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
+import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 
 interface SidebarNavItem {
   id: string;
@@ -69,7 +72,10 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
 export default function BuyerProfile() {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState('showcase_profile');
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams?.get('section');
+  const tabParam = searchParams?.get('tab');
+  const [activeSection, setActiveSection] = useState(sectionParam || 'showcase_profile');
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -100,10 +106,32 @@ export default function BuyerProfile() {
   const [passwordCountdown, setPasswordCountdown] = useState(0);
 
   // Showcase profile states
-  const [showcaseTab, setShowcaseTab] = useState('details');
+  const [showcaseTab, setShowcaseTab] = useState(tabParam || 'details');
   const [showcaseProfile, setShowcaseProfile] = useState<any>(null);
   const [showcaseLoading, setShowcaseLoading] = useState(true);
   const [showcaseSaving, setShowcaseSaving] = useState(false);
+
+  // Stamp & Signature states
+  const [stampUrl, setStampUrl] = useState<string | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
+  const [isBrandingLoading, setIsBrandingLoading] = useState(false);
+  const [isStampLoading, setIsStampLoading] = useState(false);
+  const [isSignatureLoading, setIsSignatureLoading] = useState(false);
+
+  // Synchronize section and tab from URL query params
+  useEffect(() => {
+    if (!searchParams) return;
+    const s = searchParams.get('section');
+    const t = searchParams.get('tab');
+    if (s) {
+      setActiveSection(s);
+    }
+    if (t && (!s || s === 'showcase_profile')) {
+      setShowcaseTab(t);
+    }
+  }, [searchParams]);
+
   const [items, setItems] = useState<any[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
@@ -163,6 +191,38 @@ export default function BuyerProfile() {
       setShowcaseLoading(false);
     }
   };
+
+  const fetchInvoiceBranding = async () => {
+    setIsBrandingLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stampUrl) setStampUrl(data.stampUrl);
+        if (data.signatureUrl) setSignatureUrl(data.signatureUrl);
+        if (data.logoUrl) {
+          setShowcaseProfile((prev: any) => (prev && !prev.logoUrl ? { ...prev, logoUrl: data.logoUrl } : prev));
+        }
+      } else if (typeof window !== 'undefined') {
+        const lsStamp = localStorage.getItem('msme_invoice_stamp');
+        const lsSig = localStorage.getItem('msme_invoice_signature');
+        if (lsStamp) setStampUrl(lsStamp);
+        if (lsSig) setSignatureUrl(lsSig);
+      }
+    } catch (err) {
+      console.error('Failed to fetch invoice branding', err);
+    } finally {
+      setIsBrandingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'showcase_profile' && showcaseTab === 'branding') {
+      void fetchInvoiceBranding();
+    }
+  }, [activeSection, showcaseTab]);
 
   const fetchItems = async () => {
     try {
@@ -326,6 +386,18 @@ export default function BuyerProfile() {
           const updateBody = await updateRes.json().catch(() => null);
           const finalLogoUrl = updateBody?.data?.logoUrl || logoUrl;
           setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: finalLogoUrl }));
+          // Sync with invoice-branding endpoint and localStorage
+          void api.fetch('/api/user/invoice-branding', {
+            method: 'PUT',
+            body: JSON.stringify({ logoUrl: finalLogoUrl }),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+          }).catch(() => null);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_logo', finalLogoUrl);
+          }
           toast.success('Logo uploaded successfully');
         } else {
           toast.error('Failed to update profile logo');
@@ -395,6 +467,19 @@ export default function BuyerProfile() {
       if (updateRes.ok) {
         setShowcaseProfile((prev: any) => ({ ...prev, [field]: null }));
         if (field === 'bannerUrl') setBannerLoadError(false);
+        if (field === 'logoUrl') {
+          void api.fetch('/api/user/invoice-branding', {
+            method: 'PUT',
+            body: JSON.stringify({ logoUrl: null }),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+          }).catch(() => null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('msme_invoice_logo');
+          }
+        }
         toast.success(`${field === 'logoUrl' ? 'Logo' : 'Banner'} removed successfully`);
       } else {
         toast.error('Failed to update profile');
@@ -402,6 +487,176 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Failed to remove image');
     } finally {
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleStampUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const limitMB = 2;
+    if (file.size > limitMB * 1024 * 1024) {
+      return toast.error(`File size exceeds limit of ${limitMB}MB`);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'stamp');
+    const loadingToast = toast.loading('Uploading official stamp...');
+    setIsStampLoading(true);
+    try {
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const uploadedStampUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+        if (!uploadedStampUrl) throw new Error('Upload did not return a valid URL');
+
+        const saveRes = await api.fetch('/api/user/invoice-branding', {
+          method: 'PUT',
+          body: JSON.stringify({ stampUrl: uploadedStampUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (saveRes.ok) {
+          setStampUrl(uploadedStampUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_stamp', uploadedStampUrl);
+          }
+          toast.success('Official stamp uploaded successfully');
+        } else {
+          toast.error('Failed to update official stamp');
+        }
+      } else {
+        toast.error('Stamp file upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Stamp upload failed due to network error');
+    } finally {
+      e.target.value = '';
+      setIsStampLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleRemoveStamp = async () => {
+    const loadingToast = toast.loading('Removing official stamp...');
+    setIsStampLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        method: 'PUT',
+        body: JSON.stringify({ stampUrl: null }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        setStampUrl(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('msme_invoice_stamp');
+        }
+        toast.success('Official stamp removed successfully');
+      } else {
+        toast.error('Failed to remove official stamp');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to remove official stamp due to network error');
+    } finally {
+      setIsStampLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const limitMB = 2;
+    if (file.size > limitMB * 1024 * 1024) {
+      return toast.error(`File size exceeds limit of ${limitMB}MB`);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'signature');
+    const loadingToast = toast.loading('Uploading authorized signature...');
+    setIsSignatureLoading(true);
+    try {
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const uploadedSigUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+        if (!uploadedSigUrl) throw new Error('Upload did not return a valid URL');
+
+        const saveRes = await api.fetch('/api/user/invoice-branding', {
+          method: 'PUT',
+          body: JSON.stringify({ signatureUrl: uploadedSigUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (saveRes.ok) {
+          setSignatureUrl(uploadedSigUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_signature', uploadedSigUrl);
+          }
+          toast.success('Authorized signature uploaded successfully');
+        } else {
+          toast.error('Failed to update authorized signature');
+        }
+      } else {
+        toast.error('Signature file upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Signature upload failed due to network error');
+    } finally {
+      e.target.value = '';
+      setIsSignatureLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleRemoveSignature = async () => {
+    const loadingToast = toast.loading('Removing authorized signature...');
+    setIsSignatureLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        method: 'PUT',
+        body: JSON.stringify({ signatureUrl: null }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        setSignatureUrl(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('msme_invoice_signature');
+        }
+        toast.success('Authorized signature removed successfully');
+      } else {
+        toast.error('Failed to remove authorized signature');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to remove authorized signature due to network error');
+    } finally {
+      setIsSignatureLoading(false);
       toast.dismiss(loadingToast);
     }
   };
@@ -1882,6 +2137,224 @@ export default function BuyerProfile() {
                               </div>
                             )}
                           </div>
+
+                          {/* Stamp & Authorized Signature Overview Card */}
+                          <div className="md:col-span-2 bg-gradient-to-br from-indigo-50/40 via-white to-slate-50 border border-indigo-100/80 hover:border-indigo-300 hover:shadow-md transition-all duration-300 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                            <div className="space-y-2 flex-1">
+                              <div className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider">
+                                <Stamp className="h-3.5 w-3.5" aria-hidden="true" />
+                                ERP Invoices & Purchase Orders
+                              </div>
+                              <h3 className="text-base font-black text-slate-900">Official Stamp & Authorized Signature</h3>
+                              <p className="text-xs font-semibold text-slate-500 max-w-xl leading-relaxed">
+                                Customize your company seal and signatory marks printed on generated purchase orders, delivery notes, and verification documents.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="h-16 w-28 rounded-xl border border-slate-200 bg-white shadow-xs p-1 flex items-center justify-center overflow-hidden">
+                                {stampUrl || signatureUrl ? (
+                                  <div className="relative h-full w-full flex items-center justify-center">
+                                    {stampUrl && (
+                                      <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Official Stamp" className="h-full w-auto object-contain opacity-90" />
+                                    )}
+                                    {signatureUrl && (
+                                      <img src={resolveMediaUrl(signatureUrl) || signatureUrl} alt="Authorized Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center text-slate-300">
+                                    <Stamp className="h-6 w-6" aria-hidden="true" />
+                                    <span className="text-[8px] font-bold text-slate-400">No Stamp / Sign</span>
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={() => setIsStampModalOpen(true)}
+                                aria-label="Manage official stamp and signature"
+                                className="bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black uppercase text-xs tracking-wider h-11 px-5 rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                              >
+                                <Stamp className="h-4 w-4" aria-hidden="true" /> Manage Stamp & Sign
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Official Stamp Upload Card */}
+                          <div className="p-6 rounded-3xl border border-slate-200/60 bg-white shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Official Round Stamp</h3>
+                              {stampUrl && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-0.5 text-[9px] font-black uppercase">
+                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Uploaded
+                                </span>
+                              )}
+                            </div>
+
+                            {isStampLoading ? (
+                              <div className="flex flex-col items-center justify-center h-32 animate-pulse">
+                                <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" aria-hidden="true" />
+                              </div>
+                            ) : stampUrl ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-center">
+                                  <div className="relative group">
+                                    <img
+                                      src={resolveMediaUrl(stampUrl) || stampUrl}
+                                      alt="Official Stamp"
+                                      className="h-32 w-32 object-contain rounded-xl border bg-white p-2 shadow-md"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(stampUrl) || stampUrl)}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      aria-label="View official stamp full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                  <Button
+                                    type="button"
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(stampUrl) || stampUrl)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" aria-hidden="true" /> View
+                                  </Button>
+                                  <label
+                                    htmlFor="buyer-stamp-upload-change"
+                                    className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Change
+                                    <input
+                                      id="buyer-stamp-upload-change"
+                                      type="file"
+                                      accept="image/png, image/jpeg, image/jpg"
+                                      className="hidden"
+                                      onChange={handleStampUpload}
+                                    />
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    onClick={handleRemoveStamp}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                                  </Button>
+                                </div>
+                                <p className="text-center text-[10px] text-slate-400 font-semibold">PNG, JPG · Max 2MB · Transparent background recommended</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50 space-y-3">
+                                <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+                                  <Stamp className="h-8 w-8" aria-hidden="true" />
+                                </div>
+                                <p className="text-xs text-slate-400 font-semibold text-center">No official stamp uploaded yet<br />PNG, JPG · Max 2MB</p>
+                                <label
+                                  htmlFor="buyer-stamp-upload"
+                                  className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] text-white hover:bg-slate-800 font-black uppercase text-[10px] tracking-wider h-10 px-5 rounded-xl shadow-md gap-1.5"
+                                >
+                                  <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Select Stamp
+                                  <input
+                                    id="buyer-stamp-upload"
+                                    type="file"
+                                    accept="image/png, image/jpeg, image/jpg"
+                                    className="hidden"
+                                    onChange={handleStampUpload}
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Authorized Signature Upload Card */}
+                          <div className="p-6 rounded-3xl border border-slate-200/60 bg-white shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Authorized Signatory Signature</h3>
+                              {signatureUrl && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-0.5 text-[9px] font-black uppercase">
+                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Uploaded
+                                </span>
+                              )}
+                            </div>
+
+                            {isSignatureLoading ? (
+                              <div className="flex flex-col items-center justify-center h-32 animate-pulse">
+                                <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" aria-hidden="true" />
+                              </div>
+                            ) : signatureUrl ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-center">
+                                  <div className="relative group">
+                                    <img
+                                      src={resolveMediaUrl(signatureUrl) || signatureUrl}
+                                      alt="Authorized Signature"
+                                      className="h-32 w-48 object-contain rounded-xl border bg-white p-2 shadow-md"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(signatureUrl) || signatureUrl)}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      aria-label="View authorized signature full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                  <Button
+                                    type="button"
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(signatureUrl) || signatureUrl)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" aria-hidden="true" /> View
+                                  </Button>
+                                  <label
+                                    htmlFor="buyer-signature-upload-change"
+                                    className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Change
+                                    <input
+                                      id="buyer-signature-upload-change"
+                                      type="file"
+                                      accept="image/png, image/jpeg, image/jpg"
+                                      className="hidden"
+                                      onChange={handleSignatureUpload}
+                                    />
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    onClick={handleRemoveSignature}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                                  </Button>
+                                </div>
+                                <p className="text-center text-[10px] text-slate-400 font-semibold">PNG, JPG · Max 2MB · Transparent background recommended</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50 space-y-3">
+                                <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+                                  <FileSignature className="h-8 w-8" aria-hidden="true" />
+                                </div>
+                                <p className="text-xs text-slate-400 font-semibold text-center">No signature uploaded yet<br />PNG, JPG · Max 2MB</p>
+                                <label
+                                  htmlFor="buyer-signature-upload"
+                                  className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] text-white hover:bg-slate-800 font-black uppercase text-[10px] tracking-wider h-10 px-5 rounded-xl shadow-md gap-1.5"
+                                >
+                                  <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Select Signature
+                                  <input
+                                    id="buyer-signature-upload"
+                                    type="file"
+                                    accept="image/png, image/jpeg, image/jpg"
+                                    className="hidden"
+                                    onChange={handleSignatureUpload}
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -3191,9 +3664,21 @@ export default function BuyerProfile() {
 
       </main>
 
-      {/* Background Decorations */}
-      <div className="fixed top-0 right-0 w-[800px] h-[800px] bg-[#12335f]/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
-      <div className="fixed bottom-0 left-0 w-[800px] h-[800px] bg-indigo-600/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
+      {/* Signature & Stamp Upload Modal */}
+      <SignatureStampUploadModal
+        isOpen={isStampModalOpen}
+        onClose={() => setIsStampModalOpen(false)}
+        initialLogo={showcaseProfile?.logoUrl}
+        initialStamp={stampUrl}
+        initialSignature={signatureUrl}
+        onSaved={(branding) => {
+          if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
+          if (branding.logoUrl !== undefined && branding.logoUrl) {
+            setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: branding.logoUrl }));
+          }
+        }}
+      />
     </div>
   );
 }

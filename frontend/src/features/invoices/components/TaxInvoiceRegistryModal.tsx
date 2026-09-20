@@ -17,12 +17,12 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { formatDate } from '../../shared/format';
 import { getApi } from '../../shared/apiClient';
 import { TaxInvoiceCard } from './TaxInvoiceCard';
-import { SignatureStampUploadModal } from './SignatureStampUploadModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 
 export interface TaxInvoiceRegistryModalProps {
@@ -39,33 +39,43 @@ export function TaxInvoiceRegistryModal({
   initialInvoiceData = null
 }: TaxInvoiceRegistryModalProps) {
   const router = useRouter();
+  const { user } = useAuth();
   const [invoice, setInvoice] = useState<any>(initialInvoiceData);
   const [loading, setLoading] = useState(!initialInvoiceData && Boolean(invoiceId));
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copyType, setCopyType] = useState('Original Copy');
-  const [isBrandingOpen, setIsBrandingOpen] = useState(false);
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
-  // Seller branding
+  // Seller/Buyer branding
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [stampUrl, setStampUrl] = useState<string | null>(null);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
 
-  // Load branding
+  const handleStampSignatureRedirect = () => {
+    if (user?.role === 'buyer') {
+      router.push('/buyer/profile?section=showcase_profile&tab=branding');
+    } else if (user?.role === 'shg') {
+      router.push('/shg/settings?section=branding');
+    } else {
+      router.push('/seller/settings?section=branding');
+    }
+  };
+
+  // Load branding from canonical user invoice-branding endpoint
   useEffect(() => {
     try {
-      const storedLogo = localStorage.getItem('seller_invoice_logo');
+      const storedLogo = localStorage.getItem('msme_invoice_logo') || localStorage.getItem('seller_invoice_logo');
       if (storedLogo) setLogoUrl(storedLogo);
-      const storedStamp = localStorage.getItem('seller_invoice_stamp');
+      const storedStamp = localStorage.getItem('msme_invoice_stamp') || localStorage.getItem('seller_invoice_stamp');
       if (storedStamp) setStampUrl(storedStamp);
-      const storedSig = localStorage.getItem('seller_invoice_signature');
+      const storedSig = localStorage.getItem('msme_invoice_signature') || localStorage.getItem('seller_invoice_signature');
       if (storedSig) setSignatureUrl(storedSig);
     } catch {
       // ignore
     }
 
-    void getApi<any>('/api/seller/profile/branding').then((res: any) => {
+    void getApi<any>('/api/user/invoice-branding', true).then((res: any) => {
       if (res?.logoUrl) setLogoUrl(res.logoUrl);
       if (res?.stampUrl) setStampUrl(res.stampUrl);
       if (res?.signatureUrl) setSignatureUrl(res.signatureUrl);
@@ -116,16 +126,12 @@ export function TaxInvoiceRegistryModal({
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (isBrandingOpen) {
-          setIsBrandingOpen(false);
-        } else {
-          onClose();
-        }
+        onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isBrandingOpen, onClose]);
+  }, [isOpen, onClose]);
 
   // Construct structured invoice data for TaxInvoiceCard and PDF generator
   const invoiceData: TaxInvoiceData = useMemo(() => {
@@ -472,10 +478,12 @@ export function TaxInvoiceRegistryModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsBrandingOpen(true)}
+                    onClick={handleStampSignatureRedirect}
+                    aria-label="Manage official seal and signature in settings"
+                    title="Manage official seal and signature in settings"
                     className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                   >
-                    <Stamp className="h-3.5 w-3.5 text-indigo-600" />
+                    <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
                     <span className="hidden sm:inline">STAMP & SIGNATURE</span>
                     <span className="sm:hidden">STAMP</span>
                   </Button>
@@ -559,29 +567,13 @@ export function TaxInvoiceRegistryModal({
                   logoUrl={invoiceData.seller.logoUrl}
                   stampUrl={invoiceData.seller.stampUrl}
                   signatureUrl={invoiceData.seller.signatureUrl}
-                  onOpenUploadBranding={() => setIsBrandingOpen(true)}
+                  onOpenUploadBranding={handleStampSignatureRedirect}
                 />
               </div>
             </>
           )}
         </div>
       </div>
-
-      {/* Signature & Stamp Upload Modal */}
-      {isBrandingOpen && (
-        <SignatureStampUploadModal
-          isOpen={isBrandingOpen}
-          onClose={() => setIsBrandingOpen(false)}
-          initialLogo={logoUrl}
-          initialStamp={stampUrl}
-          initialSignature={signatureUrl}
-          onSaved={(branding) => {
-            if (branding.logoUrl !== undefined) setLogoUrl(branding.logoUrl);
-            if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
-            if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
-          }}
-        />
-      )}
     </div>
   );
 }

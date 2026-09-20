@@ -473,8 +473,11 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
+    const autoOpenedRef = useRef(false);
+    const userDismissedRef = useRef(false);
 
     const openAction = useCallback((kind: string, delivery: DeliveryDto) => {
+        userDismissedRef.current = false;
         setActionTarget({ kind, delivery });
         if (typeof window !== 'undefined' && kind === 'dispatch-details') {
             const url = new URL(window.location.href);
@@ -484,11 +487,20 @@ export default function SellerDeliveryManagementPage() {
     }, []);
 
     const closeAction = useCallback(() => {
+        userDismissedRef.current = true;
         setActionTarget(null);
         if (typeof window !== 'undefined') {
             const url = new URL(window.location.href);
+            let urlChanged = false;
             if (url.searchParams.has('dispatch')) {
                 url.searchParams.delete('dispatch');
+                urlChanged = true;
+            }
+            if (url.searchParams.has('deliveryId')) {
+                url.searchParams.delete('deliveryId');
+                urlChanged = true;
+            }
+            if (urlChanged) {
                 window.history.replaceState({}, '', url.toString());
             }
         }
@@ -517,7 +529,7 @@ export default function SellerDeliveryManagementPage() {
 
     // Deep-link & browser back restoration for dispatch order fulfillment
     useEffect(() => {
-        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget) {
+        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget && !autoOpenedRef.current && !userDismissedRef.current) {
             const params = new URLSearchParams(window.location.search);
             const dispatchId = params.get('dispatch') || params.get('deliveryId');
             const poId = params.get('poId');
@@ -525,6 +537,7 @@ export default function SellerDeliveryManagementPage() {
             if (dispatchId) {
                 const found = items.find(d => String(d.id) === dispatchId);
                 if (found) {
+                    autoOpenedRef.current = true;
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
                     return;
                 }
@@ -532,6 +545,7 @@ export default function SellerDeliveryManagementPage() {
             if (poId) {
                 const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
                 if (found) {
+                    autoOpenedRef.current = true;
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
                     return;
                 }
@@ -543,6 +557,7 @@ export default function SellerDeliveryManagementPage() {
                     return cleanPo && (cleanPo === cleanSearch || cleanPo.includes(cleanSearch) || cleanSearch.includes(cleanPo));
                 });
                 if (found) {
+                    autoOpenedRef.current = true;
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
                     return;
                 }
@@ -560,6 +575,7 @@ export default function SellerDeliveryManagementPage() {
                     if (dispatchId) {
                         const found = items.find(d => String(d.id) === dispatchId);
                         if (found) {
+                            userDismissedRef.current = false;
                             setActionTarget({ kind: 'dispatch-details', delivery: found });
                             return;
                         }
@@ -567,12 +583,14 @@ export default function SellerDeliveryManagementPage() {
                     if (poId) {
                         const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
                         if (found) {
+                            userDismissedRef.current = false;
                             setActionTarget({ kind: 'dispatch-details', delivery: found });
                             return;
                         }
                     }
                 }
                 if (!dispatchId && !poId && actionTarget) {
+                    userDismissedRef.current = true;
                     setActionTarget(null);
                 }
             }

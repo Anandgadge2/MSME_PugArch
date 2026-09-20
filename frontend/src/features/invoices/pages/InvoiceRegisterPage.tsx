@@ -23,8 +23,8 @@ import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
+import { useAuth } from '../../../hooks/useAuth';
 import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
-import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
@@ -355,6 +355,19 @@ function InvoiceRowActionCell({
 
 export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer' | 'seller' | 'admin' }) {
   const router = useRouter();
+  const { user } = useAuth();
+
+  const handleStampSignatureRedirect = () => {
+    const currentRole = user?.role || role;
+    if (currentRole === 'buyer') {
+      router.push('/buyer/profile?section=showcase_profile&tab=branding');
+    } else if (currentRole === 'shg') {
+      router.push('/shg/settings?section=branding');
+    } else {
+      router.push('/seller/settings?section=branding');
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -379,7 +392,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState<string | null>(null);
   const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
   const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);
-  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -1223,10 +1235,12 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => setIsBrandingModalOpen(true)}
-            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5"
+            onClick={handleStampSignatureRedirect}
+            aria-label="Manage official seal and signature in settings"
+            title="Manage official seal and signature in settings"
+            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5 cursor-pointer"
           >
-            <Stamp className="h-4 w-4 text-indigo-600" /> Stamp & Signature
+            <Stamp className="h-4 w-4 text-indigo-600" aria-hidden="true" /> Stamp & Signature
           </Button>
           {role === 'seller' && (
             <Button
@@ -1807,14 +1821,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                       {/* Right: Actions */}
                       <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
-                        {/* Stamp & Signature Upload Button */}
+                        {/* Stamp & Signature Redirect Button */}
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => setIsBrandingModalOpen(true)}
-                          className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap"
+                          onClick={handleStampSignatureRedirect}
+                          aria-label="Manage official seal and signature in settings"
+                          title="Manage official seal and signature in settings"
+                          className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                         >
-                          <Stamp className="h-3.5 w-3.5 text-indigo-600" />
+                          <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
                           <span className="hidden sm:inline">Stamp & Signature</span>
                           <span className="sm:hidden">Stamp</span>
                         </Button>
@@ -1896,7 +1912,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             logoUrl={invoiceLogoUrl}
                             stampUrl={invoiceStampUrl}
                             signatureUrl={invoiceSignatureUrl}
-                            onOpenUploadBranding={() => setIsBrandingModalOpen(true)}
+                            onOpenUploadBranding={handleStampSignatureRedirect}
                           />
                         );
                       })()}
@@ -2404,20 +2420,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         invoiceId={viewProofInvoiceId}
         onStatusChange={() => {
           void reload();
-        }}
-      />
-
-      {/* Signature & Stamp Upload Modal */}
-      <SignatureStampUploadModal
-        isOpen={isBrandingModalOpen}
-        onClose={() => setIsBrandingModalOpen(false)}
-        initialLogo={invoiceLogoUrl}
-        initialStamp={invoiceStampUrl}
-        initialSignature={invoiceSignatureUrl}
-        onSaved={(branding) => {
-          if (branding.logoUrl !== undefined) setInvoiceLogoUrl(branding.logoUrl);
-          if (branding.stampUrl !== undefined) setInvoiceStampUrl(branding.stampUrl);
-          if (branding.signatureUrl !== undefined) setInvoiceSignatureUrl(branding.signatureUrl);
         }}
       />
     </div>
