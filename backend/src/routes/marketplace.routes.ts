@@ -1729,6 +1729,58 @@ const purgeMarketplaceHomeCache = async () => {
     }
 };
 
+router.get('/admin/marketplace/home-sections', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
+    try {
+        return ok(res, { sections: await ensureMarketplaceHomeSections() });
+    } catch (error) {
+        console.error('[Admin Marketplace Sections]', error);
+        return apiResponse.error(res, 500, 'Failed to load marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_ERROR');
+    }
+});
+
+router.post('/admin/marketplace/home-sections/reset-defaults', authenticate, authorize('admin', 'master_admin'), async (_req: AuthRequest, res: Response) => {
+    try {
+        await Promise.all(defaultHomeSections.map(section =>
+            db.marketplaceHomeSection.upsert({
+                where: { key: section.key },
+                update: {
+                    title: section.title,
+                    enabled: section.enabled,
+                    displayOrder: section.displayOrder,
+                    itemLimit: section.itemLimit,
+                    ruleType: section.ruleType
+                },
+                create: { ...section }
+            })
+        ));
+        await purgeMarketplaceHomeCache();
+        const sections = await db.marketplaceHomeSection.findMany({ orderBy: [{ displayOrder: 'asc' }, { key: 'asc' }] });
+        return ok(res, { sections });
+    } catch (error) {
+        console.error('[Admin Marketplace Sections Reset]', error);
+        return apiResponse.error(res, 500, 'Failed to reset marketplace home sections', 'ADMIN_MARKETPLACE_SECTIONS_RESET_ERROR');
+    }
+});
+
+router.patch('/admin/marketplace/home-sections/:key', authenticate, authorize('admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+    try {
+        const key = String(req.params.key || '').trim();
+        const body = adminHomeSectionSchema.parse(req.body);
+        const existingDefault = defaultHomeSections.find(section => section.key === key);
+        if (!existingDefault) return apiResponse.error(res, 404, 'Marketplace section not found', 'MARKETPLACE_SECTION_NOT_FOUND');
+        const section = await db.marketplaceHomeSection.upsert({
+            where: { key },
+            update: body,
+            create: { ...existingDefault, ...body }
+        });
+        await purgeMarketplaceHomeCache();
+        return ok(res, section);
+    } catch (error) {
+        console.error('[Admin Marketplace Section Update]', error);
+        return apiResponse.error(res, 400, 'Unable to update marketplace home section', 'ADMIN_MARKETPLACE_SECTION_UPDATE_ERROR');
+    }
+});
+
 export const fetchMarketplaceHomeData = async () => {
     return getOrSetCache(redisKeys.cacheMarketplaceHome(), async () => {
         const [
