@@ -50,7 +50,12 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
   if (cleanPath.startsWith('/categories/')) {
     return `${BASE_URL}/api/files/raw${cleanPath}`;
   }
-  if (cleanPath.startsWith('/org-logos/') || cleanPath.startsWith('/banners/') || cleanPath.startsWith('/products/')) {
+  if (
+    cleanPath.startsWith('/org-logos/') ||
+    cleanPath.startsWith('/banners/') ||
+    cleanPath.startsWith('/products/') ||
+    cleanPath.startsWith('/category-photos/')
+  ) {
     return cleanPath;
   }
   return `${BASE_URL}${cleanPath}`;
