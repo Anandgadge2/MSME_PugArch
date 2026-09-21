@@ -148,7 +148,7 @@ export function TrustBanner() {
                                             <p className="truncate text-[10px] font-medium text-slate-500 transition-colors duration-200 group-hover:text-slate-700">
                                                 {b.sub}
                                             </p>
-                                            <span className={cn("inline-flex items-center rounded-full border px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider hidden sm:inline-flex", b.badgeBg)}>
+                                            <span className={cn("inline-flex items-center justify-center rounded-full border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider leading-none shrink-0 hidden sm:inline-flex", b.badgeBg)}>
                                                 {b.tag}
                                             </span>
                                         </div>
