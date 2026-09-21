@@ -82,7 +82,7 @@ export function MarketplaceSectionCarousel({
                                 key={index}
                                 className="w-[180px] sm:w-[200px] h-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm border border-slate-200 flex flex-col"
                             >
-                                <div className="h-[150px] w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
+                                <div className="h-32 sm:h-36 w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
                                 <div className="mt-3 h-3 w-16 rounded bg-slate-100 animate-pulse" />
                                 <div className="mt-2 h-8 w-full rounded bg-slate-100 animate-pulse" />
                                 <div className="mt-auto h-3 w-12 rounded bg-slate-100 animate-pulse mb-1.5" />

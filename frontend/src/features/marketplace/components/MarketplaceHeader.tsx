@@ -391,12 +391,12 @@ export function MarketplaceHeader({ user }: Props) {
 
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-103 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
                             <img src="/logoo.png" alt="Jharsuguda SMiLE MSME Marketplace Logo" className="h-full w-full object-contain" />
                         </div>
                         <div className="min-w-0 leading-tight">
-                            <p className="truncate text-base font-black tracking-tight text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
-                            <p className="truncate text-[9.5px] font-bold text-slate-400">Jharsuguda MSME Marketplace Portal</p>
+                            <p className="truncate text-base font-black tracking- text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
+                            <p className="truncate text-[9.8px] font-bold text-slate-400">Jharsuguda MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
