@@ -293,15 +293,13 @@ export default function GrnListPage() {
             width: 'w-[12%]',
             sortable: true,
             cell: (g) => (
-                <div onClick={(e) => e.stopPropagation()}>
-                    <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
-                </div>
+                <EntityIdLink label={g.grnNumber} id={g.id} size="sm" onClick={() => router.push(`/grn/${g.id}`)} />
             ),
         },
         {
             key: 'poNumber',
             header: 'Purchase Order',
-            width: 'w-[38%]',
+            width: 'w-[30%]',
             sortable: true,
             cell: (g) => (
                 <div>
@@ -351,6 +349,22 @@ export default function GrnListPage() {
                     <p>{formatDateTime(g.updatedAt)}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{formatRelative(g.updatedAt)}</p>
                 </div>
+            ),
+        },
+        {
+            key: 'actions',
+            header: 'Action',
+            width: 'w-[8%]',
+            align: 'right',
+            cellClassName: 'text-right',
+            cell: (g) => (
+                <button
+                    type="button"
+                    onClick={() => router.push(`/grn/${g.id}`)}
+                    className="inline-flex h-8 items-center justify-center rounded-lg bg-[#12335f] px-3 text-[10px] font-black uppercase text-white hover:bg-[#0b2445] transition-colors shadow-2xs cursor-pointer"
+                >
+                    View
+                </button>
             ),
         },
     ], [router]);
@@ -619,8 +633,6 @@ export default function GrnListPage() {
                     onSort={(field) => toggleSort(field as any)}
                     showSrNo
                     srNoWidth="w-[5%]"
-                    onRowClick={(g) => router.push(`/grn/${g.id}`)}
-                    rowClassName="cursor-pointer"
                     caption="Goods Receipt Notes List"
                 />
             )}

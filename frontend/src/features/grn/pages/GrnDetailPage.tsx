@@ -6,6 +6,7 @@
  */
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     AlertTriangle,
     ArrowLeft,
@@ -17,9 +18,11 @@ import {
     ExternalLink,
     FileText,
     Package,
+    Receipt,
     Send,
     ShieldAlert,
     ShieldCheck,
+    Truck,
     X,
     XCircle
 } from 'lucide-react';
@@ -40,6 +43,7 @@ import { DataTable } from '../../../components/ui/data-table';
 import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
 import { downloadGrnPdf } from '../lib/grnPdfGenerator';
 import { openFileAsset } from '../../../lib/files';
+import { getDeliveryByPurchaseOrder } from '../../delivery/api';
 
 const STATUS_CONFIG: Record<GrnStatus, { label: string; tone: string; icon: typeof Clock }> = {
     DRAFT: {
@@ -84,11 +88,46 @@ export default function GrnDetailPage({ id }: Props) {
     const submitMut = useSubmitGrn();
     const approveMut = useApproveGrn();
     const rejectMut = useRejectGrn();
+    const queryClient = useQueryClient();
     const [showReject, setShowReject] = useState(false);
     const [showApprove, setShowApprove] = useState(false);
     const [copied, setCopied] = useState(false);
     const [viewingOrder, setViewingOrder] = useState<any | null>(null);
     const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+
+    const { data: mappedDelivery } = useQuery({
+        queryKey: ['delivery', 'by-po', grn?.purchaseOrderId],
+        queryFn: () => getDeliveryByPurchaseOrder(grn!.purchaseOrderId),
+        enabled: Boolean(grn?.purchaseOrderId && canViewGrn)
+    });
+
+    const handleViewPo = () => {
+        if (!grn) return;
+        if (grn.purchaseOrder) {
+            setViewingOrder(grn.purchaseOrder);
+        } else if (grn.purchaseOrderId) {
+            setViewingOrder({ id: grn.purchaseOrderId, poNumber: grn.grnNumber });
+        }
+    };
+
+    const handleViewDelivery = () => {
+        if (!grn) return;
+        const poNum = grn.purchaseOrder?.poNumber || '';
+        const delId = mappedDelivery?.id;
+        const poId = grn.purchaseOrderId || grn.purchaseOrder?.id;
+
+        const queryParams = new URLSearchParams();
+        if (poNum) queryParams.set('search', poNum);
+        if (poId) queryParams.set('poId', String(poId));
+        if (delId) {
+            queryParams.set('deliveryId', String(delId));
+            queryParams.set('dispatch', String(delId));
+        }
+
+        const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
+        const targetRoute = isSellerOrShg ? '/seller/delivery-management' : '/orders/tracking';
+        router.push(`${targetRoute}?${queryParams.toString()}`);
+    };
 
     if (!canViewGrn) {
         return (
@@ -118,8 +157,13 @@ export default function GrnDetailPage({ id }: Props) {
         );
     }
 
-    const canSubmit = grn.status === 'DRAFT' && canCreateGrn;
-    const canApprove = grn.status === 'SUBMITTED' && canApproveGrn;
+    const requiresApprovalWorkflow = grn.requiresApprovalWorkflow ?? true;
+    const isSingleUserOrNoApprover = !requiresApprovalWorkflow;
+    const canSubmit = grn.status === 'DRAFT' && canCreateGrn && requiresApprovalWorkflow;
+    const canApprove = (canApproveGrn || (canCreateGrn && isSingleUserOrNoApprover)) && (
+        grn.status === 'SUBMITTED' ||
+        (grn.status === 'DRAFT' && isSingleUserOrNoApprover)
+    );
 
     const totalOrdered = grn.items.reduce((s, i) => s + Number(i.orderedQty || 0), 0);
     const totalReceived = grn.items.reduce((s, i) => s + Number(i.receivedQty || 0), 0);
@@ -178,7 +222,7 @@ export default function GrnDetailPage({ id }: Props) {
                         </h1>
                         <button
                             onClick={handleCopyGrn}
-                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-300 print:hidden"
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-slate-300 print:hidden cursor-pointer"
                             title="Copy GRN Number"
                             aria-label="Copy GRN Number"
                         >
@@ -190,25 +234,41 @@ export default function GrnDetailPage({ id }: Props) {
                             {statusMeta.label}
                         </span>
                     </div>
-                    <p className="mt-1 text-xs font-medium text-slate-600 break-words">
-                        Received by <span className="font-semibold text-slate-900">{grn.receivedBy.name}</span> ({grn.receivedBy.email}) ·{' '}
-                        <span>{formatDateTime(grn.receivedAt)}</span>
-                    </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                        <p>
+                            Received by <span className="font-semibold text-slate-900">{grn.receivedBy.name}</span>{' '}
+                            <span className="text-slate-500 font-normal">({grn.receivedBy.email})</span>
+                        </p>
+                        <span className="text-slate-300 hidden sm:inline">•</span>
+                        <p>
+                            <span className="text-slate-400 font-medium">Receipt Date:</span>{' '}
+                            <span className="font-semibold text-slate-800">{formatDateTime(grn.receivedAt)}</span>
+                        </p>
+                        {grn.purchaseOrder?.poNumber && (
+                            <>
+                                <span className="text-slate-300 hidden sm:inline">•</span>
+                                <p>
+                                    <span className="text-slate-400 font-medium">PO:</span>{' '}
+                                    <button
+                                        type="button"
+                                        onClick={handleViewPo}
+                                        className="font-mono font-bold text-[#12335f] hover:underline cursor-pointer"
+                                    >
+                                        {grn.purchaseOrder.poNumber}
+                                    </button>
+                                </p>
+                            </>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
                     {(grn.purchaseOrder || grn.purchaseOrderId) && (
                         <Button
                             variant="outline"
-                            onClick={() => {
-                                if (grn.purchaseOrder) {
-                                    setViewingOrder(grn.purchaseOrder);
-                                } else if (grn.purchaseOrderId) {
-                                    const poRoute = user?.role === 'buyer' ? '/buyer/orders' : '/seller/orders';
-                                    router.push(`${poRoute}?search=${encodeURIComponent(grn.purchaseOrderId)}`);
-                                }
-                            }}
-                            className="border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                            onClick={handleViewPo}
+                            className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 hover:text-[#12335f] hover:border-[#12335f]/50 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                            title="Open interactive Purchase Order Dialog"
                         >
                             <FileText className="h-3.5 w-3.5 text-indigo-600" />
                             View Purchase Order
@@ -217,15 +277,17 @@ export default function GrnDetailPage({ id }: Props) {
 
                     <Button
                         variant="outline"
-                        onClick={() => {
-                            const delSearch = grn.purchaseOrder?.poNumber || grn.grnNumber || '';
-                            const delRoute = user?.role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
-                            router.push(`${delRoute}${delSearch ? `?search=${encodeURIComponent(delSearch)}` : ''}`);
-                        }}
-                        className="border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                        onClick={handleViewDelivery}
+                        className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 hover:text-blue-700 hover:border-blue-400 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                        title="Open delivery management for this GRN consignment"
                     >
-                        <Package className="h-3.5 w-3.5 text-blue-600" />
-                        View Delivery
+                        <Truck className="h-3.5 w-3.5 text-blue-600" />
+                        <span>View Delivery</span>
+                        {mappedDelivery?.status && (
+                            <span className="ml-1 hidden sm:inline-block rounded bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0.5 font-semibold">
+                                {mappedDelivery.status.replace(/_/g, ' ')}
+                            </span>
+                        )}
                     </Button>
 
                     <Button
@@ -236,45 +298,18 @@ export default function GrnDetailPage({ id }: Props) {
                             const invRoute = user?.role === 'buyer' ? '/buyer/invoices' : '/seller/invoices';
                             router.push(`${invRoute}?convertPoId=${poId}&amount=${amt}`);
                         }}
-                        className="border-emerald-200 bg-emerald-50/50 text-emerald-800 hover:bg-emerald-100 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
+                        className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 hover:text-emerald-800 hover:border-emerald-400 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
                     >
-                        <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                        <Receipt className="h-3.5 w-3.5 text-emerald-600" />
                         View / Create Invoice
                     </Button>
 
-                    {/* GRN Payment Gate: Pay Now / Upload Payment Proof is unlocked because GRN is created/generated */}
-                    {(() => {
-                        const poStatus = String(grn.purchaseOrder?.status || grn.status || '').toLowerCase();
-                        const isPaid = poStatus.includes('paid');
-                        const payRoute = user?.role === 'buyer' ? '/buyer/payments' : '/payments';
-                        const searchVal = grn.grnNumber || grn.purchaseOrder?.poNumber || '';
-                        if (!isPaid) {
-                            return (
-                                <Button
-                                    onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
-                                    className="bg-purple-600 text-white hover:bg-purple-700 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
-                                >
-                                    <ShieldCheck className="h-3.5 w-3.5" />
-                                    Pay Now / Upload Payment Proof
-                                </Button>
-                            );
-                        }
-                        return (
-                            <Button
-                                onClick={() => router.push(`${payRoute}${searchVal ? `?search=${encodeURIComponent(searchVal)}` : ''}`)}
-                                className="bg-emerald-700 text-white hover:bg-emerald-800 h-9 sm:h-10 text-xs font-bold shadow-sm gap-1.5 cursor-pointer"
-                            >
-                                <ShieldCheck className="h-3.5 w-3.5" />
-                                View Payment Proof (Paid)
-                            </Button>
-                        );
-                    })()}
 
                     <Button
                         variant="outline"
                         onClick={handleDownloadPdf}
                         disabled={isDownloadingPdf}
-                        className="border-[#12335f]/20 bg-white text-[#12335f] hover:bg-[#12335f]/5 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all"
+                        className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 hover:text-[#12335f] h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
                         title="Download official Goods Receipt Note (GRN) PDF"
                     >
                         {isDownloadingPdf ? (
@@ -295,7 +330,7 @@ export default function GrnDetailPage({ id }: Props) {
                                 });
                             }}
                             disabled={submitMut.isPending}
-                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] h-9 sm:h-10 text-xs font-bold shadow-sm"
+                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] h-9 sm:h-10 text-xs font-bold shadow-sm cursor-pointer"
                         >
                             {submitMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                             Submit for Approval
@@ -307,17 +342,17 @@ export default function GrnDetailPage({ id }: Props) {
                             <Button
                                 variant="outline"
                                 onClick={() => setShowReject(true)}
-                                className="border-rose-200 text-rose-700 hover:bg-rose-50 h-9 sm:h-10 text-xs font-bold shadow-2xs"
+                                className="border-rose-200 text-rose-700 hover:bg-rose-50 h-9 sm:h-10 text-xs font-bold shadow-2xs cursor-pointer"
                             >
                                 <XCircle className="mr-1.5 h-4 w-4 text-rose-600" />
                                 Reject
                             </Button>
                             <Button
                                 onClick={() => setShowApprove(true)}
-                                className="bg-emerald-600 text-white hover:bg-emerald-700 h-9 sm:h-10 text-xs font-bold shadow-sm"
+                                className="bg-emerald-600 text-white hover:bg-emerald-700 h-9 sm:h-10 text-xs font-bold shadow-sm cursor-pointer"
                             >
                                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                                Approve
+                                {grn.status === 'DRAFT' ? 'Approve & Finalize GRN' : 'Approve'}
                             </Button>
                         </>
                     )}
@@ -325,6 +360,22 @@ export default function GrnDetailPage({ id }: Props) {
             </div>
 
             {/* Status Banners */}
+            {grn.status === 'DRAFT' && !requiresApprovalWorkflow && (
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3.5 text-xs font-medium text-indigo-950 flex items-start gap-2.5 shadow-2xs">
+                    <CheckCircle2 className="h-4 w-4 text-indigo-700 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold">Direct Verification</span>: Single-user / sole-approver organization. Review line items below and directly approve or reject this Goods Receipt Note.
+                    </div>
+                </div>
+            )}
+            {grn.status === 'DRAFT' && requiresApprovalWorkflow && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs font-medium text-amber-950 flex items-start gap-2.5 shadow-2xs">
+                    <Clock className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                    <div>
+                        <span className="font-bold">Draft Pending Submission</span>: Review all received and accepted quantities before submitting for approval by your organization's inspection team.
+                    </div>
+                </div>
+            )}
             {grn.status === 'APPROVED' && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs font-medium text-emerald-900 flex items-start gap-2.5 shadow-2xs">
                     <CheckCircle2 className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
@@ -372,9 +423,13 @@ export default function GrnDetailPage({ id }: Props) {
                             {grn.status !== 'DRAFT' ? '✓' : '2'}
                         </div>
                         <div className="min-w-0">
-                            <p className="text-xs font-bold text-slate-900">2. Submitted for Review</p>
+                            <p className="text-xs font-bold text-slate-900">
+                                {requiresApprovalWorkflow ? '2. Submitted for Review' : '2. Quality Verification'}
+                            </p>
                             <p className="text-[11px] text-slate-500 truncate">
-                                {grn.status === 'DRAFT' ? 'Draft pending submission' : 'Quality verification requested'}
+                                {grn.status === 'DRAFT'
+                                    ? (requiresApprovalWorkflow ? 'Draft pending submission' : 'Ready for direct verification')
+                                    : (requiresApprovalWorkflow ? 'Quality verification requested' : 'Direct verification processed')}
                             </p>
                             <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
                                 {grn.status !== 'DRAFT' ? formatDateTime(grn.updatedAt) : 'Pending'}
@@ -391,10 +446,10 @@ export default function GrnDetailPage({ id }: Props) {
                                 {grn.status === 'APPROVED' ? '3. Approved' : grn.status === 'REJECTED' ? '3. Rejected' : grn.status === 'PARTIAL' ? '3. Partial Acceptance' : '3. Quality Inspection'}
                             </p>
                             <p className="text-[11px] text-slate-500 truncate">
-                                {grn.approvedAt ? formatDateTime(grn.approvedAt) : grn.rejectedAt ? formatDateTime(grn.rejectedAt) : 'Awaiting inspection decision'}
+                                {grn.approvedAt ? `Decision on ${formatDateTime(grn.approvedAt)}` : grn.rejectedAt ? `Decision on ${formatDateTime(grn.rejectedAt)}` : 'Awaiting inspection decision'}
                             </p>
-                            {grn.inspectionNote && (
-                                <p className="text-[10px] italic text-slate-600 mt-0.5 truncate">&ldquo;{grn.inspectionNote}&rdquo;</p>
+                            {grn.status === 'APPROVED' && (
+                                <p className="text-[10px] font-semibold text-emerald-700 mt-0.5">Quality inspection verified · Invoicing enabled</p>
                             )}
                         </div>
                     </div>
@@ -402,7 +457,7 @@ export default function GrnDetailPage({ id }: Props) {
             </div>
 
             {/* Linked Purchase Order Summary Card */}
-            {grn.purchaseOrder && (
+            {(grn.purchaseOrder || grn.purchaseOrderId) && (
                 <Card className="border-slate-200/80 shadow-xs rounded-xl sm:rounded-2xl overflow-hidden">
                     <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -412,11 +467,11 @@ export default function GrnDetailPage({ id }: Props) {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setViewingOrder(grn.purchaseOrder)}
-                            className="h-7 px-2.5 text-xs font-bold text-[#12335f] hover:bg-[#12335f]/10 gap-1 print:hidden"
+                            onClick={handleViewPo}
+                            className="h-7 px-2.5 text-xs font-bold text-[#12335f] hover:bg-[#12335f]/10 gap-1.5 print:hidden cursor-pointer"
                         >
-                            <ExternalLink className="h-3 w-3" />
-                            Open PO Dialog
+                            <FileText className="h-3.5 w-3.5" />
+                            Open Purchase Order Dialog
                         </Button>
                     </div>
                     <CardContent className="p-4 sm:p-5">
@@ -424,25 +479,39 @@ export default function GrnDetailPage({ id }: Props) {
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     {/* Clicking the PO ID opens the PO Dialog Modal */}
-                                    <EntityIdLink
-                                        label={grn.purchaseOrder.poNumber}
-                                        id={grn.purchaseOrder.id}
-                                        size="md"
-                                        onClick={() => setViewingOrder(grn.purchaseOrder)}
-                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleViewPo}
+                                        className="inline-flex items-center gap-1 font-mono font-black text-xs sm:text-sm text-[#12335f] hover:underline cursor-pointer bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition-colors"
+                                        title="Click to view Purchase Order Dialog"
+                                    >
+                                        <span>{grn.purchaseOrder?.poNumber || `PO #${grn.purchaseOrderId}`}</span>
+                                        <ExternalLink className="h-3 w-3 opacity-60" />
+                                    </button>
                                     <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">
-                                        PO Status: {grn.purchaseOrder.status}
+                                        PO Status: {grn.purchaseOrder?.status || 'Active'}
                                     </span>
+                                    {mappedDelivery && (
+                                        <button
+                                            type="button"
+                                            onClick={handleViewDelivery}
+                                            className="inline-flex items-center gap-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+                                            title="Open mapped delivery management"
+                                        >
+                                            <Truck className="h-3 w-3" />
+                                            <span>Delivery: DLV-{mappedDelivery.id} ({mappedDelivery.status.replace(/_/g, ' ')})</span>
+                                        </button>
+                                    )}
                                 </div>
                                 <p className="mt-2 text-sm sm:text-base font-black text-slate-900 break-words">
-                                    {grn.purchaseOrder.title}
+                                    {grn.purchaseOrder?.title || 'Purchase Order Consignment'}
                                 </p>
-                                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-600">
                                     <p>
                                         <span className="text-slate-400 font-medium">Seller:</span>{' '}
-                                        <span className="font-semibold text-slate-800">{grn.purchaseOrder.seller?.name || '—'}</span>
+                                        <span className="font-semibold text-slate-800">{grn.purchaseOrder?.seller?.name || '—'}</span>
                                     </p>
-                                    {grn.purchaseOrder.buyer && (
+                                    {grn.purchaseOrder?.buyer && (
                                         <p>
                                             <span className="text-slate-400 font-medium">Buyer:</span>{' '}
                                             <span className="font-semibold text-slate-800">{grn.purchaseOrder.buyer.name}</span>
@@ -451,19 +520,21 @@ export default function GrnDetailPage({ id }: Props) {
                                 </div>
                             </div>
 
-                            <div className="sm:text-right border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 shrink-0">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total PO Value</p>
-                                <p className="mt-0.5 text-lg sm:text-xl font-black text-slate-950">
-                                    {formatCurrency(grn.purchaseOrder.amount)}
-                                </p>
+                            <div className="sm:text-right border-t sm:border-t-0 border-slate-100 pt-3 sm:pt-0 shrink-0 flex sm:flex-col items-center sm:items-end justify-between gap-2">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total PO Value</p>
+                                    <p className="mt-0.5 text-lg sm:text-xl font-black text-slate-950">
+                                        {formatCurrency(grn.purchaseOrder?.amount || 0)}
+                                    </p>
+                                </div>
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setViewingOrder(grn.purchaseOrder)}
-                                    className="mt-2 h-7 text-[11px] font-bold border-slate-200 hover:bg-slate-50 gap-1 print:hidden"
+                                    onClick={handleViewPo}
+                                    className="h-8 text-xs font-bold border-slate-200 hover:bg-slate-100 hover:text-[#12335f] gap-1.5 print:hidden cursor-pointer"
                                 >
-                                    <ExternalLink className="h-3 w-3 text-slate-500" />
-                                    View Receipt Modal
+                                    <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
+                                    View PO Receipt Dialog
                                 </Button>
                             </div>
                         </div>
@@ -756,6 +827,7 @@ export default function GrnDetailPage({ id }: Props) {
                     isSeller={user?.role === 'seller'}
                 />
             )}
+
         </div>
     );
 }

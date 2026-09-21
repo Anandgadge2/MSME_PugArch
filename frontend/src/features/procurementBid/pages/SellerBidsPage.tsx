@@ -39,6 +39,7 @@ import { sellerRoutes } from '@/lib/routes';
 import { useAuth } from '../../../hooks/useAuth';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
+import { TaxInvoiceRegistryModal } from '../../invoices/components/TaxInvoiceRegistryModal';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
@@ -267,7 +268,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const [loading, setLoading] = useState<boolean>(() => !cachedSellerParticipations);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [convertingInvoiceId, setConvertingInvoiceId] = useState<string | null>(null);
+  const [loadingInvoiceBidId, setLoadingInvoiceBidId] = useState<string | number | null>(null);
+  const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   // Filters
   const [kpiFilter, setKpiFilter] = useState<string>('all');
@@ -840,28 +843,55 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     router.push(`/seller/procurement/${slug}/${encodeURIComponent(String(targetId))}`);
   };
 
-  const handleConvertToInvoice = async (e: React.MouseEvent, item: any) => {
+  const handleOpenTaxInvoice = async (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
     const bidId = item.bid?.id || item.bidId;
     if (!bidId) return;
-    
-    setConvertingInvoiceId(item.id);
+
+    setLoadingInvoiceBidId(item.id);
     try {
-      const result = await api.post(`/api/seller/procurement-bids/${bidId}/convert-to-invoice`, {});
-      toast.success('Invoice generated successfully!');
-      
-      const createdInvoiceId = (result as any)?.data?.id || (result as any)?.id;
-      
-      if (createdInvoiceId) {
-        router.push(`/seller/invoices/${createdInvoiceId}`);
-      } else {
-        router.push('/seller/invoices');
+      // 1. Check if invoiceId is already known or cached on this item
+      let invoiceId = item.invoiceId || (item.invoice && item.invoice.id);
+
+      if (!invoiceId) {
+        // Query status first to see if invoice already exists (DO NOT regenerate)
+        const res = await (api.get as any)(`/api/seller/procurement-bids/${bidId}/invoice`);
+        const statusData = (res as any)?.data || res;
+
+        if (statusData?.exists && statusData?.invoiceId) {
+          invoiceId = statusData.invoiceId;
+        } else if (statusData?.canConvertToInvoice) {
+          // 2. Only convert to invoice if it does not already exist
+          const convertRes = await (api.post as any)(`/api/seller/procurement-bids/${bidId}/convert-to-invoice`, {});
+          const convertData = (convertRes as any)?.data || convertRes;
+          invoiceId = convertData?.id;
+          if (invoiceId) {
+            toast.success('Tax invoice generated successfully!');
+          }
+        } else {
+          toast.error('Tax invoice is not available for this bid yet. Please verify Purchase Order acceptance.');
+          return;
+        }
       }
+
+      if (!invoiceId) {
+        toast.error('Unable to retrieve tax invoice for this bid.');
+        return;
+      }
+
+      // Cache invoiceId onto this participation item in state so subsequent clicks are instantaneous
+      setParticipations(prev =>
+        prev.map(p => (p.id === item.id || (p.bid?.id && p.bid.id === bidId)) ? { ...p, invoiceId } : p)
+      );
+
+      // Open the Tax Invoice Registry modal directly without routing
+      setSelectedInvoiceModalId(Number(invoiceId));
+      setIsInvoiceModalOpen(true);
     } catch (err: any) {
-      console.error('[Convert Invoice Error]', err);
-      toast.error(err?.message || 'Failed to convert to invoice.');
+      console.error('[Open Tax Invoice Error]', err);
+      toast.error(err?.message || 'Failed to open tax invoice registry.');
     } finally {
-      setConvertingInvoiceId(null);
+      setLoadingInvoiceBidId(null);
     }
   };
 
@@ -888,9 +918,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       header: 'Bid ID',
       sortable: true,
       sortKey: 'id',
-      width: 'w-28',
+      width: 'w-36',
       cell: (item: any) => (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold tracking-tight bg-slate-100 text-slate-800 border border-slate-200/90 whitespace-nowrap shadow-2xs">
           {formatBidDisplayId(item)}
         </span>
       )
@@ -906,12 +936,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         return (
           <div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="font-bold text-slate-900 line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
-              <span className="inline-block rounded px-1.5 py-0.2 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f] shrink-0">
+              <p className="font-bold text-slate-900 text-xs line-clamp-1 max-w-[220px]">{bid.title || 'Untitled Bid'}</p>
+              <span className="inline-block rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f] shrink-0 border border-[#12335f]/15">
                 {pType}
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">{bid.category}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{bid.category}</p>
           </div>
         );
       }
@@ -922,7 +952,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortable: true,
       sortKey: 'buyer',
       cell: (item: any) => (
-        <span className="text-slate-700">{item.bid?.buyerName || 'Private Buyer'}</span>
+        <span className="text-slate-700 text-xs font-medium line-clamp-2 max-w-[200px]" title={item.bid?.buyerName || 'Private Buyer'}>
+          {item.bid?.buyerName || 'Private Buyer'}
+        </span>
       )
     },
     {
@@ -931,7 +963,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortable: true,
       sortKey: 'value',
       cell: (item: any) => (
-        <span className="font-bold text-slate-900 whitespace-nowrap">
+        <span className="font-mono font-bold text-xs text-slate-900 whitespace-nowrap">
           {item.quotedAmount ? formatCurrency(item.quotedAmount) : 'Pending'}
         </span>
       )
@@ -943,7 +975,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortKey: 'budget',
       width: 'w-32',
       cell: (item: any) => (
-        <span className="font-bold text-slate-700 whitespace-nowrap">
+        <span className="font-mono font-medium text-xs text-slate-700 whitespace-nowrap">
           {formatCurrency(item.bid?.estimatedValue)}
         </span>
       )
@@ -955,7 +987,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortKey: 'closing',
       width: 'w-32',
       cell: (item: any) => (
-        <span className="text-slate-500 whitespace-nowrap">
+        <span className="text-xs text-slate-600 whitespace-nowrap">
           {formatDate(item.bid?.endDate)}
         </span>
       )
@@ -967,7 +999,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortKey: 'part',
       width: 'w-32',
       cell: (item: any) => (
-        <span className={cn('inline-flex rounded-lg border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide whitespace-nowrap', participationStatusColor(item.status))}>
+        <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide whitespace-nowrap border shadow-2xs', participationStatusColor(item.status))}>
           {item.status}
         </span>
       )
@@ -982,18 +1014,18 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         const techStatus = String(item.technicalStatus || '').toUpperCase();
         const bidStatus = String(item.bid?.status || 'OPEN');
         return (
-          <div className="flex flex-col gap-0.5">
-            <span className={cn('inline-block rounded px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap', bidStatusColor(bidStatus))}>
+          <div className="flex flex-col gap-1 items-start">
+            <span className={cn('inline-block rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider whitespace-nowrap', bidStatusColor(bidStatus))}>
               {bidStatus.replace(/_/g, ' ')}
             </span>
             {techStatus === 'QUALIFIED' && (
-              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
-                <CheckCircle2 className="h-2.5 w-2.5" /> Qualified
+              <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Qualified
               </span>
             )}
             {techStatus === 'DISQUALIFIED' && (
-              <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
-                <XCircle className="h-2.5 w-2.5" /> Disqualified
+              <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
+                <XCircle className="h-3 w-3 text-rose-600" /> Disqualified
               </span>
             )}
           </div>
@@ -1004,59 +1036,72 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      width: 'w-44',
+      width: 'w-56',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item: any) => {
         const pType = getParticipationType(item);
+        const isAwardedPo = isAwardedAndPoAccepted(item);
+        const isAuction = pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE');
+        const isDraftItem = isDraft(item);
+
         return (
-          <div className="flex justify-end items-center gap-1.5" onClick={e => e.stopPropagation()}>
-            {isAwardedAndPoAccepted(item) && (
+          <div className="flex justify-end items-center gap-1.5">
+            {isAwardedPo && (
               <Button 
-                onClick={(e) => handleConvertToInvoice(e, item)}
-                disabled={convertingInvoiceId === item.id}
-                className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-2.5 flex items-center gap-1 shadow-xs"
-                title="Convert to Invoice"
+                onClick={(e) => handleOpenTaxInvoice(e, item)}
+                disabled={loadingInvoiceBidId === item.id}
+                className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
+                title="View Official Tax Invoice Registry"
               >
-                {convertingInvoiceId === item.id ? (
-                  <RefreshCw className="h-3 w-3 animate-spin" />
+                {loadingInvoiceBidId === item.id ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <FileText className="h-3 w-3" />
+                  <FileText className="h-3.5 w-3.5" />
                 )}
-                Invoice
+                <span>Invoice</span>
               </Button>
             )}
-            {(pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE')) ? (
+            {isAuction ? (
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
                   router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
                 }}
-                className="h-8 bg-gradient-to-r from-red-600 to-rose-600 text-[10px] font-black uppercase text-white hover:from-red-500 hover:to-rose-500 rounded-lg px-3 flex items-center gap-1 shadow-xs"
+                className="h-8 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                title="Join Live Reverse Auction"
               >
-                <Gavel className="h-3 w-3" /> Live
+                <Gavel className="h-3.5 w-3.5" /> Live
               </Button>
-            ) : isDraft(item) ? (
-              <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3">
-                Resume
+            ) : isDraftItem ? (
+              <Button
+                onClick={() => handleAction(item)}
+                className="h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                title="Resume Draft Participation"
+              >
+                <FileEdit className="h-3.5 w-3.5" /> Resume
               </Button>
             ) : (
-              <div className="flex items-center gap-1">
-                <Button 
-                  onClick={() => handleAction(item)} 
-                  className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-2.5 shadow-xs"
-                  title="View Submitted Quotation"
-                >
-                  View Quote
-                </Button>
-               
-              </div>
+              <Button 
+                onClick={() => handleAction(item)} 
+                variant={isAwardedPo ? "outline" : "primary"}
+                className={cn(
+                  "h-8 px-2.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer",
+                  isAwardedPo
+                    ? "border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                    : "bg-[#12335f] hover:bg-[#0d2647] text-white"
+                )}
+                title="View Submitted Quotation"
+              >
+                <Eye className={cn("h-3.5 w-3.5", isAwardedPo ? "text-slate-500" : "text-white")} />
+                <span>View Quote</span>
+              </Button>
             )}
           </div>
         );
       }
     }
-  ], [convertingInvoiceId, router]);
+  ], [loadingInvoiceBidId, router]);
 
   if (loading) {
     return <SellerBidsSkeleton />;
@@ -1690,38 +1735,49 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                         <div className="flex items-center gap-2">
                           {isAwardedAndPoAccepted(item) && (
                             <Button 
-                              onClick={(e) => handleConvertToInvoice(e, item)} 
-                              disabled={convertingInvoiceId === item.id}
-                              className="h-8 bg-emerald-600 text-[10px] font-black uppercase text-white hover:bg-emerald-700 rounded-lg px-3 flex items-center gap-1.5 shadow-sm"
+                              onClick={(e) => handleOpenTaxInvoice(e, item)} 
+                              disabled={loadingInvoiceBidId === item.id}
+                              className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                              title="View Official Tax Invoice Registry"
                             >
-                              {convertingInvoiceId === item.id ? (
-                                <RefreshCw className="h-3 w-3 animate-spin" />
+                              {loadingInvoiceBidId === item.id ? (
+                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                               ) : (
-                                <FileText className="h-3 w-3" />
+                                <FileText className="h-3.5 w-3.5" />
                               )}
                               Invoice
                             </Button>
                           )}
                           {isDraft(item) ? (
-                            <Button onClick={() => handleAction(item)} className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-4">
-                              Resume Draft
+                            <Button
+                              onClick={() => handleAction(item)}
+                              className="h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                            >
+                              <FileEdit className="h-3.5 w-3.5" /> Resume Draft
                             </Button>
                           ) : (
                             <div className="flex items-center gap-1.5">
                               <Button 
                                 onClick={() => handleAction(item)} 
-                                className="h-8 bg-[#12335f] text-[10px] font-black uppercase text-white hover:bg-[#0b2445] rounded-lg px-3.5 shadow-xs"
+                                variant={isAwardedAndPoAccepted(item) ? "outline" : "primary"}
+                                className={cn(
+                                  "h-8 px-3 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer",
+                                  isAwardedAndPoAccepted(item)
+                                    ? "border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                                    : "bg-[#12335f] hover:bg-[#0d2647] text-white"
+                                )}
                                 title="View Submitted Quotation"
                               >
-                                View Quote
+                                <Eye className={cn("h-3.5 w-3.5", isAwardedAndPoAccepted(item) ? "text-slate-500" : "text-white")} />
+                                <span>View Quote</span>
                               </Button>
                               <Button 
                                 onClick={(e) => handleViewDetails(e, item)} 
                                 variant="outline"
-                                className="h-8 border-slate-200 text-slate-700 hover:bg-slate-100 text-[10px] font-black uppercase rounded-lg px-2.5 flex items-center gap-1"
+                                className="h-8 border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold rounded-lg px-2.5 flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
                                 title="View Procurement Notice"
                               >
-                                <Eye className="h-3.5 w-3.5" /> Notice
+                                <Eye className="h-3.5 w-3.5 text-slate-500" /> Notice
                               </Button>
                             </div>
                           )}
@@ -1757,12 +1813,23 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
               sortKey={currentSortKey}
               sortDirection={currentSortDirection}
               onSort={toggleSort}
-              onRowClick={(item) => handleAction(item)}
               paginationLabel="bids"
               minWidth="min-w-[920px]"
             />
           )}
         </div>
+      )}
+
+      {/* Tax Invoice Registry Dialog Modal */}
+      {isInvoiceModalOpen && selectedInvoiceModalId && (
+        <TaxInvoiceRegistryModal
+          isOpen={isInvoiceModalOpen}
+          onClose={() => {
+            setIsInvoiceModalOpen(false);
+            setSelectedInvoiceModalId(null);
+          }}
+          invoiceId={selectedInvoiceModalId}
+        />
       )}
     </div>
   );

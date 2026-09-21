@@ -256,8 +256,32 @@ export default function AdminOnboarding() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "sellers";
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return ["sellers", "buyers", "shg"].includes(String(tab)) ? String(tab) : "sellers";
+    if (["sellers", "buyers", "shg"].includes(String(tab))) return String(tab);
+    const saved = sessionStorage.getItem("admin_onboarding_tab");
+    return ["sellers", "buyers", "shg"].includes(String(saved)) ? String(saved) : "sellers";
   });
+
+  const handleTabChange = useCallback((newTab: string) => {
+    setActiveTab(newTab);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("admin_onboarding_tab", newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", newTab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const tab = sp.get("tab");
+      if (["sellers", "buyers", "shg"].includes(String(tab))) {
+        setActiveTab(String(tab));
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
@@ -1716,7 +1740,7 @@ export default function AdminOnboarding() {
                     { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
                   ]}
                   activeTab={activeTab}
-                  onChange={setActiveTab}
+                  onChange={handleTabChange}
                   className="px-4 pt-3 space-x-6"
                 />
               </CardHeader>

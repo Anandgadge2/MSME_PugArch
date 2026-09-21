@@ -59,15 +59,34 @@ export const fulfillmentWorkflow = {
       where: { id: purchaseOrderId },
       data: { status: 'accepted', poStatus: poStatusEnumFor('accepted') as any, acceptedAt: new Date(), version: { increment: 1 } }
     });
-    // Ensure a DeliveryTracking row exists so the seller can drive dispatch
-    // from the new delivery module immediately after acknowledging.
+    // Ensure a DeliveryTracking row exists and is marked as SELLER_ACCEPTED so the seller can drive dispatch
+    // from the delivery module immediately after acknowledging without needing to re-accept on the delivery page.
     const existingDelivery = await db.deliveryTracking.findFirst({ where: { purchaseOrderId } });
     if (!existingDelivery) {
       await db.deliveryTracking.create({
         data: {
           purchaseOrderId,
-          status: 'CREATED',
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date(),
           expectedDelivery: po.expectedDelivery || null
+        }
+      }).catch(() => undefined);
+    } else if (existingDelivery.status === 'CREATED' || existingDelivery.status === 'PENDING_ACCEPTANCE') {
+      await db.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date()
+        }
+      }).catch(() => undefined);
+      await db.deliveryStatusLog.create({
+        data: {
+          deliveryTrackingId: existingDelivery.id,
+          previousStatus: existingDelivery.status,
+          newStatus: 'SELLER_ACCEPTED',
+          changedById: actor.id,
+          actorRole: actor.role,
+          remarks: 'PO accepted by seller; delivery moved to SELLER_ACCEPTED'
         }
       }).catch(() => undefined);
     }
@@ -102,6 +121,14 @@ export const fulfillmentWorkflow = {
         }
       }).catch(() => undefined);
     }
+
+    const awardId = (po.metadata && (po.metadata as any).awardId) || (po.sourceType === 'procurement_bid_award' ? po.sourceId : null);
+    if (awardId && !isNaN(Number(awardId))) {
+      await db.procurementBidAward.update({
+        where: { id: Number(awardId) },
+        data: { awardStatus: 'ACCEPTED', acceptedAt: new Date() }
+      }).catch(() => undefined);
+    }
     await auditWorkflow(actor, 'workflow.po.acknowledged', 'purchaseOrder', purchaseOrderId);
     return updated;
   },
@@ -127,6 +154,29 @@ export const fulfillmentWorkflow = {
         version: { increment: 1 }
       }
     });
+
+    const existingDelivery = await db.deliveryTracking.findFirst({ where: { purchaseOrderId } });
+    if (existingDelivery && (existingDelivery.status === 'CREATED' || existingDelivery.status === 'PENDING_ACCEPTANCE')) {
+      await db.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_REJECTED',
+          sellerRejectedAt: new Date(),
+          sellerRejectReason: reason || undefined
+        }
+      }).catch(() => undefined);
+      await db.deliveryStatusLog.create({
+        data: {
+          deliveryTrackingId: existingDelivery.id,
+          previousStatus: existingDelivery.status,
+          newStatus: 'SELLER_REJECTED',
+          changedById: actor.id,
+          actorRole: actor.role,
+          remarks: reason || 'Purchase order rejected by seller'
+        }
+      }).catch(() => undefined);
+    }
+
     await auditWorkflow(actor, 'workflow.po.rejected', 'purchaseOrder', purchaseOrderId, { reason });
     return updated;
   },
@@ -345,13 +395,21 @@ export const fulfillmentWorkflow = {
   },
 
   async decideInvoice(actor: WorkflowActor, invoiceId: number, approved: boolean) {
-    const invoice = await db.invoice.findUnique({ where: { id: invoiceId } });
-    if (!invoice || (actor.role !== 'admin' && invoice.buyerId !== actor.id)) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { purchaseOrder: true } });
+    if (!invoice || (actor.role !== 'admin' && invoice.buyerId !== actor.id && invoice.purchaseOrder?.buyerId !== actor.id)) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
     statusTransitions.invoice(invoice.status, approved ? 'approved' : 'rejected');
     const updated = await db.invoice.update({
       where: { id: invoiceId },
       data: { status: approved ? 'approved' : 'rejected', invoiceStatus: invoiceStatusEnumFor(approved ? 'approved' : 'rejected'), approvedAt: approved ? new Date() : null, version: { increment: 1 } }
     });
+    if (approved && invoice.purchaseOrderId) {
+      await db.purchaseOrder.update({
+        where: { id: invoice.purchaseOrderId },
+        data: { status: 'payment_initiated', version: { increment: 1 } }
+      }).catch(() => {});
+    }
     await auditWorkflow(actor, approved ? 'workflow.invoice.approved' : 'workflow.invoice.rejected', 'invoice', invoiceId);
 
     // Notify seller when buyer approves/rejects invoice

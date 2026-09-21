@@ -8,6 +8,7 @@ import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
+import { getNextCanonicalSequence } from '../../services/sequence.service.js';
 
 const db = prisma as any;
 
@@ -28,7 +29,7 @@ const bidTransitions: Record<string, string[]> = {
   DRAFT: ['PENDING_ADMIN_APPROVAL', 'PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING', 'CANCELLED'],
   PENDING_ADMIN_APPROVAL: ['APPROVED', 'PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING', 'DRAFT', 'CANCELLED'],
   APPROVED: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CANCELLED'],
-  PUBLISHED: ['OPEN', 'OPEN_FOR_BIDDING', 'CANCELLED'],
+  PUBLISHED: ['OPEN', 'OPEN_FOR_BIDDING', 'CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN_FOR_BIDDING: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   CLOSED: ['UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
@@ -346,7 +347,7 @@ export const bidInclude: any = {
   buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, organizationId: true } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } } } },
       documents: true,
       clarifications: { include: { files: true } },
       evaluations: true,
@@ -396,7 +397,7 @@ export const leanBidInclude = {
   documents: true,
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, role: true, onboardingStatus: true, organizationId: true, organization: { select: { organizationName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { organizationName: true } } } },
       documents: true
     }
   },
@@ -413,12 +414,8 @@ export const leanBidInclude = {
   }
 };
 
-export const nextBidNumber = async () => {
-  const year = new Date().getFullYear();
-  const count = await db.procurementBid.count({
-    where: { bidNumber: { startsWith: `JSG-BID-${year}-` } }
-  });
-  return `JSG-BID-${year}-${String(count + 1).padStart(5, '0')}`;
+export const nextBidNumber = async (method = 'RFQ') => {
+  return getNextCanonicalSequence(method);
 };
 
 export const nextParticipationNumber = async (bidNumber: string) => {
@@ -437,43 +434,99 @@ export const nextClarificationNumber = async (bidNumber: string) => {
 
 export const resolveBid = async (bidIdOrNumber: string | number, include: any = leanBidInclude) => {
   const token = String(bidIdOrNumber).trim();
-  logger.info({ token }, '[RESOLVE_BID] Resolving bid for token');
+  logger.info({ token }, '[RESOLVE_BID] Resolving procurement record for token');
 
-  const isNum = /^\d+$/.test(token);
-  const numMatches = token.match(/\d+/g);
-  const lastDigits = numMatches ? numMatches[numMatches.length - 1] : null;
-  const cleanDigits = lastDigits ? (lastDigits.length > 5 ? lastDigits.slice(-5) : lastDigits) : null;
-  const parsedNum = (isNum && Number(token) <= 2147483647)
-    ? Number(token)
-    : (cleanDigits && !isNaN(Number(cleanDigits)) && Number(cleanDigits) <= 2147483647 ? Number(cleanDigits) : null);
-
-  const candidateTokens = new Set<string>(getCanonicalLookupVariants(token));
-  if (cleanDigits) {
-    const padded5 = cleanDigits.padStart(5, '0');
-    for (const p of CANONICAL_METHOD_PREFIXES) {
-      candidateTokens.add(`${p}-${cleanDigits}`);
-      candidateTokens.add(`${p}-${padded5}`);
-      candidateTokens.add(`${p}-2026-${padded5}`);
-      candidateTokens.add(`${p}-2026-${cleanDigits}`);
-    }
-  }
-
-  const whereConditions: any[] = Array.from(candidateTokens).map(t => ({ bidNumber: t }));
-  if (parsedNum) {
-    whereConditions.push({ id: parsedNum });
-    whereConditions.push({ technicalPacket: { path: ['sourceRequirementId'], equals: parsedNum } });
-    whereConditions.push({ technicalPacket: { path: ['requirementId'], equals: parsedNum } });
-  }
-
-  let bid = await db.procurementBid.findFirst({
-    where: { OR: whereConditions },
-    include
+  // 1. Direct indexed lookup in procurementBid
+  let bid = await db.procurementBid.findUnique({
+    where: { bidNumber: token },
+    include,
   });
+
+  if (bid) {
+    logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Direct hit on procurementBid.bidNumber');
+    return await refreshBidStatus(bid);
+  }
+
+  // 2. Direct lookup by numeric ID if parameter is an integer
+  const isNum = /^\d+$/.test(token) && Number(token) <= 2147483647;
+  if (isNum) {
+    bid = await db.procurementBid.findUnique({
+      where: { id: Number(token) },
+      include,
+    });
+    if (bid) return await refreshBidStatus(bid);
+  }
+
+  // 3. Direct indexed lookup in buyerRequirement
+  const buyerReq = await db.buyerRequirement.findFirst({
+    where: {
+      OR: [
+        { referenceNumber: token },
+        ...(isNum ? [{ id: Number(token) }] : []),
+      ],
+    },
+    include: {
+      responses: true,
+      category: true,
+      buyerOrganization: true,
+    },
+  });
+
+  if (buyerReq) {
+    logger.info({ token, reqId: buyerReq.id, ref: buyerReq.referenceNumber }, '[RESOLVE_BID] Found linked BuyerRequirement, returning resolved adapter');
+    return {
+      id: buyerReq.id,
+      bidNumber: buyerReq.referenceNumber || token,
+      title: buyerReq.title,
+      description: buyerReq.description,
+      buyerId: buyerReq.createdById,
+      buyerOrganizationId: buyerReq.buyerOrganizationId,
+      buyerOrganizationName: buyerReq.buyerOrganization?.organizationName || 'Buyer',
+      buyerType: 'COMMERCIAL_BUYER',
+      category: buyerReq.category?.name || 'General',
+      bidType: buyerReq.requirementType || 'RFQ',
+      procurementType: buyerReq.requirementType || 'RFQ',
+      quantity: buyerReq.quantity,
+      unit: buyerReq.unit,
+      estimatedValue: buyerReq.budgetMax || buyerReq.budgetMin || 0,
+      deliveryLocation: buyerReq.location || 'Pan-India',
+      startDate: buyerReq.createdAt,
+      endDate: buyerReq.lastDate,
+      status: buyerReq.status === 'PUBLISHED' ? 'OPEN' : 'DRAFT',
+      approvalStatus: 'APPROVED',
+      lifecycleStage: 'BID_PUBLISHED',
+      participations: (buyerReq.responses || []).map((r: any) => ({
+        id: r.id,
+        participationNumber: `${buyerReq.referenceNumber || token}-P${String(r.id).padStart(4, '0')}`,
+        bidId: buyerReq.id,
+        sellerId: r.sellerUserId,
+        sellerUserId: r.sellerUserId,
+        sellerOrganizationName: r.sellerOrganizationName || 'Supplier',
+        status: r.status === 'ACCEPTED' ? 'AWARDED' : 'SUBMITTED',
+        totalPrice: r.bidAmount,
+        submittedAt: r.createdAt,
+      })),
+      isBuyerRequirement: true,
+      rawBuyerRequirement: buyerReq,
+    };
+  }
+
+  // 4. Secondary lookup in canonical variants
+  const variants = getCanonicalLookupVariants(token);
+  if (variants.length > 0) {
+    bid = await db.procurementBid.findFirst({
+      where: { bidNumber: { in: variants } },
+      include,
+    });
+    if (bid) return await refreshBidStatus(bid);
+  }
 
   if (bid) {
     logger.info({ token, bidId: bid.id, bidNumber: bid.bidNumber }, '[RESOLVE_BID] Found existing procurementBid in database');
   } else {
     logger.info({ token }, '[RESOLVE_BID] Not found in procurementBid table, searching requirement tables concurrently...');
+    const parsedNum = isNum ? Number(token) : null;
+    const candidateTokens = new Set<string>([token, ...variants]);
     const legacyReqWhere: any[] = Array.from(candidateTokens).map(t => ({ requirementNumber: t }));
     if (parsedNum) {
       legacyReqWhere.push({ id: parsedNum });
@@ -773,9 +826,24 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 };
 
 export const refreshBidStatus = async (bid: any) => {
-  const current = bid.status;
+  if (!bid || !bid.id || bid.isBuyerRequirement) return bid;
+  const current = String(bid.status || '').toUpperCase();
   const time = now();
-  if (current === 'OPEN' && new Date(bid.endDate) <= time) {
+
+  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+  const deadlineCandidate = firstPresent(
+    bid.endDate,
+    bid.bidClosingDate,
+    sched?.submissionDate,
+    sched?.submissionDeadline,
+    sched?.submissionEndDate,
+    sched?.bidClosingDate,
+    (bid.technicalPacket as any)?.submissionDeadline,
+    (bid.technicalPacket as any)?.bidClosingDate
+  );
+  const endDateTime = deadlineCandidate ? new Date(deadlineCandidate).getTime() : (bid.endDate ? new Date(bid.endDate).getTime() : null);
+
+  if (['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'ACTIVE'].includes(current) && endDateTime && endDateTime <= time.getTime()) {
     const expired = await db.procurementBid.update({
       where: { id: bid.id },
       data: { status: 'EXPIRED', lifecycleStage: 'TECHNICAL_EVALUATION' },
@@ -792,7 +860,7 @@ export const refreshBidStatus = async (bid: any) => {
     });
     return expired;
   }
-  if (current === 'APPROVED' && new Date(bid.startDate) <= time && new Date(bid.endDate) > time) {
+  if (['APPROVED', 'DRAFT'].includes(current) && bid.startDate && new Date(bid.startDate) <= time && endDateTime && endDateTime > time.getTime()) {
     return db.procurementBid.update({
       where: { id: bid.id },
       data: { status: 'OPEN', lifecycleStage: 'SELLER_PARTICIPATION' },
@@ -857,10 +925,20 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const rawPacketCopy = bid.technicalPacket && typeof bid.technicalPacket === 'object'
     ? { ...(bid.technicalPacket as any) }
     : {};
+  const rawInternal = (bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).internal)
+    ? (bid.technicalPacket as any).internal
+    : {};
 
   if (actorRole === 'seller') {
     delete rawPacketCopy.internal;
     delete rawPacketCopy.limitedTenderJustification;
+    rawPacketCopy.buyerContact = {
+      orgName: rawInternal.orgName || bid.buyerOrganizationName || bid.buyerOrganization?.organizationName || null,
+      contactPerson: rawInternal.contactPerson || bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || null,
+      department: rawInternal.department || bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
+      email: rawInternal.email || bid.buyer?.buyerProfile?.email || bid.buyer?.email || null,
+      mobile: rawInternal.mobile || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || null,
+    };
   }
 
   const sellerTechnicalPacket = {
@@ -877,9 +955,9 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     title: bid.title,
     description: bid.description,
     buyerId: bid.buyerId,
-    buyerName: bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
-    buyerEmail: bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
-    buyerMobile: bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
+    buyerName: rawInternal.contactPerson || bid.buyer?.buyerProfile?.representativeName || bid.buyer?.name || undefined,
+    buyerEmail: rawInternal.email || bid.buyer?.buyerProfile?.email || bid.buyer?.email || undefined,
+    buyerMobile: rawInternal.mobile || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile || undefined,
     buyerAddress: [
       bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.corporateAddress || bid.buyer?.buyerProfile?.address || bid.buyerOrganization?.registeredAddress,
       bid.buyer?.buyerProfile?.city || bid.buyerOrganization?.city,
@@ -887,9 +965,9 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       bid.buyer?.buyerProfile?.state || bid.buyerOrganization?.state,
       bid.buyer?.buyerProfile?.pincode || bid.buyerOrganization?.pincode
     ].filter(Boolean).join(', ') || undefined,
-    buyerOrganizationName: bid.buyerOrganizationName,
+    buyerOrganizationName: bid.buyerOrganizationName || rawInternal.orgName || bid.buyer?.buyerProfile?.organizationName || bid.buyerOrganization?.organizationName || undefined,
     buyerType: bid.buyerType,
-    departmentName: bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
+    departmentName: rawInternal.department || bid.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.departmentName || null,
     consigneeDetails: bid.technicalPacket && typeof bid.technicalPacket === 'object' && (bid.technicalPacket as any).wizardData ? (bid.technicalPacket as any).wizardData : null,
     category: bid.category,
     bidType: bid.bidType,
@@ -943,29 +1021,72 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     updatedAt: bid.updatedAt,
     buyer: bid.buyer ? {
       id: bid.buyer.id,
-      name: bid.buyer.name,
-      email: bid.buyer.email,
-      mobile: bid.buyer.mobile,
+      name: bid.buyer.name || rawInternal.contactPerson || null,
+      email: bid.buyer.email || rawInternal.email || null,
+      mobile: bid.buyer.mobile || rawInternal.mobile || null,
       buyerProfile: bid.buyer.buyerProfile ? {
         id: bid.buyer.buyerProfile.id,
-        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName,
-        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
-        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || null,
+        organizationName: bid.buyer.buyerProfile.organizationName || bid.buyerOrganizationName || rawInternal.orgName,
+        department: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || rawInternal.department || null,
+        departmentName: bid.buyer.buyerProfile.department || bid.buyer.buyerProfile.departmentName || rawInternal.department || null,
         designation: bid.buyer.buyerProfile.designation || null,
-        representativeName: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
-        contactPerson: bid.buyer.buyerProfile.representativeName || bid.buyer.name || null,
-        email: bid.buyer.buyerProfile.email || bid.buyer.email || null,
-        mobile: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
-        phone: bid.buyer.buyerProfile.mobile || bid.buyer.mobile || null,
+        representativeName: bid.buyer.buyerProfile.representativeName || rawInternal.contactPerson || bid.buyer.name || null,
+        contactPerson: bid.buyer.buyerProfile.representativeName || rawInternal.contactPerson || bid.buyer.name || null,
+        email: bid.buyer.buyerProfile.email || rawInternal.email || bid.buyer.email || null,
+        mobile: bid.buyer.buyerProfile.mobile || rawInternal.mobile || bid.buyer.mobile || null,
+        phone: bid.buyer.buyerProfile.mobile || rawInternal.mobile || bid.buyer.mobile || null,
         registeredAddress: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
         address: bid.buyer.buyerProfile.registeredAddress || bid.buyer.buyerProfile.corporateAddress || bid.buyer.buyerProfile.address || null,
         city: bid.buyer.buyerProfile.city || null,
         district: bid.buyer.buyerProfile.district || null,
         state: bid.buyer.buyerProfile.state || null,
         pincode: bid.buyer.buyerProfile.pincode || null,
-      } : null
-    } : null,
-    buyerOrganization: bid.buyerOrganization,
+      } : {
+        id: null,
+        organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+        department: rawInternal.department || null,
+        departmentName: rawInternal.department || null,
+        designation: null,
+        representativeName: rawInternal.contactPerson || bid.buyer.name || null,
+        contactPerson: rawInternal.contactPerson || bid.buyer.name || null,
+        email: rawInternal.email || bid.buyer.email || null,
+        mobile: rawInternal.mobile || bid.buyer.mobile || null,
+        phone: rawInternal.mobile || bid.buyer.mobile || null,
+        registeredAddress: null,
+        address: null,
+        city: null,
+        district: null,
+        state: null,
+        pincode: null,
+      }
+    } : (rawInternal.contactPerson || bid.buyerOrganizationName ? {
+      id: null,
+      name: rawInternal.contactPerson || bid.buyerOrganizationName,
+      email: rawInternal.email || null,
+      mobile: rawInternal.mobile || null,
+      buyerProfile: {
+        id: null,
+        organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+        department: rawInternal.department || null,
+        departmentName: rawInternal.department || null,
+        designation: null,
+        representativeName: rawInternal.contactPerson || null,
+        contactPerson: rawInternal.contactPerson || null,
+        email: rawInternal.email || null,
+        mobile: rawInternal.mobile || null,
+        phone: rawInternal.mobile || null,
+        registeredAddress: null,
+        address: null,
+        city: null,
+        district: null,
+        state: null,
+        pincode: null,
+      }
+    } : null),
+    buyerOrganization: bid.buyerOrganization || (bid.buyerOrganizationName ? {
+      id: null,
+      organizationName: bid.buyerOrganizationName || rawInternal.orgName || null,
+    } : null),
     documents: publicDocuments.map((doc: any) => {
       let fileAssetId = doc.fileAssetId;
       if (!fileAssetId && doc.fileUrl) {
@@ -1198,7 +1319,7 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     } : undefined,
     sellerName: p.sellerName || p.seller?.name || p.seller?.organization?.organizationName,
     sellerEmail: first(p.seller?.email, p.sellerEmail, respData.sellerEmail, ackData.sellerEmail, descData.sellerEmail, p.seller?.organization?.email),
-    sellerMobile: first(p.seller?.mobile, p.sellerMobile, respData.sellerMobile, ackData.sellerMobile, descData.sellerMobile, p.seller?.organization?.mobile, p.seller?.organization?.phone),
+    sellerMobile: first(p.seller?.mobile, p.seller?.sellerProfile?.mobile, p.seller?.sellerProfile?.phone, p.sellerMobile, p.phone, p.mobile, respData.sellerMobile, respData.mobile, respData.phone, ackData.sellerMobile, ackData.mobile, ackData.phone, descData.sellerMobile, descData.mobile, descData.phone, p.seller?.organization?.mobile, p.seller?.organization?.phone),
     participationNumber: p.participationNumber,
     technicalStatus: p.technicalStatus,
     financialStatus: p.financialStatus,
@@ -1241,15 +1362,28 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     updatedAt: p.updatedAt,
     isWithdrawn: p.isWithdrawn,
     rejectionReason: p.rejectionReason,
-    documents: (
-      (Array.isArray(p.documents) && p.documents.length > 0)
-        ? p.documents
-        : (Array.isArray(respData.documents) && respData.documents.length > 0)
-          ? respData.documents
-          : (Array.isArray(ackData.documents) && ackData.documents.length > 0)
-            ? ackData.documents
-            : []
-    ).filter((doc: any) => {
+    documents: (() => {
+      const allDocs: any[] = [
+        ...(Array.isArray(p.documents) ? p.documents : []),
+        ...(Array.isArray(respData.documents) ? respData.documents : []),
+        ...(Array.isArray(ackData.documents) ? ackData.documents : []),
+        ...(Array.isArray(descData.documents) ? descData.documents : [])
+      ];
+      const attUrls = [p.attachmentUrl, respData.attachmentUrl, ackData.attachmentUrl, descData.attachmentUrl].filter(Boolean);
+      for (const u of attUrls) {
+        if (typeof u === 'string' && u.trim() && !allDocs.some(d => d.fileUrl === u || d.url === u)) {
+          allDocs.push({
+            id: `att-${p.id}`,
+            documentCategory: 'TECHNICAL_PROPOSAL',
+            documentName: 'Quotation Proposal Document',
+            fileName: u.split('/').pop() || 'Proposal_Document.pdf',
+            fileUrl: u,
+            fileAssetId: p.fileAssetId || null
+          });
+        }
+      }
+      return allDocs;
+    })().filter((doc: any) => {
       if (!canSeeFin && (doc.documentCategory === 'FINANCIAL_QUOTE' || String(doc.documentName || '').toLowerCase().includes('price breakup'))) {
         return false;
       }
@@ -1875,6 +2009,199 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
   return updated;
 };
 
+export interface ExtendScheduleInput {
+  closingDate: string;
+  technicalOpeningDate?: string | null;
+  financialOpeningDate?: string | null;
+  requiredByDate?: string | null;
+  bidValidityDate?: string | null;
+  reason: string;
+}
+
+export const extendBidSchedule = async (
+  req: AuthRequest,
+  bidId: string,
+  body: ExtendScheduleInput
+) => {
+  const bid = await resolveBid(bidId, {});
+  assertBuyerOwner(req.user!, bid);
+
+  const status = String(bid.status || '').toUpperCase();
+  const terminalStatuses = [
+    'AWARDED',
+    'AWARD_ACCEPTED',
+    'AWARD_OFFERED',
+    'AWARD_RECOMMENDED',
+    'PO_GENERATED',
+    'IN_PROGRESS',
+    'DELIVERED',
+    'GRN_COMPLETED',
+    'INVOICE_SUBMITTED',
+    'PAYMENT_COMPLETED',
+    'COMPLETED',
+    'CANCELLED',
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+  ];
+  if (terminalStatuses.includes(status)) {
+    throw new ApiError(
+      400,
+      `Cannot extend schedule for a tender in stage ${status.toLowerCase()} because financial bids have already been opened or contract awarded. Please issue a fresh re-tender instead.`,
+      'TENDER_POST_FINANCIAL_LOCKED'
+    );
+  }
+
+  const newClosingDate = new Date(body.closingDate);
+  if (isNaN(newClosingDate.getTime())) {
+    throw new ApiError(400, 'Invalid submission closing date provided.', 'INVALID_CLOSING_DATE');
+  }
+
+  const now = new Date();
+  if (newClosingDate.getTime() <= now.getTime()) {
+    throw new ApiError(400, 'New submission closing date must be in the future.', 'CLOSING_DATE_IN_PAST');
+  }
+
+  const oldEndDate = bid.endDate ? new Date(bid.endDate) : null;
+  if (oldEndDate && newClosingDate.getTime() <= oldEndDate.getTime()) {
+    throw new ApiError(400, 'New submission closing date must be later than the current deadline.', 'CLOSING_DATE_NOT_EXTENDED');
+  }
+
+  // Validate technical opening date if provided
+  let newTechDate: Date | null = null;
+  if (body.technicalOpeningDate) {
+    newTechDate = new Date(body.technicalOpeningDate);
+    if (isNaN(newTechDate.getTime())) {
+      throw new ApiError(400, 'Invalid technical opening date provided.', 'INVALID_TECH_DATE');
+    }
+    if (newTechDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Technical opening date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  } else if (bid.technicalOpeningDate) {
+    // If existing technical date is prior to new closing date, auto-align it
+    const oldTech = new Date(bid.technicalOpeningDate);
+    if (oldTech.getTime() < newClosingDate.getTime()) {
+      newTechDate = newClosingDate;
+    }
+  }
+
+  // Validate financial opening date if provided
+  let newFinDate: Date | null = null;
+  if (body.financialOpeningDate) {
+    newFinDate = new Date(body.financialOpeningDate);
+    if (isNaN(newFinDate.getTime())) {
+      throw new ApiError(400, 'Invalid financial opening date provided.', 'INVALID_FIN_DATE');
+    }
+    const minFin = newTechDate || newClosingDate;
+    if (newFinDate.getTime() < minFin.getTime()) {
+      throw new ApiError(400, 'Financial opening date cannot be earlier than the technical opening / closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  } else if (bid.financialOpeningDate) {
+    const oldFin = new Date(bid.financialOpeningDate);
+    const minFin = newTechDate || newClosingDate;
+    if (oldFin.getTime() < minFin.getTime()) {
+      newFinDate = minFin;
+    }
+  }
+
+  // Validate requiredByDate / delivery date if provided
+  let newRequiredByDate: Date | null = null;
+  if (body.requiredByDate) {
+    newRequiredByDate = new Date(body.requiredByDate);
+    if (isNaN(newRequiredByDate.getTime())) {
+      throw new ApiError(400, 'Invalid delivery / required-by date provided.', 'INVALID_DELIVERY_DATE');
+    }
+    if (newRequiredByDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Required-by delivery date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  }
+
+  // Validate bid validity date
+  let newValidityDate: Date | null = null;
+  if (body.bidValidityDate) {
+    newValidityDate = new Date(body.bidValidityDate);
+    if (isNaN(newValidityDate.getTime())) {
+      throw new ApiError(400, 'Invalid bid validity date provided.', 'INVALID_VALIDITY_DATE');
+    }
+    if (newValidityDate.getTime() < newClosingDate.getTime()) {
+      throw new ApiError(400, 'Bid validity date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
+    }
+  }
+
+  // Sync technicalPacket JSON payload if present
+  let updatedTechnicalPacket = bid.technicalPacket as any;
+  if (updatedTechnicalPacket && typeof updatedTechnicalPacket === 'object') {
+    const schedule = updatedTechnicalPacket.schedule || {};
+    const basics = updatedTechnicalPacket.basics || {};
+    updatedTechnicalPacket = {
+      ...updatedTechnicalPacket,
+      schedule: {
+        ...schedule,
+        submissionClosingDate: newClosingDate.toISOString(),
+        ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
+        ...(newFinDate ? { financialOpeningDate: newFinDate.toISOString() } : {}),
+        ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
+      },
+      basics: {
+        ...basics,
+        ...(newRequiredByDate ? { requiredByDate: newRequiredByDate.toISOString() } : {}),
+      }
+    };
+  }
+
+  const shouldReactivate = ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'].includes(status);
+
+  const updated = await db.procurementBid.update({
+    where: { id: bid.id },
+    data: {
+      endDate: newClosingDate,
+      ...(shouldReactivate ? { status: 'OPEN', lifecycleStage: 'SELLER_PARTICIPATION' } : {}),
+      ...(newTechDate ? { technicalOpeningDate: newTechDate } : {}),
+      ...(newFinDate ? { financialOpeningDate: newFinDate } : {}),
+      ...(newValidityDate ? { bidValidityDate: newValidityDate } : {}),
+      ...(updatedTechnicalPacket ? { technicalPacket: updatedTechnicalPacket } : {})
+    }
+  });
+
+  const changeSummary = {
+    oldDates: {
+      endDate: bid.endDate,
+      technicalOpeningDate: bid.technicalOpeningDate,
+      financialOpeningDate: bid.financialOpeningDate,
+      bidValidityDate: bid.bidValidityDate
+    },
+    newDates: {
+      endDate: newClosingDate,
+      technicalOpeningDate: newTechDate || bid.technicalOpeningDate,
+      financialOpeningDate: newFinDate || bid.financialOpeningDate,
+      bidValidityDate: newValidityDate || bid.bidValidityDate,
+      requiredByDate: newRequiredByDate
+    },
+    reason: body.reason,
+    extendedByUserId: req.user!.id
+  };
+
+  await procurementAudit(req, 'BID_SCHEDULE_EXTENDED', 'ProcurementBid', bid.id, changeSummary, bid);
+
+  // Notify all participating sellers without modifying their submission status
+  const participations = await db.procurementBidParticipation.findMany({
+    where: { bidId: bid.id }
+  });
+  for (const p of participations) {
+    try {
+      await notificationService.notifyUser(p.sellerId, {
+        title: 'Submission Deadline Extended (Corrigendum)',
+        message: `The submission deadline for "${bid.title}" has been extended to ${newClosingDate.toLocaleString()}. Reason: ${body.reason}`,
+        type: 'tender.deadline_extended',
+        redirectUrl: `/seller/procurement/events/${bid.id}`
+      }, ['in_app', 'email']);
+    } catch (err) {
+      logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');
+    }
+  }
+
+  return updated;
+};
+
 export const uploadBuyerBidDocument = async (req: AuthRequest & { file?: Express.Multer.File }, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
@@ -2462,10 +2789,58 @@ export const sellerAskClarification = async (req: AuthRequest, bidId: string, qu
 export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, {});
   assertBuyerOwner(req.user!, bid);
-  if (!technicalEvaluationStatuses.includes(bid.status)) throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
+
+  const stage2Statuses = [
+    'TECHNICAL_EVALUATION_COMPLETED',
+    'FINANCIAL_EVALUATION',
+    'L1_GENERATED',
+    'AWARD_RECOMMENDED',
+    'AWARDED',
+    'PO_GENERATED',
+    'PO_ISSUED',
+    'COMPLETED',
+    'REVERSE_AUCTION_ACTIVE',
+    'REVERSE_AUCTION_SCHEDULED',
+  ];
+  if (
+    stage2Statuses.includes(bid.status) ||
+    stage2Statuses.includes(bid.lifecycleStage)
+  ) {
+    throw new ApiError(
+      409,
+      'Technical evaluation is finalized and cannot be modified once Stage 2 has opened.',
+      'TECHNICAL_EVALUATION_FINALIZED'
+    );
+  }
+
+  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+  const deadlineCandidate = firstPresent(
+    bid.endDate,
+    bid.bidClosingDate,
+    sched?.submissionDate,
+    sched?.submissionDeadline,
+    sched?.submissionEndDate,
+    sched?.bidClosingDate,
+    (bid.technicalPacket as any)?.submissionDeadline,
+    (bid.technicalPacket as any)?.bidClosingDate,
+    bid.rawBuyerRequirement?.lastDate,
+    bid.rawBuyerRequirement?.requiredBy
+  );
+  const deadlinePassed = deadlineCandidate ? new Date(deadlineCandidate).getTime() <= Date.now() : false;
+  const isSubmissionClosed = technicalEvaluationStatuses.includes(bid.status) || deadlinePassed || Boolean(body?.closeBidIfOpen);
+
+  if (!isSubmissionClosed && !['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED'].includes(bid.status)) {
+    throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
+  }
+
   const updatedRows = await db.$transaction(async (tx: any) => {
     if (bid.status !== 'TECHNICAL_EVALUATION') assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
-    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
+    if (!bid.isBuyerRequirement) {
+      const exists = await tx.procurementBid.findUnique({ where: { id: bid.id }, select: { id: true } });
+      if (exists) {
+        await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'TECHNICAL_EVALUATION', lifecycleStage: 'TECHNICAL_EVALUATION' } });
+      }
+    }
     const rows = [];
     for (const item of body.evaluations) {
       const targetIdNum = Number(item.participationId);
@@ -2573,6 +2948,55 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
           rejectionReason: item.status === 'DISQUALIFIED' ? item.remarks : null
         }
       });
+
+      // Synchronize evaluation decision across any linked RequirementResponse, QuoteResponse, or Tender Bid
+      if (participation.sellerId) {
+        const sId = Number(participation.sellerId);
+        const packet = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+        const linkedReqId = Number(packet.sourceRequirementId || packet.requirementId || bid.sourceId || 0);
+
+        // Sync RequirementResponse
+        await tx.requirementResponse.updateMany({
+          where: {
+            OR: [
+              { id: participation.id },
+              ...(linkedReqId > 0 ? [{ requirementId: linkedReqId, sellerUserId: sId }] : []),
+              { sellerUserId: sId }
+            ]
+          },
+          data: {
+            status: technicalStatus === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED'
+          }
+        }).catch(() => {});
+
+        // Sync QuoteResponse
+        await tx.quoteResponse.updateMany({
+          where: {
+            OR: [
+              { id: participation.id },
+              { sellerId: sId }
+            ]
+          },
+          data: {
+            technicalStatus,
+            technicalRemarks: item.remarks || null
+          }
+        }).catch(() => {});
+
+        // Sync Tender Bid if applicable
+        const tenderNum = Number(String(bid.bidNumber || '').replace(/\D+/g, '')) || Number(bid.sourceId || 0);
+        if (tenderNum > 0) {
+          await tx.bid.updateMany({
+            where: {
+              tenderId: tenderNum,
+              sellerId: sId
+            },
+            data: {
+              status: technicalStatus === 'QUALIFIED' ? 'accepted' : 'rejected'
+            }
+          }).catch(() => {});
+        }
+      }
       rows.push(await tx.procurementBidEvaluation.create({
         data: {
           bidId: bid.id,
@@ -3610,7 +4034,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     title: 'Purchase Order Issued',
     message: `Buyer has issued Purchase Order #${po.purchaseOrder.poNumber} for "${bid.title}". Please accept the PO to commit to fulfillment.`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.purchaseOrder.id}`
+    redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
   }).catch(() => undefined);
 
   return {

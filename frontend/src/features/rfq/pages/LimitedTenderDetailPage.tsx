@@ -55,7 +55,8 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     queryFn: () => procurementBidApi.detail((requestId || activeLimitedId)!),
     enabled: !!(requestId || activeLimitedId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
@@ -151,10 +152,20 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
   const ownParticipation = participationsList.find((p: any) =>
-    currentUser?.id && (
-      Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
-      Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id) ||
-      (currentUser.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(currentUser.organizationId))
+    currentUser && (
+      (currentUser.id && (
+        Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
+        Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id)
+      )) ||
+      (currentUser.organizationId && (
+        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.organizationId)
+      )) ||
+      (currentUser.sellerProfile?.id && (
+        Number(p.sellerProfileId || p.sellerId) === Number(currentUser.sellerProfile.id)
+      )) ||
+      (currentUser.sellerProfile?.organizationId && (
+        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
+      ))
     )
   );
 
@@ -179,15 +190,16 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
 
   const computedInviteCount = Math.max(
     Number(bid.invitedCount) || 0,
-    Number(bid.invitationsCount) || 0,
-    Array.isArray(invitationsList) ? invitationsList.length : 0,
-    Array.isArray(invitedSellersList) ? invitedSellersList.length : 0,
-    Number(payload?.vendors?.inviteCount) || 0
+    Number(payload?.vendors?.inviteCount) || 0,
+    invitedSellersList.length,
+    invitationsList.length,
+    0
   );
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const resolvedBuyer = bid.buyer || reqObj.buyer || null;
   const rawBuyerProfile =
     bid.buyer?.buyerProfile ||
     reqObj.buyer?.buyerProfile ||
@@ -198,16 +210,14 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     bid.buyerOrganizationName ||
     reqObj.buyerOrganization?.organizationName ||
     reqObj.organization?.organizationName ||
-    (bid.buyer?.name && bid.buyer.name !== bid.buyer?.buyerProfile?.representativeName ? bid.buyer.name : '') ||
     'Buyer Organization';
 
   const resolvedContactPerson =
     bid.buyer?.buyerProfile?.contactPerson ||
     bid.buyer?.buyerProfile?.representativeName ||
-    (bid.buyer?.name && bid.buyer.name !== resolvedOrgName && bid.buyer.name !== 'Buyer' ? bid.buyer.name : '') ||
-    (bid.buyerName && bid.buyerName !== resolvedOrgName && bid.buyerName !== 'Buyer' ? bid.buyerName : '') ||
+    bid.buyer?.name ||
     reqObj.contactPerson ||
-    (reqObj.buyer?.name && reqObj.buyer.name !== resolvedOrgName && reqObj.buyer.name !== 'Buyer' ? reqObj.buyer.name : '') ||
+    bid.buyer?.name ||
     'Authorized Procurement Officer';
 
   const resolvedBuyerEmail =
@@ -246,6 +256,8 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         procurementLabel="Limited Tender"
         id={bid.id || reqObj.id || requestId}
         displayId={limitedTenderNumber}
+        rawBid={bid}
+        awards={bid.awards || []}
         invitedCount={computedInviteCount}
         invitedSellers={invitedSellersList}
         invitations={invitationsList}
@@ -334,7 +346,6 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
         submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Limited Tender Proposal')}
         onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
-        onViewQuotationClick={hasSubmittedProposal ? handleSubmitProposal : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
       />

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -67,6 +67,7 @@ import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
 import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
+import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceRegistryModal";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -78,6 +79,7 @@ import { EmdPaymentModal } from "./EmdPaymentModal";
 import StartReverseAuctionModal, {
   SubmittedVendorItem,
 } from "../../reverseAuctions/components/StartReverseAuctionModal";
+import { ExtendScheduleModal } from "./ExtendScheduleModal";
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
@@ -301,10 +303,14 @@ function hasExplicitDateTime(val?: string | Date | null): boolean {
   }
   if (val instanceof Date) {
     return !(
-      val.getUTCHours() === 0 &&
-      val.getUTCMinutes() === 0 &&
-      val.getUTCSeconds() === 0 &&
-      val.getUTCMilliseconds() === 0
+      (val.getUTCHours() === 0 &&
+        val.getUTCMinutes() === 0 &&
+        val.getUTCSeconds() === 0 &&
+        val.getUTCMilliseconds() === 0) ||
+      (val.getHours() === 0 &&
+        val.getMinutes() === 0 &&
+        val.getSeconds() === 0 &&
+        val.getMilliseconds() === 0)
     );
   }
   return false;
@@ -317,7 +323,11 @@ function formatDateString(
 ) {
   if (!dateVal) return null;
   try {
-    const d = new Date(dateVal);
+    let s = typeof dateVal === "string" ? dateVal.trim() : dateVal;
+    if (typeof s === "string") {
+      s = s.replace(/\bSept\b/i, "Sep");
+    }
+    const d = new Date(s);
     if (isNaN(d.getTime())) return String(dateVal);
     const day = String(d.getDate()).padStart(2, "0");
     const months = [
@@ -337,24 +347,37 @@ function formatDateString(
     const month = months[d.getMonth()];
     const year = d.getFullYear();
 
-    const shouldIncludeTime =
-      includeTime !== undefined ? includeTime : hasExplicitDateTime(dateVal);
-    if (!shouldIncludeTime) return `${day} ${month} ${year}`;
-
     const isDateOnlyStr =
       typeof dateVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
     const isMidnightUtc =
       d.getUTCHours() === 0 &&
       d.getUTCMinutes() === 0 &&
       d.getUTCSeconds() === 0;
-    if (isDateOnlyStr || (isMidnightUtc && !defaultMidnightTime)) {
+    const isMidnightLocal =
+      d.getHours() === 0 &&
+      d.getMinutes() === 0 &&
+      d.getSeconds() === 0;
+    const isMidnight = isMidnightUtc || isMidnightLocal;
+
+    const shouldIncludeTime =
+      includeTime !== undefined
+        ? includeTime
+        : (hasExplicitDateTime(dateVal) || Boolean(defaultMidnightTime));
+
+    if (!shouldIncludeTime) {
       return `${day} ${month} ${year}`;
     }
+
+    if ((isDateOnlyStr || isMidnight) && !defaultMidnightTime && !includeTime) {
+      return `${day} ${month} ${year}`;
+    }
+
     let hoursNum: number;
     let minutesStr: string;
-    if (isMidnightUtc && defaultMidnightTime) {
+    if ((isMidnight || isDateOnlyStr) && defaultMidnightTime) {
       if (defaultMidnightTime === "startOfDay") {
-        return `${day} ${month} ${year}`;
+        hoursNum = 0;
+        minutesStr = "00";
       } else {
         hoursNum = 23;
         minutesStr = "59";
@@ -654,13 +677,21 @@ function parseDateValue(
   isStart = false,
 ): Date | null {
   if (!dateVal) return null;
-  const d = new Date(dateVal);
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    return dateVal;
+  }
+  let s = String(dateVal).trim();
+  if (!s) return null;
+  s = s.replace(/\bSept\b/i, "Sep");
+  const d = new Date(s);
   if (isNaN(d.getTime())) return null;
-  const isDateOnlyStr =
-    typeof dateVal === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim());
+  const isDateOnlyStr = /^\d{4}-\d{2}-\d{2}$/.test(s);
   const isMidnightUtc =
     d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
-  if (isMidnightUtc || isDateOnlyStr) {
+  const isMidnightLocal =
+    d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0;
+  if (isMidnightUtc || isMidnightLocal || isDateOnlyStr) {
     const adjusted = new Date(d.getTime());
     if (isStart) {
       adjusted.setHours(0, 0, 0, 0);
@@ -787,12 +818,7 @@ function DeadlineCountdown({
   }
 
   if (timerState.isPassed) {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700">
-        <Clock className="h-3 w-3 text-rose-600" />
-        Submission Closed
-      </span>
-    );
+    return null;
   }
 
   return (
@@ -824,6 +850,8 @@ function StatusBadge({ status }: { status?: string }) {
     "CANCELLED",
     "EXPIRED",
     "AWARDED",
+    "SUBMISSION CLOSED",
+    "SUBMISSION_CLOSED",
   ].includes(label);
 
   return (
@@ -3852,6 +3880,7 @@ export interface ProcurementDetailUnifiedViewProps {
   priority?: string;
   deadlineDate?: Date | string | null;
   createdAt?: Date | string | null;
+  startDate?: Date | string | null;
   publishedDate?: string;
   submissionStartDate?: string;
   closingDate?: string;
@@ -3888,6 +3917,7 @@ export interface ProcurementDetailUnifiedViewProps {
   technicalOpeningDate?: string;
   financialOpeningDate?: string;
   participations?: any[];
+  awards?: any;
   participantsCount?: number;
   totalClarifications?: number;
   hasSubmittedProposal?: boolean;
@@ -3978,6 +4008,10 @@ export function ProcurementDetailUnifiedView(
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isTaxInvoiceModalOpen, setIsTaxInvoiceModalOpen] = useState(false);
+  const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
+  const [selectedInvoiceModalData, setSelectedInvoiceModalData] = useState<any | null>(null);
+  const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -4001,6 +4035,26 @@ export function ProcurementDetailUnifiedView(
     (isBuyerOrAdmin &&
       !pathname.startsWith("/seller") &&
       !pathname.startsWith("/shg"));
+
+  const statusUpper = String(props.status || "").toUpperCase();
+  const isPostFinancialOrAwarded = [
+    "AWARDED",
+    "AWARD_ACCEPTED",
+    "AWARD_OFFERED",
+    "AWARD_RECOMMENDED",
+    "PO_GENERATED",
+    "IN_PROGRESS",
+    "DELIVERED",
+    "GRN_COMPLETED",
+    "INVOICE_SUBMITTED",
+    "PAYMENT_COMPLETED",
+    "COMPLETED",
+    "CANCELLED",
+    "FINANCIAL_EVALUATION",
+    "L1_GENERATED",
+  ].includes(statusUpper);
+
+  const canExtendSchedule = isBuyerSide && !isPostFinancialOrAwarded;
 
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
@@ -4028,20 +4082,142 @@ export function ProcurementDetailUnifiedView(
   const [isSubmittingAward, setIsSubmittingAward] = useState(false);
   const [isAcceptingPO, setIsAcceptingPO] = useState(false);
 
-  const rawAwards: any[] = Array.isArray(props.rawBid?.awards)
+  const { data: fallbackBidData } = useQuery({
+    queryKey: ["procurement-detail-fallback-bid", targetId],
+    queryFn: async () => {
+      try {
+        if (!targetId || targetId === "N/A" || targetId === "—") return null;
+        const res = await procurementBidApi.detail(targetId);
+        return res || null;
+      } catch {
+        return null;
+      }
+    },
+    enabled:
+      Boolean(targetId) &&
+      (!props.rawBid?.awards || props.rawBid.awards.length === 0) &&
+      (!props.awards || props.awards.length === 0),
+    staleTime: 10_000,
+  });
+
+  const rawParticipations: any[] = Array.isArray(props.rawBid?.participations) && props.rawBid.participations.length > 0
+    ? props.rawBid.participations
+    : Array.isArray(props.participations) && props.participations.length > 0
+      ? props.participations
+      : Array.isArray((props as any)?.participations) && (props as any).participations.length > 0
+        ? (props as any).participations
+        : Array.isArray(fallbackBidData?.participations)
+          ? fallbackBidData.participations
+          : [];
+
+  const currentUserId = String(currentUser?.id || "");
+  const currentOrgId = String(
+    currentUser?.organizationId ||
+      currentUser?.sellerProfile?.id ||
+      currentUser?.sellerProfile?.organizationId ||
+      "",
+  );
+
+  const myParticipation = React.useMemo(() => {
+    if (isBuyerSide || !currentUser) return null;
+    return rawParticipations.find(
+      (p: any) =>
+        String(
+          p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+        ) === currentUserId ||
+        String(
+          p.sellerOrganizationId ||
+            p.sellerOrganization?.id ||
+            p.seller?.organizationId,
+        ) === currentOrgId ||
+        (currentUser.sellerProfile?.id &&
+          String(p.sellerProfileId || p.sellerId) === String(currentUser.sellerProfile.id)) ||
+        (currentUser.sellerProfile?.organizationId &&
+          String(p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === String(currentUser.sellerProfile.organizationId)),
+    );
+  }, [
+    rawParticipations,
+    isBuyerSide,
+    currentUser,
+    currentUserId,
+    currentOrgId,
+  ]);
+
+  const effectiveMyParticipation =
+    props.ownParticipation || props.ownResponse || myParticipation;
+  const isSellerParticipated = Boolean(
+    props.hasSubmittedProposal || effectiveMyParticipation,
+  );
+
+  const rawAwards: any[] = Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0
     ? props.rawBid.awards
-    : Array.isArray((props as any)?.awards)
-      ? (props as any).awards
-      : [];
+    : Array.isArray(props.awards) && props.awards.length > 0
+      ? props.awards
+      : Array.isArray((props as any)?.awards) && (props as any).awards.length > 0
+        ? (props as any).awards
+        : Array.isArray(fallbackBidData?.awards) && fallbackBidData.awards.length > 0
+          ? fallbackBidData.awards
+          : [];
+
+  const myAward = !isBuyerSide
+    ? rawAwards.find((a: any) => {
+        const aSellerId = String(
+          a.awardedSellerId || a.sellerId || a.seller?.id || a.participation?.sellerId || "",
+        );
+        const aOrgId = String(
+          a.seller?.organizationId || a.participation?.sellerOrganizationId || "",
+        );
+        const aPartId = a.participationId || a.participation?.id;
+        const myPartId = myParticipation?.id || effectiveMyParticipation?.id || props.ownParticipation?.id;
+        return (
+          (aSellerId && (aSellerId === currentUserId || aSellerId === currentOrgId)) ||
+          (aOrgId && aOrgId === currentOrgId) ||
+          (myPartId && aPartId && Number(aPartId) === Number(myPartId))
+        );
+      })
+    : null;
+
   const activeAward =
+    myAward ||
     rawAwards.find(
       (a: any) =>
         a.awardStatus === "OFFERED" ||
         a.awardStatus === "ACCEPTED" ||
+        a.awardStatus === "RECOMMENDED" ||
         a.counterOfferStatus === "PENDING",
     ) ||
     rawAwards[0] ||
     null;
+
+  const isAwardedToMe = Boolean(
+    activeAward &&
+    !isBuyerSide &&
+    ((activeAward.awardedSellerId &&
+      (String(activeAward.awardedSellerId) === currentUserId ||
+        String(activeAward.awardedSellerId) === currentOrgId)) ||
+      (activeAward.sellerId &&
+        (String(activeAward.sellerId) === currentUserId ||
+          String(activeAward.sellerId) === currentOrgId)) ||
+      (activeAward.seller?.id &&
+        (String(activeAward.seller.id) === currentUserId ||
+          String(activeAward.seller.id) === currentOrgId)) ||
+      (activeAward.seller?.organizationId &&
+        String(activeAward.seller.organizationId) === currentOrgId) ||
+      (activeAward.participation?.sellerId &&
+        (String(activeAward.participation.sellerId) === currentUserId ||
+          String(activeAward.participation.sellerId) === currentOrgId)) ||
+      (activeAward.participation?.sellerOrganizationId &&
+        String(activeAward.participation.sellerOrganizationId) === currentOrgId) ||
+      (myParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(myParticipation.id)) ||
+      (effectiveMyParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(effectiveMyParticipation.id)) ||
+      (props.ownParticipation?.id &&
+        activeAward.participationId &&
+        Number(activeAward.participationId) === Number(props.ownParticipation.id))),
+  );
 
   const rawOrders: any[] = Array.isArray(props.rawBid?.purchaseOrders)
     ? props.rawBid.purchaseOrders
@@ -4057,10 +4233,10 @@ export function ProcurementDetailUnifiedView(
     null;
 
   const { data: fetchedOrder } = useQuery({
-    queryKey: ["procurement-active-order", targetId],
+    queryKey: ["procurement-active-order", targetId, activeAward?.id],
     queryFn: async () => {
       try {
-        const res: any = await getApi(`/api/orders/procurement?take=50`);
+        const res: any = await getApi(`/api/orders/procurement?take=20${targetId ? `&bidId=${targetId}` : ""}`);
         const list = Array.isArray(res) ? res : res?.items || res?.data || [];
         return (
           list.find(
@@ -4074,73 +4250,85 @@ export function ProcurementDetailUnifiedView(
         return null;
       }
     },
-    enabled: Boolean(targetId) && !directActiveOrder,
-    staleTime: 5000,
+    enabled: Boolean(targetId),
+    staleTime: 4000,
+    refetchInterval: (query) => {
+      const ord = query.state.data;
+      const st = String(ord?.status || ord?.poStatus || "").toLowerCase();
+      if (["closed", "cancelled", "completed", "paid"].includes(st)) return false;
+      return 6000;
+    },
   });
   const effectiveActiveOrder = useMemo(() => {
-    const ord = localCreatedOrder || directActiveOrder || fetchedOrder || null;
+    const ord = fetchedOrder || localCreatedOrder || directActiveOrder || null;
     if (ord && localAcceptedPO) {
       return { ...ord, status: "accepted", poStatus: "ACCEPTED" };
     }
     return ord;
-  }, [localCreatedOrder, directActiveOrder, fetchedOrder, localAcceptedPO]);
+  }, [fetchedOrder, localCreatedOrder, directActiveOrder, localAcceptedPO]);
 
-  const currentUserId = String(currentUser?.id || "");
-  const currentOrgId = String(
-    currentUser?.organizationId ||
-      currentUser?.sellerProfile?.id ||
-      currentUser?.sellerProfile?.organizationId ||
-      "",
+  const rawOrderStatus = String(
+    effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || "",
+  ).toLowerCase();
+
+  const isPOAccepted = Boolean(
+    effectiveActiveOrder &&
+      (Boolean(effectiveActiveOrder.acceptedAt) ||
+        activeAward?.awardStatus === "ACCEPTED" ||
+        localAcceptedPO ||
+        [
+          "accepted",
+          "in_fulfillment",
+          "dispatched",
+          "in_transit",
+          "delivered",
+          "grn_created",
+          "grn_pending",
+          "grn_completed",
+          "grn_approved",
+          "invoice_submitted",
+          "invoiced",
+          "payment_initiated",
+          "paid",
+          "completed",
+          "closed",
+        ].includes(rawOrderStatus) ||
+        (rawOrderStatus &&
+          ![
+            "issued",
+            "generated",
+            "order_placed",
+            "pending_acceptance",
+            "cancelled",
+            "rejected",
+          ].includes(rawOrderStatus))),
   );
 
-  const isAwardedToMe = Boolean(
-    activeAward &&
-    !isBuyerSide &&
-    ((activeAward.awardedSellerId &&
-      (String(activeAward.awardedSellerId) === currentUserId ||
-        String(activeAward.awardedSellerId) === currentOrgId)) ||
-      (activeAward.sellerId &&
-        (String(activeAward.sellerId) === currentUserId ||
-          String(activeAward.sellerId) === currentOrgId)) ||
-      (activeAward.seller?.id &&
-        (String(activeAward.seller.id) === currentUserId ||
-          String(activeAward.seller.id) === currentOrgId)) ||
-      (activeAward.seller?.organizationId &&
-        String(activeAward.seller.organizationId) === currentOrgId)),
-  );
-
-  const rawParticipations: any[] = Array.isArray(props.rawBid?.participations)
-    ? props.rawBid.participations
-    : Array.isArray((props as any)?.participations)
-      ? (props as any).participations
-      : [];
-
-  const myParticipation = React.useMemo(() => {
-    if (isBuyerSide || !currentUser) return null;
-    return rawParticipations.find(
-      (p: any) =>
-        String(
-          p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
-        ) === currentUserId ||
-        String(
-          p.sellerOrganizationId ||
-            p.sellerOrganization?.id ||
-            p.seller?.organizationId,
-        ) === currentOrgId,
-    );
-  }, [
-    rawParticipations,
-    isBuyerSide,
-    currentUser,
-    currentUserId,
-    currentOrgId,
-  ]);
-
-  const effectiveMyParticipation =
-    props.ownParticipation || props.ownResponse || myParticipation;
-  const isSellerParticipated = Boolean(
-    props.hasSubmittedProposal || effectiveMyParticipation,
-  );
+  const poStatusBadgeText = useMemo(() => {
+    if (["delivered", "grn_completed", "grn_pending"].includes(rawOrderStatus)) {
+      return "Supplier Accepted — Items Delivered (GRN Pending)";
+    }
+    if (
+      [
+        "grn_approved",
+        "invoiced",
+        "invoice_submitted",
+        "payment_initiated",
+        "paid",
+        "completed",
+        "closed",
+      ].includes(rawOrderStatus)
+    ) {
+      return "Supplier Accepted — Fulfilled & Progressing";
+    }
+    if (["in_fulfillment", "dispatched", "in_transit"].includes(rawOrderStatus)) {
+      return "Supplier Accepted — Delivery In Progress";
+    }
+    if (isPOAccepted) {
+      return "Supplier Accepted — Fulfillment Committed";
+    }
+    return "Awaiting Supplier Acceptance & Commitment";
+  }, [rawOrderStatus, isPOAccepted]);
 
   const handleAcceptPriceMatch = async (awardId: string) => {
     try {
@@ -4474,25 +4662,72 @@ export function ProcurementDetailUnifiedView(
       for (const idToken of idsToTry) {
         const candidateResults = await Promise.allSettled([
           getApi(
-            `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
-            true,
-          ),
-          getApi(
             `/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`,
             true,
           ),
           procurementBidApi.detail(idToken),
           getApi(
-            `/api/marketplace/requirements/${encodeURIComponent(idToken)}/responses`,
+            `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
             true,
           ),
         ]);
 
+        const candidateLists: any[][] = [];
         for (const r of candidateResults) {
           if (r.status === "fulfilled" && r.value) {
             const items = extractArray(r.value);
-            if (items.length > 0) return items.map(normalizeItem);
+            if (items.length > 0) {
+              candidateLists.push(items.map(normalizeItem));
+            }
           }
+        }
+
+        if (candidateLists.length > 0) {
+          const mergedVendorMap = new Map<string, any>();
+          for (const list of candidateLists) {
+            for (const item of list) {
+              const baseKeys = [
+                item.id ? `id-${item.id}` : null,
+                item.participationId ? `part-${item.participationId}` : null,
+                item.participationNumber ? `partNum-${item.participationNumber}` : null,
+                item.sellerUserId ? `user-${item.sellerUserId}` : null,
+                item.sellerId ? `user-${item.sellerId}` : null,
+                item.sellerOrganizationId ? `org-${item.sellerOrganizationId}` : null,
+                item.sellerOrgName ? `name-${String(item.sellerOrgName).trim().toLowerCase()}` : null,
+                item.sellerOrgName ? `norm-${String(item.sellerOrgName).trim().toLowerCase().replace(/[^a-z0-9]/g, '')}` : null,
+              ].filter(Boolean) as string[];
+
+              let existing = baseKeys.map(k => mergedVendorMap.get(k)).find(Boolean);
+
+              const ts = String(item.technicalStatus || "").toUpperCase();
+              const isItemEvaluated =
+                ts === "QUALIFIED" ||
+                ts === "DISQUALIFIED" ||
+                ts === "NOT_QUALIFIED" ||
+                Boolean(item.isDisqualified);
+
+              if (existing) {
+                if (isItemEvaluated) {
+                  existing.technicalStatus = ts === "NOT_QUALIFIED" ? "DISQUALIFIED" : ts;
+                  existing.isDisqualified = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || Boolean(item.isDisqualified);
+                  if (item.technicalRemarks) existing.technicalRemarks = item.technicalRemarks;
+                  if (item.score != null) existing.score = item.score;
+                }
+                if (item.quotedAmount && !existing.quotedAmount) existing.quotedAmount = item.quotedAmount;
+                if (item.totalAmount && !existing.totalAmount) existing.totalAmount = item.totalAmount;
+                for (const k of baseKeys) mergedVendorMap.set(k, existing);
+              } else {
+                const newObj = { ...item };
+                if (isItemEvaluated) {
+                  newObj.technicalStatus = ts === "NOT_QUALIFIED" ? "DISQUALIFIED" : ts;
+                  newObj.isDisqualified = ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || Boolean(item.isDisqualified);
+                }
+                for (const k of baseKeys) mergedVendorMap.set(k, newObj);
+              }
+            }
+          }
+          const uniqueItems = Array.from(new Set(mergedVendorMap.values()));
+          if (uniqueItems.length > 0) return uniqueItems;
         }
       }
 
@@ -4501,7 +4736,7 @@ export function ProcurementDetailUnifiedView(
     enabled: Boolean(
       isBuyerOrAdmin && targetId && targetId !== "RFQ" && targetId !== "RFP",
     ),
-    staleTime: 30_000,
+    staleTime: 5_000,
   });
   const {
     data: emdRes,
@@ -4648,7 +4883,6 @@ export function ProcurementDetailUnifiedView(
     false,
   );
 
-  const statusUpper = String(props.status || "").toUpperCase();
   const lifecycleStageUpper = String(
     (props as any).lifecycleStage ||
       (props as any).rawBid?.lifecycleStage ||
@@ -4710,13 +4944,6 @@ export function ProcurementDetailUnifiedView(
       .toUpperCase()
       .includes("RATE CONTRACT") ||
     pathname.includes("/rate-contract");
-
-  const isBiddingClosed =
-    isPostBiddingStage ||
-    Boolean(props.isSubmitDisabled) ||
-    Boolean(
-      props.deadlineDate && new Date(props.deadlineDate).getTime() < Date.now(),
-    );
 
   const isReverseAuctionType =
     !isRateContractType &&
@@ -5326,6 +5553,11 @@ export function ProcurementDetailUnifiedView(
 
   const rawSubmissionStartDate = firstPresent(
     props.submissionStartDate,
+    props.rawBid?.submissionStartDate,
+    props.rawBid?.rawSubmissionStartDate,
+    props.rawBid?.technicalPacket?.schedule?.submissionStartDate,
+    props.rawBid?.startDate,
+    props.startDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
@@ -5613,13 +5845,15 @@ export function ProcurementDetailUnifiedView(
       props.orgName && props.orgName !== "—" && props.orgName !== "N/A"
         ? props.orgName
         : undefined,
+      (props.rawBid as any)?.buyerOrganizationName,
+      (props.rawBid as any)?.buyerOrganization?.organizationName,
       internal.orgName,
       basics.organizationName,
       buyerOrg.organizationName,
       buyerProfile.organizationName,
       buyerProfile.companyName,
       props.buyer?.buyerProfile?.organizationName,
-      props.buyer?.name,
+      props.buyer?.organization?.organizationName,
     ) || "Buyer Organization";
 
   const isCandidateSameAsOrg = (candidate?: string | null) => {
@@ -6168,6 +6402,9 @@ export function ProcurementDetailUnifiedView(
         .toLowerCase();
 
       const keys: string[] = [];
+      if (p.id && String(p.id) !== "0") keys.push(`id-${p.id}`);
+      if (p.participationId && String(p.participationId) !== "0") keys.push(`part-${p.participationId}`);
+      if (p.participationNumber) keys.push(`partNum-${String(p.participationNumber).trim()}`);
       if (sOrg && String(sOrg) !== "0" && String(sOrg) !== "undefined")
         keys.push(`org-${sOrg}`);
       if (sId && String(sId) !== "0" && String(sId) !== "undefined")
@@ -6179,6 +6416,11 @@ export function ProcurementDetailUnifiedView(
         !orgName.startsWith("seller partner")
       ) {
         keys.push(`name-${orgName}`);
+        keys.push(`norm-${orgName.replace(/[^a-z0-9]/g, "")}`);
+      }
+      const email = (p.sellerEmail || p.email || p.seller?.email || p.sellerUser?.email || "").trim().toLowerCase();
+      if (email && email.includes("@")) {
+        keys.push(`email-${email}`);
       }
       return { sId, sOrg, orgName, keys };
     };
@@ -6253,7 +6495,20 @@ export function ProcurementDetailUnifiedView(
       if (existing) {
         // Merge into existing vendor record
         // 1. Technical Evaluation Priority: If this record has evaluation decisions, apply them
-        if (isEvaluated && existing.technicalStatus === "PENDING") {
+        const existingTs = String(existing.technicalStatus || "").toUpperCase();
+        const existingIsEvaluated =
+          existingTs === "QUALIFIED" ||
+          existingTs === "DISQUALIFIED" ||
+          existingTs === "NOT_QUALIFIED" ||
+          Boolean(existing.isDisqualified);
+
+        if (
+          isEvaluated &&
+          (!existingIsEvaluated ||
+            existingTs === "PENDING" ||
+            ts === "QUALIFIED" ||
+            p.technicalStatus === "QUALIFIED")
+        ) {
           existing.technicalStatus = ts;
           existing.technicalRemarks =
             p.technicalRemarks ||
@@ -6398,6 +6653,78 @@ export function ProcurementDetailUnifiedView(
     return lowestId;
   }, [qualifiedParticipations]);
 
+  const handleOpenMyQuotationModal = useCallback(() => {
+    let targetPart = effectiveMyParticipation;
+    if (!targetPart) {
+      targetPart =
+        submittedParticipations.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        allParticipationsList.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        (submittedParticipations.length === 1 && !isBuyerOrAdmin
+          ? submittedParticipations[0]
+          : null) ||
+        {
+          id: `my-quote-${targetId}`,
+          sellerOrgName:
+            currentUser?.organization?.organizationName ||
+            currentUser?.organization?.name ||
+            currentUser?.companyName ||
+            currentUser?.name ||
+            "My Quoting Organization",
+          sellerName: currentUser?.name || "Authorized Representative",
+          sellerEmail: currentUser?.email || "N/A",
+          sellerPhone: currentUser?.mobile || currentUser?.phone || "N/A",
+          submissionStatus: "SUBMITTED",
+          status: "SUBMITTED",
+          quotedAmount: Number(props.rawBid?.quotedAmount || props.rawBid?.totalAmount || 0),
+          totalAmount: Number(props.rawBid?.totalAmount || props.rawBid?.quotedAmount || 0),
+          lineItems: props.rawBid?.lineItems || props.items || [],
+          documents: props.rawBid?.documents || [],
+          submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
+          deliveryTimeline: props.rawBid?.deliveryTimeline || "Standard",
+          paymentTerms: props.rawBid?.paymentTerms || "Standard Payment Terms",
+        };
+    }
+    setSelectedQuotationForReview(targetPart);
+  }, [
+    effectiveMyParticipation,
+    submittedParticipations,
+    allParticipationsList,
+    currentUserId,
+    currentOrgId,
+    currentUser,
+    isBuyerOrAdmin,
+    targetId,
+    props.rawBid,
+    props.items,
+    props.documents,
+  ]);
+
   const handleConfirmAwardSubmit = async () => {
     if (!awardingParticipation) return;
     const isTargetL1 =
@@ -6499,12 +6826,42 @@ export function ProcurementDetailUnifiedView(
 
   const effectiveDeadlineTarget = closingDateValue || props.deadlineDate;
   const isDeadlinePassed = Boolean(
+    !isBeforeSubmissionStart &&
     effectiveDeadlineTarget &&
     (() => {
-      const parsed = parseDateValue(effectiveDeadlineTarget);
+      const parsed = parseDateValue(effectiveDeadlineTarget, false);
       return parsed ? parsed.getTime() < nowMs : false;
     })(),
   );
+
+  const isBiddingClosed =
+    isPostBiddingStage ||
+    Boolean(props.isSubmitDisabled) ||
+    isDeadlinePassed;
+
+  const effectiveStatusLabel = useMemo(() => {
+    if (isBeforeSubmissionStart) {
+      return "SUBMISSION OPENS SOON";
+    }
+    if (isDeadlinePassed || isBiddingClosed) {
+      const u = statusUpper;
+      const l = String(statusLabel || "").toUpperCase();
+      if (
+        u === "OPEN" ||
+        u === "ACTIVE" ||
+        u === "IN_PROGRESS" ||
+        u === "PENDING" ||
+        u === "PUBLISHED" ||
+        l === "OPEN" ||
+        l === "ACTIVE" ||
+        l === "IN PROGRESS" ||
+        l === "PENDING"
+      ) {
+        return "SUBMISSION CLOSED";
+      }
+    }
+    return statusLabel;
+  }, [statusUpper, isDeadlinePassed, isBiddingClosed, isBeforeSubmissionStart, statusLabel]);
 
   const isEvaluationReady = Boolean(
     isPostBiddingStage ||
@@ -6793,17 +7150,6 @@ export function ProcurementDetailUnifiedView(
                 String(activeAward.participationId) ===
                   String(participation.id))),
           );
-          const isPOAccepted = Boolean(
-            effectiveActiveOrder &&
-            [
-              "accepted",
-              "in_fulfillment",
-              "delivered",
-              "completed",
-              "invoice_submitted",
-              "paid",
-            ].includes(String(effectiveActiveOrder.status || "").toLowerCase()),
-          );
 
           if (isAwardWinner) {
             if (effectiveActiveOrder) {
@@ -6869,40 +7215,18 @@ export function ProcurementDetailUnifiedView(
         width: "w-[24%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
+          const isQual =
+            ts === "QUALIFIED" || ts === "ACCEPTED" || ts === "SHORTLISTED";
           const isDisq =
             ts === "DISQUALIFIED" ||
             ts === "NOT_QUALIFIED" ||
-            participation.isDisqualified;
-          const isQualified = !isDisq;
-          const canAward = Boolean(
-            isBuyerOrAdmin &&
-            isEvaluationReady &&
-            isQualified &&
-            (!activeAward || activeAward.awardStatus === "DECLINED") &&
-            !effectiveActiveOrder,
-          );
+            ts === "REJECTED" ||
+            Boolean(participation.isDisqualified);
+          const isEvaluated = isQual || isDisq;
 
           return (
             <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-              {canAward && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    setAwardingParticipation(participation);
-                    setAwardJustification("");
-                    setAwardRemarks("");
-                  }}
-                  className="h-7.5 px-2.5 gap-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer rounded-lg shrink-0 whitespace-nowrap"
-                  title="Award contract to this qualified vendor"
-                >
-                  <Award className="h-3.5 w-3.5 shrink-0" />
-                  <span>
-                    Award<span className="hidden xl:inline"> Contract</span>
-                  </span>
-                </Button>
-              )}
-              {isBuyerOrAdmin && isTwoPacketMode && (
+              {isBuyerOrAdmin && (
                 <Button
                   type="button"
                   size="sm"
@@ -6915,31 +7239,44 @@ export function ProcurementDetailUnifiedView(
                   className={cn(
                     "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
                     isEvaluationReady
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                      ? isQual
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
+                        : isDisq
+                          ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 cursor-pointer"
+                          : "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer"
                       : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
                   )}
                   title={
                     isEvaluationReady
-                      ? isTechEvalCompleted
-                        ? "View technical evaluation decision and remarks"
-                        : "Evaluate technical proposal, compliance and eligibility"
-                      : "Technical scrutiny unlocks after bidding window closes"
+                      ? isQual
+                        ? isTechEvalCompleted
+                          ? "View technical evaluation record (Locked under Stage 2)"
+                          : "View or edit evaluation decision, score, and remarks"
+                        : isDisq
+                          ? "View disqualification record"
+                          : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
+                      : "Evaluation unlocks after bidding window closes"
                   }
                 >
                   {isEvaluationReady ? (
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    isQual ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    ) : isDisq ? (
+                      <XCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                    ) : (
+                      <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    )
                   ) : (
                     <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   )}
                   <span>
-                    {isTechEvalCompleted ? (
-                      <>
-                        <span className="hidden xl:inline">View </span>
-                        Evaluation
-                      </>
-                    ) : (
-                      "Evaluate Bid"
-                    )}
+                    {isQual
+                      ? isTechEvalCompleted
+                        ? "View Evaluation"
+                        : "Edit Remarks"
+                      : isDisq
+                        ? "View Disqualification"
+                        : "Evaluate Bid"}
                   </span>
                 </Button>
               )}
@@ -6954,11 +7291,9 @@ export function ProcurementDetailUnifiedView(
                 }
                 className={cn(
                   "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
-                  !isTwoPacketMode
-                    ? "bg-[#12335f] hover:bg-[#0b2445] text-white cursor-pointer"
-                    : isEvaluationReady
-                      ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                      : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
+                  isEvaluationReady
+                    ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
+                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
                 )}
                 title={
                   isEvaluationReady
@@ -6968,13 +7303,7 @@ export function ProcurementDetailUnifiedView(
               >
                 <Eye className="h-3.5 w-3.5 shrink-0" />
                 <span>
-                  {isTwoPacketMode ? (
-                    <>
-                      Review<span className="hidden xl:inline"> Quotation</span>
-                    </>
-                  ) : (
-                    "Review Quotation"
-                  )}
+                  Review<span className="hidden xl:inline"> Quotation</span>
                 </span>
               </Button>
             </div>
@@ -7007,6 +7336,7 @@ export function ProcurementDetailUnifiedView(
           return "Submitted • Under Evaluation";
         return "Quotation Submitted";
       } else {
+        if (isBeforeSubmissionStart) return "Upcoming";
         if (isBiddingClosed || isDeadlinePassed) return "Submission Closed";
         return "Open for Quotation";
       }
@@ -7087,6 +7417,7 @@ export function ProcurementDetailUnifiedView(
     isAwardedToMe,
     activeAward,
     effectiveActiveOrder,
+    isBeforeSubmissionStart,
     isBiddingClosed,
     isDeadlinePassed,
     props.status,
@@ -7123,9 +7454,11 @@ export function ProcurementDetailUnifiedView(
           ? isAwardedToMe
             ? "emerald"
             : "sky"
-          : isBiddingClosed || isDeadlinePassed
-            ? "slate"
-            : "amber"
+          : isBeforeSubmissionStart
+            ? "sky"
+            : isBiddingClosed || isDeadlinePassed
+              ? "slate"
+              : "amber"
         : "slate") as Tone,
       subtext:
         !isBuyerSide && currentUser?.role === "seller"
@@ -7135,9 +7468,11 @@ export function ProcurementDetailUnifiedView(
               : isBiddingClosed || isDeadlinePassed
                 ? "Quotation under evaluation"
                 : "Bid received on time"
-            : isBiddingClosed || isDeadlinePassed
-              ? "Missed cutoff deadline"
-              : "Accepting proposals"
+            : isBeforeSubmissionStart
+              ? "Submission opens soon"
+              : isBiddingClosed || isDeadlinePassed
+                ? "Missed cutoff deadline"
+                : "Accepting proposals"
           : "Current lifecycle state",
     },
     {
@@ -7441,6 +7776,122 @@ export function ProcurementDetailUnifiedView(
               !isAwardedToMe &&
               Boolean(activeAward && !effectiveActiveOrder)
             }
+            isSellerParticipated={isSellerParticipated}
+            myParticipation={effectiveMyParticipation}
+            canSubmitBid={
+              !isSellerParticipated &&
+              !isBiddingClosed &&
+              !isDeadlinePassed &&
+              !isBeforeSubmissionStart
+            }
+            submittedBidsCount={Math.max(
+              props.participantsCount || 0,
+              submittedParticipations.length,
+            )}
+            onSubmitClick={props.onSubmitClick}
+            onViewQuotationClick={handleOpenMyQuotationModal}
+            onViewEvaluation={() => {
+              setActiveTab("clarifications");
+              const targetEl =
+                document.getElementById("tabs-navigation-section") ||
+                document.getElementById("tabpanel-clarifications");
+              if (targetEl) {
+                targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+              }
+            }}
+            onViewPO={() => {
+              if (effectiveActiveOrder) {
+                setIsReceiptModalOpen(true);
+              } else if (isBuyerSide) {
+                router.push("/buyer/orders");
+              } else {
+                router.push("/seller/orders");
+              }
+            }}
+            onNavigateDelivery={async () => {
+              // Strictly open the GRN view details page (/grn/:id) of this order
+              const grn = effectiveActiveOrder?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED') ||
+                          effectiveActiveOrder?.grns?.[0] ||
+                          effectiveActiveOrder?.grn;
+              let grnId = grn?.id || effectiveActiveOrder?.grnId || effectiveActiveOrder?.grn?.id;
+
+              if (!grnId && effectiveActiveOrder?.id) {
+                try {
+                  const res: any = await getApi(`/api/purchase-orders/${effectiveActiveOrder.id}`);
+                  const poData = res?.data || res;
+                  grnId = poData?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')?.id ||
+                          poData?.grns?.[0]?.id ||
+                          poData?.grnId ||
+                          poData?.grn?.id;
+                  if (!grnId) {
+                    const eligRes: any = await getApi(`/api/grn/po/${effectiveActiveOrder.id}/eligibility`);
+                    const existingList = eligRes?.data?.existing || eligRes?.existing || [];
+                    if (existingList?.[0]?.id) {
+                      grnId = existingList[0].id;
+                    }
+                  }
+                } catch (err) {
+                  console.warn('Failed to resolve GRN for PO', err);
+                }
+              }
+
+              if (grnId) {
+                router.push(`/grn/${grnId}`);
+                return;
+              }
+
+              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
+              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
+              if (isBuyerSide) {
+                router.push(`/buyer/grn${searchParam}`);
+              } else {
+                router.push(`/seller/delivery-management${searchParam}`);
+              }
+            }}
+            onNavigateInvoice={(inv?: any) => {
+              const allInvoices = [
+                ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+                ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+              ];
+              const existingInv = inv || allInvoices.find(
+                (i: any) => !['CANCELLED', 'DRAFT'].includes(String(i.status || i.invoiceStatus || '').toUpperCase())
+              ) || (effectiveActiveOrder as any)?.invoice;
+
+              if (existingInv) {
+                // Strictly open Tax Invoice Registry dialog box with NO page redirection (buyer & seller)
+                const invId = Number(existingInv.id) || (existingInv.invoiceId ? Number(existingInv.invoiceId) : null);
+                setSelectedInvoiceModalId(invId);
+                setSelectedInvoiceModalData(existingInv);
+                setIsTaxInvoiceModalOpen(true);
+                return;
+              }
+
+              if (isBuyerSide) {
+                router.push("/buyer/invoices");
+              } else {
+                const amountVal =
+                  effectiveActiveOrder?.amount ||
+                  effectiveActiveOrder?.totalValue ||
+                  activeAward?.finalAmount ||
+                  0;
+                if (effectiveActiveOrder?.id) {
+                  router.push(
+                    `/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`,
+                  );
+                } else {
+                  router.push("/seller/invoices");
+                }
+              }
+            }}
+            onNavigateSettlement={() => {
+              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
+              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
+              if (isBuyerSide) {
+                router.push(`/buyer/payments${searchParam}`);
+              } else {
+                router.push(`/seller/invoices${searchParam}`);
+              }
+            }}
           />
 
           {!currentUser && (
@@ -7549,14 +8000,7 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             effectiveActiveOrder &&
-            [
-              "issued",
-              "generated",
-              "order_placed",
-              "pending_acceptance",
-            ].includes(
-              String(effectiveActiveOrder.status || "").toLowerCase(),
-            ) && (
+            !isPOAccepted && (
               <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950 p-5 text-white shadow-xl animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1.5">
@@ -7607,19 +8051,7 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             effectiveActiveOrder &&
-            [
-              "accepted",
-              "in_fulfillment",
-              "dispatched",
-              "grn_pending",
-              "invoiced",
-            ].includes(
-              String(
-                effectiveActiveOrder.status ||
-                  effectiveActiveOrder.poStatus ||
-                  "",
-              ).toLowerCase(),
-            ) && (
+            isPOAccepted && (
               <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-2.5">
@@ -7663,18 +8095,57 @@ export function ProcurementDetailUnifiedView(
                       <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View PO Copy
                     </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
-                        router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
-                      }}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      Create Invoice from PO
-                    </Button>
+                    {(() => {
+                      const allInvoices = [
+                        ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+                        ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+                      ];
+                      const existingInvoice = allInvoices.find(
+                        (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
+                      ) || (effectiveActiveOrder as any)?.invoice;
+                      const hasInvoiceCreated = Boolean(
+                        existingInvoice ||
+                        (effectiveActiveOrder as any)?.invoiceId ||
+                        (effectiveActiveOrder as any)?.invoiceNumber ||
+                        ['invoiced', 'invoice_submitted', 'payment_initiated', 'paid', 'completed'].includes(
+                          String(effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || '').toLowerCase()
+                        )
+                      );
+
+                      if (hasInvoiceCreated) {
+                        return (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              const invId = Number(existingInvoice?.id) || (existingInvoice?.invoiceId ? Number(existingInvoice.invoiceId) : null);
+                              setSelectedInvoiceModalId(invId);
+                              setSelectedInvoiceModalData(existingInvoice || null);
+                              setIsTaxInvoiceModalOpen(true);
+                            }}
+                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            View Tax Invoice
+                          </Button>
+                        );
+                      }
+
+                      return (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+                            router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
+                          }}
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          Create Invoice from PO
+                        </Button>
+                      );
+                    })()}
                     <Button
                       type="button"
                       size="sm"
@@ -7773,7 +8244,10 @@ export function ProcurementDetailUnifiedView(
           {/* Seller: Award Offered (Ready for Acceptance) */}
           {!isBuyerSide &&
             isAwardedToMe &&
-            activeAward?.awardStatus === "OFFERED" &&
+            Boolean(activeAward) &&
+            ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED"].includes(
+              String(activeAward?.awardStatus || "").toUpperCase(),
+            ) &&
             activeAward?.counterOfferStatus !== "PENDING" && (
               <div className="relative overflow-hidden rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-3 sm:p-4 text-white shadow-md animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -7954,50 +8428,63 @@ export function ProcurementDetailUnifiedView(
                         <span
                           className={cn(
                             "rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border",
-                            ["accepted", "in_fulfillment", "dispatched"].includes(
-                              String(
-                                effectiveActiveOrder.status ||
-                                  effectiveActiveOrder.poStatus ||
-                                  "",
-                              ).toLowerCase(),
-                            )
+                            isPOAccepted
                               ? "bg-emerald-100 text-emerald-800 border-emerald-200"
                               : "bg-amber-100 text-amber-800 border-amber-200",
                           )}
                         >
-                          {["accepted", "in_fulfillment", "dispatched"].includes(
-                            String(
-                              effectiveActiveOrder.status ||
-                                effectiveActiveOrder.poStatus ||
-                                "",
-                            ).toLowerCase(),
-                          )
-                            ? "Supplier Accepted — Delivery In Progress"
-                            : "Awaiting Supplier Acceptance & Commitment"}
+                          {poStatusBadgeText}
                         </span>
                       </div>
                       <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
-                        Official Purchase Order Released — Contract Binding Enacted
+                        {isPOAccepted
+                          ? "Purchase Order Accepted — Fulfillment & Delivery Active"
+                          : "Official Purchase Order Released — Contract Binding Enacted"}
                       </h3>
                       <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
-                        Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
-                        <strong className="text-slate-900 font-bold">
-                          {activeAward.sellerName ||
-                            activeAward.seller?.name ||
-                            activeAward.awardedSellerName ||
-                            activeAward.sellerOrganization?.name ||
-                            "Awarded Supplier"}
-                        </strong>{" "}
-                        for{" "}
-                        <strong className="text-emerald-700 font-bold">
-                          ₹{Number(
-                            effectiveActiveOrder.amount ||
-                              effectiveActiveOrder.totalValue ||
-                              activeAward?.finalAmount ||
-                              0,
-                          ).toLocaleString("en-IN")}
-                        </strong>
-                        . All participating bidders have been transitioned, and order binding is legally established.
+                        {isPOAccepted ? (
+                          <>
+                            Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally accepted by{" "}
+                            <strong className="text-slate-900 font-bold">
+                              {activeAward.sellerName ||
+                                activeAward.seller?.name ||
+                                activeAward.awardedSellerName ||
+                                activeAward.sellerOrganization?.name ||
+                                "Awarded Supplier"}
+                            </strong>{" "}
+                            for{" "}
+                            <strong className="text-emerald-700 font-bold">
+                              ₹{Number(
+                                effectiveActiveOrder.amount ||
+                                  effectiveActiveOrder.totalValue ||
+                                  activeAward?.finalAmount ||
+                                  0,
+                              ).toLocaleString("en-IN")}
+                            </strong>
+                            . Order binding is established and fulfillment progress is actively tracked under Stage 3 (Delivery &amp; GRN).
+                          </>
+                        ) : (
+                          <>
+                            Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
+                            <strong className="text-slate-900 font-bold">
+                              {activeAward.sellerName ||
+                                activeAward.seller?.name ||
+                                activeAward.awardedSellerName ||
+                                activeAward.sellerOrganization?.name ||
+                                "Awarded Supplier"}
+                            </strong>{" "}
+                            for{" "}
+                            <strong className="text-emerald-700 font-bold">
+                              ₹{Number(
+                                effectiveActiveOrder.amount ||
+                                  effectiveActiveOrder.totalValue ||
+                                  activeAward?.finalAmount ||
+                                  0,
+                              ).toLocaleString("en-IN")}
+                            </strong>
+                            . All participating bidders have been transitioned, and awaiting supplier acceptance &amp; commitment.
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -8205,6 +8692,43 @@ export function ProcurementDetailUnifiedView(
             />
           )}
 
+          {isTaxInvoiceModalOpen && (
+            <TaxInvoiceRegistryModal
+              isOpen={isTaxInvoiceModalOpen}
+              onClose={() => {
+                setIsTaxInvoiceModalOpen(false);
+                setSelectedInvoiceModalId(null);
+                setSelectedInvoiceModalData(null);
+              }}
+              invoiceId={selectedInvoiceModalId}
+              initialInvoiceData={selectedInvoiceModalData}
+              onInvoiceApproved={() => {
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
+          {isExtendScheduleOpen && (
+            <ExtendScheduleModal
+              isOpen={isExtendScheduleOpen}
+              onClose={() => setIsExtendScheduleOpen(false)}
+              bidId={props.id}
+              bidTitle={resolvedSubject}
+              bidNumber={props.displayId || String(props.id)}
+              currentSchedule={{
+                closingDate: closingDateValue || props.deadlineDate || props.closingDate,
+                technicalOpeningDate: technicalDateValue || props.technicalDate || props.technicalOpeningDate,
+                financialOpeningDate: financialDateValue || props.financialDate || props.financialOpeningDate,
+                requiredByDate: requiredByDateValue || props.requiredByDate || props.requiredBy,
+                bidValidityDate: bidValidityDateComputed || bidValidityDateValue || props.bidValidityDate,
+                validityDays: rawValidityDays || props.validityDays,
+              }}
+              onSuccess={() => {
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
           {/* Buyer: Award Contract Confirmation Modal */}
           {awardingParticipation && (
             <div
@@ -8383,7 +8907,7 @@ export function ProcurementDetailUnifiedView(
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge status={statusLabel} />
+                  <StatusBadge status={effectiveStatusLabel} />
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
                       <Layers className="h-3 w-3" aria-hidden="true" />
@@ -8445,6 +8969,14 @@ export function ProcurementDetailUnifiedView(
                             : "Proposal Submitted"}
                         </span>
                       )
+                    ) : isBeforeSubmissionStart ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-900 shadow-2xs">
+                        <Clock
+                          className="h-3 w-3 text-sky-700"
+                          aria-hidden="true"
+                        />
+                        Submission Opens Soon
+                      </span>
                     ) : isBiddingClosed || isDeadlinePassed ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-800 shadow-2xs">
                         <Lock
@@ -8599,6 +9131,22 @@ export function ProcurementDetailUnifiedView(
                   </Button>
                 )}
                 {isBuyerOrAdmin && props.buyerAuctionActions}
+                {canExtendSchedule && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsExtendScheduleOpen(true)}
+                    className="h-9 px-3.5 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                    aria-label="Extend tender schedule and submission deadline"
+                  >
+                    <CalendarDays
+                      className="h-3.5 w-3.5 text-indigo-600"
+                      aria-hidden="true"
+                    />
+                    Extend Schedule
+                  </Button>
+                )}
                 {props.onCancelClick && (
                   <Button
                     type="button"
@@ -8615,39 +9163,64 @@ export function ProcurementDetailUnifiedView(
                   </Button>
                 )}
                 {!isBuyerOrAdmin && isSellerParticipated && (
-                  <>
-                    {(props.onViewQuotationClick || props.onSubmitClick) && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        aria-label="View your submitted quotation"
-                        onClick={
-                          props.onViewQuotationClick || props.onSubmitClick
-                        }
-                        className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
-                      >
-                        <Eye
-                          className="h-3.5 w-3.5 text-slate-600"
-                          aria-hidden="true"
-                        />
-                        <span>
-                          {isRfqType
-                            ? "View My Quotation"
-                            : isRateContractType
-                              ? "View My Rate Proposal"
-                              : isReverseAuctionType
-                                ? isBiddingClosed
-                                  ? "View Auction Results"
-                                  : "Live Bid Console"
-                                : "View My Proposal"}
-                        </span>
-                      </Button>
-                    )}
-                  </>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label="View your submitted quotation"
+                    onClick={() => {
+                      if (
+                        isReverseAuctionType &&
+                        !isBiddingClosed &&
+                        props.onSubmitClick
+                      ) {
+                        props.onSubmitClick();
+                      } else {
+                        handleOpenMyQuotationModal();
+                      }
+                    }}
+                    className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                  >
+                    <Eye
+                      className="h-3.5 w-3.5 text-slate-600"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      {isRfqType
+                        ? "View My Quotation"
+                        : isRateContractType
+                          ? "View My Rate Proposal"
+                          : isReverseAuctionType
+                            ? isBiddingClosed
+                              ? "View Auction Results"
+                              : "Live Bid Console"
+                            : "View My Proposal"}
+                    </span>
+                  </Button>
                 )}
                 {!isBuyerOrAdmin &&
                   !isSellerParticipated &&
+                  isBeforeSubmissionStart && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled
+                      aria-disabled="true"
+                      title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
+                      className="h-8 px-3.5 bg-sky-50 text-sky-800 border border-sky-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs"
+                    >
+                      <Clock className="h-3.5 w-3.5 text-sky-600" />
+                      <span>
+                        Submission Opens{" "}
+                        {submissionStartDateFormatted
+                          ? `on ${submissionStartDateFormatted}`
+                          : "Soon"}
+                      </span>
+                    </Button>
+                  )}
+                {!isBuyerOrAdmin &&
+                  !isSellerParticipated &&
+                  !isBeforeSubmissionStart &&
                   (isBiddingClosed || isDeadlinePassed) && (
                     <Button
                       type="button"
@@ -8659,27 +9232,6 @@ export function ProcurementDetailUnifiedView(
                     >
                       <Lock className="h-3.5 w-3.5 text-slate-400" />
                       <span>Submission Window Closed</span>
-                    </Button>
-                  )}
-                {!isBuyerOrAdmin &&
-                  !props.hasSubmittedProposal &&
-                  !isBiddingClosed &&
-                  isBeforeSubmissionStart && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      aria-disabled="true"
-                      title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
-                      className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-slate-400" />
-                      <span>
-                        Submission Opens{" "}
-                        {submissionStartDateFormatted
-                          ? `on ${submissionStartDateFormatted}`
-                          : "Soon"}
-                      </span>
                     </Button>
                   )}
                 {isBuyerOrAdmin && !isEvaluationReady && (
@@ -8784,9 +9336,10 @@ export function ProcurementDetailUnifiedView(
 
           {/* Tab Navigation Bar (WAI-ARIA Compliant) */}
           <div
+            id="tabs-navigation-section"
             role="tablist"
             aria-label="Procurement details navigation"
-            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs scroll-mt-6"
           >
             {tabs.map((tab, idx) => {
               const Icon = tab.icon;
@@ -9084,9 +9637,56 @@ export function ProcurementDetailUnifiedView(
                   </div>
                 )}
 
+              {/* Seller Notification Banner: Upcoming Procurement / Opens Soon */}
+              {!isBuyerOrAdmin &&
+                !isSellerParticipated &&
+                isBeforeSubmissionStart && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50/90 via-blue-50/30 to-white p-3 sm:p-3.5 shadow-2xs transition-all"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
+                          <Clock className="h-4 w-4" aria-hidden="true" />
+                        </div>
+                        <div className="space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-sky-900 bg-sky-100/90 border border-sky-300 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <Clock className="h-3 w-3 text-sky-700" aria-hidden="true" />
+                              Submission Window Opens Soon
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+                              Upcoming Procurement
+                            </span>
+                          </div>
+                          <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                            Bidding Commences on {submissionStartDateFormatted || "Scheduled Start Time"}
+                          </h3>
+                          <p className="text-xs text-slate-700 max-w-2xl leading-relaxed">
+                            Quotation submissions have not opened yet. You will be able to submit your quotations and pricing as soon as the window officially commences.
+                          </p>
+                        </div>
+                      </div>
+                      {subStartDateObj && (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <DeadlineCountdown
+                            targetDate={closingDateValue || props.deadlineDate || ""}
+                            startDate={subStartDateObj}
+                            label="Submission Closes in: "
+                            startLabel="Submission Opens in: "
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               {/* Seller Notification Banner: Did Not Participate / Missed Deadline */}
               {!isBuyerOrAdmin &&
                 !isSellerParticipated &&
+                !isBeforeSubmissionStart &&
                 (isBiddingClosed || isDeadlinePassed) && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-3.5 shadow-2xs transition-all">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -9426,10 +10026,25 @@ export function ProcurementDetailUnifiedView(
               >
                 <div className="space-y-5">
                   <div className="space-y-2.5">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <Calendar className="h-4 w-4 text-indigo-600" />
-                      Milestones &amp; Critical Dates
-                    </h3>
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                        <Calendar className="h-4 w-4 text-indigo-600" />
+                        Milestones &amp; Critical Dates
+                      </h3>
+                      {canExtendSchedule && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setIsExtendScheduleOpen(true)}
+                          className="h-7 px-2.5 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[11px] font-bold rounded-lg gap-1 flex items-center cursor-pointer shadow-2xs"
+                          aria-label="Extend schedule dates"
+                        >
+                          <CalendarDays className="h-3 w-3 text-indigo-600" aria-hidden="true" />
+                          Extend Schedule
+                        </Button>
+                      )}
+                    </div>
                     <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                       <PropertyGrid columns={3}>
                         <PropertyItem
@@ -10004,9 +10619,8 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
 
-                  {/* Two-Packet Stage 1 Technical Evaluation Progress Banner OR Single-Packet Header */}
-                  {isTwoPacketMode &&
-                    submittedParticipations.length > 0 &&
+                  {/* Evaluation Progress Banner for both Two-Packet and Single-Packet mode */}
+                  {submittedParticipations.length > 0 &&
                     isEvaluationReady && (
                       <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/90 via-blue-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -10029,8 +10643,12 @@ export function ProcurementDetailUnifiedView(
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/70 px-2 py-0.5 rounded">
                                   {isBidAwarded
-                                    ? "Two-Packet Procurement Concluded"
-                                    : "Two-Packet Procurement • Stage 1"}
+                                    ? isTwoPacketMode
+                                      ? "Two-Packet Procurement Concluded"
+                                      : "Procurement Concluded"
+                                    : isTwoPacketMode
+                                      ? "Two-Packet Procurement • Stage 1"
+                                      : "Single-Packet Evaluation"}
                                 </span>
                                 {isBidAwarded ? (
                                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded flex items-center gap-1">
@@ -10047,13 +10665,17 @@ export function ProcurementDetailUnifiedView(
                               </div>
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
                                 {isBidAwarded
-                                  ? "Technical Packet Evaluations (Archived)"
-                                  : "Technical Packet Opening & Seller Qualification"}
+                                  ? "Evaluations Concluded & Contract Finalized"
+                                  : isTwoPacketMode
+                                    ? "Technical Packet Opening & Seller Qualification"
+                                    : "Quotation Scrutiny & Supplier Qualification"}
                               </h4>
                               <p className="text-[11px] text-slate-500">
                                 {isBidAwarded
-                                  ? "Technical proposal evaluations are concluded and archived. Contract has been awarded."
-                                  : "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."}
+                                  ? "Proposal evaluations are concluded and archived. Contract has been awarded."
+                                  : isTwoPacketMode
+                                    ? "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."
+                                    : "Review seller quotations and evaluate technical/commercial compliance below. Mark bidders as Qualified or Disqualified before finalizing award on Results page."}
                               </p>
                             </div>
                           </div>
@@ -10080,17 +10702,22 @@ export function ProcurementDetailUnifiedView(
                           <span className="text-[11px] font-semibold text-slate-600">
                             {isBidAwarded
                               ? `✅ Procurement Awarded. Contract finalized with ${awardedVendorName}.`
-                              : isTechEvalCompleted
-                                ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                              : isTwoPacketMode
+                                ? isTechEvalCompleted
+                                  ? `✅ Stage 1 technical evaluation finalized. ${techEvaluationStats.qualified} qualified seller(s) advanced to Stage 2.`
+                                  : techEvaluationStats.pending > 0
+                                    ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
+                                    : techEvaluationStats.qualified > 0
+                                      ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
+                                      : `⚠️ At least one seller must be technically qualified to proceed.`
                                 : techEvaluationStats.pending > 0
-                                  ? `⚠️ Please evaluate the remaining ${techEvaluationStats.pending} pending seller(s) before proceeding.`
-                                  : techEvaluationStats.qualified > 0
-                                    ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
-                                    : `⚠️ At least one seller must be technically qualified to proceed.`}
+                                  ? `⚠️ ${techEvaluationStats.pending} quotation(s) pending review. Evaluate and qualify/disqualify vendors below.`
+                                  : `✅ Evaluation complete. ${techEvaluationStats.qualified} vendor(s) qualified for commercial ranking & award.`}
                           </span>
 
                           <div className="flex items-center gap-2">
-                            {!isBidAwarded &&
+                            {isTwoPacketMode &&
+                              !isBidAwarded &&
                               !isTechEvalCompleted &&
                               techEvaluationStats.pending === 0 &&
                               techEvaluationStats.qualified > 0 && (
@@ -10126,20 +10753,24 @@ export function ProcurementDetailUnifiedView(
                                 type="button"
                                 size="sm"
                                 variant={
-                                  isTechEvalCompleted ? "primary" : "outline"
+                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
+                                    ? "primary"
+                                    : "outline"
                                 }
                                 onClick={() =>
                                   router.push(`/bids/${targetId}/results`)
                                 }
                                 className={cn(
                                   "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
-                                  isTechEvalCompleted
+                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
                                     ? "bg-indigo-600 hover:bg-indigo-700 text-white"
                                     : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50",
                                 )}
                               >
                                 <span>
-                                  View Stage 2 Financial Opening & Results
+                                  {isTwoPacketMode
+                                    ? "View Stage 2 Financial Opening & Results"
+                                    : "View Evaluation & Results"}
                                 </span>
                                 <ArrowRight className="h-3.5 w-3.5" />
                               </Button>
@@ -10232,31 +10863,29 @@ export function ProcurementDetailUnifiedView(
                   isTwoPacketMode={isTwoPacketMode}
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isBidAwarded={isBidAwarded}
-                  canAward={Boolean(
-                    isBuyerOrAdmin &&
-                    isEvaluationReady &&
-                    !isBidAwarded &&
-                    (!activeAward || activeAward.awardStatus === "DECLINED") &&
-                    !effectiveActiveOrder,
-                  )}
-                  onAwardVendor={(p) => {
-                    setSelectedQuotationForReview(null);
-                    setAwardingParticipation(p);
-                    setAwardJustification("");
-                    setAwardRemarks("");
-                  }}
-                  onOpenCompare={() => {
-                    setSelectedQuotationForReview(null);
-                    setSelectedCompareIds(
-                      submittedParticipations.map((p: any) =>
-                        String(p.id || p.sellerId || p.sellerUserId),
-                      ),
-                    );
-                    setIsComparisonModalOpen(true);
-                  }}
-                  onOpenTechnicalEvaluation={(p) => {
-                    setSelectedForTechnicalEval(p);
-                  }}
+                  canAward={false}
+                  isBuyer={Boolean(isBuyerSide || isBuyerOrAdmin)}
+                  onOpenCompare={
+                    isBuyerSide || isBuyerOrAdmin
+                      ? () => {
+                          setSelectedQuotationForReview(null);
+                          setSelectedCompareIds(
+                            submittedParticipations.map((p: any) =>
+                              String(p.id || p.sellerId || p.sellerUserId),
+                            ),
+                          );
+                          setIsComparisonModalOpen(true);
+                        }
+                      : undefined
+                  }
+                  onOpenTechnicalEvaluation={
+                    isBuyerSide || isBuyerOrAdmin
+                      ? (p) => {
+                          setSelectedQuotationForReview(null);
+                          setSelectedForTechnicalEval(p);
+                        }
+                      : undefined
+                  }
                 />
               )}
 
@@ -10268,7 +10897,12 @@ export function ProcurementDetailUnifiedView(
                   participation={selectedForTechnicalEval}
                   bidId={targetId}
                   readOnly={isBidAwarded}
+                  isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
+                  isStage2Active={isTechEvalCompleted || isBidAwarded}
+                  bidStatus={props.status || props.lifecycleStage}
                   procurementTitle={props.subject || props.procurementLabel}
+                  isTwoPacketMode={isTwoPacketMode}
+                  packetType={isTwoPacketMode ? "TWO_PACKET" : "SINGLE_PACKET"}
                   onEvaluationSuccess={() => {
                     queryClient.invalidateQueries({
                       queryKey: ["buyer-unified-participations"],
@@ -10427,22 +11061,16 @@ export function ProcurementDetailUnifiedView(
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {(props.onViewQuotationClick ||
-                            props.onSubmitClick) && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={
-                                props.onViewQuotationClick ||
-                                props.onSubmitClick
-                              }
-                              className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              <span>View Full Quotation</span>
-                            </Button>
-                          )}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={handleOpenMyQuotationModal}
+                            className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>View Full Quotation</span>
+                          </Button>
                           <Button
                             type="button"
                             size="sm"
@@ -10520,6 +11148,31 @@ export function ProcurementDetailUnifiedView(
                           completed.
                         </p>
                       </div>
+                    </div>
+                  ) : isBeforeSubmissionStart ? (
+                    <div className="rounded-2xl border border-dashed border-sky-200 bg-sky-50/40 p-8 text-center space-y-3">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-100 text-sky-700">
+                        <Clock className="h-6 w-6" aria-hidden="true" />
+                      </div>
+                      <div className="space-y-1 max-w-md mx-auto">
+                        <h4 className="text-sm font-black uppercase tracking-tight text-slate-900">
+                          Quotation Submission Window Opens Soon
+                        </h4>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Bidding for this procurement opens on{" "}
+                          <strong className="text-slate-800">{submissionStartDateFormatted || "the scheduled start time"}</strong>. You will be able to prepare and submit your technical response and commercial quotation as soon as the window commences.
+                        </p>
+                      </div>
+                      {subStartDateObj && (
+                        <div className="pt-2 flex justify-center">
+                          <DeadlineCountdown
+                            targetDate={closingDateValue || props.deadlineDate || ""}
+                            startDate={subStartDateObj}
+                            label="Submission Closes in: "
+                            startLabel="Submission Opens in: "
+                          />
+                        </div>
+                      )}
                     </div>
                   ) : isBiddingClosed || isDeadlinePassed ? (
                     <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 p-8 text-center space-y-3">
@@ -10640,6 +11293,7 @@ interface SellerQuotationReviewModalProps {
   isFinancialStageOpened?: boolean;
   isBidAwarded?: boolean;
   canAward?: boolean;
+  isBuyer?: boolean;
   onAwardVendor?: (participation: any) => void;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
@@ -10656,6 +11310,7 @@ export function SellerQuotationReviewModal({
   isFinancialStageOpened,
   isBidAwarded,
   canAward,
+  isBuyer,
   onAwardVendor,
   onOpenCompare,
   onOpenTechnicalEvaluation,
@@ -10735,21 +11390,24 @@ export function SellerQuotationReviewModal({
       {
         key: "itemName",
         header: "Line Item & Specifications",
+        width: "w-[40%] min-w-[280px]",
+        cellClassName: "align-top",
+        headerClassName: "w-[40%] min-w-[280px]",
         cell: (item, idx) => {
           const itemHsn = item.hsnCode || item.hsn_sac_code;
           const itemBrandPolicy = item.brandPolicy;
           const itemAttachments: any[] = Array.isArray(item.attachments) ? item.attachments : [];
           return (
-            <div className="space-y-1.5">
+            <div className="space-y-2 py-0.5">
               <div>
-                <span className="font-bold text-slate-900">
+                <span className="font-bold text-slate-900 text-xs">
                   {item.itemName ||
                     item.name ||
                     item.description ||
                     `Item #${idx + 1}`}
                 </span>
                 {item.remarks && (
-                  <p className="text-[10.5px] font-normal text-slate-500 mt-0.5">
+                  <p className="text-[10.5px] font-normal text-slate-500 mt-0.5 break-words">
                     {item.remarks}
                   </p>
                 )}
@@ -10757,12 +11415,12 @@ export function SellerQuotationReviewModal({
 
               <div className="flex flex-wrap items-center gap-1.5">
                 {itemHsn && (
-                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[10px] font-mono font-bold text-indigo-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-mono font-bold text-indigo-800">
                     HSN: {itemHsn}
                   </span>
                 )}
                 {itemBrandPolicy && (
-                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.2 text-[10px] font-bold ${
+                  <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold ${
                     itemBrandPolicy === "EQUIVALENT_ACCEPTED"
                       ? "bg-purple-50 text-purple-800 border-purple-200"
                       : "bg-amber-50 text-amber-800 border-amber-200"
@@ -10771,12 +11429,12 @@ export function SellerQuotationReviewModal({
                   </span>
                 )}
                 {item.model && (
-                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[10px] font-bold text-slate-700">
-                    Model: {item.model}
+                  <span className="inline-flex items-center gap-1 rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 break-words max-w-full">
+                    <span className="font-bold text-slate-500">Model:</span> {item.model}
                   </span>
                 )}
                 {item.complianceStatus && (
-                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 text-[10px] font-bold text-emerald-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
                     {item.complianceStatus === "DEVIATION"
                       ? "⚠ Deviation"
                       : item.complianceStatus === "ALTERNATIVE"
@@ -10787,11 +11445,11 @@ export function SellerQuotationReviewModal({
               </div>
 
               {item.specifications && (
-                <div className="rounded bg-slate-50 border border-slate-200/80 p-1.5 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  <span className="text-[9.5px] font-bold uppercase text-slate-400 block">
+                <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                     Offered Specifications:
                   </span>
-                  {item.specifications}
+                  <span className="break-words font-medium">{item.specifications}</span>
                 </div>
               )}
 
@@ -10844,85 +11502,109 @@ export function SellerQuotationReviewModal({
       {
         key: "makeBrand",
         header: "Make / Brand",
+        width: "w-[14%] min-w-[100px]",
+        cellClassName: "align-top",
         cell: (item) => (
-          <span className="text-slate-700 font-medium">
-            {item.makeBrand || item.brand || "—"}
-          </span>
+          <div className="pt-0.5">
+            <span className="text-slate-800 font-medium break-words text-xs">
+              {item.makeBrand || item.brand || "—"}
+            </span>
+          </div>
         ),
       },
       {
         key: "quantity",
         header: "Qty",
+        width: "w-[10%] min-w-[80px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           const q = Number(item.quantity ?? item.qty ?? 1);
           return (
-            <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1">
-              <span>{q}</span>{" "}
-              <span
-                className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
-                title={item.unitOfMeasure || item.unit || "Nos"}
-              >
-                {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
+            <div className="pt-0.5 flex justify-end">
+              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1 whitespace-nowrap">
+                <span>{q}</span>{" "}
+                <span
+                  className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
+                  title={item.unitOfMeasure || item.unit || "Nos"}
+                >
+                  {sanitizeUom(item.unitOfMeasure || item.unit || "Nos")}
+                </span>
               </span>
-            </span>
+            </div>
           );
         },
       },
       {
         key: "unitRate",
         header: "Unit Rate (₹)",
+        width: "w-[14%] min-w-[100px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
-              </span>
+              <div className="pt-0.5 flex justify-end">
+                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+                </span>
+              </div>
             );
           }
           const uPrice = Number(
             item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
           );
           return (
-            <span className="tabular-nums font-bold text-slate-900">
-              ₹
-              {uPrice.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
+            <div className="pt-0.5">
+              <span className="tabular-nums font-bold text-slate-900 text-xs whitespace-nowrap">
+                ₹
+                {uPrice.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            </div>
           );
         },
       },
       {
         key: "gst",
         header: "GST %",
+        width: "w-[8%] min-w-[65px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="text-slate-400 font-medium text-xs">—</span>
+              <div className="pt-0.5">
+                <span className="text-slate-400 font-medium text-xs">—</span>
+              </div>
             );
           }
           const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
           return (
-            <span className="tabular-nums font-semibold text-slate-700">
-              {gst}%
-            </span>
+            <div className="pt-0.5">
+              <span className="tabular-nums font-semibold text-slate-700 text-xs">
+                {gst}%
+              </span>
+            </div>
           );
         },
       },
       {
         key: "lineTotal",
         header: "Line Total (₹)",
+        width: "w-[14%] min-w-[110px]",
+        cellClassName: "align-top",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
-              </span>
+              <div className="pt-0.5 flex justify-end">
+                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
+                </span>
+              </div>
             );
           }
           const uPrice = Number(
@@ -10935,13 +11617,15 @@ export function SellerQuotationReviewModal({
               ? Number(item.lineTotal ?? item.totalAmount)
               : uPrice * q * (1 + gst / 100);
           return (
-            <span className="font-black text-slate-900 tabular-nums">
-              ₹
-              {tot.toLocaleString("en-IN", {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </span>
+            <div className="pt-0.5">
+              <span className="font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
+                ₹
+                {tot.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+            </div>
           );
         },
       },
@@ -11233,10 +11917,10 @@ export function SellerQuotationReviewModal({
       aria-labelledby="quotation-review-modal-title"
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4 animate-fadeIn overflow-y-auto"
     >
-      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-4xl my-auto">
+      <FocusTrap active={isOpen} onEscape={onClose} className="w-full max-w-5xl xl:max-w-6xl my-auto">
         <div className="flex max-h-[92vh] w-full flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
           {/* Enhanced Header */}
-          <div className="relative border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
+          <div className="relative shrink-0 border-b border-blue-900/40 bg-gradient-to-r from-[#0d2137] via-[#1B365D] to-[#1e3a8a] px-6 py-4 text-white shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -11257,11 +11941,11 @@ export function SellerQuotationReviewModal({
                     </span>
                   )}
                 </div>
-                <h2 id="quotation-review-modal-title" className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                <h2 id="quotation-review-modal-title" className="text-base sm:text-lg font-black text-white mt-1 break-words">
                   {sellerOrg}
                 </h2>
                 {procurementTitle && (
-                  <p className="text-xs font-medium text-blue-200/90 truncate max-w-lg mt-0.5">
+                  <p className="text-xs font-medium text-blue-200/90 break-words max-w-2xl mt-0.5">
                     For: {procurementTitle}
                   </p>
                 )}
@@ -11298,7 +11982,7 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Total Quoted Value
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 break-words">
                   {isFinancialSealed ? (
                     <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold text-indigo-700">
                       <Lock className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
@@ -11310,7 +11994,7 @@ export function SellerQuotationReviewModal({
                     "Rates On File"
                   )}
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   {isFinancialSealed ? "Unlocks upon technical qualification" : "Total quoted value (incl. GST)"}
                 </p>
               </div>
@@ -11319,11 +12003,11 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Delivery Timeline SLA
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 flex items-center gap-1.5">
                   <Truck className="h-4 w-4 text-blue-600 shrink-0" />
-                  <span className="truncate">{deliveryTimeline}</span>
+                  <span className="break-words leading-tight">{deliveryTimeline}</span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   Promised fulfillment window
                 </p>
               </div>
@@ -11332,11 +12016,11 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Quoted Scope &amp; Qty
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 truncate flex items-center gap-1.5">
+                <div className="mt-1 text-base sm:text-lg font-black text-slate-900 flex items-center gap-1.5">
                   <Package className="h-4 w-4 text-amber-600 shrink-0" />
-                  <span className="truncate">{offeredQty}</span>
+                  <span className="break-words leading-tight">{offeredQty}</span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   {lineItems.length > 0 ? `${lineItems.length} line item(s) quoted` : "Offered delivery scope"}
                 </p>
               </div>
@@ -11345,7 +12029,7 @@ export function SellerQuotationReviewModal({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
                   Technical Compliance
                 </span>
-                <div className="mt-1 text-base sm:text-lg font-black truncate">
+                <div className="mt-1 text-base sm:text-lg font-black break-words">
                   <span className={cn(
                     "inline-flex items-center gap-1 text-xs sm:text-sm font-bold",
                     complianceStatement === "WITH_DEVIATION"
@@ -11366,7 +12050,7 @@ export function SellerQuotationReviewModal({
                     )}
                   </span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500 mt-0.5 truncate">
+                <p className="text-[10px] font-medium text-slate-500 mt-0.5">
                   Seller declaration status
                 </p>
               </div>
@@ -11448,7 +12132,7 @@ export function SellerQuotationReviewModal({
                       )}
                     </div>
                   </div>
-                  {onOpenTechnicalEvaluation && !isBidAwarded && (
+                  {isBuyer && onOpenTechnicalEvaluation && !isBidAwarded && (
                     <Button
                       type="button"
                       size="sm"
@@ -11563,25 +12247,25 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Make / Brand
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{makeBrand}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight" title={makeBrand}>{makeBrand}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Model / Ref No
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{model}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight" title={model}>{model}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Offered Quantity
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{offeredQty}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight">{offeredQty}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
                       Delivery Window
                     </span>
-                    <p className="font-bold text-slate-900 truncate">{deliveryTimeline}</p>
+                    <p className="font-bold text-slate-900 break-words leading-tight">{deliveryTimeline}</p>
                   </div>
                 </div>
 
@@ -11590,7 +12274,7 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
                       Technical Specifications:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700">
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700 break-words">
                       {techSpecs}
                     </p>
                   </div>
@@ -11601,7 +12285,7 @@ export function SellerQuotationReviewModal({
                     <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
                       Supplier Remarks / Cover Note:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed">
+                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed break-words">
                       "{message}"
                     </p>
                   </div>
@@ -11627,7 +12311,8 @@ export function SellerQuotationReviewModal({
                   columns={reviewLineItemsColumns}
                   keyExtractor={(item, idx) => String(item.id || idx)}
                   showSrNo={false}
-                  minWidth="min-w-[650px]"
+                  minWidth="w-full min-w-[720px]"
+                  tableClassName="table-fixed"
                   emptyTitle="No line items"
                   emptyDescription="No line items attached."
                   footer={
@@ -11763,7 +12448,7 @@ export function SellerQuotationReviewModal({
           </div>
 
           {/* Modal Footer Actions */}
-          <div className="flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
+          <div className="relative shrink-0 flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
             <Button
               type="button"
               variant="outline"
@@ -11773,56 +12458,57 @@ export function SellerQuotationReviewModal({
               Close
             </Button>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {onOpenCompare && (
+            {isBuyer && (
+              <div className="flex items-center gap-2 flex-wrap">
+                {onOpenCompare && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onClose();
+                      onOpenCompare();
+                    }}
+                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+                  >
+                    <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
+                    Compare Quotations
+                  </Button>
+                )}
+
+                {/* Evaluate Bid / Technical Packet button for both single and two-packet mode */}
+                {onOpenTechnicalEvaluation && !isBidAwarded && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      onOpenTechnicalEvaluation(participation);
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
+                    {techStatus === "PENDING"
+                      ? "Evaluate Bid (Qualify / Disqualify)"
+                      : "Update Evaluation Decision"}
+                  </Button>
+                )}
+
+                {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => {
                     onClose();
-                    onOpenCompare();
+                    router.push(`/bids/${targetId}/results`);
                   }}
-                  className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
+                  className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
                 >
-                  <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                  Compare Quotations
+                  <Trophy className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
+                  View Results &amp; Award
                 </Button>
-              )}
-
-              {/* In Two-Packet mode ONLY: Stage 1 Evaluate Technical Packet button if pending/not awarded */}
-              {isTwoPacketMode && onOpenTechnicalEvaluation && !isBidAwarded && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    onOpenTechnicalEvaluation(participation);
-                  }}
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                  {techStatus === "PENDING"
-                    ? "Evaluate Technical Packet"
-                    : "Update Technical Review"}
-                </Button>
-              )}
-
-              {/* In Single-Packet mode: Allow direct awarding when eligible */}
-              {!isTwoPacketMode && canAward && onAwardVendor && !isBidAwarded && (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    onClose();
-                    onAwardVendor(participation);
-                  }}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-xs cursor-pointer"
-                >
-                  <Award className="h-3.5 w-3.5 mr-1.5" />
-                  Award Quotation
-                </Button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </FocusTrap>

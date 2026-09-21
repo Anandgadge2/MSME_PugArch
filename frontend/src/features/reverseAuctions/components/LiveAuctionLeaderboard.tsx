@@ -417,7 +417,7 @@ export default function LiveAuctionLeaderboard({
             {generatedPo ? (
               <Button
                 type="button"
-                onClick={() => router.push(`/procurement-orders/${generatedPo.id}`)}
+                onClick={() => router.push(`/buyer/orders?orderId=${generatedPo.id}`)}
                 className="h-11 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider shadow-sm flex items-center gap-2"
               >
                 <Receipt className="h-4 w-4" /> View PO ({generatedPo.poNumber})

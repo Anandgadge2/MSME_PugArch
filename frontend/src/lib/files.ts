@@ -221,19 +221,31 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     }
   }
 
-  const previewWindow = window.open('about:blank', '_blank');
+  let previewWindow: Window | null = null;
+  try {
+    previewWindow = window.open('about:blank', '_blank');
+  } catch {
+    previewWindow = null;
+  }
 
   if (previewWindow) {
-    previewWindow.opener = null;
-    previewWindow.document.title = label;
-    previewWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 24px;">Opening document...</p>';
+    try {
+      previewWindow.document.title = label;
+      previewWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 24px; color: #334155;">Opening document preview...</p>';
+    } catch {
+      // Ignore initial DOM access restrictions
+    }
   }
 
   try {
     if (!fileId) {
       if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
-      if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
-      else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+      if (previewWindow && !previewWindow.closed) {
+        try { previewWindow.opener = null; } catch {}
+        previewWindow.location.href = absoluteFallbackUrl;
+      } else {
+        window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+      }
       return;
     }
 
@@ -254,7 +266,8 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         if (data?.signedUrl) {
           const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
           if (isRealSignedUrl) {
-            if (previewWindow) {
+            if (previewWindow && !previewWindow.closed) {
+              try { previewWindow.opener = null; } catch {}
               previewWindow.location.href = data.signedUrl;
             } else {
               window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
@@ -280,8 +293,12 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 
     if (!res || !res.ok) {
       if (absoluteFallbackUrl) {
-        if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
-        else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+        if (previewWindow && !previewWindow.closed) {
+          try { previewWindow.opener = null; } catch {}
+          previewWindow.location.href = absoluteFallbackUrl;
+        } else {
+          window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+        }
         return;
       }
       throw new Error('Document file is not uploaded on server.');
@@ -290,65 +307,69 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    if (previewWindow) {
-      previewWindow.document.body.innerHTML = '';
-      if (contentType.startsWith('image/')) {
-        previewWindow.document.body.style.margin = '0';
-        previewWindow.document.body.style.background = '#edf2f7';
-        previewWindow.document.body.style.display = 'flex';
-        previewWindow.document.body.style.justifyContent = 'center';
-        previewWindow.document.body.style.alignItems = 'center';
-        previewWindow.document.body.style.minHeight = '100vh';
-        previewWindow.document.body.style.padding = '20px';
-        const img = previewWindow.document.createElement('img');
-        img.src = url;
-        img.style.width = '800px';
-        img.style.maxWidth = '100%';
-        img.style.height = 'auto';
-        img.style.objectFit = 'contain';
-        img.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
-        img.style.borderRadius = '2px';
-        img.style.border = '2px solid black';
-        img.style.background = 'white';
-        previewWindow.document.body.appendChild(img);
-      } else if (contentType === 'application/pdf') {
-        previewWindow.document.body.style.margin = '0';
-        previewWindow.document.body.style.background = '#edf2f7';
-        previewWindow.document.body.style.display = 'flex';
-        previewWindow.document.body.style.justifyContent = 'center';
-        previewWindow.document.body.style.minHeight = '100vh';
-        previewWindow.document.body.style.padding = '16px';
-        const docWrapper = previewWindow.document.createElement('div');
-        docWrapper.style.width = '800px';
-        docWrapper.style.maxWidth = '100%';
-        docWrapper.style.height = 'calc(100vh - 32px)';
-        docWrapper.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
-        docWrapper.style.borderRadius = '2px';
-        docWrapper.style.border = '2px solid black';
-        docWrapper.style.background = 'white';
-        docWrapper.style.overflow = 'hidden';
-        const iframe = previewWindow.document.createElement('iframe');
-        iframe.src = url;
-        iframe.style.width = '100%';
-        iframe.style.height = '100%';
-        iframe.style.border = 'none';
-        docWrapper.appendChild(iframe);
-        previewWindow.document.body.appendChild(docWrapper);
-      } else {
-        const link = previewWindow.document.createElement('a');
-        link.href = url;
-        link.download = fileAsset?.originalName || 'document';
-        link.style.fontFamily = 'sans-serif';
-        link.style.display = 'block';
-        link.style.padding = '24px';
-        link.style.textAlign = 'center';
-        link.style.fontSize = '16px';
-        link.style.fontWeight = 'bold';
-        link.style.color = '#2563eb';
-        link.style.textDecoration = 'none';
-        link.innerText = 'Click here to download ' + (fileAsset?.originalName || 'document');
-        previewWindow.document.body.appendChild(link);
-        link.click();
+    if (previewWindow && !previewWindow.closed) {
+      try {
+        previewWindow.document.body.innerHTML = '';
+        if (contentType.startsWith('image/')) {
+          previewWindow.document.body.style.margin = '0';
+          previewWindow.document.body.style.background = '#edf2f7';
+          previewWindow.document.body.style.display = 'flex';
+          previewWindow.document.body.style.justifyContent = 'center';
+          previewWindow.document.body.style.alignItems = 'center';
+          previewWindow.document.body.style.minHeight = '100vh';
+          previewWindow.document.body.style.padding = '20px';
+          const img = previewWindow.document.createElement('img');
+          img.src = url;
+          img.style.width = '800px';
+          img.style.maxWidth = '100%';
+          img.style.height = 'auto';
+          img.style.objectFit = 'contain';
+          img.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
+          img.style.borderRadius = '2px';
+          img.style.border = '2px solid black';
+          img.style.background = 'white';
+          previewWindow.document.body.appendChild(img);
+        } else if (contentType === 'application/pdf') {
+          previewWindow.document.body.style.margin = '0';
+          previewWindow.document.body.style.background = '#edf2f7';
+          previewWindow.document.body.style.display = 'flex';
+          previewWindow.document.body.style.justifyContent = 'center';
+          previewWindow.document.body.style.minHeight = '100vh';
+          previewWindow.document.body.style.padding = '16px';
+          const docWrapper = previewWindow.document.createElement('div');
+          docWrapper.style.width = '800px';
+          docWrapper.style.maxWidth = '100%';
+          docWrapper.style.height = 'calc(100vh - 32px)';
+          docWrapper.style.boxShadow = '0 25px 50px -12px rgba(0, 0, 0, 0.25)';
+          docWrapper.style.borderRadius = '2px';
+          docWrapper.style.border = '2px solid black';
+          docWrapper.style.background = 'white';
+          docWrapper.style.overflow = 'hidden';
+          const iframe = previewWindow.document.createElement('iframe');
+          iframe.src = url;
+          iframe.style.width = '100%';
+          iframe.style.height = '100%';
+          iframe.style.border = 'none';
+          docWrapper.appendChild(iframe);
+          previewWindow.document.body.appendChild(docWrapper);
+        } else {
+          const link = previewWindow.document.createElement('a');
+          link.href = url;
+          link.download = fileAsset?.originalName || 'document';
+          link.style.fontFamily = 'sans-serif';
+          link.style.display = 'block';
+          link.style.padding = '24px';
+          link.style.textAlign = 'center';
+          link.style.fontSize = '16px';
+          link.style.fontWeight = 'bold';
+          link.style.color = '#2563eb';
+          link.style.textDecoration = 'none';
+          link.innerText = 'Click here to download ' + (fileAsset?.originalName || 'document');
+          previewWindow.document.body.appendChild(link);
+          link.click();
+        }
+      } catch {
+        previewWindow.location.href = url;
       }
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');

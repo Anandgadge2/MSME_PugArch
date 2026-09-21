@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -48,7 +48,43 @@ interface BuyerProcurementItem {
 
 export function BuyerProcurementMonitor() {
   const { user, token } = useAuth();
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [activeTab, setActiveTab] = useState<FilterTab>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('monitorTab');
+      if (urlTab && ['all', 'bidding', 'evaluation', 'awarded'].includes(urlTab)) {
+        return urlTab as FilterTab;
+      }
+      const saved = sessionStorage.getItem('buyer_procurement_monitor_tab');
+      if (saved && ['all', 'bidding', 'evaluation', 'awarded'].includes(saved)) {
+        return saved as FilterTab;
+      }
+    }
+    return 'all';
+  });
+
+  const handleTabChange = useCallback((newTab: FilterTab) => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('buyer_procurement_monitor_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('monitorTab');
+      if (urlTab && ['all', 'bidding', 'evaluation', 'awarded'].includes(urlTab)) {
+        setActiveTab(urlTab as FilterTab);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const { data: procurementsData, isLoading } = useQuery({
@@ -212,7 +248,7 @@ export function BuyerProcurementMonitor() {
       <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-slate-100 bg-white overflow-x-auto no-scrollbar">
         <button
           type="button"
-          onClick={() => setActiveTab('all')}
+          onClick={() => handleTabChange('all')}
           className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition shrink-0 ${
             activeTab === 'all' 
               ? 'bg-[#12335f] text-white shadow-xs' 
@@ -223,7 +259,7 @@ export function BuyerProcurementMonitor() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('bidding')}
+          onClick={() => handleTabChange('bidding')}
           className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition shrink-0 ${
             activeTab === 'bidding' 
               ? 'bg-[#12335f] text-white shadow-xs' 
@@ -234,7 +270,7 @@ export function BuyerProcurementMonitor() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('evaluation')}
+          onClick={() => handleTabChange('evaluation')}
           className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition shrink-0 ${
             activeTab === 'evaluation' 
               ? 'bg-[#12335f] text-white shadow-xs' 
@@ -245,7 +281,7 @@ export function BuyerProcurementMonitor() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab('awarded')}
+          onClick={() => handleTabChange('awarded')}
           className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wide transition shrink-0 ${
             activeTab === 'awarded' 
               ? 'bg-[#12335f] text-white shadow-xs' 

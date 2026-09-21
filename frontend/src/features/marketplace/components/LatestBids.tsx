@@ -162,7 +162,7 @@ function mapTender(t: MarketplaceTender): OpportunityData {
         startDate: t.publishedAt || t.createdAt,
         endDate: t.closesAt,
         isTender: true,
-        link: `/tenders?tender=${t.id}`,
+        link: `/tenders?tender=${encodeURIComponent(t.tenderId || t.id)}`,
         daysRemaining: days,
         deadlineLabel: status.deadlineLabel,
         statusCode: status.code,
@@ -441,7 +441,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             if (r.linkedAuctionId) {
                 link = sellerRoutes.detail('REVERSE_AUCTION', r.linkedAuctionId);
             } else if (method === 'OPEN_TENDER' || method === 'LIMITED_TENDER' || method.includes('TENDER')) {
-                link = `/tenders?tender=${r.sourceId || r.id}`;
+                link = `/tenders?tender=${encodeURIComponent(r.referenceNumber || r.bidNumber || r.sourceId || r.id)}`;
             } else {
                 const isLoggedIn = !!user;
                 const isSeller = user?.role === 'seller';
@@ -578,7 +578,6 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             cell: (item) => (
                 <Link 
                     href={item.link} 
-                    onClick={(e) => e.stopPropagation()}
                     className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug hover:text-[#0b2447] line-clamp-2 transition-colors block"
                 >
                     {item.title}
@@ -688,8 +687,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             cell: (item) => (
                 <Link 
                     href={item.link} 
-                    onClick={(e) => e.stopPropagation()}
-                    className="inline-flex h-8 items-center justify-center gap-1 rounded-full bg-[#0b2447] px-3 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm whitespace-nowrap"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-full bg-[#0b2447] px-3 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm whitespace-nowrap cursor-pointer"
                 >
                     View Details 
                     <ArrowRight className="h-3 w-3" />
@@ -798,8 +796,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                             sortKey={sortKey}
                             sortDirection={sortDirection}
                             onSort={(key) => toggleSort(key as any)}
-                            onRowClick={(item) => router.push(item.link)}
-                            rowClassName="cursor-pointer hover:bg-blue-50/20 transition-colors"
+                            rowClassName="hover:bg-blue-50/20 transition-colors"
                             emptyTitle="No active procurement opportunities found"
                             emptyDescription={emptyMessage}
                             minWidth="min-w-0 w-full"

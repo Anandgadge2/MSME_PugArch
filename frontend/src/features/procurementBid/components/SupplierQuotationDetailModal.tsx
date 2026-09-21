@@ -21,6 +21,7 @@ import {
   Quote,
   Trophy,
   Loader2,
+  Award,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -191,6 +192,7 @@ export function SupplierQuotationDetailView({
 }: SupplierQuotationDetailViewProps) {
   const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
+  const [activeTab, setActiveTab] = React.useState<'pricing' | 'terms' | 'compliance'>('pricing');
 
   if (!result) return null;
 
@@ -530,37 +532,33 @@ export function SupplierQuotationDetailView({
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-3 sm:px-5 py-3 space-y-3 pb-28 animate-in fade-in duration-150">
+    <div className="mx-auto w-full max-w-7xl px-3 sm:px-6 py-4 space-y-4 pb-28 animate-in fade-in duration-150">
       
-      {/* ── 1. Compact Top Bar: Navigation + Breadcrumb + Primary Actions ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-0.5">
-        <div className="flex items-center gap-2">
+      {/* ── 1. Top Bar: Navigation + Breadcrumb + Primary Actions ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+        <div className="flex items-center gap-2.5">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onBack}
-            className="h-8 gap-1.5 rounded-lg border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+            className="h-8.5 gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
-            <span>Back</span>
+            <span>Back to Results</span>
           </Button>
 
-          <nav className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-            <span className="hover:text-slate-800 cursor-pointer" onClick={onBack}>
+          <nav className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <span className="hover:text-slate-700 cursor-pointer" onClick={onBack}>
               Procurements
             </span>
             <ChevronRight className="h-3 w-3 text-slate-300" />
-            <span className="font-mono text-slate-600 truncate max-w-[140px] sm:max-w-none">
+            <span className="font-mono text-slate-600">
               {bidId || bid?.id || 'Bid'}
             </span>
             <ChevronRight className="h-3 w-3 text-slate-300" />
-            <span className="text-blue-900 font-bold bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded text-[11px]">
-              Quotation
-            </span>
-            <ChevronRight className="h-3 w-3 text-slate-300" />
-            <span className="font-bold text-slate-800 truncate max-w-[180px] sm:max-w-none">
-              {sellerOrg}
+            <span className="text-blue-900 font-bold bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md text-[11px]">
+              Supplier Quotation
             </span>
           </nav>
         </div>
@@ -573,7 +571,7 @@ export function SupplierQuotationDetailView({
               variant="outline"
               size="sm"
               onClick={() => onOpenTechnicalEvaluation(result)}
-              className="h-8 gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+              className="h-8.5 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
               <span>Technical Evaluation Record</span>
@@ -586,7 +584,7 @@ export function SupplierQuotationDetailView({
               variant="outline"
               size="sm"
               onClick={() => onDownloadPdf(result)}
-              className="h-8 gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer"
+              className="h-8.5 gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer"
             >
               <Download className="h-3.5 w-3.5 text-blue-600" />
               <span>PDF</span>
@@ -594,487 +592,576 @@ export function SupplierQuotationDetailView({
           )}
 
           {isAwarded ? (
-            <span className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-100 border border-emerald-200 px-3 text-xs font-black text-emerald-800 uppercase tracking-wide">
+            <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 px-3.5 text-xs font-black text-emerald-800 uppercase tracking-wide">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
             </span>
           ) : onAcceptAndGeneratePo ? (
-            <button
+            <Button
               type="button"
+              size="sm"
               onClick={() => onAcceptAndGeneratePo(result)}
-              className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 text-xs font-black text-white transition-all inline-flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95"
+              className="h-8.5 gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 text-xs font-black shadow-xs transition-colors cursor-pointer"
             >
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>Accept Quotation &amp; Generate PO</span>
-            </button>
+              <Award className="h-3.5 w-3.5" />
+              <span>Award Contract</span>
+            </Button>
           ) : null}
         </div>
       </div>
 
-      {/* ── 2. Concise Executive Header: Supplier & Financial Overview (Tight, Zero Space Waste) ── */}
-      <section className="relative overflow-hidden rounded-xl border border-slate-200/90 bg-white p-4 shadow-xs">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500" />
+      {/* ── 2. Executive Hero Banner: Supplier Identity & Commercial Outcome ── */}
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
+        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500" />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-start lg:items-center">
           
-          {/* Left: Supplier Identity & Meta */}
-          <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="inline-flex items-center rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-800 border border-blue-200/70">
-                SUPPLIER QUOTATION
-              </span>
-
-              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200/70">
+          {/* Left: Supplier Info & Tender Reference */}
+          <div className="space-y-2.5 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
                 <Trophy className="h-3 w-3 text-emerald-600" />
-                RANK {rank} • LOWEST EVALUATED
+                Rank {rank} • Lowest Evaluated
               </span>
 
-              <span className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {statusStr}
               </span>
 
-              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200">
+              <span className="font-mono text-[10px] font-bold px-2 py-1 rounded-md bg-slate-50 text-slate-500 border border-slate-200">
                 QUOTE #{result.id || result.participationId || 'REF'}
               </span>
             </div>
 
-            <div className="flex flex-wrap items-baseline gap-2">
+            <div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-tight">
                 {sellerOrg}
               </h1>
               {bid?.title && (
-                <span className="text-xs font-semibold text-slate-500">
-                  for <strong className="text-slate-800">{bid.title}</strong>
-                </span>
+                <p className="text-xs font-semibold text-slate-500 mt-1">
+                  Procurement Requirement: <strong className="text-slate-800">{bid.title}</strong>
+                </p>
               )}
             </div>
 
-            {/* Dense Contact Strip */}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 font-medium">
-              <span className="inline-flex items-center gap-1">
+            {/* Clean Contact Strip */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 font-medium pt-1">
+              <span className="inline-flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                Rep: <strong className="text-slate-800">{contactPerson}</strong>
+                Representative: <strong className="text-slate-800">{contactPerson}</strong>
               </span>
 
-              {sellerEmail !== 'Not provided' && (
-                <span className="inline-flex items-center gap-1">
+              {sellerEmail && sellerEmail !== '—' && sellerEmail !== 'Not provided' && (
+                <span className="inline-flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  {sellerEmail}
+                  <a href={`mailto:${sellerEmail}`} className="hover:underline text-slate-700">{sellerEmail}</a>
                 </span>
               )}
 
-              {sellerMobile !== 'Not listed' && (
-                <span className="inline-flex items-center gap-1">
+              {sellerMobile && sellerMobile !== '—' && sellerMobile !== 'Not listed' && (
+                <span className="inline-flex items-center gap-1.5">
                   <Phone className="h-3.5 w-3.5 text-slate-400" />
-                  {sellerMobile}
+                  <span className="text-slate-700">{sellerMobile}</span>
                 </span>
               )}
 
-              <span className="inline-flex items-center gap-1 text-slate-500">
+              <span className="inline-flex items-center gap-1.5 text-slate-500">
                 <Clock className="h-3.5 w-3.5 text-slate-400" />
-                {formatDateTime(submittedAt)}
+                Submitted: <span className="font-semibold text-slate-700">{formatDateTime(submittedAt)}</span>
               </span>
             </div>
           </div>
 
-          {/* Right: Compact Evaluated Price Highlight Box */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-4 py-2.5 min-w-[240px] flex flex-col justify-center space-y-1">
+          {/* Right: Elegant Commercial Summary Box */}
+          <div className="rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-emerald-50/50 to-white px-5 py-4 min-w-[260px] flex flex-col justify-center space-y-2 shadow-2xs">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-emerald-800">
-                TOTAL EVALUATED PRICE (LANDED)
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                Total Evaluated Landed Price
               </span>
-              <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
+              <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
                 INR (₹)
               </span>
             </div>
-            <div className="text-2xl font-black text-emerald-700 tracking-tight leading-tight">
+            <div className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight leading-tight">
               {formatCurrency(totalEvaluatedPrice)}
             </div>
-            <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-0.5 border-t border-emerald-100/80">
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-1.5 border-t border-emerald-100">
               <span>Base: <strong className="text-slate-800">{formatCurrency(quotedBaseAmount)}</strong></span>
               <span>GST {gstPercentage}%: <strong className="text-slate-800">{formatCurrency(taxAmount)}</strong></span>
             </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              F.O.R Destination • All taxes &amp; delivery included
+            </p>
           </div>
 
         </div>
       </section>
 
-      {/* ── 3. Concise 4-KPI Metric Strip (Tightly Engineered, Zero Gaps) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        
-        {/* KPI 1 */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
-            <IndianRupee className="h-4 w-4" />
+      {/* ── 3. Operational Parameter Ribbon (Streamlined, Non-Redundant) ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+            <Package className="h-3.5 w-3.5 text-blue-600" />
+            <span>Supply Commitment</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Offered Landed Rate
-            </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
-              {formatCurrency(totalEvaluatedPrice)}
-            </p>
-            <p className="text-[10px] text-slate-500 font-medium leading-none mt-0.5 truncate">
-              Incl. GST {gstPercentage}% & Freight
-            </p>
-          </div>
+          <p className="text-sm font-black text-slate-900">
+            {totalCommittedUnits} Units
+          </p>
+          <span className="text-[10.5px] font-semibold text-emerald-700 block">
+            100% Tender Quantity Covered
+          </span>
         </div>
 
-        {/* KPI 2 */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">
-            <Package className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+            <Truck className="h-3.5 w-3.5 text-amber-600" />
+            <span>Delivery SLA</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Supply Commitment
-            </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
-              {totalCommittedUnits} Units Committed
-            </p>
-            <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
-              Full Supply (100% Covered)
-            </p>
-          </div>
+          <p className="text-sm font-black text-slate-900">
+            {deliveryTimeline}
+          </p>
+          <span className="text-[10.5px] font-medium text-slate-500 block">
+            Direct Consignee Site Dispatch
+          </span>
         </div>
 
-        {/* KPI 3 */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700 border border-amber-100">
-            <Truck className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
+          <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+            <Building2 className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Make &amp; Model</span>
           </div>
-          <div className="min-w-0 flex-1">
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-              Delivery Turnaround
-            </span>
-            <p className="text-xs font-black text-slate-900 mt-0.5 leading-tight truncate">
-              {deliveryTimeline}
-            </p>
-            <p className="text-[10px] text-slate-500 font-medium leading-none mt-0.5 truncate">
-              Direct Consignee Site Dispatch
-            </p>
-          </div>
+          <p className="text-sm font-black text-slate-900 truncate" title={`${makeBrand} / ${model}`}>
+            {makeBrand}
+          </p>
+          <span className="text-[10.5px] font-medium text-slate-500 truncate block" title={model}>
+            Model: {model}
+          </span>
         </div>
 
-        {/* KPI 4 */}
-        <div className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-700 border border-purple-100">
-              <ShieldCheck className="h-4 w-4" />
+        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs flex items-center justify-between gap-2">
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
+              <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
+              <span>Technical Standing</span>
             </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block leading-none">
-                Evaluation Standing
-              </span>
-              <p className="text-xs font-black text-purple-900 mt-0.5 leading-tight truncate">
-                Rank {rank} • {statusStr}
-              </p>
-              <p className="text-[10px] text-emerald-700 font-bold leading-none mt-0.5 truncate">
-                Verified &amp; Qualified Bidder
-              </p>
-            </div>
+            <p className="text-sm font-black text-purple-900">
+              Qualified Bidder
+            </p>
+            <span className="text-[10.5px] font-semibold text-emerald-700 block">
+              Stage 1 Scrutiny Passed
+            </span>
           </div>
           {onOpenTechnicalEvaluation && (
             <button
               type="button"
               onClick={() => onOpenTechnicalEvaluation(result)}
-              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50/80 hover:bg-purple-100 text-purple-800 px-2 py-1 text-[10px] font-bold transition-colors cursor-pointer shrink-0 shadow-2xs"
+              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-2xs"
               title="Open Technical Evaluation Record"
             >
-              <Eye className="h-3 w-3 text-purple-600" />
-              <span>Eval Record</span>
+              <Eye className="h-3.5 w-3.5 text-purple-600" />
+              <span>Record</span>
             </button>
           )}
         </div>
-
       </div>
 
-      {/* ── 4. Item-Wise BOQ Breakdown Table (Tight, High-Contrast & Clear) ── */}
-      <section className="rounded-xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
-        <div className="flex items-center justify-between px-3.5 py-2 border-b border-slate-150 bg-slate-50/70">
-          <div className="flex items-center gap-2">
-            <Package className="h-3.5 w-3.5 text-blue-900" />
-            <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-              Item-Wise Quotation & Financial BOQ Breakdown
-            </h2>
-          </div>
-          <span className="text-[10px] font-black bg-white text-slate-700 border border-slate-200 px-2 py-0.5 rounded shadow-2xs">
-            {rawLineItems.length} {rawLineItems.length === 1 ? 'Item' : 'Items'} Listed
+      {/* ── 4. Segmented Tab Navigation ── */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pt-2 pb-1" role="tablist" aria-label="Quotation detail sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'pricing'}
+          aria-controls="panel-pricing"
+          onClick={() => setActiveTab('pricing')}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            activeTab === 'pricing'
+              ? "bg-[#1B365D] text-white shadow-xs"
+              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          )}
+        >
+          <Package className="h-3.5 w-3.5" />
+          <span>Items &amp; Financial BOQ</span>
+          <span className={cn(
+            "text-[10px] px-1.5 py-0.2 rounded-md font-extrabold",
+            activeTab === 'pricing' ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+          )}>
+            {rawLineItems.length}
           </span>
-        </div>
+        </button>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-slate-50/90 border-b border-slate-200 text-[9px] font-black uppercase text-slate-500 tracking-wider">
-              <tr>
-                <th className="px-3 py-2 w-10 text-center">#</th>
-                <th className="px-3 py-2 min-w-[200px]">Item Name & Specifications</th>
-                <th className="px-3 py-2 min-w-[130px]">Make / Brand</th>
-                <th className="px-3 py-2 min-w-[90px]">HSN / Tax</th>
-                <th className="px-3 py-2 w-20 text-center">Quantity</th>
-                <th className="px-3 py-2 w-28 text-right">Unit Rate (₹)</th>
-                <th className="px-3 py-2 w-32 text-right bg-emerald-50/50">Total Amount (₹)</th>
-                <th className="px-3 py-2 min-w-[110px] text-center">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
-              {rawLineItems.map((line: any, idx: number) => {
-                const qty = Number(line.quantity || 1);
-                const unitPrice = Number(line.unitPrice || line.unitRate || line.rate || 0);
-                const gst =
-                  line.gstPercent !== undefined && line.gstPercent !== null
-                    ? Number(line.gstPercent)
-                    : gstPercentage;
-                const lineTot = Number(
-                  line.lineTotal || line.totalAmount || unitPrice * qty * (1 + gst / 100)
-                );
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'terms'}
+          aria-controls="panel-terms"
+          onClick={() => setActiveTab('terms')}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            activeTab === 'terms'
+              ? "bg-[#1B365D] text-white shadow-xs"
+              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          )}
+        >
+          <FileText className="h-3.5 w-3.5" />
+          <span>Proposal &amp; Delivery Terms</span>
+        </button>
 
-                return (
-                  <tr
-                    key={idx}
-                    className="hover:bg-blue-50/20 transition-colors align-middle group"
-                  >
-                    <td className="px-3 py-2.5 text-center font-bold text-slate-400 font-mono text-[11px]">
-                      {idx + 1}
-                    </td>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'compliance'}
+          aria-controls="panel-compliance"
+          onClick={() => setActiveTab('compliance')}
+          className={cn(
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            activeTab === 'compliance'
+              ? "bg-[#1B365D] text-white shadow-xs"
+              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          )}
+        >
+          <FileCheck2 className="h-3.5 w-3.5" />
+          <span>Compliance &amp; Documents</span>
+          <span className={cn(
+            "text-[10px] px-1.5 py-0.2 rounded-md font-extrabold",
+            activeTab === 'compliance' ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+          )}>
+            {uniqueDocs.length}
+          </span>
+        </button>
+      </div>
 
-                    <td className="px-3 py-2.5">
-                      <p className="font-bold text-slate-900 group-hover:text-blue-900 transition-colors leading-tight">
-                        {line.itemName || `Item #${idx + 1}`}
-                      </p>
-                      {line.description && (
-                        <p
-                          title={line.description}
-                          className="text-[10px] text-slate-500 mt-0.5 line-clamp-1"
-                        >
-                          {line.description}
-                        </p>
-                      )}
-                      <span className="inline-block text-[9px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 mt-1">
-                        {line.technicalSpecs || line.specifications || 'As per tender requirements'}
-                      </span>
-                    </td>
+      {/* ── 5. Tab Panels ── */}
 
-                    <td className="px-3 py-2.5 text-[11px] text-slate-700">
-                      <div>
-                        <span className="text-slate-400">Make:</span>{' '}
-                        <strong className="text-slate-800">{line.makeBrand || makeBrand || '—'}</strong>
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        Model: {line.model || model || '—'}
-                      </div>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-[11px] text-slate-700">
-                      <div className="font-mono text-slate-500 text-[10px]">{line.hsn || '—'}</div>
-                      <span className="inline-block px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200/70 font-bold text-[9px]">
-                        GST {gst}%
-                      </span>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
-                        <span>{qty}</span>
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{line.unitOfMeasure || 'Nos'}</span>
-                      </span>
-                    </td>
-
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-slate-800 text-xs">
-                      {unitPrice ? formatCurrency(unitPrice) : '—'}
-                    </td>
-
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/50">
-                      {lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'}
-                    </td>
-
-                    <td className="px-3 py-2.5 text-center">
-                      <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded text-[10px]">
-                        <Check className="h-3 w-3 text-emerald-600" /> Compliant
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-
-            {totalEvaluatedPrice > 0 && (
-              <tfoot className="bg-slate-50/90 border-t border-slate-200">
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-3 py-2.5 text-xs font-black uppercase tracking-wider text-slate-700 text-right"
-                  >
-                    Total Evaluated Bid Amount:
-                  </td>
-                  <td className="px-3 py-2.5 text-sm font-black text-emerald-700 text-right tabular-nums bg-emerald-50/70">
-                    {formatCurrency(totalEvaluatedPrice)}
-                  </td>
-                  <td className="px-3 py-2.5 text-center text-[10px] font-black text-slate-600">
-                    Rank {rank}
-                  </td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </section>
-
-      {/* ── 5. Balanced Operational 2-Column Grid (Zero Wasted Space) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        
-        {/* Left: Supplier Cover Note, Terms & Conditions */}
-        <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-3 flex flex-col justify-between">
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
-              <div className="flex items-center gap-1.5">
-                <FileText className="h-3.5 w-3.5 text-indigo-700" />
-                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Supplier Cover Note & Remarks
-                </h3>
+      {/* TAB 1: Items & Financial BOQ Breakdown */}
+      {activeTab === 'pricing' && (
+        <section id="panel-pricing" role="tabpanel" className="space-y-4 animate-in fade-in duration-150">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-150 bg-slate-50/70">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-blue-900" />
+                <h2 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Item-Wise Quotation &amp; Financial BOQ Schedule
+                </h2>
               </div>
-              <span className="text-[9px] font-bold text-slate-400 uppercase">
-                Official Declaration
+              <span className="text-xs font-bold text-slate-500">
+                All prices quoted in Indian Rupees (INR ₹)
               </span>
             </div>
 
-            {/* Quote Statement Box */}
-            {coverNoteMessage ? (
-              <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 relative">
-                <Quote className="h-3.5 w-3.5 text-slate-300 absolute top-2 left-2 -scale-x-100" />
-                <p className="text-xs font-medium text-slate-800 leading-relaxed pl-5 whitespace-pre-wrap">
-                  {coverNoteMessage}
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-slate-50/50 border border-slate-200/60 p-2 text-[11px] text-slate-400 font-medium text-center">
-                No cover note or remarks provided by supplier.
-              </div>
-            )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                  <tr>
+                    <th className="px-4 py-3 w-12 text-center">#</th>
+                    <th className="px-4 py-3 min-w-[240px]">Item Description &amp; Technical Specs</th>
+                    <th className="px-4 py-3 min-w-[140px]">Make &amp; Model</th>
+                    <th className="px-4 py-3 min-w-[90px]">HSN Code</th>
+                    <th className="px-4 py-3 text-center min-w-[90px]">Quantity</th>
+                    <th className="px-4 py-3 text-right min-w-[110px]">Unit Rate (₹)</th>
+                    <th className="px-4 py-3 text-center min-w-[90px]">GST %</th>
+                    <th className="px-4 py-3 text-right min-w-[130px] bg-emerald-50/40">Total Amount (₹)</th>
+                    <th className="px-4 py-3 text-center min-w-[100px]">Technical Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {rawLineItems.map((line: any, idx: number) => {
+                    const qty = Number(line.quantity || 1);
+                    const unitPrice = Number(line.unitPrice || line.unitRate || line.rate || 0);
+                    const gst =
+                      line.gstPercent !== undefined && line.gstPercent !== null
+                        ? Number(line.gstPercent)
+                        : gstPercentage;
+                    const lineTot = Number(
+                      line.lineTotal || line.totalAmount || unitPrice * qty * (1 + gst / 100)
+                    );
 
-            {/* Terms & Conditions */}
-            <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-2.5 space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <FileText className="h-3 w-3 text-slate-600" />
-                  <span className="text-[10px] font-black text-slate-700 uppercase tracking-wider">
-                    Terms &amp; Conditions
-                  </span>
+                    return (
+                      <tr
+                        key={idx}
+                        className="hover:bg-blue-50/20 transition-colors align-top group"
+                      >
+                        <td className="px-4 py-3.5 text-center font-bold text-slate-400 font-mono text-xs">
+                          {idx + 1}
+                        </td>
+
+                        <td className="px-4 py-3.5">
+                          <p className="font-extrabold text-slate-900 group-hover:text-blue-900 transition-colors text-xs leading-snug">
+                            {line.itemName || `Item #${idx + 1}`}
+                          </p>
+                          {line.description && (
+                            <p className="text-[11px] text-slate-600 mt-1 whitespace-pre-wrap leading-relaxed">
+                              {line.description}
+                            </p>
+                          )}
+                          {(line.technicalSpecs || line.specifications) && (
+                            <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200/80 p-2 text-[10.5px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                                Offered Specifications:
+                              </span>
+                              {line.technicalSpecs || line.specifications}
+                            </div>
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3.5 text-xs text-slate-700">
+                          <div>
+                            <span className="text-slate-400 font-bold text-[9.5px] uppercase">Make:</span>{' '}
+                            <strong className="text-slate-900">{line.makeBrand || makeBrand || '—'}</strong>
+                          </div>
+                          <div className="text-[11px] text-slate-600 mt-0.5">
+                            <span className="text-slate-400 font-bold text-[9.5px] uppercase">Model:</span>{' '}
+                            <span className="font-semibold text-slate-800">{line.model || model || '—'}</span>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-xs text-slate-700">
+                          <span className="font-mono text-slate-800 font-bold text-[11px]">{line.hsn || '—'}</span>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-center">
+                          <span className="inline-flex items-center gap-1 font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded-md text-xs border border-slate-200 whitespace-nowrap">
+                            <span>{qty}</span>
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">{line.unitOfMeasure || 'Nos'}</span>
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-800 text-xs tabular-nums">
+                          {unitPrice ? formatCurrency(unitPrice) : '—'}
+                        </td>
+
+                        <td className="px-4 py-3.5 text-center">
+                          <span className="inline-block px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[10px]">
+                            {gst}%
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/40">
+                          {lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'}
+                        </td>
+
+                        <td className="px-4 py-3.5 text-center">
+                          <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded text-[10.5px] whitespace-nowrap">
+                            <Check className="h-3 w-3 text-emerald-600 stroke-[2.5]" /> Compliant
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+
+                {totalEvaluatedPrice > 0 && (
+                  <tfoot className="bg-slate-50/90 border-t border-slate-200 font-bold">
+                    <tr>
+                      <td colSpan={7} className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 text-right">
+                        Total Evaluated Bid Amount (Landed):
+                      </td>
+                      <td className="px-4 py-3 text-base font-black text-emerald-700 text-right tabular-nums bg-emerald-50/70">
+                        {formatCurrency(totalEvaluatedPrice)}
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs font-black text-emerald-800">
+                        Rank {rank}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+          {/* Pricing Summary Card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Commercial Term Summary</span>
+              <p className="text-xs text-slate-600">
+                Rate Basis: <strong>F.O.R Destination</strong> • Includes Packaging, Forwarding, Freight, Transit Insurance, and GST.
+              </p>
+            </div>
+            <div className="flex items-center gap-4 text-xs">
+              <div className="text-right">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
+                <strong className="text-slate-800 text-sm font-black">{formatCurrency(quotedBaseAmount)}</strong>
+              </div>
+              <div className="h-8 w-px bg-slate-200" />
+              <div className="text-right">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
+                <strong className="text-slate-800 text-sm font-black">{formatCurrency(taxAmount)}</strong>
+              </div>
+              <div className="h-8 w-px bg-slate-200" />
+              <div className="text-right">
+                <span className="text-emerald-700 block text-[10px] uppercase font-bold">Total Landed Amount</span>
+                <strong className="text-emerald-700 text-base font-black">{formatCurrency(totalEvaluatedPrice)}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* TAB 2: Proposal, Remarks & Terms */}
+      {activeTab === 'terms' && (
+        <section id="panel-terms" role="tabpanel" className="space-y-4 animate-in fade-in duration-150">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Supplier Cover Note */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-indigo-700" />
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                    Supplier Cover Note &amp; Proposal Remarks
+                  </h3>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                  Official Declaration
+                </span>
+              </div>
+
+              {coverNoteMessage ? (
+                <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-4 relative">
+                  <Quote className="h-4 w-4 text-slate-300 absolute top-3 left-3 -scale-x-100" />
+                  <p className="text-xs font-medium text-slate-800 leading-relaxed pl-6 whitespace-pre-wrap">
+                    {coverNoteMessage}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl bg-slate-50/50 border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 font-medium">
+                  No special cover note or remarks submitted with this quotation.
+                </div>
+              )}
+            </div>
+
+            {/* Commercial Terms & Conditions */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-slate-700" />
+                  <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                    Commercial &amp; Contractual Terms
+                  </h3>
                 </div>
                 {termsAndConditions && termsAndConditions !== 'Standard procurement terms and conditions apply.' && (
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.2 rounded">
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
                     Seller Specified
                   </span>
                 )}
               </div>
-              <p className="text-xs font-medium text-slate-800 leading-relaxed pl-4.5 whitespace-pre-wrap">
-                {termsAndConditions || '—'}
-              </p>
-            </div>
-          </div>
 
-          {/* 4 Compact Parameter Chips */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-2 border-t border-slate-150 text-[11px]">
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Brand</span>
-              <span className="font-bold text-slate-900 truncate block">{makeBrand}</span>
-            </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Model</span>
-              <span className="font-bold text-slate-900 truncate block">{model}</span>
-            </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Delivery SLA</span>
-              <span className="font-bold text-slate-900 truncate block">{deliveryTimeline}</span>
-            </div>
-            <div className="bg-slate-50 px-2 py-1 rounded border border-slate-200/70">
-              <span className="text-[9px] font-bold text-slate-400 uppercase block">Validity</span>
-              <span className="font-bold text-slate-900 truncate block">{result.validity || result.details?.validity || '—'}</span>
-            </div>
-          </div>
-        </div>
+              <div className="rounded-xl bg-slate-50 border border-slate-200/80 p-4">
+                <p className="text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+                  {termsAndConditions || 'Standard tender commercial and contractual terms accepted without deviations.'}
+                </p>
+              </div>
 
-        {/* Right: Statutory Checklist & Submitted Files */}
-        <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-xs space-y-2.5 flex flex-col justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-150">
-              <div className="flex items-center gap-1.5">
-                <FileCheck2 className="h-3.5 w-3.5 text-emerald-700" />
+              {/* Delivery & Validity Strip */}
+              <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Delivery SLA</span>
+                  <strong className="text-slate-900 mt-0.5 block">{deliveryTimeline}</strong>
+                </div>
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Quotation Validity</span>
+                  <strong className="text-slate-900 mt-0.5 block">{result.validity || result.details?.validity || '90 Days from opening'}</strong>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      )}
+
+      {/* TAB 3: Compliance & Documents */}
+      {activeTab === 'compliance' && (
+        <section id="panel-compliance" role="tabpanel" className="space-y-4 animate-in fade-in duration-150">
+          
+          {/* Statutory Verification Checklist */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-emerald-700" />
                 <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
-                  Compliance & Attached Documents
+                  Mandatory Statutory &amp; Technical Verification Checklist
                 </h3>
               </div>
-              <span className="text-[9px] font-black text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded shadow-2xs uppercase">
-                {uniqueDocs.length} Attachment{uniqueDocs.length === 1 ? '' : 's'}
+              <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                Audit Verified
               </span>
             </div>
 
-            {/* Checklist */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {statutoryChecklist.map((item, idx) => (
                 <div
                   key={idx}
                   className={cn(
-                    "flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-bold transition-colors",
+                    "flex items-center gap-2 rounded-xl border p-3 text-xs font-bold transition-colors min-w-0 shadow-2xs",
                     item.verified
-                      ? "border-emerald-200/80 bg-emerald-50/80 text-emerald-800"
+                      ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
                       : "border-slate-200 bg-slate-50 text-slate-500"
                   )}
                 >
-                  <Check className={cn("h-3 w-3 shrink-0", item.verified ? "text-emerald-600 stroke-[3]" : "text-slate-300")} />
-                  <span className="truncate">{item.label}</span>
+                  <Check className={cn("h-4 w-4 shrink-0", item.verified ? "text-emerald-600 stroke-[3]" : "text-slate-300")} />
+                  <span className="truncate leading-tight text-xs">{item.label}</span>
                 </div>
               ))}
             </div>
+          </div>
 
-            {/* Attached Files List */}
+          {/* Attached Files Gallery */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+              <div className="flex items-center gap-2">
+                <FileCheck2 className="h-4 w-4 text-blue-900" />
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                  Quotation Documents &amp; Technical Attachments
+                </h3>
+              </div>
+              <span className="text-xs font-bold text-slate-500">
+                {uniqueDocs.length} {uniqueDocs.length === 1 ? 'file' : 'files'} attached
+              </span>
+            </div>
+
             {uniqueDocs.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-0.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
                 {uniqueDocs.map((doc, idx) => (
                   <div
                     key={doc.id || idx}
-                    className="rounded-lg border border-slate-200 bg-slate-50/70 p-2 flex items-center justify-between gap-2 shadow-2xs hover:bg-slate-100/70 transition-colors"
+                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col justify-between gap-3 shadow-2xs hover:bg-slate-100/70 transition-colors"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <div className="h-7 w-7 rounded-md bg-blue-100/80 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/60">
-                        <FileText className="h-3.5 w-3.5" />
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/80">
+                        <FileText className="h-4 w-4" />
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">
-                            {doc.name}
-                          </p>
-                          <span className="shrink-0 text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-1 py-0.2 rounded">
-                            {doc.category}
-                          </span>
-                        </div>
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <span className="inline-block text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded">
+                          {doc.category}
+                        </span>
+                        <p className="text-xs font-bold text-slate-900 truncate" title={doc.name}>
+                          {doc.name}
+                        </p>
                         {doc.fileName && doc.fileName !== doc.name && (
-                          <p
-                            title={doc.fileName}
-                            className="text-[9px] text-slate-500 font-mono truncate max-w-[170px] sm:max-w-[210px] leading-tight mt-0.5"
-                          >
+                          <p className="text-[10px] text-slate-400 font-mono truncate" title={doc.fileName}>
                             {doc.fileName}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-end">
                       <button
                         type="button"
                         onClick={() => handlePreviewDoc(doc)}
                         disabled={previewLoadingId === doc.id}
-                        className="inline-flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs shrink-0 cursor-pointer disabled:opacity-60"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
                         title="Preview Document"
                       >
                         {previewLoadingId === doc.id ? (
                           <>
-                            <Loader2 className="h-3 w-3 animate-spin text-blue-700" />
-                            <span>Loading...</span>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-700" />
+                            <span>Opening...</span>
                           </>
                         ) : (
                           <>
-                            <Eye className="h-3 w-3 text-blue-700" />
-                            <span>Preview</span>
+                            <Eye className="h-3.5 w-3.5 text-blue-700" />
+                            <span>Preview Document</span>
                           </>
                         )}
                       </button>
@@ -1083,21 +1170,14 @@ export function SupplierQuotationDetailView({
                 ))}
               </div>
             ) : (
-              <div className="rounded border border-dashed border-slate-200 p-2.5 text-center text-[11px] text-slate-400 font-medium">
-                No additional document files attached.
+              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400 font-medium">
+                No additional document files attached to this quotation.
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-semibold pt-1 border-t border-slate-150">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-            <span>Supplier meets all mandatory statutory criteria and tender rules.</span>
-          </div>
-        </div>
-
-      </div>
-
-   
+        </section>
+      )}
 
       {/* Regular Document Preview Modal */}
       <DocumentPreviewModal

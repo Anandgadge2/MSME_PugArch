@@ -694,7 +694,7 @@ export default function ProcurementDraftsPage() {
       cell: (d) => {
         const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
         return (
-          <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1.5">
             {/* View Details */}
             <Button
               type="button"
@@ -1060,7 +1060,6 @@ export default function ProcurementDraftsPage() {
               sortKey={sortKey}
               sortDirection={sortDir}
               onSort={(field) => handleSort(field as SortKey)}
-              onRowClick={(d) => openDetail(d)}
               paginationLabel="drafts"
               emptyTitle="No procurement drafts found"
               emptyDescription={searchQuery || methodFilter || sourceFilter || activeKpi

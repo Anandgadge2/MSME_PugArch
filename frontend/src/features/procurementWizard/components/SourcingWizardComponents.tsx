@@ -565,14 +565,29 @@ export function BOQTable({
 </div>
       </div>
 
-      <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-lg border border-slate-200 font-bold text-xs">
-        <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
-        </Button>
-        <span className="text-sm font-extrabold text-[#12335f]">
-          BOQ Total Value: {formatCurrency(estimatedTotal)}
-        </span>
-      </div>
+      {(() => {
+        const baseTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0)), 0);
+        const taxTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (Number(r.taxPercent ?? 18) / 100)), 0);
+        const grossTotal = baseTotal + taxTotal;
+        return (
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 font-bold text-xs">
+            <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700 bg-white hover:bg-slate-100">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
+            </Button>
+            <div className="flex items-center gap-4 flex-wrap text-xs">
+              <div className="text-slate-600">
+                Base: <span className="text-slate-900 font-extrabold">{formatCurrency(baseTotal)}</span>
+              </div>
+              <div className="text-slate-600">
+                GST (Tax): <span className="text-slate-900 font-extrabold">+{formatCurrency(taxTotal)}</span>
+              </div>
+              <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-[#12335f] text-sm font-black">
+                BOQ Total (Gross): {formatCurrency(grossTotal)}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

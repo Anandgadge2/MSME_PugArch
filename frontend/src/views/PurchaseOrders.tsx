@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, Printer, MoreVertical, Building2, Calendar, ChevronDown, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
@@ -9,6 +9,41 @@ import { RepeatPurchaseOrderModal } from '../features/purchaseOrders/components/
 import { PurchaseOrderReceiptModal } from '../features/purchaseOrders/components/PurchaseOrderReceiptModal';
 import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/RecordOrderPaymentModal';
 import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
+import { GrnCreateModal } from '../features/grn/components/GrnCreateModal';
+import { TaxInvoiceRegistryModal } from '../features/invoices/components/TaxInvoiceRegistryModal';
+
+export const hasApprovedGrn = (order: any): boolean => {
+  if (!order) return false;
+  const status = String(order.status || '').toLowerCase();
+  if (['grn_approved', 'grn_completed', 'inspection_accepted'].includes(status)) return true;
+  if (Array.isArray(order.grns) && order.grns.length > 0) {
+    return order.grns.some((g: any) => {
+      const gs = String(g.status || '').toUpperCase();
+      return ['APPROVED', 'PARTIAL', 'VERIFIED', 'COMPLETED'].includes(gs);
+    });
+  }
+  return false;
+};
+
+export const getExistingGrn = (order: any): any | null => {
+  if (!order) return null;
+  if (Array.isArray(order.grns) && order.grns.length > 0) {
+    return order.grns[0];
+  }
+  if (order.grn && typeof order.grn === 'object') {
+    return order.grn;
+  }
+  return null;
+};
+
+export const hasAnyGrn = (order: any): boolean => {
+  if (!order) return false;
+  if (Array.isArray(order.grns) && order.grns.length > 0) return true;
+  if (order.grnId || (order.grn && order.grn.id)) return true;
+  const status = String(order.status || '').toLowerCase();
+  if (['grn_approved', 'grn_completed', 'inspection_accepted'].includes(status)) return true;
+  return false;
+};
 
 const moneyPdf = (val: any, currency = 'INR') => {
   const num = Number(val || 0);
@@ -122,7 +157,10 @@ const OrderActionsMenu = ({
   onViewPaymentSlip,
   onViewReceipt,
   onRecordPayment,
-  onConfirmSettlement
+  onConfirmSettlement,
+  onOpenGrnModal,
+  onViewGrn,
+  onViewInvoice
 }: any) => {
   const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -248,16 +286,26 @@ const OrderActionsMenu = ({
         <>
           {(() => {
             const hasInvoice = Boolean(
-              (order as any).invoices?.length > 0 || (order as any).invoiceId || (order as any).invoiceNumber
+              (order as any).invoices?.length > 0 ||
+              (order as any).invoiceId ||
+              (order as any).invoiceNumber ||
+              (order as any).invoice ||
+              ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(String(order.status || '').toLowerCase())
             );
             if (hasInvoice) {
-              const invNo = (order as any).invoices?.[0]?.invoiceNumber || (order as any).invoiceNumber || order.id;
+              const inv = (order as any).invoices?.[0] || (order as any).invoice;
+              const invNo = inv?.invoiceNumber || (order as any).invoiceNumber || order.id;
+              const invId = inv?.id || (order as any).invoiceId;
               return (
                 <button
                   type="button"
                   onClick={() => {
                     onClose();
-                    router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                    if (invId && onViewInvoice) {
+                      onViewInvoice(Number(invId), inv || null);
+                    } else {
+                      router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                    }
                   }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                 >
@@ -296,41 +344,73 @@ const OrderActionsMenu = ({
       )}
 
       {(() => {
-        const hasGrn = Boolean(
-          (order as any).grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(String(order.status || '').toLowerCase())
-        );
+        const anyGrn = hasAnyGrn(order);
+        const approvedGrn = hasApprovedGrn(order);
         const isPaid = String(order.status || '').toLowerCase().includes('paid');
-        if (hasGrn && !isPaid) {
-          return (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                router.push('/payments');
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
-            >
-              <CreditCard className="h-3.5 w-3.5 text-purple-600" />
-              <span>Pay Now / Upload Payment Proof</span>
-            </button>
-          );
-        }
-        if (isPaid) {
-          return (
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                router.push('/payments');
-              }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              <span>View Payment Proof (Paid)</span>
-            </button>
-          );
-        }
-        return null;
+
+        return (
+          <>
+            {/* View GRN: once GRN is created, always allow viewing it */}
+            {anyGrn && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onViewGrn?.(order);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 transition-colors text-left cursor-pointer"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5 text-teal-600" />
+                <span>View GRN</span>
+              </button>
+            )}
+
+            {/* Generate GRN: ONLY visible when no GRN has been created yet */}
+            {!anyGrn && !approvedGrn && !isPaid && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(String(order.status || '').toLowerCase()) && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenGrnModal?.(order.id);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                <span>Generate GRN (Pay Gate)</span>
+              </button>
+            )}
+
+            {/* Pay Now / Upload Payment Proof: when GRN approved and not paid */}
+            {approvedGrn && !isPaid && isBuyer && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onRecordPayment?.(order);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
+              >
+                <CreditCard className="h-3.5 w-3.5 text-purple-600" />
+                <span>Pay Now / Upload Payment Proof</span>
+              </button>
+            )}
+
+            {/* View Payment Proof: when paid */}
+            {isPaid && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onViewPaymentSlip?.(order);
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                <span>View Payment Proof (Paid)</span>
+              </button>
+            )}
+          </>
+        );
       })()}
 
       <button
@@ -345,82 +425,108 @@ const OrderActionsMenu = ({
         <span>Download PO</span>
       </button>
 
-      <button
-        type="button"
-        onClick={() => {
-          onClose();
-          exportInvoicePdf(order, 'print');
-        }}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-      >
-        <Printer className="h-3.5 w-3.5 text-slate-500" />
-        <span>Print</span>
-      </button>
+      {(() => {
+        const isPaid = String(order.status || '').toLowerCase().includes('paid');
+        const activeInvoice = (order as any).invoices?.find(
+          (inv: any) =>
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+        ) || (order as any).invoices?.[0];
 
-      {isBuyer && !isCancelled && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onRecordPayment?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-          >
-            <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Record Payment & Slip</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onUploadPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-          >
-            <Upload className="h-3.5 w-3.5 text-indigo-600" />
-            <span>Upload Slip</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onViewPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-          >
-            <Receipt className="h-3.5 w-3.5 text-slate-500" />
-            <span>View Slip</span>
-          </button>
-        </>
-      )}
+        const hasSlip = Boolean(
+          activeInvoice?.paymentSlipFileId ||
+          activeInvoice?.paymentSlipFile ||
+          (activeInvoice as any)?.offlineProof ||
+          (order as any).paymentSlipFileId ||
+          (order as any).paymentSlip ||
+          (order as any).offlineProof ||
+          (order as any).paymentProof
+        );
 
-      {isSeller && !isCancelled && (
-        <>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onConfirmSettlement?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-          >
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-            <span>Confirm Settlement</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onViewPaymentSlip?.(order);
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left"
-          >
-            <Receipt className="h-3.5 w-3.5 text-indigo-600" />
-            <span>Payment Slip</span>
-          </button>
-        </>
-      )}
+        const hasPaymentRecorded = Boolean(
+          isPaid ||
+          activeInvoice?.paymentReference ||
+          String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
+          String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+          (order as any).payments?.length > 0
+        );
+
+        const isSettled = Boolean(
+          activeInvoice?.settledAt ||
+          String(activeInvoice?.status || '').toLowerCase() === 'paid' ||
+          (isPaid && !hasSlip)
+        );
+
+        if (isBuyer && !isCancelled) {
+          return (
+            <>
+              {(hasSlip || hasPaymentRecorded || isPaid) ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onViewPaymentSlip?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                  title="View uploaded payment slip"
+                >
+                  <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>View Payment Slip</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRecordPayment?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                  title="Record payment details and attach slip"
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Record Payment & Slip</span>
+                </button>
+              )}
+            </>
+          );
+        }
+
+        if (isSeller && !isCancelled) {
+          return (
+            <>
+              {(hasPaymentRecorded || hasSlip) && !isSettled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onConfirmSettlement?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Confirm Settlement</span>
+                </button>
+              )}
+
+              {(hasPaymentRecorded || hasSlip) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onViewPaymentSlip?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+                >
+                  <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+                  <span>Payment Slip</span>
+                </button>
+              )}
+            </>
+          );
+        }
+
+        return null;
+      })()}
 
       {isBuyer && !isCancelled && !isDelivered && (
         <button
@@ -546,6 +652,8 @@ function UpdatedDateFilterPopover({
 export default function PurchaseOrders() {
   const { user } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetParamProcessedRef = useRef<string | null>(null);
   const isSeller = user?.role === 'seller' || user?.role === 'shg';
   const isBuyer = user?.role === 'buyer';
 
@@ -571,7 +679,11 @@ export default function PurchaseOrders() {
   const [viewProofOrder, setViewProofOrder] = useState<PurchaseOrderDto | null>(null);
   const [recordPaymentOrder, setRecordPaymentOrder] = useState<PurchaseOrderDto | null>(null);
   const [confirmSettlementOrder, setConfirmSettlementOrder] = useState<PurchaseOrderDto | null>(null);
+  const [grnModalPoId, setGrnModalPoId] = useState<number | null>(null);
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
+  const [taxInvoiceModalOpen, setTaxInvoiceModalOpen] = useState(false);
+  const [taxInvoiceModalId, setTaxInvoiceModalId] = useState<number | null>(null);
+  const [taxInvoiceModalData, setTaxInvoiceModalData] = useState<any | null>(null);
 
   useEffect(() => {
     if (!openKebabId) return;
@@ -616,6 +728,47 @@ export default function PurchaseOrders() {
 
   const reload = reloadAllOrders;
   const setPagedOrders = setAllOrders; // Alias for minimal changes to action handlers
+
+  useEffect(() => {
+    const targetId = searchParams?.get('orderId') || searchParams?.get('id') || searchParams?.get('poId');
+    const searchParam = searchParams?.get('search') || searchParams?.get('po');
+
+    if (searchParam && !searchTerm) {
+      setSearchTerm(searchParam);
+    }
+
+    if (!targetId || targetParamProcessedRef.current === targetId) return;
+
+    const numId = Number(targetId);
+    const found = allOrders.find(
+      (o) => o.id === numId || String(o.id) === targetId || o.poNumber?.toLowerCase() === targetId.toLowerCase()
+    );
+
+    if (found) {
+      setViewingOrder(found);
+      setActiveTab('All');
+      targetParamProcessedRef.current = targetId;
+      return;
+    }
+
+    if (!loading) {
+      targetParamProcessedRef.current = targetId;
+      let alive = true;
+      api.get(`/api/purchase-orders/${targetId}`)
+        .then(readJsonResponse)
+        .then((body: any) => {
+          const fullData = body?.data || body;
+          if (fullData && fullData.id && alive) {
+            setViewingOrder(fullData);
+            setActiveTab('All');
+          }
+        })
+        .catch(() => {
+          // Ignore if order not found
+        });
+      return () => { alive = false; };
+    }
+  }, [searchParams, allOrders, loading, searchTerm]);
 
   const uniqueStatuses = useMemo(() => {
     const statuses = new Set<string>();
@@ -910,6 +1063,42 @@ export default function PurchaseOrders() {
     }
   };
 
+  const handleViewGrn = async (targetOrder: any) => {
+    const grn = getExistingGrn(targetOrder);
+    let grnId = grn?.id || targetOrder.grnId || targetOrder.grn?.id;
+    if (grnId) {
+      router.push(`/grn/${grnId}`);
+      return;
+    }
+
+    try {
+      const res = await api.get(`/api/grn/po/${targetOrder.id}/eligibility`).then(readJsonResponse);
+      const existingList = res?.data?.existing || res?.existing || [];
+      if (Array.isArray(existingList) && existingList.length > 0 && existingList[0]?.id) {
+        router.push(`/grn/${existingList[0].id}`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to resolve GRN by eligibility, trying po detail', err);
+    }
+
+    try {
+      const poRes = await api.get(`/api/purchase-orders/${targetOrder.id}`).then(readJsonResponse);
+      const poData = poRes?.data || poRes;
+      const gId = poData?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')?.id ||
+                  poData?.grns?.[0]?.id ||
+                  poData?.grnId;
+      if (gId) {
+        router.push(`/grn/${gId}`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Failed to resolve GRN by PO details', err);
+    }
+
+    router.push('/grn');
+  };
+
   const renderOrderActions = (order: PurchaseOrderDto) => {
     const statusLower = String(order.status || '').toLowerCase();
     const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed' || statusLower === 'pending_approval';
@@ -954,6 +1143,13 @@ export default function PurchaseOrders() {
             onViewReceipt={setReceiptModalOrder}
             onRecordPayment={setRecordPaymentOrder}
             onConfirmSettlement={setConfirmSettlementOrder}
+            onOpenGrnModal={(poId: number) => setGrnModalPoId(poId)}
+            onViewGrn={handleViewGrn}
+            onViewInvoice={(invId: number, invData: any) => {
+              setTaxInvoiceModalId(invId);
+              setTaxInvoiceModalData(invData);
+              setTaxInvoiceModalOpen(true);
+            }}
           />
         )}
       </div>
@@ -2401,6 +2597,50 @@ export default function PurchaseOrders() {
                   );
                 })()}
 
+                {/* GRN Gating Warning Banner for Buyer */}
+                {isBuyer && !hasApprovedGrn(viewingOrder) && !String(viewingOrder.status || '').toLowerCase().includes('paid') && !['cancelled', 'draft'].includes(String(viewingOrder.status || '').toLowerCase()) && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 text-amber-900 shadow-2xs space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                      <h4 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                        {hasAnyGrn(viewingOrder) ? 'GRN Created: Verification / Approval In Progress' : 'Statutory Payment Gate: Verified GRN Required'}
+                      </h4>
+                    </div>
+                    <p className="text-xs text-amber-800 font-semibold leading-relaxed">
+                      {hasAnyGrn(viewingOrder)
+                        ? 'A Goods Receipt Note (GRN) has already been recorded for this order. Please inspect and approve the GRN to unlock escrow and record payments.'
+                        : 'Payment Blocked: A verified Goods Receipt Note (GRN) must be generated and approved by the consignee/buyer before releasing escrow or uploading payment proof.'}
+                    </p>
+                    <div className="pt-1">
+                      {hasAnyGrn(viewingOrder) ? (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const target = viewingOrder;
+                            setViewingOrder(null);
+                            handleViewGrn(target);
+                          }}
+                          className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg shadow-2xs cursor-pointer"
+                        >
+                          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            const poId = viewingOrder.id;
+                            setViewingOrder(null);
+                            setGrnModalPoId(poId);
+                          }}
+                          className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-black uppercase tracking-wider rounded-lg shadow-2xs cursor-pointer"
+                        >
+                          <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
 
               {/* Modal Sticky Action Footer - Harmonized & Professional */}
@@ -2410,8 +2650,49 @@ export default function PurchaseOrders() {
                     const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
                     const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
                     const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
+                    const isDeliveredModal = viewingStatusLower === 'delivered';
+                    const isCancelledModal = viewingStatusLower === 'cancelled' || viewingStatusLower === 'rejected';
+
+                    const activeInvoice = (viewingOrder as any).invoices?.[0] || (viewingOrder as any).invoice;
+                    const approvedGrn = hasApprovedGrn(viewingOrder);
+
+                    const hasSlip = Boolean(
+                      (viewingOrder as any).paymentProofUrl ||
+                      (viewingOrder as any).paymentProofDocumentUrl ||
+                      (viewingOrder as any).paymentSlipUrl ||
+                      (viewingOrder as any).bankSlipUrl ||
+                      (viewingOrder as any).receiptUrl ||
+                      activeInvoice?.paymentProofUrl ||
+                      activeInvoice?.paymentSlipUrl ||
+                      (viewingOrder as any).paymentSlip ||
+                      (viewingOrder as any).offlineProof ||
+                      (viewingOrder as any).paymentProof
+                    );
+
+                    const isPaid = Boolean(
+                      viewingStatusLower.includes('paid') ||
+                      String(activeInvoice?.status || '').toLowerCase() === 'paid'
+                    );
+
+                    const hasPaymentRecorded = Boolean(
+                      isPaid ||
+                      activeInvoice?.paymentReference ||
+                      String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
+                      String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+                      ((viewingOrder as any).payments && (viewingOrder as any).payments.length > 0)
+                    );
+
+                    const isSettled = Boolean(
+                      activeInvoice?.settledAt ||
+                      viewingStatusLower === 'settled' ||
+                      viewingStatusLower === 'closed' ||
+                      viewingStatusLower === 'completed' ||
+                      (isPaid && !hasSlip)
+                    );
+
                     return (
                       <>
+                        {/* Seller: Accept / Reject when newly issued */}
                         {isSeller && isIssuedModal && (
                           <>
                             <Button
@@ -2435,19 +2716,33 @@ export default function PurchaseOrders() {
                             </Button>
                           </>
                         )}
-                        {isSeller && (isAcceptedModal || viewingStatusLower === 'delivered') && (
+
+                        {/* Seller: Invoicing & Delivery tracking */}
+                        {isSeller && (isAcceptedModal || isDeliveredModal) && (
                           <>
                             {(() => {
                               const hasInvoice = Boolean(
-                                (viewingOrder as any)?.invoices?.length > 0 || (viewingOrder as any)?.invoiceId || (viewingOrder as any)?.invoiceNumber
+                                (viewingOrder as any)?.invoices?.length > 0 ||
+                                (viewingOrder as any)?.invoiceId ||
+                                (viewingOrder as any)?.invoiceNumber ||
+                                (viewingOrder as any)?.invoice ||
+                                ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(String(viewingOrder.status || '').toLowerCase())
                               );
                               if (hasInvoice) {
-                                const invNo = (viewingOrder as any)?.invoices?.[0]?.invoiceNumber || (viewingOrder as any)?.invoiceNumber || viewingOrder.id;
+                                const inv = (viewingOrder as any)?.invoices?.[0] || (viewingOrder as any)?.invoice;
+                                const invNo = inv?.invoiceNumber || (viewingOrder as any)?.invoiceNumber || viewingOrder.id;
+                                const invId = inv?.id || (viewingOrder as any)?.invoiceId;
                                 return (
                                   <Button
                                     onClick={() => {
-                                      setViewingOrder(null);
-                                      router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                                      if (invId) {
+                                        setTaxInvoiceModalId(Number(invId));
+                                        setTaxInvoiceModalData(inv || null);
+                                        setTaxInvoiceModalOpen(true);
+                                      } else {
+                                        setViewingOrder(null);
+                                        router.push(`/seller/invoices?viewInvoiceNo=${invNo}`);
+                                      }
                                     }}
                                     className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                                   >
@@ -2479,6 +2774,8 @@ export default function PurchaseOrders() {
                             </Button>
                           </>
                         )}
+
+                        {/* Linked Quotation */}
                         {(viewingOrder as any)?.bidId && (
                           <Button
                             variant="outline"
@@ -2492,102 +2789,165 @@ export default function PurchaseOrders() {
                             <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Quotation
                           </Button>
                         )}
-                        {(() => {
-                          const hasGrn = Boolean(
-                            (viewingOrder as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'accepted'].includes(viewingStatusLower)
-                          );
-                          const isPaid = viewingStatusLower.includes('paid');
-                          if (hasGrn && !isPaid) {
-                            return (
+
+                        {/* BUYER WORKFLOW */}
+                        {isBuyer && !isCancelledModal && (
+                          <>
+                            {/* Cancel PO (only if not yet delivered/settled) */}
+                            {!['delivered', 'completed', 'settled', 'closed'].includes(viewingStatusLower) && (
+                              <Button
+                                variant="outline"
+                                onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
+                                className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                              >
+                                <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
+                              </Button>
+                            )}
+
+                            {/* GRN Required Gate: If goods delivered/in fulfillment but GRN not approved */}
+                            {!approvedGrn && ['delivered', 'in_fulfillment', 'accepted'].includes(viewingStatusLower) && (
+                              hasAnyGrn(viewingOrder) ? (
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const target = viewingOrder;
+                                    setViewingOrder(null);
+                                    handleViewGrn(target);
+                                  }}
+                                  className="h-9 bg-teal-600 hover:bg-teal-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const poId = viewingOrder.id;
+                                    setViewingOrder(null);
+                                    setGrnModalPoId(poId);
+                                  }}
+                                  className="h-9 bg-amber-600 hover:bg-amber-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
+                                </Button>
+                              )
+                            )}
+
+                            {/* View GRN (Available when GRN approved) */}
+                            {approvedGrn && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  const target = viewingOrder;
+                                  setViewingOrder(null);
+                                  handleViewGrn(target);
+                                }}
+                                className="h-9 border-teal-300 text-teal-700 hover:bg-teal-50 text-xs font-bold uppercase tracking-wider shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <ClipboardCheck className="mr-1.5 h-3.5 w-3.5 text-teal-600" /> View GRN
+                              </Button>
+                            )}
+
+                            {/* Payment Actions: ONLY enabled after GRN is approved and order not settled */}
+                            {approvedGrn && !isSettled && (
+                              <>
+                                <Button
+                                  onClick={() => {
+                                    const target = viewingOrder;
+                                    setViewingOrder(null);
+                                    setRecordPaymentOrder(target);
+                                  }}
+                                  className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
+                                </Button>
+                                <Button
+                                  onClick={() => setUploadProofOrder(viewingOrder)}
+                                  className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
+                                </Button>
+                              </>
+                            )}
+
+                            {/* View Payment Slip: ONLY visible if slip is uploaded */}
+                            {hasSlip && (
+                              <Button
+                                variant="outline"
+                                onClick={() => setViewProofOrder(viewingOrder)}
+                                className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                              >
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
+                              </Button>
+                            )}
+
+                            {/* Repeat Order for Buyer on completed/delivered orders */}
+                            {(isDeliveredModal || isSettled) && (
+                              <Button
+                                onClick={() => handleOpenRepeatModal(viewingOrder)}
+                                className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
+                              </Button>
+                            )}
+                          </>
+                        )}
+
+                        {/* SELLER WORKFLOW */}
+                        {isSeller && !isCancelledModal && (
+                          <>
+                            {/* GRN approved, but buyer has not yet paid */}
+                            {approvedGrn && !hasPaymentRecorded && !hasSlip && !isSettled && (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                                <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Awaiting Buyer Payment & Bank Slip</span>
+                              </span>
+                            )}
+
+                            {/* View Payment Slip: ONLY if slip is actually uploaded */}
+                            {hasSlip && (
+                              <Button
+                                variant="outline"
+                                onClick={() => setViewProofOrder(viewingOrder)}
+                                className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
+                              >
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
+                              </Button>
+                            )}
+
+                            {/* Confirm Settlement & Close: ONLY when payment recorded or slip uploaded, and NOT already settled */}
+                            {(hasPaymentRecorded || hasSlip) && !isSettled && (
                               <Button
                                 onClick={() => {
+                                  const target = viewingOrder;
                                   setViewingOrder(null);
-                                  router.push('/payments');
+                                  setConfirmSettlementOrder(target);
                                 }}
                                 className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
                               >
-                                <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Proof
+                                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
                               </Button>
-                            );
-                          }
-                          if (isPaid) {
-                            return (
-                              <Button
-                                onClick={() => {
-                                  setViewingOrder(null);
-                                  router.push('/payments');
-                                }}
-                                className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                              >
-                                <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-emerald-400" /> View Payment Proof
-                              </Button>
-                            );
-                          }
-                          return null;
-                        })()}
-                        {isBuyer && !['cancelled', 'delivered'].includes(viewingStatusLower) && (
-                          <Button
-                            variant="outline"
-                            onClick={() => setConfirming({ action: 'cancel', order: viewingOrder })}
-                            className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                          >
-                            <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
-                          </Button>
-                        )}
-                        {isBuyer && viewingStatusLower !== 'cancelled' && (
-                          <>
-                            <Button
-                              onClick={() => {
-                                const target = viewingOrder;
-                                setViewingOrder(null);
-                                setRecordPaymentOrder(target);
-                              }}
-                              className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                            >
-                              <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
-                            </Button>
-                            <Button
-                              onClick={() => setUploadProofOrder(viewingOrder)}
-                              className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                            >
-                              <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
-                            </Button>
-                            <Button
-                              variant="outline"
-                              onClick={() => setViewProofOrder(viewingOrder)}
-                              className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                            >
-                              <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
-                            </Button>
+                            )}
+
+                            {/* Settled Badge */}
+                            {isSettled && (
+                              <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Settled & Closed</span>
+                              </span>
+                            )}
                           </>
                         )}
-                        {isSeller && viewingStatusLower !== 'cancelled' && (
-                          <Button
-                            onClick={() => {
-                              const target = viewingOrder;
-                              setViewingOrder(null);
-                              setConfirmSettlementOrder(target);
-                            }}
-                            className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                          >
-                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Confirm Settlement & Close
-                          </Button>
-                        )}
-                        {(isSeller || user?.role === 'admin' || user?.role === 'master_admin') && viewingStatusLower !== 'cancelled' && (
+
+                        {/* Admin / Master Admin: View Payment Slip if uploaded */}
+                        {(user?.role === 'admin' || user?.role === 'master_admin') && hasSlip && (
                           <Button
                             variant="outline"
                             onClick={() => setViewProofOrder(viewingOrder)}
                             className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                           >
                             <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
-                          </Button>
-                        )}
-                        {isBuyer && viewingStatusLower === 'delivered' && (
-                          <Button
-                            onClick={() => handleOpenRepeatModal(viewingOrder)}
-                            className="h-9 bg-slate-900 text-xs font-bold uppercase tracking-wider text-white hover:bg-slate-800 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                          >
-                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Repeat Order
                           </Button>
                         )}
                       </>
@@ -2603,19 +2963,7 @@ export default function PurchaseOrders() {
                   >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Official PO
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => exportInvoicePdf(viewingOrder, 'download')} 
-                    className="h-9 text-xs font-bold uppercase tracking-wider rounded-lg border-slate-200 bg-white text-slate-700 hover:bg-slate-50 px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
-                  >
-                    <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Download PO
-                  </Button>
-                  <Button 
-                    onClick={() => setViewingOrder(null)} 
-                    className="h-9 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-bold uppercase tracking-wider rounded-lg px-4 whitespace-nowrap cursor-pointer"
-                  >
-                    Close
-                  </Button>
+                 
                 </div>
               </div>
 
@@ -2676,6 +3024,8 @@ export default function PurchaseOrders() {
           isOpen={!!viewProofOrder}
           onClose={() => setViewProofOrder(null)}
           orderId={Number(viewProofOrder.id)}
+          orderPoNumber={viewProofOrder.poNumber}
+          sellerName={viewProofOrder.seller?.name}
           onStatusChange={() => {
             setViewProofOrder(null);
             reload();
@@ -2705,6 +3055,55 @@ export default function PurchaseOrders() {
             setConfirmSettlementOrder(null);
             toast.success('Settlement confirmed and order closed successfully.');
             reload();
+          }}
+        />
+      )}
+
+      {grnModalPoId && (
+        <GrnCreateModal
+          initialPoId={grnModalPoId}
+          onClose={() => setGrnModalPoId(null)}
+          onCreated={(createdGrn: any) => {
+            const currentPoId = grnModalPoId;
+            setGrnModalPoId(null);
+            toast.success('Goods Receipt Note (GRN) created successfully!');
+            if (createdGrn) {
+              setAllOrders((prev: PurchaseOrderDto[]) =>
+                prev.map((o) =>
+                  o.id === createdGrn.purchaseOrderId || o.id === currentPoId
+                    ? {
+                        ...o,
+                        grns: [createdGrn, ...(o.grns || [])],
+                        grnId: createdGrn.id
+                      }
+                    : o
+                )
+              );
+              if (viewingOrder && (viewingOrder.id === createdGrn.purchaseOrderId || viewingOrder.id === currentPoId)) {
+                setViewingOrder((prev: any) => ({
+                  ...prev,
+                  grns: [createdGrn, ...(prev?.grns || [])],
+                  grnId: createdGrn.id
+                }));
+              }
+            }
+            refreshPurchaseOrders();
+          }}
+        />
+      )}
+
+      {taxInvoiceModalOpen && (
+        <TaxInvoiceRegistryModal
+          isOpen={taxInvoiceModalOpen}
+          onClose={() => {
+            setTaxInvoiceModalOpen(false);
+            setTaxInvoiceModalId(null);
+            setTaxInvoiceModalData(null);
+          }}
+          invoiceId={taxInvoiceModalId}
+          initialInvoiceData={taxInvoiceModalData}
+          onInvoiceApproved={() => {
+            refreshPurchaseOrders();
           }}
         />
       )}

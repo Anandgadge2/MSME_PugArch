@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ArrowDown,
   ArrowUp,
@@ -45,6 +46,7 @@ import { DeliveryDetailPage } from './DeliveryDetailPage';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import GrnListPage from '../../grn/pages/GrnListPage';
+import { GrnCreateModal } from '../../grn/components/GrnCreateModal';
 
 const STATUS_OPTIONS = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
 
@@ -57,7 +59,14 @@ interface Props {
 export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const { user } = useAuth();
   const { hasPermission } = usePermissions();
-  const [searchTerm, setSearchTerm] = useState('');
+  const router = useRouter();
+  const [searchTerm, setSearchTerm] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || '';
+    }
+    return '';
+  });
   const [statusFilter, setStatusFilter] = useState('All Statuses');
   const [orderFilter, setOrderFilter] = useState('All Orders');
   const [carrierFilter, setCarrierFilter] = useState('All Carriers');
@@ -66,7 +75,15 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
   const [activeKpiFilter, setActiveKpiFilter] = useState('all');
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const dId = params.get('deliveryId') || params.get('id');
+      if (dId && !isNaN(Number(dId))) return Number(dId);
+    }
+    return null;
+  });
+  const [grnModalPoId, setGrnModalPoId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [sortKey, setSortKey] = useState<string>('updated_desc');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -95,6 +112,20 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
   const reportQuery = useDeliveryReport(user?.role === 'admin');
 
   const rawRecords = (listQuery.data?.records || []) as DeliveryDetailDto[];
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && rawRecords.length > 0 && !selectedId) {
+      const params = new URLSearchParams(window.location.search);
+      const dId = params.get('deliveryId') || params.get('id');
+      const poId = params.get('poId');
+      if (dId && !isNaN(Number(dId))) {
+        setSelectedId(Number(dId));
+      } else if (poId) {
+        const found = rawRecords.find(r => String(r.purchaseOrderId) === poId || String(r.purchaseOrder?.id) === poId);
+        if (found) setSelectedId(found.id);
+      }
+    }
+  }, [rawRecords, selectedId]);
 
   const uniqueStatuses = useMemo(() => {
     const set = new Set(rawRecords.map(o => o.status).filter(Boolean));
@@ -125,15 +156,24 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
     }
 
     if (searchTerm) {
-      const lower = searchTerm.toLowerCase();
-      result = result.filter(o => 
-        String(o.trackingNumber || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.poNumber || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.title || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.seller?.name || '').toLowerCase().includes(lower) ||
-        String(o.purchaseOrder?.buyer?.name || '').toLowerCase().includes(lower) ||
-        String(o.carrierName || o.logisticsPartnerName || '').toLowerCase().includes(lower)
-      );
+      const lower = searchTerm.toLowerCase().trim();
+      const cleanLower = lower.replace(/[\s-]/g, '');
+      result = result.filter(o => {
+        const poClean = String(o.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+        return (
+          String(o.id) === lower ||
+          `dlv-${o.id}`.toLowerCase() === lower ||
+          String(o.purchaseOrderId || '') === lower ||
+          String(o.purchaseOrder?.id || '') === lower ||
+          String(o.trackingNumber || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.poNumber || '').toLowerCase().includes(lower) ||
+          (cleanLower.length >= 3 && poClean.includes(cleanLower)) ||
+          String(o.purchaseOrder?.title || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.seller?.name || '').toLowerCase().includes(lower) ||
+          String(o.purchaseOrder?.buyer?.name || '').toLowerCase().includes(lower) ||
+          String(o.carrierName || o.logisticsPartnerName || '').toLowerCase().includes(lower)
+        );
+      });
     }
 
     if (orderFilter !== 'All Orders') {
@@ -574,6 +614,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
               pageSize={pageSize}
               total={total}
               onSelect={setSelectedId}
+              onOpenGrnModal={setGrnModalPoId}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               isFetching={isBackgroundFetching}
@@ -586,6 +627,7 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
               pageSize={pageSize}
               total={total}
               onSelect={setSelectedId}
+              onOpenGrnModal={setGrnModalPoId}
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
               isFetching={isBackgroundFetching}
@@ -595,6 +637,17 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
             />
           )}
         </>
+      )}
+
+      {grnModalPoId && (
+        <GrnCreateModal
+          initialPoId={grnModalPoId}
+          onClose={() => setGrnModalPoId(null)}
+          onCreated={() => {
+            setGrnModalPoId(null);
+            listQuery.refetch();
+          }}
+        />
       )}
     </div>
   );
@@ -642,6 +695,7 @@ interface ViewProps {
   pageSize: number;
   total: number;
   onSelect: (id: number) => void;
+  onOpenGrnModal?: (poId: number) => void;
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   isFetching: boolean;
@@ -650,7 +704,7 @@ interface ViewProps {
   onSort?: (key: string) => void;
 }
 
-function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
+function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
   const deliveryColumns: ColumnDef<DeliveryDetailDto>[] = [
     {
       key: 'tracking',
@@ -667,7 +721,7 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
     {
       key: 'order',
       header: 'Order',
-      width: 'w-[20%]',
+      width: 'w-[18%]',
       sortable: true,
       sortKey: 'order',
       cell: (record) => (
@@ -684,7 +738,7 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
     {
       key: 'parties',
       header: 'Parties',
-      width: 'w-[16%]',
+      width: 'w-[15%]',
       sortable: true,
       sortKey: 'parties',
       cell: (record) => (
@@ -701,7 +755,7 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
     {
       key: 'carrier',
       header: 'Carrier',
-      width: 'w-[12%]',
+      width: 'w-[11%]',
       sortable: true,
       sortKey: 'carrier',
       cell: (record) => (
@@ -741,20 +795,43 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
     {
       key: 'action',
       header: 'Action',
-      width: 'w-[10%]',
+      width: 'w-[14%]',
       align: 'right',
       cellClassName: 'text-right',
-      cell: (record) => (
-        <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-          <Button
-            size="sm"
-            onClick={() => onSelect(record.id)}
-            className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs"
-          >
-            <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
-          </Button>
-        </div>
-      ),
+      cell: (record) => {
+        const canGrn = ['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase());
+        const poId = record.purchaseOrder?.id || record.purchaseOrderId;
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            <Button
+              size="sm"
+              onClick={() => onSelect(record.id)}
+              className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-2.5 rounded-lg shadow-2xs cursor-pointer"
+            >
+              <Eye className="mr-1 h-3.5 w-3.5" /> Track
+            </Button>
+            {canGrn ? (
+              <Button
+                size="sm"
+                onClick={() => poId && onOpenGrnModal?.(poId)}
+                className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-2.5 rounded-lg shadow-2xs cursor-pointer"
+                title="Generate Goods Receipt Note (GRN)"
+              >
+                <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> GRN
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                disabled
+                className="h-8 bg-slate-100 text-slate-400 text-[10px] font-black uppercase px-2 rounded-lg cursor-not-allowed border border-slate-200"
+                title="Consignment must be delivered before generating GRN"
+              >
+                GRN
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -772,7 +849,6 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
       onPageChange={onPageChange}
       onPageSizeChange={onPageSizeChange}
       paginationLabel="deliveries"
-      onRowClick={(record) => onSelect(record.id)}
       isLoading={isFetching && records.length === 0}
       srNoWidth="w-[4%]"
       minWidth="min-w-[1000px]"
@@ -782,15 +858,14 @@ function ListView({ records, page, pageSize, total, onSelect, onPageChange, onPa
 
 /* ---------- Grid (cards) view ---------- */
 
-function GridView({ records, startIndex, page, pageSize, total, onSelect, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
+function GridView({ records, startIndex, page, pageSize, total, onSelect, onOpenGrnModal, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
+  const router = useRouter();
   return (
     <div className={cn('space-y-4 transition-opacity', isFetching && 'opacity-90')}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {records.map((record, index) => (
-          <button
+          <div
             key={record.id}
-            type="button"
-            onClick={() => onSelect(record.id)}
             className="group flex flex-col rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md justify-between"
           >
             <div className="w-full">
@@ -831,8 +906,57 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onPage
                   </p>
                 </div>
               </div>
+
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => onSelect(record.id)}
+                  className="h-8 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                >
+                  <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
+                </Button>
+                {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase()) ? (
+                  (() => {
+                    const po = record.purchaseOrder as any;
+                    const grnId = (record as any).grnId || po?.grnId || po?.grns?.[0]?.id || (record as any).grn?.id;
+                    if (grnId) {
+                      return (
+                        <Button
+                          size="sm"
+                          type="button"
+                          onClick={() => router.push(`/grn/${grnId}`)}
+                          className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                        >
+                          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
+                        </Button>
+                      );
+                    }
+                    return (
+                      <Button
+                        size="sm"
+                        type="button"
+                        onClick={() => {
+                          const pId = record.purchaseOrder?.id || record.purchaseOrderId;
+                          if (pId) onOpenGrnModal?.(pId);
+                        }}
+                        className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                      >
+                        <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Generate GRN
+                      </Button>
+                    );
+                  })()
+                ) : (
+                  <span
+                    className="text-[10px] font-bold text-slate-400 italic"
+                    title="Consignment must be delivered before generating GRN"
+                  >
+                    GRN on Delivery
+                  </span>
+                )}
+              </div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
       <Pagination

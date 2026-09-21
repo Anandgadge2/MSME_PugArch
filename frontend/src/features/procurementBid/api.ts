@@ -385,6 +385,9 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     || raw.buyer?.name
     || raw.contactPerson
     || (raw.buyerName && raw.buyerName !== raw.buyerOrganizationName ? raw.buyerName : '')
+    || raw.buyerName
+    || internal.contactPerson
+    || raw.buyerContact?.contactPerson
     || '';
 
   // Organization name: prefer direct organization name
@@ -393,6 +396,7 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     || raw.buyer?.buyerProfile?.organizationName
     || raw.organization?.organizationName
     || internal.orgName
+    || raw.buyerContact?.orgName
     || basics.buyerOrganizationName
     || '';
 
@@ -445,10 +449,13 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   }
 
   const rawStartDate = authenticPublishedAt || raw.startDate || schedule.publishDate || raw.createdAt || null;
-  const startDate = String(rawStartDate || new Date().toISOString()).slice(0, 10);
-  const endDate = String(rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const techDate = String(schedule.technicalOpeningDate || raw.technicalOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
-  const finDate = String(schedule.financialOpeningDate || raw.financialOpeningDate || rawEndDate || rawStartDate || new Date().toISOString()).slice(0, 10);
+  const startDate = rawStartDate ? String(rawStartDate) : new Date().toISOString();
+  const endDate = rawEndDate ? String(rawEndDate) : (rawStartDate ? String(rawStartDate) : new Date().toISOString());
+  const scheduleSubmissionStartDate = schedule.submissionStartDate || schedule.bidStartDate || null;
+  const rawSubmissionStartDate = scheduleSubmissionStartDate || raw.submissionStartDate || raw.startDate || null;
+  const submissionStartDate = rawSubmissionStartDate ? String(rawSubmissionStartDate) : startDate;
+  const techDate = schedule.technicalOpeningDate || raw.technicalOpeningDate ? String(schedule.technicalOpeningDate || raw.technicalOpeningDate) : endDate;
+  const finDate = schedule.financialOpeningDate || raw.financialOpeningDate ? String(schedule.financialOpeningDate || raw.financialOpeningDate) : endDate;
 
   return {
     id: raw.bidNumber || String(raw.id || ''),
@@ -483,6 +490,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     endDate,
     rawStartDate,
     rawEndDate,
+    submissionStartDate,
+    rawSubmissionStartDate,
     publishedAt: authenticPublishedAt,
     approvedAt: raw.approvedAt || null,
     createdAt: raw.createdAt || undefined,
@@ -569,6 +578,8 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     results,
     participations: participations as ProcurementBidParticipation[],
     awards: raw.awards || [],
+    purchaseOrders: raw.purchaseOrders || [],
+    activeOrder: raw.activeOrder || null,
     bidDocuments: (raw.documents || []).map((doc: any) => ({
       id: doc.id,
       name: doc.fileName || doc.documentType || 'Bid document',
@@ -694,6 +705,17 @@ export const procurementBidApi = {
   },
   async updateBuyerBid(bidId: string, payload: Record<string, unknown>) {
     const res = await api.put(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}`, payload, { headers: authHeaders() });
+    return readApiBody(res);
+  },
+  async extendBidSchedule(bidId: string | number, payload: {
+    closingDate: string;
+    technicalOpeningDate?: string | null;
+    financialOpeningDate?: string | null;
+    requiredByDate?: string | null;
+    bidValidityDate?: string | null;
+    reason: string;
+  }) {
+    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(String(bidId))}/extend-schedule`, payload, { headers: authHeaders() });
     return readApiBody(res);
   },
   async uploadBuyerBidDocuments(
@@ -827,16 +849,33 @@ export const procurementBidApi = {
     return readApiBody(res);
   },
   async acceptAward(bidId: string, awardId?: string | number) {
-    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
-    return readApiBody(res);
+    try {
+      const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/accept-award`, { awardId }, { headers: authHeaders() });
+      return await readApiBody(res);
+    } catch (err: any) {
+      if (awardId) {
+        const res2 = await api.post(`/api/seller/awards/${encodeURIComponent(String(awardId))}/accept`, {}, { headers: authHeaders() });
+        return await readApiBody(res2);
+      }
+      throw err;
+    }
   },
   async declineAward(bidId: string, awardIdOrData?: string | number | { reason: string }, reasonParam?: string) {
     let payload: any = typeof awardIdOrData === 'object' ? awardIdOrData : { reason: reasonParam || String(awardIdOrData || ''), awardId: typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined };
     if (reasonParam && (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number')) {
       payload = { reason: reasonParam, awardId: awardIdOrData };
     }
-    const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
-    return readApiBody(res);
+    try {
+      const res = await api.post(`/api/seller/procurement-bids/${encodeURIComponent(bidId)}/decline-award`, payload, { headers: authHeaders() });
+      return await readApiBody(res);
+    } catch (err: any) {
+      const aId = payload.awardId || (typeof awardIdOrData === 'string' || typeof awardIdOrData === 'number' ? awardIdOrData : undefined);
+      if (aId) {
+        const res2 = await api.post(`/api/seller/awards/${encodeURIComponent(String(aId))}/reject`, { reason: payload.reason || 'Declined by seller' }, { headers: authHeaders() });
+        return await readApiBody(res2);
+      }
+      throw err;
+    }
   },
   async generatePO(bidId: string, data: any = {}) {
     const payload =

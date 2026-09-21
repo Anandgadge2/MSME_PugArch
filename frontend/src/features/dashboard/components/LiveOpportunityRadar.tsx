@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { 
@@ -47,12 +47,48 @@ interface OpportunityItem {
   actionLabel: string;
   urgent?: boolean;
   isNew?: boolean;
+  isExpired?: boolean;
 }
 
 export function LiveOpportunityRadar() {
   const { user } = useAuth();
   const isShg = isShgUser(user) || user?.role === 'shg';
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
+  const [activeTab, setActiveTab] = useState<FilterTab>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('radarTab');
+      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+        return urlTab as FilterTab;
+      }
+      const saved = sessionStorage.getItem('dashboard_radar_tab');
+      if (saved && ['all', 'tenders', 'rfqs', 'auctions'].includes(saved)) {
+        return saved as FilterTab;
+      }
+    }
+    return 'all';
+  });
+
+  const handleTabChange = useCallback((newTab: FilterTab) => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dashboard_radar_tab', newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', newTab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const urlTab = sp.get('tab') || sp.get('radarTab');
+      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+        setActiveTab(urlTab as FilterTab);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-live-opportunities'],
@@ -85,7 +121,10 @@ export function LiveOpportunityRadar() {
     if (data?.bids && data.bids.length > 0) {
       data.bids.forEach((bid: any, idx: number) => {
         const closing = bid.endDate ? new Date(bid.endDate) : null;
-        const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
+        const isExpired = closing ? closing.getTime() <= now.getTime() : false;
+        const diffDays = closing
+          ? (isExpired ? 0 : Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))))
+          : 5;
         
         const pType = String(bid.procurementType || bid.bidType || '').toUpperCase();
         const isAuction = pType === 'REVERSE_AUCTION' || pType === 'AUCTION';
@@ -98,13 +137,13 @@ export function LiveOpportunityRadar() {
 
         if (type === 'Reverse Auction') {
           actionHref = `${rolePrefix}/procurement/reverse-auction/${bid.auctionCode || bid.id}/live`;
-          actionLabel = 'Join Auction';
+          actionLabel = isExpired ? 'View Results' : 'Join Auction';
         } else if (type === 'RFQ') {
           actionHref = `${rolePrefix}/procurement/rfq/${bid.id}`;
-          actionLabel = 'Quote Now';
+          actionLabel = isExpired ? 'View Details' : 'Quote Now';
         } else {
           actionHref = `${rolePrefix}/procurement/open-tender/${bid.id}`;
-          actionLabel = 'Bid Now';
+          actionLabel = isExpired ? 'View Details' : 'Bid Now';
         }
 
         const createdDate = bid.createdAt || bid.publishedAt || bid.startDate || null;
@@ -126,8 +165,9 @@ export function LiveOpportunityRadar() {
           category: bid.category || 'General',
           actionHref,
           actionLabel,
-          urgent: diffDays <= 3,
-          isNew: isRecentlyCreated
+          urgent: !isExpired && diffDays <= 3,
+          isNew: isRecentlyCreated,
+          isExpired
         });
       });
     }
@@ -137,7 +177,10 @@ export function LiveOpportunityRadar() {
       data.auctions.forEach((auction: any) => {
         if (!auction) return;
         const closing = auction.endTime ? new Date(auction.endTime) : null;
-        const diffDays = closing ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 5;
+        const isExpired = closing ? closing.getTime() <= now.getTime() : false;
+        const diffDays = closing
+          ? (isExpired ? 0 : Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))))
+          : 5;
         const createdDate = auction.createdAt || auction.startTime || null;
         const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
@@ -156,9 +199,10 @@ export function LiveOpportunityRadar() {
           isEmdExempt: true,
           category: auction.category || 'Dynamic Auction',
           actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
-          actionLabel: 'Join Auction',
-          urgent: diffDays <= 3,
-          isNew: isRecentlyCreated
+          actionLabel: isExpired ? 'View Results' : 'Join Auction',
+          urgent: !isExpired && diffDays <= 3,
+          isNew: isRecentlyCreated,
+          isExpired
         });
       });
     }
@@ -182,6 +226,10 @@ export function LiveOpportunityRadar() {
     return opportunities;
   }, [opportunities, activeTab]);
 
+  const displayedOpportunities = useMemo(() => {
+    return filtered.slice(0, 5);
+  }, [filtered]);
+
   const countByTab = useMemo(() => ({
     all: opportunities.length,
     tenders: opportunities.filter(o => o.type === 'Tender').length,
@@ -204,7 +252,7 @@ export function LiveOpportunityRadar() {
     ? 'View All RFQs'
     : activeTab === 'auctions'
     ? 'View All Auctions'
-    : `View All (${opportunities.length})`;
+    : 'View All Opportunities';
 
   return (
     <section 
@@ -256,7 +304,7 @@ export function LiveOpportunityRadar() {
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabChange(tab)}
               className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 shrink-0 ${
                 isActive 
                   ? 'bg-[#12335f] text-white shadow-xs' 
@@ -308,8 +356,8 @@ export function LiveOpportunityRadar() {
           </Link>
         </div>
       ) : (
-        <div className="divide-y divide-slate-100 p-2 sm:p-3 space-y-2">
-          {filtered.map((item) => {
+        <div className="p-2 sm:p-3 space-y-2">
+          {displayedOpportunities.map((item) => {
             const isTender = item.type === 'Tender';
             const isRfq = item.type === 'RFQ';
 
@@ -343,11 +391,15 @@ export function LiveOpportunityRadar() {
                         <ShieldCheck className="h-2.5 w-2.5" /> EMD Exempt
                       </span>
                     )}
-                    {item.urgent && (
+                    {item.isExpired ? (
+                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        <Clock className="h-2.5 w-2.5 text-slate-400" /> Closed / Evaluation
+                      </span>
+                    ) : item.urgent ? (
                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 border border-rose-200 animate-pulse">
                         <Clock className="h-2.5 w-2.5" /> {item.daysLeft}d left
                       </span>
-                    )}
+                    ) : null}
                   </div>
 
                   <Link href={item.actionHref} className="block group/link">
@@ -393,20 +445,34 @@ export function LiveOpportunityRadar() {
               </div>
             );
           })}
+
+          {/* Dedicated 'View All Opportunities' Button */}
+          <div className="pt-2 pb-1 flex items-center justify-center">
+            <Link href={viewAllHref} className="w-full sm:w-auto">
+              <Button 
+                variant="outline"
+                className="w-full sm:w-auto h-8 px-5 rounded-lg border-[#12335f]/25 text-[#12335f] hover:bg-[#12335f] hover:text-white text-[10px] font-bold uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
+              >
+                <span>{viewAllLabel} ({filtered.length})</span>
+                <ArrowRight className="h-3 w-3" />
+              </Button>
+            </Link>
+          </div>
         </div>
       )}
 
       {/* ── Card Footer Fast Insight ── */}
-      <div className="bg-slate-50/80 px-3.5 py-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-medium text-slate-600">
+      <div className="bg-slate-50/80 px-3.5 py-2.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[10px] font-medium text-slate-600">
         <span className="flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
-          MSME advantage: 100% EMD waived on all public tenders.
+          <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+          Showing top {displayedOpportunities.length} of {filtered.length} active opportunities. MSME 100% EMD waiver applies.
         </span>
         <Link 
-          href={`${rolePrefix}/opportunities`}
-          className="font-bold uppercase tracking-wider text-[#12335f] hover:underline"
+          href={viewAllHref}
+          className="font-bold uppercase tracking-wider text-[#12335f] hover:underline shrink-0 flex items-center gap-1"
         >
-          Explore All Opportunities →
+          <span>All Opportunities</span>
+          <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
     </section>

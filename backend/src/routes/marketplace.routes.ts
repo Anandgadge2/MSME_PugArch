@@ -10,7 +10,9 @@ import { verifyAccessToken } from '../services/token.service.js';
 import { longCache, shortCache } from '../middleware/httpCache.js';
 import { sha256 } from '../utils/crypto.js';
 import { formatRequirementNumber, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
+import { getNextCanonicalSequence } from '../services/sequence.service.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
+import { broadcastToProcurement } from '../services/websocket.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -803,8 +805,8 @@ const responseSchema = z.object({
         if (!data.deliveryTimeline || !data.deliveryTimeline.trim()) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Delivery timeline is required for submission", path: ["deliveryTimeline"] });
         }
-        if (!data.message || data.message.trim().length < 10) {
-            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Quotation message must be at least 10 characters", path: ["message"] });
+        if (!data.message || !data.message.trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Quotation message is required", path: ["message"] });
         }
     }
 });
@@ -1975,13 +1977,36 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
 
         const where: any = productPublicWhere();
         if (query.q) {
-            where.OR = [
-                { name: { contains: query.q, mode: 'insensitive' } },
-                { description: { contains: query.q, mode: 'insensitive' } },
-                { brand: { contains: query.q, mode: 'insensitive' } },
-                { category: { name: { contains: query.q, mode: 'insensitive' } } },
-                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
+            const cleanQ = query.q.trim();
+            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+            const buildConditions = (term: string) => [
+                { name: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } },
+                { brand: { contains: term, mode: 'insensitive' } },
+                { modelNumber: { contains: term, mode: 'insensitive' } },
+                { sku: { contains: term, mode: 'insensitive' } },
+                { hsnCode: { contains: term, mode: 'insensitive' } },
+                { category: { name: { contains: term, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: term, mode: 'insensitive' } } },
+                { seller: { name: { contains: term, mode: 'insensitive' } } },
+                { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
+
+            if (tokens.length > 1) {
+                where.AND = [
+                    ...(where.AND || []),
+                    {
+                        OR: [
+                            ...buildConditions(cleanQ),
+                            {
+                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                            }
+                        ]
+                    }
+                ];
+            } else {
+                where.OR = buildConditions(cleanQ);
+            }
         }
         if (categoryId) where.categoryId = categoryId;
         const minPrice = query.priceMin ?? query.minPrice;
@@ -2016,7 +2041,17 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
             where.taxRate = Number(req.query.taxRate);
         }
         if (req.query.brand !== undefined && req.query.brand !== '') {
-            where.brand = { contains: String(req.query.brand), mode: 'insensitive' };
+            const brandTerm = String(req.query.brand).trim();
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { brand: { contains: brandTerm, mode: 'insensitive' } },
+                        { organization: { organizationName: { contains: brandTerm, mode: 'insensitive' } } },
+                        { seller: { name: { contains: brandTerm, mode: 'insensitive' } } }
+                    ]
+                }
+            ];
         }
         if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
             const offer = activeOfferWhere();
@@ -2083,12 +2118,35 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
 
         const where: any = servicePublicWhere();
         if (query.q) {
-            where.OR = [
-                { name: { contains: query.q, mode: 'insensitive' } },
-                { description: { contains: query.q, mode: 'insensitive' } },
-                { category: { name: { contains: query.q, mode: 'insensitive' } } },
-                { organization: { organizationName: { contains: query.q, mode: 'insensitive' } } }
+            const cleanQ = query.q.trim();
+            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+            const buildConditions = (term: string) => [
+                { name: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } },
+                { scopeOfWork: { contains: term, mode: 'insensitive' } },
+                { deliverables: { contains: term, mode: 'insensitive' } },
+                { serviceArea: { contains: term, mode: 'insensitive' } },
+                { category: { name: { contains: term, mode: 'insensitive' } } },
+                { organization: { organizationName: { contains: term, mode: 'insensitive' } } },
+                { seller: { name: { contains: term, mode: 'insensitive' } } },
+                { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
+
+            if (tokens.length > 1) {
+                where.AND = [
+                    ...(where.AND || []),
+                    {
+                        OR: [
+                            ...buildConditions(cleanQ),
+                            {
+                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                            }
+                        ]
+                    }
+                ];
+            } else {
+                where.OR = buildConditions(cleanQ);
+            }
         }
         if (categoryId) where.categoryId = categoryId;
         const minPrice = query.priceMin ?? query.minPrice;
@@ -2118,6 +2176,18 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
         }
         if (req.query.taxRate !== undefined && req.query.taxRate !== '') {
             where.taxRate = Number(req.query.taxRate);
+        }
+        if (req.query.brand !== undefined && req.query.brand !== '') {
+            const brandTerm = String(req.query.brand).trim();
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { organization: { organizationName: { contains: brandTerm, mode: 'insensitive' } } },
+                        { seller: { name: { contains: brandTerm, mode: 'insensitive' } } }
+                    ]
+                }
+            ];
         }
         if (query.discount === 'true' || query.discount === 'active' || query.sort === 'discount') {
             const offer = activeOfferWhere();
@@ -2751,6 +2821,16 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 if (buyerReq) {
                     requirement = decorateRequirement(buyerReq);
                 }
+            } else {
+                const buyerReq = await db.buyerRequirement.findFirst({
+                    where: {
+                        OR: searchTokens.map(t => ({ referenceNumber: t }))
+                    },
+                    select: publicRequirementDetailSelect
+                });
+                if (buyerReq) {
+                    requirement = decorateRequirement(buyerReq);
+                }
             }
             if (!requirement) {
                 const legacyReq = await db.requirement.findFirst({
@@ -3032,8 +3112,15 @@ router.post('/buyer/requirements', authenticate, authorize('buyer', 'admin', 'ma
         if (req.user?.role === 'buyer' && !isApproved) {
             return apiResponse.error(res, 403, 'Please complete buyer onboarding and organization verification to continue.', 'BUYER_VERIFICATION_REQUIRED');
         }
+        const referenceNumber = await getNextCanonicalSequence('RFQ');
         const requirement = await db.buyerRequirement.create({
-            data: { ...body,  buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null, createdById: req.user?.id, status: 'PENDING_APPROVAL' },
+            data: {
+                ...body,
+                referenceNumber,
+                buyerOrganizationId: actor?.organizationId || req.user?.organizationId || null,
+                createdById: req.user?.id,
+                status: 'PENDING_APPROVAL'
+            },
             include: requirementIncludes
         });
         return ok(res, requirement);
@@ -3096,26 +3183,36 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 }
             }
         } else if (!Number.isFinite(id) || id === 0) {
-            const bid = await db.procurementBid.findFirst({
+            const modernByRef = await db.buyerRequirement.findFirst({
                 where: {
-                    OR: tokenVariants.map(t => ({ bidNumber: t }))
+                    OR: tokenVariants.map(t => ({ referenceNumber: t }))
                 },
-                select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+                select: { id: true }
             }).catch(() => null);
-            const bidResolved = await resolveFromProcurementBid(bid);
 
-            if (bidResolved) {
-                id = bidResolved;
-            } else if (bid) {
-                // Bid found but couldn't resolve to a BuyerRequirement — use bid.id directly
-                id = bid.id;
+            if (modernByRef) {
+                id = modernByRef.id;
             } else {
-                const legacy = await db.requirement.findFirst({
+                const bid = await db.procurementBid.findFirst({
                     where: {
-                        OR: tokenVariants.map(t => ({ requirementNumber: t }))
+                        OR: tokenVariants.map(t => ({ bidNumber: t }))
                     },
-                    select: { id: true }
+                    select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
                 }).catch(() => null);
+                const bidResolved = await resolveFromProcurementBid(bid);
+
+                if (bidResolved) {
+                    id = bidResolved;
+                } else if (bid) {
+                    // Bid found but couldn't resolve to a BuyerRequirement — use bid.id directly
+                    id = bid.id;
+                } else {
+                    const legacy = await db.requirement.findFirst({
+                        where: {
+                            OR: tokenVariants.map(t => ({ requirementNumber: t }))
+                        },
+                        select: { id: true }
+                    }).catch(() => null);
 
                 if (legacy) {
                     id = -legacy.id;
@@ -3163,6 +3260,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 }
             }
         }
+    }
 
         const body = responseSchema.parse(req.body);
         if (req.user?.role !== 'seller') {
@@ -3513,6 +3611,31 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
              }
         }
 
+        // Broadcast real-time event to all clients viewing this procurement or requirement
+        try {
+            const broadcastTarget = (response as any)?.requirementId || idToken;
+            broadcastToProcurement(broadcastTarget, {
+                type: 'QUOTATION_SUBMITTED',
+                requirementId: broadcastTarget,
+                responseId: (response as any)?.id,
+                offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
+                sellerOrgId: sellerOrganizationId || null,
+                timestamp: new Date().toISOString()
+            });
+            if (idToken && String(idToken) !== String(broadcastTarget)) {
+                broadcastToProcurement(idToken, {
+                    type: 'QUOTATION_SUBMITTED',
+                    requirementId: idToken,
+                    responseId: (response as any)?.id,
+                    offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
+                    sellerOrgId: sellerOrganizationId || null,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (bcErr) {
+            console.error('[Marketplace Response] Failed to broadcastToProcurement', bcErr);
+        }
+
         return ok(res, response);
     } catch (error: any) {
         if (error instanceof z.ZodError) {
@@ -3532,7 +3655,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
     }
 });
 
-router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
+router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/responses'], authenticate, authorize('buyer', 'admin', 'master_admin'), async (req: AuthRequest, res: Response) => {
     try {
         const rawToken = String(req.params.id || '').trim();
         const pureNum = Number(rawToken);
@@ -3547,25 +3670,50 @@ router.get('/buyer/requirements/:id/responses', authenticate, authorize('buyer',
         const page = query.page || 1;
         const pageSize = query.pageSize || 20;
         const skip = (page - 1) * pageSize;
+        const currentYear = new Date().getFullYear();
+        const candidateYears = [currentYear, currentYear - 1, currentYear + 1];
+        const prefixes = ['RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA', 'REQ', 'TENDER'];
+
         const candidateNumbers = Array.from(new Set([
             rawToken,
-            rawToken.replace(/^[A-Z]{2,5}-/i, ''),
-            `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
-            `REQ_${id}`, `RFQ_${id}`, `RC_${id}`
+            rawToken.replace(/^[A-Z]{2,6}-/i, ''),
+            ...getCanonicalLookupVariants(rawToken),
+            ...(id > 0 ? [
+                `REQ-${id}`, `RFQ-${id}`, `RC-${id}`, `RATE-${id}`, `TND-${id}`, `TENDER-${id}`,
+                `REQ_${id}`, `RFQ_${id}`, `RC_${id}`,
+                ...prefixes.flatMap(pfx => candidateYears.map(yr => `${pfx}-${yr}-${id}`))
+            ] : [])
         ].filter(Boolean) as string[]));
         const candidateIds = Array.from(new Set([id].filter(i => i > 0 && i <= 2147483647)));
 
         const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
             db.buyerRequirement.findFirst({
-                where: candidateIds.length ? { id: { in: candidateIds } } : { id: -1 },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ referenceNumber: { in: candidateNumbers } }] : [])
+                    ]
+                },
                 select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
             }).catch(() => null),
             db.requirement.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []) ] },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ requirementNumber: { in: candidateNumbers } }] : []),
+                        ...(id > 0 ? [{ requirementNumber: { endsWith: `-${id}` } }] : [])
+                    ]
+                },
                 select: { id: true, requirementNumber: true, title: true, buyerId: true, organizationId: true, status: true }
             }).catch(() => null),
             db.procurementBid.findFirst({
-                where: { OR: [ ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []), ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []) ] },
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [{ bidNumber: { in: candidateNumbers } }] : []),
+                        ...(id > 0 ? [{ bidNumber: { endsWith: `-${id}` } }] : [])
+                    ]
+                },
                 select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
             }).catch(() => null)
         ]);
@@ -3893,6 +4041,30 @@ router.post('/buyer/requirements/:id/responses/:responseId/accept', authenticate
             });
         }
 
+        try {
+            const reqId = requirement.id;
+            broadcastToProcurement(reqId, {
+                type: 'QUOTATION_STATUS_CHANGED',
+                requirementId: reqId,
+                responseId,
+                status: 'ACCEPTED',
+                updatedBy: String(req.user?.id || 'Buyer'),
+                timestamp: new Date().toISOString()
+            });
+            if (rawToken && String(rawToken) !== String(reqId)) {
+                broadcastToProcurement(rawToken, {
+                    type: 'QUOTATION_STATUS_CHANGED',
+                    requirementId: rawToken,
+                    responseId,
+                    status: 'ACCEPTED',
+                    updatedBy: String(req.user?.id || 'Buyer'),
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (bcErr) {
+            console.error('[Accept Response] Failed to broadcastToProcurement', bcErr);
+        }
+
         return ok(res, { success: true, message: 'Response accepted and PO generated successfully.' });
     } catch (error: any) {
         console.error('[Accept Requirement Response]', error);
@@ -3982,7 +4154,13 @@ const findRequirementRecord = async (idParam: string | number) => {
 
     const tokenVariants = Array.from(new Set([token, ...getCanonicalLookupVariants(token)]));
 
-    const [bid, legacyMatch] = await Promise.all([
+    const [modernBuyerReq, bid, legacyMatch] = await Promise.all([
+        db.buyerRequirement.findFirst({
+            where: {
+                OR: tokenVariants.map(t => ({ referenceNumber: t }))
+            },
+            select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true, payload: true, startDate: true }
+        }).catch(() => null),
         db.procurementBid.findFirst({
             where: {
                 OR: tokenVariants.map(t => ({ bidNumber: t }))
@@ -3996,6 +4174,15 @@ const findRequirementRecord = async (idParam: string | number) => {
             select: { id: true, title: true, createdById: true, payload: true }
         }).catch(() => null)
     ]);
+
+    if (modernBuyerReq) {
+        const sched = (modernBuyerReq.payload as any)?.schedule;
+        return {
+            ...modernBuyerReq,
+            submissionStartDate: sched?.submissionStartDate || sched?.startDate || modernBuyerReq.startDate || null,
+            allowClarification: sched?.clarificationAllowed !== false && (modernBuyerReq as any).allowClarification !== false
+        };
+    }
 
     if (bid) {
         const sched = (bid.technicalPacket as any)?.schedule;
@@ -4442,8 +4629,12 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
                         { name: { contains: q, mode: 'insensitive' } },
                         { description: { contains: q, mode: 'insensitive' } },
                         { brand: { contains: q, mode: 'insensitive' } },
+                        { modelNumber: { contains: q, mode: 'insensitive' } },
+                        { sku: { contains: q, mode: 'insensitive' } },
                         { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
+                        { seller: { name: { contains: q, mode: 'insensitive' } } },
+                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
                     ]
                 }),
                 take: 6,
@@ -4469,8 +4660,12 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
                     OR: [
                         { name: { contains: q, mode: 'insensitive' } },
                         { description: { contains: q, mode: 'insensitive' } },
+                        { scopeOfWork: { contains: q, mode: 'insensitive' } },
+                        { deliverables: { contains: q, mode: 'insensitive' } },
                         { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } }
+                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
+                        { seller: { name: { contains: q, mode: 'insensitive' } } },
+                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
                     ]
                 }),
                 take: 6,

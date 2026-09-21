@@ -555,7 +555,7 @@ export default function BuyerProcurementHub() {
         const isDraft = p.statusGroup === 'draft' || p.status.toLowerCase().includes('draft');
         const finalActionUrl = resolveProcurementActionUrl(p);
         return (
-          <Link href={finalActionUrl} onClick={(e) => e.stopPropagation()}>
+          <Link href={finalActionUrl}>
             <Button
               size="sm"
               className="h-7 rounded-full bg-[#12335f] px-3 text-[10px] font-black uppercase tracking-wide text-white hover:bg-[#0f2a4f]"
@@ -1106,11 +1106,7 @@ export default function BuyerProcurementHub() {
               onPageSizeChange={setPageSize}
               paginationLabel="procurements"
               minWidth="min-w-[1120px]"
-              onRowClick={(p) => {
-                const url = resolveProcurementActionUrl(p);
-                router.push(url);
-              }}
-              rowClassName="hover:bg-slate-50/50 cursor-pointer text-xs"
+              rowClassName="hover:bg-slate-50/50 text-xs"
             />
           </div>
         )}

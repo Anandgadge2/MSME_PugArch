@@ -18,11 +18,15 @@ import {
     Percent,
     Layers,
     Sparkles,
-    Boxes
+    Boxes,
+    Package,
+    Wrench
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 export interface MarketplaceFilterPanelProps {
+    itemType?: 'products' | 'services' | 'all';
+    onItemTypeChange?: (type: 'products' | 'services' | 'all') => void;
     categories: any[];
     selectedCategoryIds: string[];
     onSelectCategory: (categoryId: string) => void;
@@ -109,6 +113,8 @@ export function MarketplaceFilterPanel({
     activeFiltersCount,
     totalResults,
     onClearAll,
+    itemType,
+    onItemTypeChange,
     isServices = false,
     isMobileDrawer = false,
     onCloseMobileDrawer
@@ -243,6 +249,48 @@ export function MarketplaceFilterPanel({
                 )}
             </div>
 
+            {/* Offering Type (Products vs Services) */}
+            <div className="space-y-2 pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-blue-600" />
+                        Offering Type
+                    </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Filter by Offering Type">
+                    <button
+                        type="button"
+                        role="radio"
+                        aria-checked={!isServices}
+                        onClick={() => onItemTypeChange?.('products')}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all border select-none cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none",
+                            !isServices
+                                ? "bg-[#0b2447] text-white border-[#0b2447] shadow-xs"
+                                : "bg-slate-50 text-slate-700 border-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
+                        )}
+                    >
+                        <Package className="h-3.5 w-3.5" />
+                        <span>Products</span>
+                    </button>
+                    <button
+                        type="button"
+                        role="radio"
+                        aria-checked={isServices}
+                        onClick={() => onItemTypeChange?.('services')}
+                        className={cn(
+                            "flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl text-xs font-bold transition-all border select-none cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none",
+                            isServices
+                                ? "bg-[#0b2447] text-white border-[#0b2447] shadow-xs"
+                                : "bg-slate-50 text-slate-700 border-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
+                        )}
+                    >
+                        <Wrench className="h-3.5 w-3.5" />
+                        <span>Services</span>
+                    </button>
+                </div>
+            </div>
+
             {/* Quick Filter Badges (1-Click Chips) */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -252,39 +300,6 @@ export function MarketplaceFilterPanel({
                     </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                    {/* Fast Dispatch Toggle */}
-                    {/* <button
-                        type="button"
-                        onClick={() => onFastDispatchToggle(!fastDispatchFilter)}
-                        className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border select-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none cursor-pointer",
-                            fastDispatchFilter
-                                ? "bg-amber-50 text-amber-900 border-amber-300 shadow-xs"
-                                : "bg-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
-                        )}
-                        aria-pressed={fastDispatchFilter}
-                    >
-                        <Zap className={cn("h-3.5 w-3.5", fastDispatchFilter ? "text-amber-600 fill-amber-500" : "text-slate-400")} />
-                        <span>Fast Dispatch</span>
-                        {fastDispatchFilter && <Check className="h-3 w-3 text-amber-700" />}
-                    </button> */}
-
-                    {/* MSME Assured Toggle */}
-                    <button
-                        type="button"
-                        onClick={() => onMsmeToggle(!msmeOnlyFilter)}
-                        className={cn(
-                            "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border select-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none cursor-pointer",
-                            msmeOnlyFilter
-                                ? "bg-blue-50 text-blue-900 border-blue-300 shadow-xs"
-                                : "bg-slate-50 text-slate-600 border-slate-200/80 hover:bg-slate-100 hover:text-slate-900"
-                        )}
-                        aria-pressed={msmeOnlyFilter}
-                    >
-                        <ShieldCheck className={cn("h-3.5 w-3.5", msmeOnlyFilter ? "text-blue-600" : "text-slate-400")} />
-                        <span>MSME Assured</span>
-                        {msmeOnlyFilter && <Check className="h-3 w-3 text-blue-700" />}
-                    </button>
 
                     {/* Active Discounts Toggle */}
                     {canViewPrice && (

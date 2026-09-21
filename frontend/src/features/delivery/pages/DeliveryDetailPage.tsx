@@ -14,6 +14,7 @@ import { queryKeys } from '../../shared/queryKeys';
 import {
   AlertTriangle,
   ArrowRight,
+  Box,
   Building2,
   Calendar,
   Check,
@@ -26,13 +27,17 @@ import {
   CreditCard,
   DollarSign,
   ExternalLink,
+  Eye,
   FileText,
   Key,
   Layers,
+  Lock,
   MapPin,
   Package,
   Phone,
+  Receipt,
   RefreshCw,
+  Send,
   Share2,
   Shield,
   ShieldAlert,
@@ -54,6 +59,7 @@ import { CardSkeleton, Skeleton } from '../../../components/ui/skeleton';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { runWithToast, notify } from '../../../lib/toast';
+import { postApi } from '../../shared/apiClient';
 import { DeliveryStatusBadge } from '../components/DeliveryStatusBadge';
 import { DeliveryTimeline } from '../components/DeliveryTimeline';
 import { DELIVERY_STATUS_LABELS, isLiveStatus, labelFor } from '../status';
@@ -75,10 +81,13 @@ import {
   useRequestDpExtension,
   useRespondDpExtension,
   useResolveDispute,
-  // useSendDeliveryOtp,
-  // useVerifyDeliveryOtp,
   useVerifyInvoice
 } from '../hooks';
+import { PackedOrderDialog } from '../components/PackedOrderDialog';
+import { DispatchDetailsModal } from '../components/DispatchDetailsModal';
+import { PurchaseOrderReceiptModal } from '../../purchaseOrders/components/PurchaseOrderReceiptModal';
+import { TaxInvoiceRegistryModal } from '../../invoices/components/TaxInvoiceRegistryModal';
+import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { uploadDeliveryFile } from '../upload';
 import { openFileAsset } from '../../../lib/files';
 import type {
@@ -95,6 +104,8 @@ const inputBase = 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 
 const textareaBase = `${inputBase} h-24 py-2.5`;
 
 const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
+  'SELLER_ACCEPTED',
+  'PACKED',
   'READY_FOR_PICKUP',
   'PICKED_UP',
   'IN_TRANSIT',
@@ -103,6 +114,7 @@ const MANUAL_TRACKING_FLOW: DeliveryStatus[] = [
 ];
 
 const nextManualStatusFor = (status: DeliveryStatus): DeliveryStatus | null => {
+  if (status === 'CREATED' || (status as string) === 'PENDING_ACCEPTANCE') return 'SELLER_ACCEPTED';
   if (status === 'DISPATCHED') return 'IN_TRANSIT';
   const index = MANUAL_TRACKING_FLOW.indexOf(status);
   if (index < 0 || index >= MANUAL_TRACKING_FLOW.length - 1) return null;
@@ -196,6 +208,104 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
     return null;
   }, [user, delivery]);
 
+  // Modals & interactive state - must be declared BEFORE any early returns
+  const [isPackModalOpen, setIsPackModalOpen] = useState(false);
+  const [isFulfillmentModalOpen, setIsFulfillmentModalOpen] = useState(false);
+  const [viewingPoOrder, setViewingPoOrder] = useState<any | null>(null);
+  const [viewingInvoiceId, setViewingInvoiceId] = useState<number | null>(null);
+  const [isInvoicePickerOpen, setIsInvoicePickerOpen] = useState(false);
+  const [isPaymentProofModalOpen, setIsPaymentProofModalOpen] = useState(false);
+  const [approvingInvoiceId, setApprovingInvoiceId] = useState<number | null>(null);
+
+  const po = delivery?.purchaseOrder;
+  const docs = useMemo(() => delivery?.documents || [], [delivery?.documents]);
+  const poNumber = po?.poNumber || (delivery ? `PO-${delivery.purchaseOrderId}` : '');
+  const trackingNo = delivery?.trackingNumber || (delivery ? `DLV-${delivery.id}` : '');
+
+  const invoices = useMemo(() => po?.invoices || [], [po?.invoices]);
+  const pendingSubmittedInvoice = useMemo(() => {
+    return invoices.find(inv => String(inv.invoiceStatus || inv.status || '').toLowerCase() === 'submitted');
+  }, [invoices]);
+  const taxInvoiceDoc = useMemo(() => docs.find(d => d.documentType === 'TAX_INVOICE'), [docs]);
+  const paymentProofDoc = useMemo(() => docs.find(d => d.documentType === 'PAYMENT_PROOF'), [docs]);
+
+  const handleDirectApproveInvoice = useCallback(async (invId: number) => {
+    if (approvingInvoiceId) return;
+    setApprovingInvoiceId(invId);
+    try {
+      await postApi(`/api/invoices/${invId}/approve`, {});
+      notify.success('Tax invoice approved successfully! Payment is now unlocked.');
+      await detailQuery.refetch();
+    } catch (err: any) {
+      notify.error(err?.message || 'Failed to approve invoice');
+    } finally {
+      setApprovingInvoiceId(null);
+    }
+  }, [approvingInvoiceId, detailQuery]);
+
+  const handleOpenPo = useCallback(() => {
+    if (!delivery) return;
+    setViewingPoOrder(po || { id: delivery.purchaseOrderId, poNumber });
+  }, [po, delivery, poNumber]);
+
+  const handleOpenInvoice = useCallback(() => {
+    if (invoices.length === 1) {
+      setViewingInvoiceId(invoices[0].id);
+    } else if (invoices.length > 1) {
+      setIsInvoicePickerOpen(true);
+    } else if (taxInvoiceDoc) {
+      const fileTarget = taxInvoiceDoc.fileAsset || (taxInvoiceDoc as any).fileAssetId || taxInvoiceDoc.id;
+      openFileAsset(fileTarget, 'Tax Invoice').catch(err => {
+        notify.error(err?.message || 'Failed to open invoice document');
+      });
+    } else {
+      notify.info('No tax invoice has been generated or uploaded for this delivery yet.');
+    }
+  }, [invoices, taxInvoiceDoc]);
+
+  const handleOpenPaymentProof = useCallback(() => {
+    setIsPaymentProofModalOpen(true);
+  }, []);
+
+  const derivedInitialProof = useMemo(() => {
+    if (!delivery) return null;
+    if (paymentProofDoc) {
+      const fileAsset = paymentProofDoc.fileAsset;
+      return {
+        id: paymentProofDoc.id,
+        amount: delivery.settlement?.netReleasedAmount || po?.amount || po?.totalValue || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: delivery.settlement?.transactionReference || `DOC-REF-${paymentProofDoc.id}`,
+        paymentDate: paymentProofDoc.createdAt || delivery.settlement?.releasedAt || new Date().toISOString(),
+        payerBankName: 'Linked Payer Account',
+        receiptFileId: fileAsset?.id,
+        receiptFileUrl: fileAsset?.url || (fileAsset?.id ? `/api/files/${fileAsset.id}/download` : undefined),
+        status: delivery.settlement?.status === 'RELEASED' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: paymentProofDoc.description || 'Payment proof attached to delivery'
+      };
+    }
+    const invoiceWithSlip = invoices.find(inv => Boolean((inv as any).paymentSlipFile || (inv as any).paymentSlipFileId));
+    if (invoiceWithSlip) {
+      const slip = (invoiceWithSlip as any).paymentSlipFile;
+      const slipId = slip?.id || (invoiceWithSlip as any).paymentSlipFileId;
+      return {
+        id: invoiceWithSlip.id,
+        amount: invoiceWithSlip.amount || po?.amount || 0,
+        method: 'BANK_TRANSFER',
+        transactionReference: (invoiceWithSlip as any).paymentReference || 'INVOICE_PAYMENT_SLIP',
+        paymentDate: (invoiceWithSlip as any).paymentDate || invoiceWithSlip.createdAt || new Date().toISOString(),
+        payerBankName: (invoiceWithSlip as any).bankName || 'Direct Transfer',
+        receiptFileId: slipId,
+        receiptFileUrl: slip?.url || (slipId ? `/api/files/${slipId}/download` : undefined),
+        status: invoiceWithSlip.status === 'paid' ? 'VERIFIED' : 'UPLOADED',
+        purchaseOrderId: delivery.purchaseOrderId,
+        remarks: 'Payment slip attached to invoice'
+      };
+    }
+    return null;
+  }, [paymentProofDoc, delivery, po, invoices]);
+
   if (detailQuery.isLoading && !detailQuery.data) {
     return (
       <div className="space-y-5 animate-in fade-in duration-150">
@@ -243,8 +353,6 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   }
   if (!delivery) return <EmptyState title="Delivery not found" />;
 
-  const po = delivery.purchaseOrder;
-  const docs = delivery.documents || [];
   const isFetching = detailQuery.isFetching;
   const latestManual = latestManualUpdateFor(delivery);
   const nextManualStatus = nextManualStatusFor(delivery.status);
@@ -252,8 +360,6 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
   const sellerName = po?.seller?.name || 'Seller';
   const buyerName = po?.buyer?.name || 'Buyer';
-  const poNumber = po?.poNumber || `PO-${delivery.purchaseOrderId}`;
-  const trackingNo = delivery.trackingNumber || `DLV-${delivery.id}`;
 
   return (
     <div className="space-y-4">
@@ -279,6 +385,15 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                   <span className="text-slate-400 font-semibold">PO:</span>
                   <span>{poNumber}</span>
                   <Copy className="h-2.5 w-2.5 text-slate-400 group-hover:text-slate-700" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenPo}
+                  className="group inline-flex items-center gap-1 rounded-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-700 transition-colors cursor-pointer"
+                  title="Open Purchase Order Dialog"
+                >
+                  <Eye className="h-2.5 w-2.5 text-indigo-600" />
+                  <span>View PO</span>
                 </button>
                 <SlaBadge slaStatus={delivery.slaStatus} />
               </div>
@@ -310,7 +425,84 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 self-start shrink-0">
+          <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
+            {/* View PO Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenPo}
+              className="h-8 rounded-lg border-indigo-200 bg-indigo-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 shadow-2xs cursor-pointer transition-all"
+              title="View Purchase Order details & line items"
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
+              View PO
+            </Button>
+
+            {/* View Invoice Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenInvoice}
+              className="h-8 rounded-lg border-emerald-200 bg-emerald-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs cursor-pointer transition-all"
+              title="View Tax Invoice & GST details"
+            >
+              <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+              View Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}
+            </Button>
+
+            {/* Approve Invoice Button for Buyer */}
+            {pendingSubmittedInvoice && (accessRole === 'buyer' || user?.role === 'buyer' || user?.role === 'admin') && (
+              <Button
+                type="button"
+                disabled={approvingInvoiceId === pendingSubmittedInvoice.id}
+                onClick={() => handleDirectApproveInvoice(pendingSubmittedInvoice.id)}
+                className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 text-[11px] font-black uppercase tracking-wider shadow-2xs cursor-pointer transition-all"
+                title={`Approve Invoice #${pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} to unlock payment`}
+              >
+                {approvingInvoiceId === pendingSubmittedInvoice.id ? (
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Approve Invoice
+              </Button>
+            )}
+
+            {/* View Payment Proof Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleOpenPaymentProof}
+              className="h-8 rounded-lg border-sky-200 bg-sky-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-100 hover:border-sky-300 shadow-2xs cursor-pointer transition-all"
+              title="View Payment proof, UTR & transaction receipt"
+            >
+              <CreditCard className="mr-1.5 h-3.5 w-3.5 text-sky-600" />
+              View Payment Proof
+            </Button>
+
+            {/* Prominent Mark Packed action if awaiting packing */}
+            {(accessRole === 'seller' || accessRole === 'admin') &&
+              (delivery.status === 'SELLER_ACCEPTED' || (delivery.status as string) === 'CREATED') && (
+                <Button
+                  type="button"
+                  onClick={() => setIsPackModalOpen(true)}
+                  className="h-8 rounded-lg bg-indigo-600 px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-2xs cursor-pointer"
+                >
+                  <Package className="mr-1.5 h-3.5 w-3.5" /> Mark Packed
+                </Button>
+            )}
+
+            {/* Manage Fulfillment button */}
+            {(accessRole === 'seller' || accessRole === 'admin' || accessRole === 'logistics') && (
+              <Button
+                type="button"
+                onClick={() => setIsFulfillmentModalOpen(true)}
+                className="h-8 rounded-lg bg-[#12335f] px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-2xs cursor-pointer"
+              >
+                <Truck className="mr-1.5 h-3.5 w-3.5" /> Manage Fulfillment
+              </Button>
+            )}
+
             <Button
               variant="outline"
               onClick={onClose || (() => window.history.back())}
@@ -403,6 +595,26 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                 {delivery.settlement?.status || 'FUNDS SECURED'}
               </span>
             </div>
+            <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-1.5">
+              <button
+                type="button"
+                onClick={handleOpenInvoice}
+                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-2 py-0.5 text-[9px] font-bold text-emerald-700 transition-colors cursor-pointer"
+                title="View Tax Invoice"
+              >
+                <Receipt className="h-2.5 w-2.5 text-emerald-600" />
+                <span>Invoice</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenPaymentProof}
+                className="inline-flex items-center gap-1 rounded-md bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2 py-0.5 text-[9px] font-bold text-sky-700 transition-colors cursor-pointer"
+                title="View Payment Proof"
+              >
+                <CreditCard className="h-2.5 w-2.5 text-sky-600" />
+                <span>Payment Proof</span>
+              </button>
+            </div>
           </div>
 
           {/* Tile 4: Next Milestone & Schedule */}
@@ -476,26 +688,55 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             </>
           )}
 
-          <DocumentsPanel docs={docs} deliveryId={delivery.id} accessRole={accessRole} />
+          <DocumentsPanel
+            docs={docs}
+            deliveryId={delivery.id}
+            accessRole={accessRole}
+            poNumber={poNumber}
+            invoices={invoices}
+            taxInvoiceDoc={taxInvoiceDoc}
+            paymentProofDoc={paymentProofDoc}
+            settlement={delivery.settlement}
+            onOpenPo={handleOpenPo}
+            onOpenInvoice={handleOpenInvoice}
+            onOpenPaymentProof={handleOpenPaymentProof}
+            pendingSubmittedInvoice={pendingSubmittedInvoice}
+            onApproveInvoice={handleDirectApproveInvoice}
+            isApprovingInvoice={Boolean(approvingInvoiceId)}
+          />
         </div>
 
         {/* ─── Right Action Rail ─── */}
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          {accessRole === 'seller' && (
-            <ManualTrackingActions delivery={delivery} latestManual={latestManual} onRefresh={() => detailQuery.refetch()} />
+          {(accessRole === 'seller' || accessRole === 'admin') && (
+            <ManualTrackingActions
+              delivery={delivery}
+              latestManual={latestManual}
+              onRefresh={() => detailQuery.refetch()}
+              onOpenPackModal={() => setIsPackModalOpen(true)}
+              onOpenFulfillmentModal={() => setIsFulfillmentModalOpen(true)}
+            />
           )}
           {accessRole === 'seller' && (
             <DpExtensionSection delivery={delivery} accessRole={accessRole} />
           )}
-          
-          {/* Handover OTP Verification — Temporarily commented out as per request */}
-          {/* <EmailOtpVerificationCard delivery={delivery} accessRole={accessRole} /> */}
 
           {(accessRole === 'buyer' || accessRole === 'consignee') && (
-            <BuyerActions delivery={delivery} />
+            <BuyerActions
+              delivery={delivery}
+              invoices={invoices}
+              onOpenInvoice={handleOpenInvoice}
+              onOpenPaymentProof={handleOpenPaymentProof}
+              onApproveInvoice={handleDirectApproveInvoice}
+              isApprovingInvoice={Boolean(approvingInvoiceId)}
+            />
           )}
           {(accessRole === 'finance' || accessRole === 'admin') && (
-            <FinanceActions delivery={delivery} />
+            <FinanceActions
+              delivery={delivery}
+              onApproveInvoice={handleDirectApproveInvoice}
+              isApprovingInvoice={Boolean(approvingInvoiceId)}
+            />
           )}
           {accessRole === 'admin' && <AdminActions delivery={delivery} />}
           {accessRole && accessRole !== 'seller' && (
@@ -503,6 +744,147 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
           )}
         </aside>
       </div>
+
+      {/* Fulfillment & Packing Modals */}
+      <PackedOrderDialog
+        isOpen={isPackModalOpen}
+        delivery={delivery}
+        onClose={() => setIsPackModalOpen(false)}
+        onSuccess={() => detailQuery.refetch()}
+      />
+
+      <DispatchDetailsModal
+        isOpen={isFulfillmentModalOpen}
+        delivery={delivery}
+        onClose={() => setIsFulfillmentModalOpen(false)}
+        onSuccess={() => detailQuery.refetch()}
+      />
+
+      {/* ─── Interactive Purchase Order Receipt Modal Dialog ─── */}
+      {viewingPoOrder && (
+        <PurchaseOrderReceiptModal
+          order={viewingPoOrder}
+          onClose={() => setViewingPoOrder(null)}
+          isBuyer={accessRole === 'buyer'}
+          isSeller={accessRole === 'seller'}
+        />
+      )}
+
+      {/* ─── Official Tax Invoice Registry Modal Dialog ─── */}
+      {viewingInvoiceId !== null && (
+        <TaxInvoiceRegistryModal
+          isOpen={viewingInvoiceId !== null}
+          onClose={() => setViewingInvoiceId(null)}
+          invoiceId={viewingInvoiceId}
+          onInvoiceApproved={() => {
+            detailQuery.refetch();
+          }}
+        />
+      )}
+
+      {/* ─── Multi-Invoice Selection Dialog (when multiple invoices exist) ─── */}
+      {isInvoicePickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="invoice-picker-title"
+        >
+          <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-5 py-3.5">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                  <Receipt className="h-4 w-4" />
+                </span>
+                <div>
+                  <h3 id="invoice-picker-title" className="text-sm font-black text-slate-900">
+                    Select Tax Invoice to View
+                  </h3>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    {invoices.length} invoices generated for PO #{poNumber}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsInvoicePickerOpen(false)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition cursor-pointer"
+                aria-label="Close invoice selector dialog"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-2 max-h-96 overflow-y-auto">
+              {invoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex items-center justify-between p-3 rounded-xl border border-slate-200/80 bg-white hover:border-emerald-300 hover:bg-emerald-50/30 transition-all shadow-2xs"
+                >
+                  <div className="min-w-0 pr-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-slate-900">
+                        {inv.invoiceNumber || `Invoice #${inv.id}`}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600">
+                        {inv.invoiceStatus || inv.status || 'Submitted'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs font-black text-emerald-800">
+                      {formatCurrency(inv.amount)}
+                      {inv.createdAt && (
+                        <span className="ml-2 font-normal text-[10px] text-slate-400">
+                          {formatDate(inv.createdAt)}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setIsInvoicePickerOpen(false);
+                      setViewingInvoiceId(inv.id);
+                    }}
+                    className="h-7 rounded-lg bg-[#0f766e] px-3 text-[10px] font-bold text-white hover:bg-[#0d665f] cursor-pointer shadow-2xs"
+                  >
+                    <Eye className="mr-1 h-3 w-3" /> View
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs">
+              <span className="text-[11px] font-medium text-slate-500">
+                Official GST Tax Invoices
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsInvoicePickerOpen(false)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Interactive Payment Receipt & Proof Dialog ─── */}
+      {isPaymentProofModalOpen && (
+        <PaymentReceiptViewModal
+          isOpen={isPaymentProofModalOpen}
+          onClose={() => setIsPaymentProofModalOpen(false)}
+          orderId={delivery.purchaseOrderId}
+          orderPoNumber={poNumber}
+          invoiceNumber={invoices[0]?.invoiceNumber}
+          invoiceId={invoices[0]?.id}
+          sellerName={sellerName}
+          buyerName={buyerName}
+          initialProof={derivedInitialProof}
+          onStatusChange={() => detailQuery.refetch()}
+        />
+      )}
     </div>
   );
 }
@@ -532,13 +914,41 @@ function SectionHeading({
 function DocumentsPanel({
   docs,
   deliveryId,
-  accessRole
+  accessRole,
+  poNumber,
+  invoices = [],
+  taxInvoiceDoc,
+  paymentProofDoc,
+  settlement,
+  onOpenPo,
+  onOpenInvoice,
+  onOpenPaymentProof,
+  pendingSubmittedInvoice,
+  onApproveInvoice,
+  isApprovingInvoice
 }: {
   docs: DeliveryDetailDto['documents'];
   deliveryId: number;
   accessRole: string | null;
+  poNumber?: string;
+  invoices?: any[];
+  taxInvoiceDoc?: any;
+  paymentProofDoc?: any;
+  settlement?: any;
+  onOpenPo?: () => void;
+  onOpenInvoice?: () => void;
+  onOpenPaymentProof?: () => void;
+  pendingSubmittedInvoice?: any;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
 }) {
   const records = docs || [];
+  const primaryInvoice = invoices?.[0];
+  const rawStatus = String(primaryInvoice?.invoiceStatus || primaryInvoice?.status || '').toLowerCase();
+  const isInvSubmitted = rawStatus === 'submitted';
+  const isInvApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
+  const isInvPaid = rawStatus === 'paid';
+  const canApprove = accessRole === 'buyer' || accessRole === 'admin';
 
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
@@ -548,6 +958,146 @@ function DocumentsPanel({
         meta={<span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-500">{records.length} files attached</span>}
       />
       <div className="space-y-3">
+        {/* Linked Procurement Documents Quick-Access Ribbon */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+          {/* PO Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
+                <FileText className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Purchase Order</p>
+                <p className="text-xs font-black text-slate-900 truncate">{poNumber || 'Official PO'}</p>
+              </div>
+            </div>
+            {onOpenPo && (
+              <button
+                type="button"
+                onClick={onOpenPo}
+                className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 shadow-2xs cursor-pointer transition-colors"
+                title="View Purchase Order"
+              >
+                <Eye className="h-3 w-3" /> View
+              </button>
+            )}
+          </div>
+
+          {/* Tax Invoice Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">
+                <Receipt className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Tax Invoice</p>
+                  {isInvPaid && (
+                    <span className="rounded-md bg-emerald-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-emerald-800">
+                      Paid
+                    </span>
+                  )}
+                  {isInvApproved && !isInvPaid && (
+                    <span className="rounded-md bg-teal-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-[#0f766e]">
+                      Approved
+                    </span>
+                  )}
+                  {isInvSubmitted && (
+                    <span className="rounded-md bg-amber-100 px-1.5 py-0.2 text-[8px] font-black uppercase tracking-wider text-amber-800">
+                      Submitted
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs font-black text-slate-900 truncate">
+                  {primaryInvoice?.invoiceNumber || (taxInvoiceDoc ? 'Document Attached' : 'Tax Invoice')}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {pendingSubmittedInvoice && canApprove && onApproveInvoice && (
+                <button
+                  type="button"
+                  disabled={isApprovingInvoice}
+                  onClick={() => onApproveInvoice(pendingSubmittedInvoice.id)}
+                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-white shadow-2xs cursor-pointer transition-colors"
+                  title="Approve Tax Invoice"
+                >
+                  {isApprovingInvoice ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  Approve
+                </button>
+              )}
+              {onOpenInvoice && (
+                <button
+                  type="button"
+                  onClick={onOpenInvoice}
+                  className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-50 shadow-2xs cursor-pointer transition-colors"
+                  title="View Tax Invoice"
+                >
+                  <Eye className="h-3 w-3" /> View
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Payment Proof Card */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                <CreditCard className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Payment Proof</p>
+                <p className="text-xs font-black text-slate-900 truncate">
+                  {settlement?.transactionReference || (paymentProofDoc ? 'Proof Attached' : 'Bank UTR Proof')}
+                </p>
+              </div>
+            </div>
+            {onOpenPaymentProof && (
+              <button
+                type="button"
+                onClick={onOpenPaymentProof}
+                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-50 shadow-2xs cursor-pointer transition-colors"
+                title="View Payment Proof"
+              >
+                <Eye className="h-3 w-3" /> View
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Payment Locked Informative Banner when invoice is pending approval */}
+        {pendingSubmittedInvoice && (
+          <div
+            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50/95 p-3.5 text-amber-900 text-xs shadow-xs"
+            role="alert"
+          >
+            <div className="flex items-start gap-2.5 min-w-0">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 ring-1 ring-amber-300">
+                <Lock className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-bold text-amber-950 text-xs uppercase tracking-tight">
+                  Payment Locked &bull; Tax Invoice #{pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} Pending Approval
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-800 leading-relaxed font-semibold">
+                  Payment disbursement and settlement release are locked because this tax invoice requires buyer approval. Please review the invoice details and click &ldquo;Approve Now&rdquo; to unlock payment.
+                </p>
+              </div>
+            </div>
+            {canApprove && onApproveInvoice && (
+              <button
+                type="button"
+                disabled={isApprovingInvoice}
+                onClick={() => onApproveInvoice(pendingSubmittedInvoice.id)}
+                className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-white shadow-2xs cursor-pointer transition-colors self-end sm:self-center"
+              >
+                {isApprovingInvoice ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                Approve Now
+              </button>
+            )}
+          </div>
+        )}
+
         {records.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-6 text-center text-xs font-semibold text-slate-500">
             No shipping or tax documents uploaded yet.
@@ -671,22 +1221,33 @@ function RatingCTACard({
 function ManualTrackingActions({
   delivery,
   latestManual,
-  onRefresh
+  onRefresh,
+  onOpenPackModal,
+  onOpenFulfillmentModal
 }: {
   delivery: DeliveryDetailDto;
   latestManual?: ReturnType<typeof latestManualUpdateFor>;
   onRefresh?: () => void | Promise<any>;
+  onOpenPackModal?: () => void;
+  onOpenFulfillmentModal?: () => void;
 }) {
   const nextStatus = nextManualStatusFor(delivery.status);
   const latest = latestManual;
   const updateMut = useManualDeliveryStatusUpdate(delivery.id);
   const qc = useQueryClient();
 
+  const [locationCheckIn, setLocationCheckIn] = useState('');
+  const [milestoneRemarks, setMilestoneRemarks] = useState('');
+
   const updateStatus = async () => {
     if (!nextStatus) return;
     await runWithToast(
       async () => {
-        await updateMut.mutateAsync({ status: nextStatus });
+        await updateMut.mutateAsync({
+          status: nextStatus,
+          location: locationCheckIn.trim() || undefined,
+          remarks: milestoneRemarks.trim() || undefined
+        });
         const nowIso = new Date().toISOString();
         qc.setQueriesData({ queryKey: queryKeys.deliveries.detail(delivery.id) }, (old: any) =>
           old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
@@ -694,6 +1255,8 @@ function ManualTrackingActions({
         qc.setQueriesData({ queryKey: ['delivery', 'detail', delivery.id] }, (old: any) =>
           old ? { ...old, status: nextStatus, updatedAt: nowIso } : old
         );
+        setLocationCheckIn('');
+        setMilestoneRemarks('');
         if (onRefresh) {
           void onRefresh();
         }
@@ -760,22 +1323,94 @@ function ManualTrackingActions({
           )}
         </div>
 
+        {/* Quick Action Triggers for Packing & Dispatch */}
+        {delivery.status === 'SELLER_ACCEPTED' && onOpenPackModal && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">Recommended Next Step</span>
+              <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[8px] font-black uppercase text-amber-900">Required</span>
+            </div>
+            <p className="text-xs font-bold text-slate-900">Order Accepted — Prepare Packaging & Tare Metrics</p>
+            <Button
+              type="button"
+              onClick={onOpenPackModal}
+              className="w-full h-10 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider shadow-xs"
+            >
+              <Box className="mr-2 h-4 w-4" /> Open Packaging Console
+            </Button>
+          </div>
+        )}
+
+        {['PACKED', 'READY_FOR_PICKUP'].includes(delivery.status) && onOpenFulfillmentModal && (
+          <div className="rounded-xl border border-teal-200 bg-teal-50/60 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">Dispatch & Carrier</span>
+              <span className="rounded-full bg-teal-200 px-2 py-0.5 text-[8px] font-black uppercase text-teal-900">Ready</span>
+            </div>
+            <p className="text-xs font-bold text-slate-900">Assign Driver, Vehicle, Transport Mode & Challan</p>
+            <Button
+              type="button"
+              onClick={onOpenFulfillmentModal}
+              className="w-full h-10 rounded-xl bg-[#0f766e] hover:bg-[#0d665f] text-white text-xs font-black uppercase tracking-wider shadow-xs"
+            >
+              <Send className="mr-2 h-4 w-4" /> Open Fulfillment & Dispatch
+            </Button>
+          </div>
+        )}
+
         {/* Next Action Box with prominent button */}
-        <div className="space-y-2.5 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3.5">
+        <div className="space-y-3 rounded-xl border border-teal-200/70 bg-teal-50/30 p-3.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
-              {isCompleted ? 'Fulfillment Complete' : 'Next Milestone Action'}
+              {isCompleted ? 'Fulfillment Complete' : 'Sequential Milestone Advance'}
             </span>
           </div>
 
           {!isCompleted && nextStatus ? (
-            <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
-              <p className="text-[10px] font-bold text-slate-500">Advancing To:</p>
-              <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
-                <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
-                {DELIVERY_STATUS_LABELS[nextStatus]}
-              </p>
-            </div>
+            <>
+              <div className="rounded-lg bg-white p-2.5 border border-teal-100 shadow-2xs">
+                <p className="text-[10px] font-bold text-slate-500">Advancing To Next Step:</p>
+                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5 mt-0.5">
+                  <ArrowRight className="h-3.5 w-3.5 text-[#0f766e]" />
+                  {DELIVERY_STATUS_LABELS[nextStatus]}
+                </p>
+              </div>
+
+              {/* Location and Remarks Inputs */}
+              <div className="space-y-2 pt-1">
+                <div>
+                  <label htmlFor="milestone-location" className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Checkpoint Location (Optional)
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                    <Input
+                      id="milestone-location"
+                      value={locationCheckIn}
+                      onChange={e => setLocationCheckIn(e.target.value)}
+                      placeholder="e.g. Pune Hub / Bhiwandi Depot / Gate 2"
+                      className="pl-8 text-xs h-9 rounded-lg"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="milestone-remarks" className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Milestone Remarks / Notes (Optional)
+                  </label>
+                  <div className="relative">
+                    <FileText className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                    <Input
+                      id="milestone-remarks"
+                      value={milestoneRemarks}
+                      onChange={e => setMilestoneRemarks(e.target.value)}
+                      placeholder="e.g. Inspection cleared, dispatched on truck"
+                      className="pl-8 text-xs h-9 rounded-lg"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
           ) : null}
 
           <Button
@@ -804,7 +1439,7 @@ function ManualTrackingActions({
 
           {!isCompleted && nextStatus && (
             <p className="text-[10px] text-center text-slate-500 font-medium">
-              Clicking updates the tracking timeline and notifies the buyer in real time.
+              Updates tracking timeline and notifies buyer in real-time. Direct completion without OTP barrier.
             </p>
           )}
         </div>
@@ -813,7 +1448,21 @@ function ManualTrackingActions({
   );
 }
 
-function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
+function BuyerActions({
+  delivery,
+  invoices = [],
+  onOpenInvoice,
+  onOpenPaymentProof,
+  onApproveInvoice,
+  isApprovingInvoice
+}: {
+  delivery: DeliveryDetailDto;
+  invoices?: any[];
+  onOpenInvoice?: () => void;
+  onOpenPaymentProof?: () => void;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
+}) {
   const [accept, setAccept] = useState(true);
   const [rejectReason, setRejectReason] = useState('');
   const [damageNotes, setDamageNotes] = useState('');
@@ -850,124 +1499,226 @@ function BuyerActions({ delivery }: { delivery: DeliveryDetailDto }) {
     );
 
   return (
-    <CollapsibleSection title="Receipt & Acceptance" icon={CheckCircle2} defaultOpen>
-      <div className="space-y-4">
-        {!canAcceptStage && (
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs font-semibold text-slate-500 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-slate-400 shrink-0" />
-            <span>Acceptance becomes available once the shipment is marked as delivered.</span>
-          </div>
-        )}
-
-        {canAcceptStage && (
-          <div className="space-y-3">
-            <p className={fieldLabel}>Verification Decision</p>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setAccept(true)}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
-                  accept
-                    ? 'border-emerald-500 bg-emerald-50/80 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                )}
-              >
-                <CheckCircle2 className={cn('h-5 w-5', accept ? 'text-emerald-600' : 'text-slate-400')} />
-                <span>Accept Delivery</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAccept(false)}
-                className={cn(
-                  'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
-                  !accept
-                    ? 'border-rose-500 bg-rose-50/80 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                )}
-              >
-                <AlertTriangle className={cn('h-5 w-5', !accept ? 'text-rose-600' : 'text-slate-400')} />
-                <span>Report / Reject</span>
-              </button>
+    <div className="space-y-4">
+      <CollapsibleSection title="Receipt & Acceptance" icon={CheckCircle2} defaultOpen>
+        <div className="space-y-4">
+          {!canAcceptStage && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs font-semibold text-slate-500 flex items-center gap-2">
+              <Clock className="h-4 w-4 text-slate-400 shrink-0" />
+              <span>Acceptance becomes available once the shipment is marked as delivered.</span>
             </div>
+          )}
 
-            {!accept && (
-              <div className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/30 p-3 dt-fade-in-up">
-                <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Issue Details</p>
-                <textarea
-                  className={textareaBase}
-                  placeholder="State the reason for rejection (required)..."
-                  value={rejectReason}
-                  onChange={e => setRejectReason(e.target.value)}
-                />
-                <textarea
-                  className={textareaBase}
-                  placeholder="Damage / wrong item details (optional)..."
-                  value={damageNotes}
-                  onChange={e => setDamageNotes(e.target.value)}
-                />
-                <Input
-                  placeholder="Missing quantity (if applicable)"
-                  value={missingQty}
-                  onChange={e => setMissingQty(e.target.value)}
-                />
+          {canAcceptStage && (
+            <div className="space-y-3">
+              <p className={fieldLabel}>Verification Decision</p>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setAccept(true)}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                    accept
+                      ? 'border-emerald-500 bg-emerald-50/80 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  )}
+                >
+                  <CheckCircle2 className={cn('h-5 w-5', accept ? 'text-emerald-600' : 'text-slate-400')} />
+                  <span>Accept Delivery</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAccept(false)}
+                  className={cn(
+                    'flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-black uppercase tracking-wider transition-all duration-200',
+                    !accept
+                      ? 'border-rose-500 bg-rose-50/80 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  )}
+                >
+                  <AlertTriangle className={cn('h-5 w-5', !accept ? 'text-rose-600' : 'text-slate-400')} />
+                  <span>Report / Reject</span>
+                </button>
               </div>
-            )}
 
-            <Button
-              className={cn(
-                'w-full h-10.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-xs',
-                accept
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-rose-600 hover:bg-rose-700'
+              {!accept && (
+                <div className="space-y-2.5 rounded-xl border border-rose-100 bg-rose-50/30 p-3 dt-fade-in-up">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-rose-800">Issue Details</p>
+                  <textarea
+                    className={textareaBase}
+                    placeholder="State the reason for rejection (required)..."
+                    value={rejectReason}
+                    onChange={e => setRejectReason(e.target.value)}
+                  />
+                  <textarea
+                    className={textareaBase}
+                    placeholder="Damage / wrong item details (optional)..."
+                    value={damageNotes}
+                    onChange={e => setDamageNotes(e.target.value)}
+                  />
+                  <Input
+                    placeholder="Missing quantity (if applicable)"
+                    value={missingQty}
+                    onChange={e => setMissingQty(e.target.value)}
+                  />
+                </div>
               )}
-              disabled={(!accept && !rejectReason.trim()) || acceptanceMut.isPending}
-              onClick={submitDecision}
-            >
-              {acceptanceMut.isPending ? (
-                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              ) : accept ? (
-                <Check className="mr-2 h-4 w-4 stroke-[3]" />
-              ) : (
-                <AlertTriangle className="mr-2 h-4 w-4" />
-              )}
-              {accept ? 'Confirm & Accept Delivery' : 'Submit Rejection Report'}
-            </Button>
-          </div>
-        )}
 
-        {canReturnStage && (
-          <div className="space-y-2.5 border-t border-slate-100 pt-3">
-            <p className={fieldLabel}>Initiate Return / Replacement</p>
-            <Select value={returnType} onChange={e => setReturnType(e.target.value as any)}>
-              <option value="RETURN">Return Goods</option>
-              <option value="REPLACEMENT">Replacement Request</option>
-              <option value="REFUND">Full Refund Request</option>
-            </Select>
-            <textarea
-              className={textareaBase}
-              placeholder="State reason for return/replacement..."
-              value={returnReason}
-              onChange={e => setReturnReason(e.target.value)}
-            />
-            <Button
-              variant="outline"
-              className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50"
-              disabled={!returnReason.trim() || returnMut.isPending}
-              onClick={submitReturn}
-            >
-              {returnMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Initiate {returnType}
-            </Button>
+              <Button
+                className={cn(
+                  'w-full h-10.5 rounded-xl text-xs font-black uppercase tracking-wider text-white shadow-xs',
+                  accept
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                )}
+                disabled={(!accept && !rejectReason.trim()) || acceptanceMut.isPending}
+                onClick={submitDecision}
+              >
+                {acceptanceMut.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : accept ? (
+                  <Check className="mr-2 h-4 w-4 stroke-[3]" />
+                ) : (
+                  <AlertTriangle className="mr-2 h-4 w-4" />
+                )}
+                {accept ? 'Confirm & Accept Delivery' : 'Submit Rejection Report'}
+              </Button>
+            </div>
+          )}
+
+          {canReturnStage && (
+            <div className="space-y-2.5 border-t border-slate-100 pt-3">
+              <p className={fieldLabel}>Initiate Return / Replacement</p>
+              <Select value={returnType} onChange={e => setReturnType(e.target.value as any)}>
+                <option value="RETURN">Return Goods</option>
+                <option value="REPLACEMENT">Replacement Request</option>
+                <option value="REFUND">Full Refund Request</option>
+              </Select>
+              <textarea
+                className={textareaBase}
+                placeholder="State reason for return/replacement..."
+                value={returnReason}
+                onChange={e => setReturnReason(e.target.value)}
+              />
+              <Button
+                variant="outline"
+                className="w-full h-10 rounded-xl text-xs font-black uppercase tracking-wider text-slate-700 border-slate-200 hover:bg-slate-50"
+                disabled={!returnReason.trim() || returnMut.isPending}
+                onClick={submitReturn}
+              >
+                {returnMut.isPending ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Initiate {returnType}
+              </Button>
+            </div>
+          )}
+        </div>
+      </CollapsibleSection>
+
+      {invoices && invoices.length > 0 && (
+        <CollapsibleSection title="Invoice & Settlement (Buyer)" icon={Wallet} defaultOpen>
+          <div className="space-y-3">
+            {invoices.map((inv: any) => {
+              const status = String(inv.invoiceStatus || inv.status || '').toLowerCase();
+              const isInvSubmitted = status === 'submitted' || status === 'draft';
+              const isInvApproved = ['approved', 'payment_initiated'].includes(status);
+              const isInvPaid = status === 'paid';
+
+              return (
+                <div key={inv.id} className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-black text-slate-900">{inv.invoiceNumber || `Invoice #${inv.id}`}</span>
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
+                      isInvPaid ? "bg-emerald-100 text-emerald-800" :
+                      isInvApproved ? "bg-teal-100 text-[#0f766e]" :
+                      "bg-amber-100 text-amber-800"
+                    )}>
+                      {isInvPaid ? 'Paid' : isInvApproved ? 'Approved' : 'Submitted'}
+                    </span>
+                  </div>
+
+                  {inv.amount !== undefined && (
+                    <div className="flex items-center justify-between text-slate-600 font-semibold">
+                      <span>Total Amount</span>
+                      <span className="font-black text-slate-900">{formatCurrency(inv.amount)}</span>
+                    </div>
+                  )}
+
+                  {isInvSubmitted && (
+                    <div className="rounded-lg border border-amber-300 bg-amber-50/90 p-2 text-amber-900 text-[11px] flex items-start gap-1.5" role="alert">
+                      <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-black text-amber-950">Payment Locked:</strong>
+                        <span> Tax invoice requires buyer approval before funds can be released.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {isInvApproved && !isInvPaid && (
+                    <div className="rounded-lg border border-teal-200 bg-teal-50/80 p-2 text-[#0f766e] text-[11px] flex items-start gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-[#0f766e] shrink-0 mt-0.5" />
+                      <div>
+                        <strong className="font-black text-teal-950">Payment Unlocked:</strong>
+                        <span> Invoice has been approved. You can proceed with settlement.</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1">
+                    {isInvSubmitted && onApproveInvoice && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isApprovingInvoice}
+                        onClick={() => onApproveInvoice(inv.id)}
+                        className="flex-1 h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black uppercase tracking-wider shadow-2xs"
+                      >
+                        {isApprovingInvoice ? <RefreshCw className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                        Approve Invoice
+                      </Button>
+                    )}
+                    {onOpenInvoice && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={onOpenInvoice}
+                        className="flex-1 h-8 rounded-lg border-slate-200 text-slate-700 text-[10px] font-black uppercase tracking-wider hover:bg-slate-100"
+                      >
+                        <Eye className="mr-1 h-3 w-3" /> View Invoice
+                      </Button>
+                    )}
+                    {isInvApproved && onOpenPaymentProof && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={onOpenPaymentProof}
+                        className="flex-1 h-8 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-black uppercase tracking-wider"
+                      >
+                        <CreditCard className="mr-1 h-3 w-3" /> Proof / Pay
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
-    </CollapsibleSection>
+        </CollapsibleSection>
+      )}
+    </div>
   );
 }
 
-function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
+function FinanceActions({
+  delivery,
+  onApproveInvoice,
+  isApprovingInvoice
+}: {
+  delivery: DeliveryDetailDto;
+  onApproveInvoice?: (invoiceId: number) => void;
+  isApprovingInvoice?: boolean;
+}) {
   const invoices = delivery.purchaseOrder?.invoices || [];
 
   const defaultInvoiceId = useMemo(() => {
@@ -1044,6 +1795,30 @@ function FinanceActions({ delivery }: { delivery: DeliveryDetailDto }) {
                       >
                         <FileText className="h-3.5 w-3.5" /> Preview PDF Document
                       </button>
+                    )}
+
+                    {String(selectedInvoice.invoiceStatus || selectedInvoice.status || '').toLowerCase() === 'submitted' && (
+                      <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50/90 p-2.5 text-amber-900 text-[11px] space-y-2" role="alert">
+                        <div className="flex items-start gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                          <div>
+                            <strong className="font-black text-amber-950">Payment Release Locked:</strong>
+                            <span> Invoice {selectedInvoice.invoiceNumber || `#${selectedInvoice.id}`} must be approved before settlement release decisions can proceed.</span>
+                          </div>
+                        </div>
+                        {onApproveInvoice && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={isApprovingInvoice}
+                            onClick={() => onApproveInvoice(Number(selectedInvoice.id))}
+                            className="w-full h-7 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-black uppercase tracking-wider shadow-2xs cursor-pointer"
+                          >
+                            {isApprovingInvoice ? <RefreshCw className="mr-1.5 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3 w-3" />}
+                            Approve Invoice Now
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1567,122 +2342,5 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
     </CollapsibleSection>
   );
 }
-
-/* ================== Handover OTP Verification (Temporarily Commented Out) ================== */
-/*
-function EmailOtpVerificationCard({ delivery, accessRole }: { delivery: DeliveryDetailDto; accessRole: string | null }) {
-  const sendOtpMut = useSendDeliveryOtp(delivery.id);
-  const verifyOtpMut = useVerifyDeliveryOtp(delivery.id);
-  const [otp, setOtp] = useState('');
-
-  const isVerified = Boolean(delivery.deliveryOtpVerifiedAt);
-  const isSellerOrCourier = accessRole === 'seller' || accessRole === 'logistics' || accessRole === 'admin';
-  const canVerifyRole = ['buyer', 'seller', 'consignee', 'logistics', 'admin'].includes(accessRole || '');
-
-  const handleSend = () => {
-    runWithToast(() => sendOtpMut.mutateAsync(undefined), {
-      loading: 'Sending OTP to buyer...',
-      success: '6-digit OTP emailed to buyer!',
-      error: 'Failed to send OTP'
-    });
-  };
-
-  const handleVerify = () => {
-    if (!otp || otp.length !== 6) return;
-    runWithToast(() => verifyOtpMut.mutateAsync({ otp }), {
-      loading: 'Verifying OTP...',
-      success: 'Delivery receipt verified successfully!',
-      error: 'Invalid or expired OTP'
-    });
-  };
-
-  if (!canVerifyRole && !isVerified) return null;
-
-  return (
-    <CollapsibleSection title="Handover OTP Verification" icon={Key} defaultOpen>
-      <div className="space-y-3 dt-fade-in-up">
-        {isVerified ? (
-          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 p-3.5 text-emerald-900">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div>
-              <p className="text-xs font-black uppercase tracking-wider">Physical Handover Verified</p>
-              <p className="text-[11px] font-semibold text-emerald-700">
-                Receipt confirmed on {formatDate(delivery.deliveryOtpVerifiedAt)}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {isSellerOrCourier ? (
-              <>
-                <p className="text-xs font-semibold text-slate-600 leading-relaxed">
-                  Verify physical delivery handover: Click to email the 6-digit OTP to the buyer, then enter the OTP upon handover.
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
-                    onClick={handleSend}
-                    disabled={sendOtpMut.isPending}
-                  >
-                    {sendOtpMut.isPending ? (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
-                    )}
-                    Send OTP to Buyer
-                  </Button>
-                </div>
-                <div className="flex gap-2 items-center">
-                  <Input
-                    placeholder="6-digit OTP"
-                    value={otp}
-                    maxLength={6}
-                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
-                    className="font-mono text-center tracking-widest text-base font-bold rounded-xl"
-                  />
-                  <Button
-                    className="h-10 rounded-xl bg-[#0f766e] text-xs font-black uppercase tracking-wider text-white shrink-0 px-4 hover:bg-[#0d665f] shadow-xs"
-                    disabled={otp.length !== 6 || verifyOtpMut.isPending}
-                    onClick={handleVerify}
-                  >
-                    Verify Handover
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="rounded-xl border border-teal-100 bg-teal-50/50 p-3.5 space-y-1 text-xs text-slate-700">
-                  <p className="font-bold text-[#0f766e] flex items-center gap-1.5">
-                    <Key className="h-4 w-4" /> Handover Instructions
-                  </p>
-                  <p className="text-slate-600 font-semibold leading-relaxed">
-                    A 6-digit OTP is emailed when delivery is initiated. Share this OTP with the delivery agent upon receiving goods.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 items-center">
-                  <Button
-                    variant="outline"
-                    className="h-10 rounded-xl text-xs font-black uppercase tracking-wider border-slate-200 hover:bg-slate-50"
-                    onClick={handleSend}
-                    disabled={sendOtpMut.isPending}
-                  >
-                    {sendOtpMut.isPending ? (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Key className="mr-2 h-4 w-4 text-[#0f766e]" />
-                    )}
-                    Resend OTP to My Email
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-    </CollapsibleSection>
-  );
-}
-*/
 
 export default DeliveryDetailPage;

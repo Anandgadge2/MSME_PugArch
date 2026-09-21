@@ -226,6 +226,32 @@ const isUnderEvaluationOpportunity = (item: SellerOpportunity, now: number) => {
 };
 
 /**
+ * Helper to test if opportunity or seller's participation is disqualified or not selected
+ */
+const isDisqualifiedOrNotSelected = (item: SellerOpportunity) => {
+  const statusUpper = String(item.status || '').toUpperCase();
+  const eligUpper = String(item.eligibility || '').toUpperCase();
+  const actionUpper = String(item.actionLabel || '').toUpperCase();
+  const nextUpper = String(item.nextAction || '').toUpperCase();
+
+  return (
+    statusUpper === 'DISQUALIFIED' ||
+    statusUpper.includes('DISQUALIF') ||
+    statusUpper === 'NOT_SELECTED' ||
+    statusUpper === 'NOT SELECTED' ||
+    statusUpper === 'REJECTED' ||
+    eligUpper.includes('DISQUALIF') ||
+    eligUpper.includes('NOT SELECTED') ||
+    eligUpper.includes('NOT_SELECTED') ||
+    eligUpper.includes('REJECTED') ||
+    actionUpper.includes('DISQUALIF') ||
+    actionUpper.includes('NOT SELECTED') ||
+    nextUpper.includes('DISQUALIF') ||
+    nextUpper.includes('NOT SELECTED')
+  );
+};
+
+/**
  * Clean procurement descriptions
  */
 const cleanOpportunitySummary = (desc?: string | null): string => {
@@ -424,7 +450,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setPrevSubRouteType(subRouteType);
     setType(subRouteType);
   }
-  const [status, setStatus] = useState('LIVE');
+  const [status, setStatus] = useState('ALL');
   const [location, setLocation] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -708,6 +734,21 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           || bidSchedule.bidClosingDate
           || bid.rawEndDate
           || bid.endDate;
+        const myParticipation = bid.myParticipation || (Array.isArray(bid.participations) && user?.id
+          ? bid.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+          : null);
+        const myTechStatus = String(myParticipation?.technicalStatus || '').toUpperCase();
+        const myFinalStatus = String(myParticipation?.finalStatus || '').toUpperCase();
+        const isBidDisqualified = myTechStatus === 'DISQUALIFIED' || myFinalStatus === 'DISQUALIFIED';
+        const isBidNotSelected = myFinalStatus === 'NOT_SELECTED' || myFinalStatus === 'REJECTED';
+
+        const bidEligibility = isBidDisqualified
+          ? 'Disqualified'
+          : isBidNotSelected
+          ? 'Not Selected'
+          : bid.participated
+          ? 'Already participated'
+          : 'Check documents';
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -719,7 +760,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           closingDate: effectiveClosingDate,
           estimatedValue: toNumber(bid.estimatedValue),
           discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: bid.participated ? 'Already participated' : 'Check documents',
+          eligibility: bidEligibility,
           status: bid.status || 'Open',
           actionLabel,
           href,
@@ -807,7 +848,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
-        const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
+        const canonicalReqId = req.referenceNumber || req.bidNumber || req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
           if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
           if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
@@ -822,10 +863,21 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
           : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
 
+        const myReqParticipation = req.myParticipation || (Array.isArray(req.participations) && user?.id
+          ? req.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+          : null);
+        const myReqResponse = req.ownResponse || (Array.isArray(req.responses) && user?.id
+          ? req.responses.find((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id))
+          : null);
+        const reqTechStatus = String(myReqParticipation?.technicalStatus || myReqResponse?.technicalStatus || '').toUpperCase();
+        const reqFinalStatus = String(myReqParticipation?.finalStatus || myReqResponse?.status || myReqResponse?.finalStatus || '').toUpperCase();
+        const isReqDisqualified = reqTechStatus === 'DISQUALIFIED' || reqFinalStatus === 'DISQUALIFIED' || reqFinalStatus === 'REJECTED';
+        const isReqNotSelected = reqFinalStatus === 'NOT_SELECTED';
+
         const isReqParticipated = Boolean(
           req.hasParticipated ||
-          req.myParticipation ||
-          req.ownResponse ||
+          myReqParticipation ||
+          myReqResponse ||
           (user?.id && (
             (Array.isArray(req.participations) && req.participations.some((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))) ||
             (Array.isArray(req.responses) && req.responses.some((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id)))
@@ -848,6 +900,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           || req.lastDate
           || req.requiredBy;
 
+        const reqEligibility = isReqDisqualified
+          ? 'Disqualified'
+          : isReqNotSelected
+          ? 'Not Selected'
+          : isReqParticipated
+          ? 'Already participated'
+          : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers');
+
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -858,12 +918,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           closingDate: effectiveReqClosingDate,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
           discloseEstimatedCost: Boolean(req.discloseEstimatedCost ?? req.payload?.discloseEstimatedCost ?? req.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: isReqParticipated ? 'Already participated' : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers'),
+          eligibility: reqEligibility,
           status: req.status || 'OPEN',
           actionLabel: isReqParticipated ? 'Track Status' : defaultReqAction,
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
+          sourceRef: req.referenceNumber || req.bidNumber || formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'RFQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
           publishedAt: req.approvedAt || req.publishedAt || req.createdAt,
           createdAt: req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
@@ -1129,6 +1189,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (type === 'Limited Tender') {
           if (!item.isInvitation && item.type !== 'Limited Tender') return false;
         } else if (item.type !== type) {
+          return false;
+        }
+      }
+
+      // By default show all opportunities until seller is disqualified or not selected
+      if (isDisqualifiedOrNotSelected(item)) {
+        if (status !== 'DISQUALIFIED' && status !== 'NOT_SELECTED' && status !== 'REJECTED') {
           return false;
         }
       }
@@ -1582,7 +1649,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const reset = () => {
     setQuery('');
     setType(subRouteType || '');
-    setStatus('LIVE');
+    setStatus('ALL');
     setLocation('');
     setCategory('');
     setValueRange('');
@@ -1646,21 +1713,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     };
 
     items.forEach(item => {
+      if (isDisqualifiedOrNotSelected(item)) return;
       if (isParticipatedOpportunity(item)) {
         counts.participated++;
       }
-      if (isOpenOpportunity(item, nowMs)) {
-        counts.all++;
-        if (item.type && counts[item.type] !== undefined) {
-          counts[item.type]++;
-        } else if (item.isInvitation) {
-          counts['Limited Tender']++;
-        }
+      counts.all++;
+      if (item.type && counts[item.type] !== undefined) {
+        counts[item.type]++;
+      } else if (item.isInvitation) {
+        counts['Limited Tender']++;
       }
     });
 
     return counts;
-  }, [items, nowMs]);
+  }, [items]);
 
   const opportunityCategories: Array<{ label: string; typeVal: OpportunityType | ''; countKey: string; icon: any }> = useMemo(() => [
     { label: 'All Opportunities', typeVal: '', countKey: 'all', icon: Globe },
@@ -1786,7 +1852,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           singleRowDesktop={true}
           searchWrapperClassName="flex-1 min-w-[170px] max-w-sm xl:max-w-md"
           filtersClassName="flex items-center gap-1.5 sm:gap-2 shrink-0"
-          activeFilterCount={(query ? 1 : 0) + (status !== 'LIVE' ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          activeFilterCount={(query ? 1 : 0) + (status !== 'ALL' ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -1818,8 +1884,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by status"
                 >
-                  <option value="LIVE">Live & Open (Default)</option>
-                  <option value="ALL">All Statuses (incl. Closed)</option>
+                  <option value="ALL">All Opportunities (Default)</option>
+                  <option value="LIVE">Live & Open Only</option>
                   <option value="CLOSING_SOON">Closing Soon</option>
                   <option value="PARTICIPATED">Submissions</option>
                   <option value="UNDER_EVALUATION">Evaluation</option>
@@ -1875,7 +1941,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Reset Trigger */}
-              {(query || status !== 'LIVE' || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
+              {(query || status !== 'ALL' || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1894,7 +1960,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       </div>
 
       {/* ── Active Filter Badges Bar ── */}
-      {(kpiFilter !== 'all' || (status && status !== 'LIVE') || type || category || location || query) && (
+      {(kpiFilter !== 'all' || (status && status !== 'ALL') || type || category || location || query) && (
         <div className="flex flex-wrap items-center gap-2 px-1 -mt-2">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
           {kpiFilter === 'participated' && (
@@ -1929,10 +1995,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-purple-600 hover:bg-purple-200/60 transition-colors cursor-pointer" aria-label="Remove High Value filter"><X className="h-3 w-3" /></button>
             </span>
           )}
-          {status && status !== 'LIVE' && (
+          {status && status !== 'ALL' && (
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
-              <span>Status: {status === 'PARTICIPATED' ? 'Participated' : status === 'ALL' ? 'All Statuses' : status === 'CLOSED' ? 'Closed' : status}</span>
-              <button type="button" onClick={() => setStatus('LIVE')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Reset Status to Live"><X className="h-3 w-3" /></button>
+              <span>Status: {status === 'PARTICIPATED' ? 'My Submissions' : status === 'LIVE' ? 'Live Only' : status === 'CLOSED' ? 'Closed' : status === 'CLOSING_SOON' ? 'Closing Soon' : status === 'UNDER_EVALUATION' ? 'Evaluation' : status}</span>
+              <button type="button" onClick={() => setStatus('ALL')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Reset Status to All"><X className="h-3 w-3" /></button>
             </span>
           )}
           {type && (

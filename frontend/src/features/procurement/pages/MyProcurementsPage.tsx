@@ -64,6 +64,7 @@ import { DataTable, type ColumnDef, type SortDirection } from '../../../componen
 import { useQuery } from '@tanstack/react-query';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 import { ProcurementDetailView } from '../components/ProcurementDetailView';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 export { ProcurementDetailView };
 
 const procurementSkeletonColumns: ColumnDef<any>[] = [
@@ -536,7 +537,7 @@ export default function MyProcurementsPage() {
       const consolidated = getConsolidatedType(p);
       const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
-        route = `/tenders?tender=${p.id}`;
+        route = `/tenders?tender=${targetId}`;
       } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
         route = `/bids/${targetId}?type=RFQ`;
       } else if (consolidated === 'RFP' || methodLower === 'rfp') {
@@ -569,6 +570,9 @@ export default function MyProcurementsPage() {
   const manualRefreshRef = React.useRef(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
+  // Real-time synchronization across all procurements
+  useProcurementRealtime('all');
+
   const { data: queryData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
@@ -577,10 +581,11 @@ export default function MyProcurementsPage() {
       const result = await getApi<any>(url);
       return result || { kpis: null, procurements: [] };
     },
-    staleTime: 0,
+    staleTime: 5_000,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   const loadData = useCallback(async () => {
@@ -892,7 +897,7 @@ export default function MyProcurementsPage() {
       align: 'right',
       width: 'w-[19%]',
       cell: (p: any) => (
-        <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
           {isProcurementCancellable(p) && (
             <Button
               type="button"
@@ -1127,8 +1132,7 @@ export default function MyProcurementsPage() {
               onPageSizeChange={setPageSize}
               pageSizeOptions={[10, 20, 50]}
               paginationLabel="procurements"
-              onRowClick={(p) => openDetail(p)}
-              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle cursor-pointer"
+              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle"
             />
           )}
 

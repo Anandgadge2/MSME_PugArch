@@ -56,7 +56,8 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     queryFn: () => procurementBidApi.detail((requestId || activeOpenId)!),
     enabled: !!(requestId || activeOpenId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
-    staleTime: 60_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
@@ -182,10 +183,20 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
 
   const ownParticipation = participationsList.find((p: any) =>
-    currentUser?.id && (
-      Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
-      Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id) ||
-      (currentUser.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(currentUser.organizationId))
+    currentUser && (
+      (currentUser.id && (
+        Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
+        Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id)
+      )) ||
+      (currentUser.organizationId && (
+        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.organizationId)
+      )) ||
+      (currentUser.sellerProfile?.id && (
+        Number(p.sellerProfileId || p.sellerId) === Number(currentUser.sellerProfile.id)
+      )) ||
+      (currentUser.sellerProfile?.organizationId && (
+        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
+      ))
     )
   );
 
@@ -274,6 +285,8 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         procurementLabel="Open Tender"
         id={bid.id || reqObj.id || requestId}
         displayId={openTenderNumber}
+        rawBid={bid}
+        awards={bid.awards || []}
         subject={title}
         status={bid.status || reqObj.status || 'OPEN'}
         buyerName={resolvedContactPerson}
@@ -359,7 +372,6 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
         submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
         onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
-        onViewQuotationClick={hasSubmittedProposal ? handleSubmitProposal : undefined}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
       />

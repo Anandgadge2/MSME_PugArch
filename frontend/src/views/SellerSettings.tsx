@@ -24,6 +24,12 @@ export default function SellerSettings() {
   const [currentSection, setCurrentSection] = useState(sectionParam || 'profile');
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (sectionParam) {
+      setCurrentSection(sectionParam);
+    }
+  }, [sectionParam]);
+
   // Use cached profile if available from useAuth
   const cachedProfile = user?.sellerProfile || (user as any)?.shgProfile || null;
   const [profileData, setProfileData] = useState<any>(cachedProfile);
@@ -166,6 +172,18 @@ export default function SellerSettings() {
           const saveBody = await saveRes.json().catch(() => null);
           const finalLogoUrl = saveBody?.data?.logoUrl || uploadedLogoUrl;
           setLogoUrl(finalLogoUrl);
+          // Sync to invoice branding for portal-wide invoice and PO consistency
+          void api.fetch('/api/user/invoice-branding', {
+            method: 'PUT',
+            body: JSON.stringify({ logoUrl: finalLogoUrl }),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+          }).catch(() => null);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_logo', finalLogoUrl);
+          }
           toast.success('Logo uploaded and updated successfully');
         } else {
           toast.error('Failed to update logo in your profile settings');
@@ -196,6 +214,18 @@ export default function SellerSettings() {
       });
       if (res.ok) {
         setLogoUrl(null);
+        // Sync to invoice branding
+        void api.fetch('/api/user/invoice-branding', {
+          method: 'PUT',
+          body: JSON.stringify({ logoUrl: null }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }).catch(() => null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('msme_invoice_logo');
+        }
         toast.success('Logo removed successfully');
       } else {
         toast.error('Failed to remove logo');
@@ -1065,6 +1095,7 @@ export default function SellerSettings() {
         onSaved={(branding) => {
           if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
           if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
+          if (branding.logoUrl !== undefined && branding.logoUrl) setLogoUrl(branding.logoUrl);
         }}
       />
     </div>

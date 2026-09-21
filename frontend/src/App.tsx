@@ -98,7 +98,6 @@ const BidParticipationPage = lazy(() => import('./features/procurementBid/pages/
 const BidResultsPage = lazy(() => import('./features/procurementBid/pages/BidResultsPage'));
 const BidComparisonPage = lazy(() => import('./features/procurementBid/pages/BidComparisonPage'));
 const AdminBidManagementPage = lazy(() => import('./features/procurementBid/pages/AdminBidManagementPage'));
-const ProcurementOrdersPage = lazy(() => import('./features/procurementBid/pages/ProcurementOrdersPage'));
 const ReverseAuctionCreatePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionCreatePage'));
 const ReverseAuctionDetailPage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionDetailPage'));
 const ReverseAuctionLivePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionLivePage'));
@@ -131,6 +130,7 @@ const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedT
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
+const SellerAwardPoAlertPopup = lazy(() => import('./features/notifications/SellerAwardPoAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -519,9 +519,16 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 }
 
 let globalInitialLoadComplete = false;
+let globalSidebarCollapsed: boolean | null = null;
 
-export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
-  const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+export default function App({
+  serverInitialLoadComplete = false,
+  initialSidebarCollapsed = false
+}: {
+  serverInitialLoadComplete?: boolean;
+  initialSidebarCollapsed?: boolean;
+}) {
+  const { user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
@@ -538,7 +545,29 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (globalSidebarCollapsed !== null) {
+      return globalSidebarCollapsed;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('isSidebarCollapsed');
+        if (saved !== null) {
+          const parsed = JSON.parse(saved);
+          globalSidebarCollapsed = Boolean(parsed);
+          return Boolean(parsed);
+        }
+        const cookieMatch = document.cookie.match(/(?:^|; )isSidebarCollapsed=([^;]*)/);
+        if (cookieMatch) {
+          const val = cookieMatch[1] === 'true';
+          globalSidebarCollapsed = val;
+          return val;
+        }
+      } catch {}
+    }
+    globalSidebarCollapsed = initialSidebarCollapsed;
+    return initialSidebarCollapsed;
+  });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
@@ -569,23 +598,34 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
   const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
-  const [hasCookie, setHasCookie] = useState(false);
+  const [hasCookie, setHasCookie] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    return Boolean(getCookieValue('csrfToken'));
+  });
 
   React.useEffect(() => {
     setHasCookie(Boolean(getCookieValue('csrfToken')));
-  }, []);
+  }, [loading, user]);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');
     if (saved !== null) {
-      setIsSidebarCollapsed(JSON.parse(saved));
+      try {
+        const parsed = JSON.parse(saved);
+        globalSidebarCollapsed = Boolean(parsed);
+        setIsSidebarCollapsed(Boolean(parsed));
+      } catch {}
     }
   }, []);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
       const newValue = !prev;
-      localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+      globalSidebarCollapsed = newValue;
+      try {
+        localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+        document.cookie = `isSidebarCollapsed=${newValue}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
       return newValue;
     });
   };
@@ -677,10 +717,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <RouteFallback />;
       }
     }
-    if (pathname === '/') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
-    if (pathname === '/login') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <Login />;
+    const isAuthedUser = Boolean(user && (hasCookie || token || (typeof window !== 'undefined' && localStorage.getItem('token'))));
+    if (pathname === '/') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
+    if (pathname === '/login') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <Login />;
     if (pathname === '/shg/login') return <Redirect to="/login" />;
-    if (pathname === '/forgot-password') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
+    if (pathname === '/forgot-password') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
     if (pathname === '/register') return <RegisterSelection />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
@@ -973,8 +1014,21 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
     if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
     
-    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
-    if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
+    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
+    if ((pathname === '/purchase-orders' || pathname === '/seller/purchase-orders') && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+      if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+      return <Redirect to="/orders" />;
+    }
+    {
+      const directPoMatch = pathname.match(/^\/(?:seller\/|buyer\/|shg\/)?(?:orders|purchase-orders)\/(\d+)$/);
+      if (directPoMatch && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+        const id = directPoMatch[1];
+        if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders?orderId=${id}`} />;
+        if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders?orderId=${id}`} />;
+        return <Redirect to={`/orders?orderId=${id}`} />;
+      }
+    }
     if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
     if ((pathname === '/orders/tracking' || pathname === '/tracking' || pathname === '/delivery' || pathname === '/orders/delivery' || pathname === '/delivery-management') && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
       if (user.role === 'seller') return <PermissionRouteGuard permission="delivery.view"><SellerDeliveryManagementPage /></PermissionRouteGuard>;
@@ -1021,7 +1075,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     
     if (pathname === '/grn' || pathname === '/buyer/grn') return <PermissionRouteGuard permission="grn.view"><GrnListPage /></PermissionRouteGuard>;
     {
-      const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
+      const grnDetailMatch = pathname.match(/^\/(?:buyer\/|seller\/)?grn\/(\d+)$/);
       if (grnDetailMatch) {
         const id = Number(grnDetailMatch[1]);
         if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="grn.view"><GrnDetailPage id={id} /></PermissionRouteGuard>;
@@ -1061,8 +1115,32 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         if (id) return <AuctionResultPage id={id} />;
       }
     }
-    if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
-    if (/^\/procurement-orders\/\d+$/.test(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
+    {
+      const procOrderMatch = pathname.match(/^\/(?:procurement-orders|orders\/procurement)(?:\/(\d+))?$/);
+      if (procOrderMatch && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+        const id = procOrderMatch[1];
+        const qs = id ? `?orderId=${id}` : '';
+        if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders${qs}`} />;
+        if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders${qs}`} />;
+        return <Redirect to={`/orders${qs}`} />;
+      }
+    }
+    if (pathname === '/seller/awards' && roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+    if (pathname === '/buyer/procurement-orders' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+    if (pathname === '/admin/procurement-orders' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/bids" />;
+    if (pathname === '/orders/procurement') {
+      if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+      return <Redirect to="/orders" />;
+    }
+    {
+      const buyerProcEventMatch = pathname.match(/^\/buyer\/procurement\/events\/([^/?#]+)$/i);
+      if (buyerProcEventMatch) return <Redirect to={`/bids/${buyerProcEventMatch[1]}`} />;
+    }
+    {
+      const adminBidDetailMatch = pathname.match(/^\/admin\/bids\/([^/?#]+)$/i);
+      if (adminBidDetailMatch) return <Redirect to={`/bids/${adminBidDetailMatch[1]}`} />;
+    }
     if (pathname === '/settings/security') return <SecuritySettingsPage />;
     if (pathname === '/settings/notifications') return <NotificationPrefsPage />;
     if (pathname === '/onboarding/kyc') return <AadhaarKycPage />;
@@ -1172,6 +1250,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             <InviteLoginPopup />
             {user && (user.role === 'admin' || user.role === 'master_admin') && (
               <AdminCategoryAlertPopup />
+            )}
+            {user && (user.role === 'seller' || user.role === 'shg') && (
+              <SellerAwardPoAlertPopup />
             )}
           </Suspense>
         )}

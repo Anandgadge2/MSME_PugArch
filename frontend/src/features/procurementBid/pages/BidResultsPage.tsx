@@ -196,15 +196,22 @@ export default function BidResultsPage() {
   const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
   
   const isContractFinalized = React.useMemo(() => {
+    if (isAwardOfferPending || isPriceMatchPending) return false;
     const rawStatus = String(bid?.status || '').toUpperCase();
     const rawStage = String(bid?.lifecycleStage || '').toUpperCase();
+    const hasActivePo = Boolean(
+      (bid as any)?.purchaseOrderId ||
+      (bid as any)?.purchaseOrder ||
+      (bid as any)?.activeOrder ||
+      (Array.isArray((bid as any)?.purchaseOrders) && (bid as any).purchaseOrders.length > 0)
+    );
     return (
-      ['IN_PROGRESS', 'AWARDED', 'PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
-      ['AWARDED', 'PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
-      Boolean((bid as any)?.purchaseOrderId || (bid as any)?.purchaseOrder) ||
+      hasActivePo ||
+      ['PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
+      ['PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
       ranking.some(r => String((r as any).finalStatus || '').toUpperCase() === 'ORDERED')
     );
-  }, [bid, ranking]);
+  }, [bid, ranking, isAwardOfferPending, isPriceMatchPending]);
 
   const isBidAlreadyAwarded = Boolean(isContractFinalized);
 
@@ -460,11 +467,10 @@ export default function BidResultsPage() {
 
     try {
       // Execute primary bid detail fetch and fallback endpoints concurrently in parallel!
-      const [bidRes, fallbackRes1, fallbackRes2, fallbackRes3] = await Promise.allSettled([
+      const [bidRes, fallbackRes1, fallbackRes2] = await Promise.allSettled([
         procurementBidApi.getBidResults(bidId),
         getApi(`/api/buyer/requirements/${encodeURIComponent(bidId)}/responses`, true),
         getApi(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, true),
-        getApi(`/api/marketplace/requirements/${encodeURIComponent(bidId)}/responses`, true),
       ]);
 
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
@@ -637,7 +643,7 @@ export default function BidResultsPage() {
 
       // If data is still missing entirely (e.g. legacy requirement URL), try direct fallbacks for bidId only
       if (!data) {
-        const fallbacks = [fallbackRes1, fallbackRes2, fallbackRes3];
+        const fallbacks = [fallbackRes1, fallbackRes2];
         for (const f of fallbacks) {
           if (f.status === 'fulfilled' && f.value) {
             const reqRes: any = f.value;
@@ -1335,6 +1341,107 @@ export default function BidResultsPage() {
     );
   }
 
+  // Award Offer Confirmation Modal renderer
+  const renderAwardModal = () => {
+    if (!awardModal.show || !awardModal.row) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Contract Award Offer</span>
+              <h3 className="text-base font-black text-slate-900 mt-1">Award Contract to Supplier</h3>
+            </div>
+            <button
+              onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          
+          <div className="py-4 space-y-4 text-xs">
+            <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100 space-y-2">
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Supplier:</span>
+                <span className="font-black text-slate-900">{awardModal.row.sellerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Offered Item:</span>
+                <span className="font-semibold text-slate-800">{awardModal.row.offeredItem || 'As Quoted'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Total Evaluated Price:</span>
+                <span className="font-black text-emerald-700">{awardModal.row.totalPrice ? money(awardModal.row.totalPrice) : 'Evaluated'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-bold text-slate-500">Rank:</span>
+                <span className="font-bold text-slate-800">{awardModal.row.finalRank}</span>
+              </div>
+            </div>
+
+            {awardModal.row.finalRank !== 'L1' && (
+              <div className="space-y-2">
+                <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-900 leading-snug font-medium">
+                    <strong>Non-L1 Selection:</strong> You are awarding a supplier ({awardModal.row.finalRank}) other than L1. An official justification reason is required for procurement audit compliance.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                    Audit Justification Reason <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={awardModal.justificationReason}
+                    onChange={e => setAwardModal(prev => ({ ...prev, justificationReason: e.target.value }))}
+                    placeholder="Enter justification for selecting a non-L1 supplier (e.g. superior warranty, technical superiority, local service availability)..."
+                    className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
+                Award Notes / Contract Remarks
+              </label>
+              <textarea
+                rows={3}
+                value={awardModal.remarks}
+                onChange={e => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
+                placeholder="Enter award notes or terms to communicate with the supplier..."
+                className="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-emerald-500 focus:outline-none"
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              An award offer will be dispatched to <strong>{awardModal.row.sellerName}</strong>. Once the supplier accepts, you will be prompted to issue the Purchase Order. Other bidders remain on standby until PO is finalized.
+            </p>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 flex justify-end gap-2.5 sm:gap-3">
+            <button
+              onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
+              disabled={awardModal.submitting}
+              className="h-10 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 text-xs font-black text-slate-700"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmAward}
+              disabled={awardModal.submitting}
+              className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-black text-white inline-flex items-center gap-2 shadow-xs"
+            >
+              {awardModal.submitting ? 'Submitting Offer...' : 'Send Award Offer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render dedicated Full View Page when a quotation is selected
   if (selectedResult) {
     return (
@@ -1362,88 +1469,21 @@ export default function BidResultsPage() {
             onClose={() => setSelectedForTechEval(null)}
             procurementId={bidId}
             participation={selectedForTechEval}
-            readOnly={isBidAlreadyAwarded}
+            readOnly={true}
+            isFinancialStageOpened={true}
+            isStage2Active={true}
+            bidStatus={bid?.status}
+            isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
+            packetType={bid?.packetType}
             onSuccess={() => {
               loadBid();
             }}
           />
         )}
 
-        {/* Award & PO Generation Confirmation Modal */}
-        {awardModal.show && awardModal.row && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-            <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                <div>
-                  <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Generate Purchase Order</span>
-                  <h3 className="text-base font-black text-slate-900 mt-1">Accept Quotation & Award Bid</h3>
-                </div>
-                <button
-                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
-                  className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              
-              <div className="py-4 space-y-4 text-xs">
-                <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100 space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-semibold">Selected Supplier:</span>
-                    <span className="font-black text-slate-900">{awardModal.row.sellerName}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-semibold">Evaluated Price:</span>
-                    <span className="font-black text-emerald-700 text-sm">{money(awardModal.row.totalPrice)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-semibold">Rank:</span>
-                    <span className="font-black text-slate-800">{awardModal.row.finalRank}</span>
-                  </div>
-                </div>
+        {/* Contract Award Confirmation Modal */}
+        {renderAwardModal()}
 
-                <div className="space-y-1.5">
-                  <label className="block font-bold text-slate-700">Award Remarks / PO Reference</label>
-                  <textarea
-                    rows={3}
-                    value={awardModal.remarks}
-                    onChange={(e) => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
-                    placeholder="Enter award justification or procurement notes (e.g., L1 verified and compliant)..."
-                    className="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none"
-                  />
-                </div>
-
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Accepting this quotation will officially award the procurement to <strong className="text-slate-700">{awardModal.row.sellerName}</strong>, mark the bid as awarded, and trigger automatic purchase order generation.
-                </p>
-              </div>
-
-              <div className="border-t border-slate-100 pt-4 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
-                  className="h-9 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-bold text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={awardModal.submitting}
-                  onClick={handleConfirmAward}
-                  className="h-9 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-xs font-black text-white flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-                >
-                  {awardModal.submitting ? (
-                    'Generating PO...'
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" /> Confirm & Generate PO
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </PageShell>
     );
   }
@@ -2219,102 +2259,7 @@ export default function BidResultsPage() {
 
 
       {/* Award Offer Confirmation Modal */}
-      {awardModal.show && awardModal.row && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-              <div>
-                <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-sm">Contract Award Offer</span>
-                <h3 className="text-base font-black text-slate-900 mt-1">Award Contract to Supplier</h3>
-              </div>
-              <button
-                onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
-                className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            
-            <div className="py-4 space-y-4 text-xs">
-              <div className="rounded-2xl bg-slate-50 p-4 border border-slate-100 space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-500">Supplier:</span>
-                  <span className="font-black text-slate-900">{awardModal.row.sellerName}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-500">Offered Item:</span>
-                  <span className="font-semibold text-slate-800">{awardModal.row.offeredItem || 'As Quoted'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-500">Total Evaluated Price:</span>
-                  <span className="font-black text-emerald-700">{awardModal.row.totalPrice ? money(awardModal.row.totalPrice) : 'Evaluated'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-bold text-slate-500">Rank:</span>
-                  <span className="font-bold text-slate-800">{awardModal.row.finalRank}</span>
-                </div>
-              </div>
-
-              {awardModal.row.finalRank !== 'L1' && (
-                <div className="space-y-2">
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 flex items-start gap-2">
-                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <p className="text-[11px] text-amber-900 leading-snug font-medium">
-                      <strong>Non-L1 Selection:</strong> You are awarding a supplier ({awardModal.row.finalRank}) other than L1. An official justification reason is required for procurement audit compliance.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                      Audit Justification Reason <span className="text-rose-500">*</span>
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={awardModal.justificationReason}
-                      onChange={e => setAwardModal(prev => ({ ...prev, justificationReason: e.target.value }))}
-                      placeholder="Enter justification for selecting a non-L1 supplier (e.g. superior warranty, technical superiority, local service availability)..."
-                      className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-emerald-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1">
-                  Award Notes / Contract Remarks
-                </label>
-                <textarea
-                  rows={3}
-                  value={awardModal.remarks}
-                  onChange={e => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
-                  placeholder="Enter award notes or terms to communicate with the supplier..."
-                  className="w-full rounded-xl border border-slate-200 p-3 text-xs focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                An award offer will be dispatched to <strong>{awardModal.row.sellerName}</strong>. Once the supplier accepts, you will be prompted to issue the Purchase Order. Other bidders remain on standby until PO is finalized.
-              </p>
-            </div>
-
-            <div className="border-t border-slate-100 pt-4 flex justify-end gap-2.5 sm:gap-3">
-              <button
-                onClick={() => setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false })}
-                disabled={awardModal.submitting}
-                className="h-10 rounded-xl bg-slate-100 hover:bg-slate-200 px-4 text-xs font-black text-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmAward}
-                disabled={awardModal.submitting}
-                className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 text-xs font-black text-white inline-flex items-center gap-2 shadow-xs"
-              >
-                {awardModal.submitting ? 'Submitting Offer...' : 'Send Award Offer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {renderAwardModal()}
 
       {/* Price Match Counter-Offer Modal (Configurable Deadline) */}
       {priceMatchModal.show && priceMatchModal.row && (
@@ -2489,7 +2434,12 @@ export default function BidResultsPage() {
           onClose={() => setSelectedForTechEval(null)}
           procurementId={bidId}
           participation={selectedForTechEval}
-          readOnly={isBidAlreadyAwarded}
+          readOnly={true}
+          isFinancialStageOpened={true}
+          isStage2Active={true}
+          bidStatus={bid?.status}
+          isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
+          packetType={bid?.packetType}
           onSuccess={() => {
             loadBid();
           }}

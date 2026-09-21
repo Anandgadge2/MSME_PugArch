@@ -452,7 +452,7 @@ export function BuyerRequirementsList({
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
                         <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-1.5 py-0.5 rounded border border-slate-200/80 shadow-2xs">
-                            {req.requirementNumber || `REQ-${req.id}`}
+                            {(req as any).referenceNumber || req.requirementNumber || (req.createdAt ? `RFQ-${new Date(req.createdAt).getFullYear()}-${String(req.id).padStart(5, '0')}` : `RFQ-${String(req.id).padStart(5, '0')}`)}
                         </span>
                         <span className="text-[10px] font-bold text-slate-500">
                             {req.category?.name || 'General Category'}
@@ -551,10 +551,7 @@ export function BuyerRequirementsList({
             cell: (req) => (
                 <button 
                     type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetails(req);
-                    }} 
+                    onClick={() => handleViewDetails(req)} 
                     className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] hover:shadow-md active:scale-95 transition-all duration-200 shadow-sm cursor-pointer"
                 >
                     View Details
@@ -804,7 +801,6 @@ export function BuyerRequirementsList({
                         sortKey={sort}
                         sortDirection={sortDir}
                         onSort={handleSortHeader}
-                        onRowClick={handleViewDetails}
                         minWidth="min-w-[1000px]"
                         isLoading={isLoading}
                     />

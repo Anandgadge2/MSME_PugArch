@@ -369,7 +369,7 @@ import { getResolvedOrgName } from '../../utils/organizationUtils';
 export { getResolvedOrgName };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const isShgAccount = isShgUser(user);
@@ -385,17 +385,47 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const [isHovered, setIsHovered] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // When collapsed, hovering over the sidebar smoothly opens/expands it
+  const effectivelyCollapsed = isCollapsed && !isHovered;
+
+  // Reset hover state immediately when route changes
+  useEffect(() => {
+    setIsHovered(false);
+  }, [pathname]);
 
   useEffect(() => {
     onHoverChange?.(isHovered);
   }, [isHovered, onHoverChange]);
 
-  const effectivelyCollapsed = isCollapsed && !isHovered;
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 60);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+    }, 120);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
+  const isAuthenticatedSeller = Boolean(!loading && token && user && (user?.role === 'seller' || user?.role === 'shg' || isShgAccount));
 
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],
     queryFn: async () => {
       const res = await api.get('/api/navigation/summary');
+      if (!res.ok) return {} as Record<string, number>;
       const body = await readJsonResponse(res);
       const data = unwrapApiData(body);
       if (!data) return {} as Record<string, number>;
@@ -422,9 +452,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/shg/opportunities/rate-contracts': rateContractsCount
       };
     },
-    enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
+    enabled: isAuthenticatedSeller,
     staleTime: 60000,
-    refetchInterval: 60000,
+    refetchInterval: isAuthenticatedSeller ? 60000 : false,
+    retry: false
   });
 
   const counts = countsData || {};
@@ -488,16 +519,18 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Email Setup', path: '/master-admin/email', icon: Mail, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Audit Logs', path: '/master-admin/audit', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
       { label: 'Stakeholder Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
       { label: 'Tender Approvals', path: '/admin/bids', icon: FileText, roles: ['admin'], featureCode: 'admin-bid-approval' },
-      { label: 'Final Award Approvals', path: '/admin/procurement-orders', icon: Trophy, roles: ['admin'] },
+      { label: 'Final Award Approvals', path: '/admin/bids', icon: Trophy, roles: ['admin'] },
     ] },
     { label: 'Monitoring', icon: FileSearch, roles: ['admin'], children: [
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
       { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
+      { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ] },
     { label: 'Marketplace & Content', icon: ShoppingCart, roles: ['admin'], children: [
       { label: 'Catalogue Moderation', path: '/admin/catalogue-moderation', icon: ShoppingCart, roles: ['admin'] },
@@ -586,7 +619,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Common items
     { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
     { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
-    { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'], permission: 'dispute.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -595,6 +627,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
     const hasRole = item.roles.includes(user.role)
+      || (user.role === 'master_admin' && item.roles.includes('admin'))
       || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {
@@ -687,8 +720,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         ref={sidebarRef}
         aria-label="Main Navigation"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={cn(
           "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
           effectivelyCollapsed ? "w-64 lg:w-20" : "w-64",
@@ -786,7 +819,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
-  const { user, token: authToken, logout, login } = useAuth();
+  const { user, token: authToken, loading: authLoading, logout, login } = useAuth();
   const { count: cartCount } = useMarketplaceCart();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
@@ -901,7 +934,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      if (!authToken) return;
+      if (authLoading || !user || !authToken) return;
       try {
         const res = await api.fetch('/api/notifications', {
           headers: { Authorization: `Bearer ${authToken}` }
@@ -911,25 +944,31 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           const body = unwrapApiData<any>(data);
           const items = Array.isArray(body) ? body : body?.notifications || body?.records || body?.items || [];
           setNotifications(Array.isArray(items) ? items : []);
+        } else if (res.status === 401) {
+          setNotifications([]);
         }
       } catch {
         setNotifications([]);
       }
     };
-    fetchNotifications();
+    if (!authLoading && user && authToken) {
+      fetchNotifications();
+    }
     const handleUpdate = () => { void fetchNotifications(); };
     window.addEventListener('notifications:updated', handleUpdate);
     const pollTimer = setInterval(() => {
-      void fetchNotifications();
+      if (!authLoading && user && authToken) {
+        void fetchNotifications();
+      }
     }, 30000);
     return () => {
       clearInterval(pollTimer);
       window.removeEventListener('notifications:updated', handleUpdate);
     };
-  }, [authToken]);
+  }, [authToken, user, authLoading]);
 
   useEffect(() => {
-    if (!authToken) return;
+    if (authLoading || !user || !authToken) return;
 
     const baseUrl = BASE_URL;
     const isRealToken = authToken && authToken !== COOKIE_SESSION_TOKEN && authToken !== 'cookie-session';
@@ -1101,7 +1140,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   const openNotification = async (item: PortalNotification) => {
     if (!item.isRead) await markNotificationAsRead(item.id);
-    router.push(routeForNotification(item, user?.role));
+    router.push(routeForNotification(item, user?.role, user));
     setIsNotificationsOpen(false);
   };
 

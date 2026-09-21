@@ -16,6 +16,7 @@ export interface DateTimePickerProps {
   label?: string;
   value?: string; // Expects "YYYY-MM-DDTHH:mm", "YYYY-MM-DD", or ISO string
   onChange: (value: string) => void;
+  mode?: 'datetime' | 'date';
   required?: boolean;
   disabled?: boolean;
   error?: string;
@@ -139,12 +140,13 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       label,
       value,
       onChange,
+      mode = 'datetime',
       required,
       disabled,
       error,
       min,
       max,
-      placeholder = 'Select date & time (12-hr AM/PM)',
+      placeholder,
       className,
       hint,
       'aria-label': ariaLabel,
@@ -157,6 +159,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const errorId = `${inputId}-error`;
     const hintId = `${inputId}-hint`;
     const popoverId = `${inputId}-popover`;
+    const resolvedPlaceholder = placeholder || (mode === 'date' ? 'Select date' : 'Select date & time (12-hr AM/PM)');
 
     const containerRef = React.useRef<HTMLDivElement>(null);
     const triggerRef = React.useRef<HTMLButtonElement>(null);
@@ -211,7 +214,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const updatePosition = React.useCallback(() => {
       if (!triggerRef.current) return;
       const triggerRect = triggerRef.current.getBoundingClientRect();
-      const popoverHeight = popoverRef.current?.offsetHeight || 370;
+      const popoverHeight = popoverRef.current?.offsetHeight || (mode === 'date' ? 290 : 370);
       const popoverWidth = Math.min(310, window.innerWidth - 16);
       const bottomBuffer = 85; // Account for floating sticky bottom action bars
 
@@ -239,7 +242,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
         zIndex: 99999,
         visibility: 'visible',
       });
-    }, []);
+    }, [mode]);
 
     const toggleOpen = () => {
       if (disabled) return;
@@ -272,6 +275,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
 
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
+          e.stopPropagation();
           setIsOpen(false);
           triggerRef.current?.focus();
         }
@@ -306,7 +310,12 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     };
 
     const handleDateSelect = (dateStr: string) => {
-      handleUpdate(dateStr, parsed.hour12, parsed.minute, parsed.period);
+      if (mode === 'date') {
+        onChange(dateStr);
+        setIsOpen(false);
+      } else {
+        handleUpdate(dateStr, parsed.hour12, parsed.minute, parsed.period);
+      }
     };
 
     const handleHourChange = (hourStr: string) => {
@@ -324,6 +333,11 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     };
 
     const handleSetNow = () => {
+      if (mode === 'date') {
+        onChange(todayIsoDate);
+        setIsOpen(false);
+        return;
+      }
       const n = new Date();
       const curDate = `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
       let h = n.getHours();
@@ -366,8 +380,11 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       const [y, m, d] = parsed.date.split('-');
       const monthIdx = parseInt(m, 10) - 1;
       const monthName = SHORT_MONTH_NAMES[monthIdx] || m;
+      if (mode === 'date') {
+        return `${d} ${monthName} ${y}`;
+      }
       return `${d} ${monthName} ${y}, ${parsed.hour12}:${parsed.minute} ${parsed.period}`;
-    }, [parsed]);
+    }, [parsed, mode]);
 
     const hoursList = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
     // Minute options in 5-minute steps, plus current minute if not in 5-min step
@@ -428,7 +445,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                   {displayLabel}
                 </span>
               ) : (
-                <span className="text-slate-400 truncate">{placeholder}</span>
+                <span className="text-slate-400 truncate">{resolvedPlaceholder}</span>
               )}
             </div>
 
@@ -450,7 +467,9 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                   <X className="h-3.5 w-3.5" />
                 </span>
               )}
-              <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              {mode !== 'date' && (
+                <Clock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              )}
             </div>
           </button>
         </div>
@@ -473,7 +492,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
             ref={popoverRef}
             id={popoverId}
             role="dialog"
-            aria-label="Date and 12-Hour Time Picker"
+            aria-label={mode === 'date' ? 'Date Picker' : 'Date and 12-Hour Time Picker'}
             style={popoverStyle}
             className="rounded-2xl bg-white p-3.5 shadow-2xl border border-slate-200 ring-1 ring-black/10 animate-in fade-in-50 duration-100"
           >
@@ -549,14 +568,23 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                   const isSelected = parsed.date === dayStr;
                   const isToday = todayIsoDate === dayStr;
 
+                  const minDateStr = min ? (min.includes('T') ? min.split('T')[0] : min) : undefined;
+                  const maxDateStr = max ? (max.includes('T') ? max.split('T')[0] : max) : undefined;
+                  const isBeforeMin = minDateStr ? dayStr < minDateStr : false;
+                  const isAfterMax = maxDateStr ? dayStr > maxDateStr : false;
+                  const isDayDisabled = isBeforeMin || isAfterMax;
+
                   return (
                     <button
                       key={dayStr}
                       type="button"
-                      onClick={() => handleDateSelect(dayStr)}
+                      disabled={isDayDisabled}
+                      onClick={() => !isDayDisabled && handleDateSelect(dayStr)}
                       className={cn(
                         'flex h-7 w-full items-center justify-center rounded-lg text-xs font-semibold transition',
-                        isSelected
+                        isDayDisabled
+                          ? 'text-slate-300 cursor-not-allowed opacity-35 hover:bg-transparent pointer-events-none'
+                          : isSelected
                           ? 'bg-[#12335f] text-white font-bold shadow-xs'
                           : isToday
                           ? 'border border-[#12335f] text-[#12335f] font-bold hover:bg-slate-50'
@@ -571,83 +599,85 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
             </div>
 
             {/* 3. Minimalist 12-Hour Time Strip */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 mb-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
-                  <Clock className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
-                  <span className="text-[11px] font-bold text-slate-700">Time</span>
-                </div>
+            {mode !== 'date' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-2.5 mb-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
+                    <Clock className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                    <span className="text-[11px] font-bold text-slate-700">Time</span>
+                  </div>
 
-                {/* Hour : Minute Selectors */}
-                <div className="flex items-center gap-1">
-                  <select
-                    id={`${inputId}-hour`}
-                    value={parsed.hour12}
-                    onChange={e => handleHourChange(e.target.value)}
-                    aria-label="Select hour"
-                    className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/20 cursor-pointer"
-                  >
-                    {hoursList.map(h => (
-                      <option key={h} value={h}>
-                        {h}
-                      </option>
-                    ))}
-                  </select>
+                  {/* Hour : Minute Selectors */}
+                  <div className="flex items-center gap-1">
+                    <select
+                      id={`${inputId}-hour`}
+                      value={parsed.hour12}
+                      onChange={e => handleHourChange(e.target.value)}
+                      aria-label="Select hour"
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/20 cursor-pointer"
+                    >
+                      {hoursList.map(h => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
 
-                  <span className="text-slate-400 font-black text-sm">:</span>
+                    <span className="text-slate-400 font-black text-sm">:</span>
 
-                  <select
-                    id={`${inputId}-minute`}
-                    value={parsed.minute}
-                    onChange={e => handleMinuteChange(e.target.value)}
-                    aria-label="Select minute"
-                    className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/20 cursor-pointer"
-                  >
-                    {minuteOptions.map(m => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    <select
+                      id={`${inputId}-minute`}
+                      value={parsed.minute}
+                      onChange={e => handleMinuteChange(e.target.value)}
+                      aria-label="Select minute"
+                      className="h-8 rounded-lg border border-slate-200 bg-white px-1.5 text-xs font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/20 cursor-pointer"
+                    >
+                      {minuteOptions.map(m => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* AM / PM Toggle Pill */}
-                <div
-                  role="radiogroup"
-                  aria-label="AM or PM"
-                  className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs shrink-0"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={parsed.period === 'AM'}
-                    onClick={() => handlePeriodToggle('AM')}
-                    className={cn(
-                      'px-2 py-1 text-[11px] font-black rounded-md transition-all',
-                      parsed.period === 'AM'
-                        ? 'bg-[#12335f] text-white shadow-xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    )}
+                  {/* AM / PM Toggle Pill */}
+                  <div
+                    role="radiogroup"
+                    aria-label="AM or PM"
+                    className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs shrink-0"
                   >
-                    AM
-                  </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={parsed.period === 'PM'}
-                    onClick={() => handlePeriodToggle('PM')}
-                    className={cn(
-                      'px-2 py-1 text-[11px] font-black rounded-md transition-all',
-                      parsed.period === 'PM'
-                        ? 'bg-[#12335f] text-white shadow-xs'
-                        : 'text-slate-500 hover:text-slate-800'
-                    )}
-                  >
-                    PM
-                  </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={parsed.period === 'AM'}
+                      onClick={() => handlePeriodToggle('AM')}
+                      className={cn(
+                        'px-2 py-1 text-[11px] font-black rounded-md transition-all',
+                        parsed.period === 'AM'
+                          ? 'bg-[#12335f] text-white shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      AM
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={parsed.period === 'PM'}
+                      onClick={() => handlePeriodToggle('PM')}
+                      className={cn(
+                        'px-2 py-1 text-[11px] font-black rounded-md transition-all',
+                        parsed.period === 'PM'
+                          ? 'bg-[#12335f] text-white shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      )}
+                    >
+                      PM
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* 4. Sleek Footer Actions */}
             <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
@@ -657,7 +687,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                   onClick={handleSetNow}
                   className="text-[11px] font-bold text-slate-500 hover:text-[#12335f] transition"
                 >
-                  Now
+                  {mode === 'date' ? 'Today' : 'Now'}
                 </button>
                 {parsed.hasValue && (
                   <button

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { resolveMediaUrl } from '../../../lib/api';
 
 export interface TaxInvoiceItem {
   srNo: number | string;
@@ -61,6 +62,7 @@ export interface TaxInvoiceData {
 export async function loadImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
   if (!url || typeof window === 'undefined') return null;
   if (url.startsWith('data:image/')) return url;
+  const targetUrl = resolveMediaUrl(url) || url;
 
   return new Promise((resolve) => {
     try {
@@ -84,7 +86,7 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
         }
       };
       img.onerror = () => resolve(null);
-      img.src = url;
+      img.src = targetUrl;
     } catch {
       resolve(null);
     }

@@ -214,10 +214,16 @@ export default function Profile() {
                 </Link>
               )}
               {user.role === 'admin' && (
-                <Link href="/admin/onboarding" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
-                  Admin console
-                  <ExternalLink className="h-4 w-4" />
-                </Link>
+                <>
+                  <Link href="/admin/onboarding" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
+                    Admin console
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                  <Link href="/admin/disputes" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
+                    Disputes & Grievances
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </>
               )}
             </div>
           </div>

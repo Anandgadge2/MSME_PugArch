@@ -25,7 +25,7 @@ configureGCS().then(ok => {
 import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
-import { handleUpgrade } from './src/services/websocket.service.js';
+import { handleUpgrade, broadcastToProcurement } from './src/services/websocket.service.js';
 import { authorizePusherChannel, isPusherConfigured, publishConversationEvent } from './src/services/pusher.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
@@ -206,6 +206,36 @@ app.use('/api', (req, res, next) => {
   });
 
   return next();
+});
+
+// RFC 6455 compliant HTTP endpoint for WebSocket route:
+// When a plain HTTP request arrives at /api/ws (e.g. from browser navigation, health checks, or misconfigured reverse proxies),
+// respond with 200 OK on serverless environments (where WebSockets are not supported) to avoid false-positive 426 warnings in logs,
+// or respond with 426 Upgrade Required on persistent server runtimes.
+app.get('/api/ws', (req, res) => {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.LAMBDA_TASK_ROOT) {
+    return res.status(200).json({
+      status: 'SERVERLESS_ENVIRONMENT',
+      code: 200,
+      websocketSupported: false,
+      message: 'Persistent WebSockets are not supported in serverless functions. Real-time events are served via Pusher or HTTP polling.',
+      transport: 'polling',
+    });
+  }
+
+  res.status(426).set({
+    'Upgrade': 'WebSocket',
+    'Connection': 'Upgrade',
+  }).json({
+    status: 'UPGRADE_REQUIRED',
+    code: 426,
+    message: 'This is a WebSocket endpoint. Connect using ws:// or wss:// with Upgrade headers.',
+    transport: 'websocket',
+  });
+});
+
+app.get('/api/ws/health', (req, res) => {
+  res.json({ status: 'OK', transport: 'websocket' });
 });
 
 app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
@@ -1291,7 +1321,18 @@ const enrichConversationPayload = async (conversation: any) => {
             subject: true,
             status: true,
             quoteResponses: {
-              select: { id: true, status: true, totalAmount: true, responseNumber: true, createdAt: true, deliveryDays: true }
+              select: {
+                id: true,
+                status: true,
+                totalAmount: true,
+                responseNumber: true,
+                createdAt: true,
+                deliveryDays: true,
+                notes: true,
+                documentUrl: true,
+                warrantyPeriod: true,
+                acknowledgement: true
+              }
             }
           }
         });
@@ -1991,6 +2032,40 @@ app.get('/api/tenders/:id', authenticate, authorize('buyer', 'seller', 'admin'),
     const isAdmin = req.user?.role === 'admin';
     if (!isOwnerBuyer && !isPublishedForSeller && !isAdmin) {
       return res.status(404).json({ message: 'Tender not found' });
+    }
+
+    if (tender && (!tender.participations || tender.participations.length === 0)) {
+      const tenderNumId = Number(tender.id);
+      const tenderStrId = String(tender.tenderId || '');
+      const linkedBid = await prisma.procurementBid.findFirst({
+        where: {
+          OR: [
+            ...(tenderStrId ? [{ bidNumber: tenderStrId }] : []),
+            ...(tenderNumId ? [{ id: tenderNumId }] : [])
+          ]
+        },
+        include: {
+          participations: {
+            include: {
+              seller: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  mobile: true,
+                  role: true,
+                  organization: true
+                }
+              },
+              documents: true
+            }
+          }
+        }
+      }).catch(() => null);
+
+      if (linkedBid?.participations && linkedBid.participations.length > 0) {
+        tender.participations = linkedBid.participations;
+      }
     }
 
     res.json(maskSensitive(tender));
@@ -4514,7 +4589,8 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
         inspectionRecord: true,
         invoices: { orderBy: { createdAt: 'desc' } },
         buyer: { select: { id: true, name: true, email: true } },
-        seller: { select: { id: true, name: true, email: true } }
+        seller: { select: { id: true, name: true, email: true } },
+        grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
       },
       orderBy,
       skip,
@@ -4598,12 +4674,16 @@ app.post('/api/purchase-orders/:id/invoices', authenticate, authorize('seller', 
 app.get('/api/invoices/summary', authenticate, authorize('buyer', 'seller', 'admin'), async (req: AuthRequest, res) => {
   try {
     const userId = Number(req.user?.id);
+    const orgId = req.user?.organizationId;
     const role = String(req.user?.role);
-    const where = role === 'admin'
-      ? {}
-      : role === 'buyer'
-        ? { buyerId: userId }
-        : { sellerId: userId };
+    let where: any = {};
+    if (role !== 'admin') {
+      if (role === 'buyer') {
+        where = orgId ? { OR: [{ buyerId: userId }, { buyer: { organizationId: orgId } }] } : { buyerId: userId };
+      } else {
+        where = orgId ? { OR: [{ sellerId: userId }, { seller: { organizationId: orgId } }] } : { sellerId: userId };
+      }
+    }
 
     const invoices = await prisma.invoice.findMany({
       where,
@@ -6362,6 +6442,27 @@ app.post('/api/conversations/:id/quotation', authenticate, authorize('seller', '
       totalAmount: finalAmount,
       responseNumber
     });
+
+    try {
+      broadcastToProcurement(quoteRequest.id, {
+        type: 'QUOTATION_SUBMITTED',
+        requirementId: quoteRequest.id,
+        responseId: quoteResponse.id,
+        offeredPrice: finalAmount,
+        sellerOrgId: (req.user as any)?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(conversation.id, {
+        type: 'QUOTATION_SUBMITTED',
+        requirementId: conversation.id,
+        responseId: quoteResponse.id,
+        offeredPrice: finalAmount,
+        sellerOrgId: (req.user as any)?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[Conversation Quotation] Failed to broadcastToProcurement');
+    }
 
     void notifyConversationParticipants({
       actor: req.user!,

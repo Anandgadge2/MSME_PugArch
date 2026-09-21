@@ -178,7 +178,7 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
             width: 'w-[8%]',
             align: 'right',
             cell: (dp) => (
-                <div className="flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-end gap-1">
                     <button
                         type="button"
                         onClick={() => setOpenId(dp.id)}
@@ -356,8 +356,6 @@ export default function DirectPurchasePage({ listOnly = false }: { listOnly?: bo
                 emptyDescription={isBuyer ? 'Create your first request from a known vendor.' : 'No requests visible.'}
                 showSrNo
                 srNoWidth="w-[4%]"
-                onRowClick={(dp) => setOpenId(dp.id)}
-                rowClassName="cursor-pointer"
                 caption="Direct Purchases List"
             />
 

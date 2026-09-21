@@ -3,11 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getPusherClient, isPusherAvailable } from '../../../lib/realtime';
 import type { ConversationDto, MessageDto } from '../api';
 
-export const useConversationRealtime = (conversationId: number | undefined) => {
+export const useConversationRealtime = (conversationId: number | undefined, enabled: boolean = true) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !enabled) return;
 
     let isMounted = true;
 

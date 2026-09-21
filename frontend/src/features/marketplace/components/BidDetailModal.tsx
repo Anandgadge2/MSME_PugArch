@@ -535,7 +535,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                         <textarea
                             value={message}
                             onChange={e => setMessage(e.target.value)}
-                            placeholder="Your message or quotation details (min. 10 characters)…"
+                            placeholder="Your message or quotation details…"
                             rows={3}
                             className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 focus:border-[#0b2447] transition-colors resize-none"
                         />

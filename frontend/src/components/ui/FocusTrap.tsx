@@ -85,9 +85,15 @@ export function FocusTrap({
         return;
       }
 
+      const activeElement = document.activeElement;
+
+      // Allow focus navigation inside portaled dialogs (e.g., date-time picker popover)
+      if (activeElement && (activeElement as HTMLElement).closest?.('[role="dialog"][id$="-popover"], [data-portal-popover]')) {
+        return;
+      }
+
       const firstElement = focusables[0];
       const lastElement = focusables[focusables.length - 1];
-      const activeElement = document.activeElement;
 
       if (e.shiftKey) {
         // Shift + Tab: if on first element, wrap to last

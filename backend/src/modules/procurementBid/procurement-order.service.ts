@@ -378,7 +378,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
   // Send in-app & email notification to the seller with attached Purchase Order PDF when quotation is accepted
   const sellerUserId = Number(participation.sellerId);
   const poNumberStr = result.poNumber || 'PO-PB';
-  const bidTitleStr = bid.title || bid.itemName || `Bid #${bid.id}`;
+  const bidTitleStr = bid.title || `Bid #${bid.id}`;
   const totalAmountStr = result.amount ? `₹${Number(result.amount).toLocaleString('en-IN')}` : '';
 
   let pdfAttachment: { filename: string; content: Buffer; contentType: string } | undefined = undefined;
@@ -400,7 +400,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
     message: `Your quotation for "${bidTitleStr}" has been accepted by the buyer! Purchase Order #${poNumberStr} has been generated. Official Purchase Order PDF is attached to this email.`,
     type: 'QUOTATION_ACCEPTED',
     priority: 'high',
-    redirectUrl: `/orders/procurement/${result.id}`,
+    redirectUrl: `/seller/orders?orderId=${result.id}`,
     emailSubject: `Quotation Accepted & Purchase Order #${poNumberStr} Generated - MSME Portal`,
     attachments: pdfAttachment ? [pdfAttachment] : undefined,
     emailHtml: `
@@ -442,7 +442,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
     message: `Your purchase order for "${bidTitleStr}" has been generated and issued to supplier ${sellerOrgName}. Official Purchase Order PDF is attached to this email.`,
     type: 'PO_GENERATED',
     priority: 'high',
-    redirectUrl: `/buyer/orders`,
+    redirectUrl: `/buyer/orders?orderId=${result.id}`,
     emailSubject: `[PO Confirmation] Purchase Order #${poNumberStr} Generated - MSME Portal`,
     attachments: pdfAttachment ? [pdfAttachment] : undefined,
     emailHtml: `
@@ -484,9 +484,11 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
 };
 
 export const listSellerAwards = async (actor: AuthenticatedUser) => {
-  if (actor.role !== 'seller') throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
+  if (actor.role !== 'seller' && actor.role !== 'shg') throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
+  const sellerIds = await getSellerUserIdsForActor(actor);
+  if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
   const awards = await db.procurementBidAward.findMany({
-    where: { sellerId: actor.id },
+    where: { sellerId: { in: sellerIds } },
     include: {
       bid: true,
       participation: true
@@ -501,10 +503,137 @@ export const listSellerAwards = async (actor: AuthenticatedUser) => {
   return awards.map((award: any) => ({ ...award, purchaseOrder: poMap.get(award.id) || null }));
 };
 
+export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser) => {
+  if (actor.role !== 'seller' && actor.role !== 'shg') {
+    throw new ApiError(403, 'Seller or SHG access required', 'FORBIDDEN_ROLE');
+  }
+  const sellerIds = await getSellerUserIdsForActor(actor);
+  if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
+
+  // 1. Pending Bid Awards (OFFERED, RECOMMENDED, ADMIN_APPROVED)
+  const pendingAwards = await db.procurementBidAward.findMany({
+    where: {
+      sellerId: { in: sellerIds },
+      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+    },
+    include: {
+      bid: {
+        select: {
+          id: true,
+          bidNumber: true,
+          title: true,
+          category: true,
+          buyerOrganizationName: true,
+          buyerId: true,
+          status: true,
+          bidType: true
+        }
+      },
+      participation: {
+        select: {
+          id: true,
+          participationNumber: true,
+          totalAmount: true,
+          quotedAmount: true,
+          finalStatus: true
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  // Attach any PO associated with these awards
+  const awardIds = pendingAwards.map((a: any) => a.id);
+  const posForAwards = awardIds.length > 0 ? await db.purchaseOrder.findMany({
+    where: {
+      sourceType: 'procurement_bid_award',
+      sourceId: { in: awardIds }
+    },
+    select: {
+      id: true,
+      poNumber: true,
+      status: true,
+      poStatus: true,
+      amount: true,
+      sourceId: true,
+      buyerId: true,
+      createdAt: true
+    }
+  }) : [];
+  const poByAwardId = new Map<number, any>(posForAwards.map((po: any) => [Number(po.sourceId), po]));
+  const awardPoIds = posForAwards.map((po: any) => Number(po.id)).filter(Boolean);
+
+  // 2. Standalone or related Purchase Orders issued to this seller that are NOT yet accepted
+  const pendingPOs = await db.purchaseOrder.findMany({
+    where: {
+      sellerId: { in: sellerIds },
+      ...(awardPoIds.length > 0 ? { id: { notIn: awardPoIds } } : {}),
+      status: { in: ['issued', 'generated', 'pending_acceptance', 'placed'] },
+      OR: [
+        { poStatus: null },
+        { poStatus: { in: ['GENERATED', 'ISSUED'] } }
+      ]
+    },
+    include: {
+      buyer: {
+        select: {
+          id: true,
+          name: true,
+          organization: { select: { organizationName: true } }
+        }
+      }
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 20
+  });
+
+  const formattedAwards = pendingAwards.map((a: any) => {
+    const po: any = poByAwardId.get(Number(a.id)) || null;
+    return {
+      id: a.id,
+      bidId: a.bidId,
+      bidNumber: a.bid?.bidNumber || `BID-${a.bidId}`,
+      title: a.bid?.title || 'Procurement Bid Award',
+      amount: Number(a.awardedAmount || a.participation?.totalAmount || a.participation?.quotedAmount || 0),
+      awardStatus: a.awardStatus,
+      awardedAt: a.awardedAt || a.createdAt,
+      buyerOrganizationName: a.bid?.buyerOrganizationName || 'Buyer Organization',
+      purchaseOrder: po ? {
+        id: (po as any).id,
+        poNumber: (po as any).poNumber,
+        status: (po as any).status,
+        poStatus: (po as any).poStatus,
+        amount: Number((po as any).amount || 0)
+      } : null
+    };
+  });
+
+  const formattedPOs = pendingPOs.map((po: any) => ({
+    id: po.id,
+    poNumber: po.poNumber,
+    title: po.title || 'Purchase Order',
+    amount: Number(po.amount || 0),
+    status: po.status,
+    poStatus: po.poStatus,
+    createdAt: po.createdAt,
+    buyerName: po.buyer?.name || 'Buyer',
+    buyerOrganizationName: po.buyer?.organization?.organizationName || (po.metadata as any)?.buyerOrganizationName || 'Buyer Organization'
+  }));
+
+  return {
+    hasPending: formattedAwards.length > 0 || formattedPOs.length > 0,
+    count: formattedAwards.length + formattedPOs.length,
+    awards: formattedAwards,
+    purchaseOrders: formattedPOs
+  };
+};
+
 const loadAwardOrderForSeller = async (actor: AuthenticatedUser, awardId: number) => {
-  if (actor.role !== 'seller') throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
+  if (actor.role !== 'seller' && actor.role !== 'shg') throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
+  const sellerIds = await getSellerUserIdsForActor(actor);
+  if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
   const award = await db.procurementBidAward.findUnique({ where: { id: awardId }, include: { bid: true, participation: true } });
-  if (!award || award.sellerId !== actor.id) throw new ApiError(404, 'Award not found', 'AWARD_NOT_FOUND');
+  if (!award || !sellerIds.includes(award.sellerId)) throw new ApiError(404, 'Award not found', 'AWARD_NOT_FOUND');
   const po = await db.purchaseOrder.findFirst({ where: { sourceType: 'procurement_bid_award', sourceId: award.id }, include: poInclude });
   if (!po) throw new ApiError(404, 'Purchase order not generated for award yet', 'PO_NOT_FOUND');
   const delivery = po.deliveryTrackings?.[0] || await deliveryService.ensureDeliveryForPO({ id: actor.id, role: actor.role }, po.id, {});
@@ -612,7 +741,7 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
     title: 'Purchase Order Accepted',
     message: `Seller has accepted Purchase Order #${po.poNumber}. Fulfillment has officially begun.`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   }).catch(() => undefined);
 
   return result;
@@ -638,7 +767,7 @@ export const acceptSellerAward = async (req: AuthRequest, awardId: number, body:
     title: 'Purchase Order Accepted',
     message: `Seller has accepted the purchase order for "${award.bid.title}".`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po?.id}`
+    redirectUrl: `/buyer/orders?orderId=${po?.id}`
   });
 
   return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
@@ -659,7 +788,7 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
     title: 'Purchase Order Rejected',
     message: `Seller has rejected the purchase order for "${award.bid.title}". Reason: ${reason}`,
     type: 'purchase_order',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   });
 
   return { award: updatedAward, purchaseOrderId: po.id, delivery: updatedDelivery };
@@ -692,7 +821,7 @@ export const updateOrderDelivery = async (req: AuthRequest, orderId: number, bod
         title: 'Goods Delivered',
         message: `Seller has marked purchase order ${po.poNumber} as DELIVERED.`,
         type: 'delivery',
-        redirectUrl: `/orders/procurement/${po.id}`
+        redirectUrl: `/buyer/orders?orderId=${po.id}`
       });
     }
   }
@@ -781,7 +910,7 @@ export const approveOrderGrn = async (req: AuthRequest, orderId: number, grnId: 
     title: 'GRN Approved',
     message: `Buyer has approved the Goods Receipt Note for purchase order ${po.poNumber}.`,
     type: 'grn',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return updated;
@@ -902,7 +1031,7 @@ export const createOrderInvoice = async (req: AuthRequest, orderId: number, body
     title: 'Invoice Submitted',
     message: `Seller has submitted invoice ${invoice.invoiceNumber} for purchase order ${po.poNumber}.`,
     type: 'invoice',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/buyer/orders?orderId=${po.id}`
   });
 
   return invoice;
@@ -937,7 +1066,7 @@ export const approveOrderInvoice = async (req: AuthRequest, orderId: number, inv
     title: 'Invoice Approved',
     message: `Buyer has approved invoice ${invoice.invoiceNumber} for purchase order ${po.poNumber}.`,
     type: 'invoice',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return updated;
@@ -1023,7 +1152,7 @@ export const markSettlementConfirmed = async (req: AuthRequest, orderId: number,
     title: 'Payment Released',
     message: `Payment has been released and confirmed for purchase order ${po.poNumber}.`,
     type: 'payment',
-    redirectUrl: `/orders/procurement/${po.id}`
+    redirectUrl: `/seller/orders?orderId=${po.id}`
   });
 
   return settlement;
@@ -1167,7 +1296,7 @@ export const confirmOrderSettlement = async (req: AuthRequest, invoiceId: number
     title: 'Order Completed & Settled',
     message: `Seller has confirmed receipt of funds for Invoice #${invoice.invoiceNumber}. Purchase Order #${invoice.purchaseOrder?.poNumber || invoice.purchaseOrderId} is now completed.`,
     type: 'order_completed',
-    redirectUrl: `/orders/procurement/${invoice.purchaseOrderId}`
+    redirectUrl: `/buyer/orders?orderId=${invoice.purchaseOrderId}`
   }).catch(() => undefined);
 
   return updatedInvoice;

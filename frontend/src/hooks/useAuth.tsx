@@ -3,8 +3,10 @@ import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
+import { disconnectPusher } from '../lib/realtime';
 import { isShgUser } from '../lib/shg';
 import { clearPermissionsCache } from './useOrgRole';
+import { getQueryClient } from '../lib/queryClient';
 
 interface User {
   id: string;
@@ -118,10 +120,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('msme_user_cache');
     clearPermissionsCache();
     clearAuthCookie();
+    disconnectPusher();
     setToken(null);
     setUser(null);
     setLoading(false);
     api.invalidate();
+    try {
+      getQueryClient().clear();
+    } catch {
+      // ignore
+    }
   }, []);
 
   const logout = useCallback(async (redirectPath?: string | any) => {
@@ -150,10 +158,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [clearLocalSession, router]);
 
   const refreshUser = useCallback(async (options?: { skipCache?: boolean }) => {
-    const headers = {};
+    const storedToken = getStoredToken();
+    const headers: Record<string, string> = {};
+    if (storedToken && storedToken !== COOKIE_SESSION_TOKEN && storedToken !== 'null' && storedToken !== 'undefined') {
+      headers.Authorization = `Bearer ${storedToken}`;
+    }
     const hasCachedUser = Boolean(localStorage.getItem('msme_user_cache'));
     const hasSessionMarker = Boolean(getCookieValue('csrfToken'));
-    const hasStoredSession = Boolean(getStoredToken());
+    const hasStoredSession = Boolean(storedToken);
 
     // The public marketplace is intentionally usable without authentication.
     // If the browser has no evidence of a session, do not probe /me, attempt a

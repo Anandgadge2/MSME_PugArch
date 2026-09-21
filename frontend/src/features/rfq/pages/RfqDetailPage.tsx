@@ -25,6 +25,7 @@ import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../comp
 import RateContractDetailPage from './RateContractDetailPage';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
 import { sanitizeUom, sanitizeHsn } from '../utils/quoteItemParser';
+import { useProcurementRealtime } from '../hooks/useProcurementRealtime';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UTILITY HELPERS
@@ -40,17 +41,23 @@ const fmt = (val?: number | string | null): string => {
 const fmtDate = (d?: string | Date | null, includeTime?: boolean): string => {
   if (!d) return '—';
   try {
-    const dt = new Date(d);
+    let s = typeof d === 'string' ? d.trim() : d;
+    if (typeof s === 'string') {
+      s = s.replace(/\bSept\b/i, 'Sep');
+    }
+    const dt = new Date(s);
     if (isNaN(dt.getTime())) return String(d);
     const day = dt.getDate().toString().padStart(2, '0');
     const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
     const yr = dt.getFullYear();
     const isDateOnlyStr = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
     const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
-    if (isDateOnlyStr || (isMidnightUtc && !includeTime)) {
+    const isMidnightLocal = dt.getHours() === 0 && dt.getMinutes() === 0 && dt.getSeconds() === 0;
+    const isMidnight = isMidnightUtc || isMidnightLocal;
+    if (isDateOnlyStr || (isMidnight && !includeTime)) {
       return `${day} ${mo} ${yr}`;
     }
-    const shouldIncludeTime = includeTime !== undefined ? includeTime : (!isDateOnlyStr && !isMidnightUtc);
+    const shouldIncludeTime = includeTime !== undefined ? includeTime : (!isDateOnlyStr && !isMidnight);
     if (!shouldIncludeTime) return `${day} ${mo} ${yr}`;
     let hours = dt.getHours();
     const mm = dt.getMinutes().toString().padStart(2, '0');
@@ -363,6 +370,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       : (requestId || (rawBid as any)?.bidNumber || targetReqId || explicitReqId || requirementId || (rawBid as any)?.id || '')
   );
 
+  // Hybrid Real-Time Synchronization for Quotations & Responses
+  useProcurementRealtime(effectiveTargetId);
+
   const { data: buyerResponsesData } = useQuery({
     queryKey: ['rfq-buyer-responses-v2', effectiveTargetId, targetReqId, (rawBid as any)?.id],
     queryFn: async () => {
@@ -380,43 +390,26 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         return [];
       };
 
-      const trailingDigits = effectiveTargetId.match(/\d+/g);
-      const lastNumericPart = trailingDigits ? trailingDigits[trailingDigits.length - 1] : null;
-      const rawTargetReqId = targetReqId !== undefined && targetReqId !== null ? String(targetReqId) : null;
-      const absTargetReqId = rawTargetReqId && !isNaN(Number(rawTargetReqId)) && Number(rawTargetReqId) !== 0 ? String(Math.abs(Number(rawTargetReqId))) : null;
-      const rawBidId = (rawBid as any)?.id !== undefined && (rawBid as any)?.id !== null ? String((rawBid as any)?.id) : null;
+      const primaryToken = (rawBid as any)?.bidNumber || effectiveTargetId;
 
-      const candidateTokens = Array.from(new Set([
-        effectiveTargetId,
-        rawBidId,
-        (rawBid as any)?.bidNumber,
-        rawTargetReqId,
-        absTargetReqId,
-        requirementId ? String(requirementId) : null,
-        requestId,
-        lastNumericPart
-      ].filter(Boolean) as string[]));
+      try {
+        const res = await getApi<any>(`/api/buyer/procurement-bids/${encodeURIComponent(primaryToken)}/participants`, true);
+        const items = extractArray(res);
+        if (items.length > 0) return items;
+      } catch {}
 
-      for (const token of candidateTokens) {
-        const endpoints = [
-          `/api/buyer/requirements/${encodeURIComponent(token)}/responses?pageSize=50`,
-          `/api/buyer/procurement-bids/${encodeURIComponent(token)}/participants`,
-          `/api/marketplace/requirements/${encodeURIComponent(token)}/responses`,
-        ];
-
-        for (const ep of endpoints) {
-          try {
-            const res = await getApi<any>(ep, true);
-            const items = extractArray(res);
-            if (items.length > 0) return items;
-          } catch {}
-        }
-      }
+      try {
+        const res = await getApi<any>(`/api/buyer/requirements/${encodeURIComponent(primaryToken)}/responses?pageSize=50`, true);
+        const items = extractArray(res);
+        if (items.length > 0) return items;
+      } catch {}
 
       return [];
     },
     enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
-    staleTime: 10_000,
+    staleTime: 5_000,
+    refetchInterval: 12_000,
+    refetchOnWindowFocus: true,
   });
 
   const sellerResponses = React.useMemo(() => {
@@ -720,8 +713,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const buyType    = preferReq ? (reqObj?.payload?.basics?.bidType || rawBid?.technicalPacket?.basics?.bidType || 'Product') : (rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product');
   const value      = preferReq ? (reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.estimatedValue || rawBid?.technicalPacket?.basics?.estimatedValue) : (rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue);
   const deadline   = preferReq
-    ? (reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || reqObj?.lastDate || rawBid?.endDate || reqObj?.requiredBy)
-    : (rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
+    ? (reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || reqObj?.lastDate || rawBid?.rawEndDate || rawBid?.endDate || reqObj?.requiredBy)
+    : (rawBid?.rawEndDate || rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
   const resolvePublishedCandidate = (...candidates: any[]) => {
     const valid = candidates.filter(Boolean);
     const withTime = valid.find(c => {
@@ -753,12 +746,12 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     : (rawBid?.submissionStartDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.submissionStartDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || reqObj?.payload?.tender?.bidStartDate);
   const submissionStartDate = explicitSubmissionStartDate || published;
   const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
-  const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
+  const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.buyerProfile?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
   const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
-  const contact    = preferReq ? (reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyerPersonName || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.technicalPacket?.internal?.contactPerson || '—') : (rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.contactPerson || rawBid?.buyer?.name || reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyer?.name || '—');
-  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || reqObj?.buyer?.email || reqObj?.createdBy?.email || rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyer?.email || '') : (rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyerProfile?.email || rawBid?.buyer?.email || rawBid?.technicalPacket?.internal?.email || reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.createdBy?.email || '');
-  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.phone || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || reqObj?.buyer?.mobile || reqObj?.createdBy?.mobile || rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || rawBid?.buyerProfile?.mobile || rawBid?.buyer?.mobile || rawBid?.technicalPacket?.internal?.mobile || reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.createdBy?.mobile || '');
-  const buyerAddress = preferReq ? (reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || reqObj?.buyerProfile?.registeredAddress || reqObj?.buyerOrganization?.registeredAddress || rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '') : (rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || rawBid?.buyerProfile?.registeredAddress || rawBid?.buyerOrganization?.registeredAddress || reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || '');
+  const contact    = preferReq ? (reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyerPersonName || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.buyerName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.technicalPacket?.buyerContact?.contactPerson || '—') : (rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.buyerName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.technicalPacket?.buyerContact?.contactPerson || rawBid?.contactPerson || rawBid?.buyer?.name || reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.contactPerson || rawBid?.buyer?.name || '—');
+  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || reqObj?.buyer?.email || reqObj?.createdBy?.email || rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyer?.email || '') : (rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || rawBid?.buyer?.email || rawBid?.technicalPacket?.internal?.email || rawBid?.technicalPacket?.buyerContact?.email || reqObj?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || reqObj?.createdBy?.email || '');
+  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.phone || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || reqObj?.buyer?.mobile || reqObj?.createdBy?.mobile || rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || rawBid?.buyer?.mobile || rawBid?.technicalPacket?.internal?.mobile || rawBid?.technicalPacket?.buyerContact?.mobile || reqObj?.buyerMobile || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.createdBy?.mobile || '');
+  const buyerAddress = preferReq ? (reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || reqObj?.buyerProfile?.registeredAddress || reqObj?.buyerOrganization?.registeredAddress || rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '') : (rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || rawBid?.buyerProfile?.registeredAddress || rawBid?.buyerOrganization?.registeredAddress || reqObj?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '');
   const payTerms   = preferReq ? (reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || rawBid?.technicalPacket?.terms?.paymentTerms || '100% after delivery and acceptance') : (rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance');
   const delTerms   = preferReq ? (reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || rawBid?.technicalPacket?.terms?.deliveryTerms || 'Door delivery to site') : (rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site');
   const warranty   = preferReq ? (reqObj?.payload?.terms?.warrantyTerms || rawBid?.technicalPacket?.terms?.warrantyTerms || '12 Months') : (rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months');
@@ -1260,8 +1253,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       deadlineDate={deadline}
       createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
       publishedDate={published ? fmtDate(published, true) : undefined}
-      submissionStartDate={submissionStartDate ? fmtDate(submissionStartDate, true) : undefined}
-      closingDate={deadline ? fmtDate(deadline, true) : undefined}
+      submissionStartDate={submissionStartDate ? String(submissionStartDate) : undefined}
+      closingDate={deadline ? String(deadline) : undefined}
       clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
       technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
       financialDate={finOpen ? fmtDate(finOpen, true) : undefined}
@@ -1300,7 +1293,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
       submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results & Ranking' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
-      onViewQuotationClick={submitted ? handleSubmitQuotation : undefined}
       onDownloadClick={handleDownloadPdf}
       invoiceStatus={user?.role === 'seller' && isCurrentSellerAwarded ? { 
         exists: Boolean(invoiceStatusData?.exists), 

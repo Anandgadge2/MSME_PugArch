@@ -219,6 +219,39 @@ export function PurchaseOrderReceiptModal({
   const [scaleFactor, setScaleFactor] = useState<number>(1);
   const [sheetDims, setSheetDims] = useState<{ w: number; h: number }>({ w: 800, h: 650 });
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [liveBranding, setLiveBranding] = useState<{
+    logoUrl: string | null;
+    stampUrl: string | null;
+    signatureUrl: string | null;
+  }>({
+    logoUrl: null,
+    stampUrl: null,
+    signatureUrl: null
+  });
+
+  useEffect(() => {
+    if (!order) return;
+    const fetchBranding = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await api.fetch('/api/user/invoice-branding', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setLiveBranding({
+            logoUrl: data.logoUrl || null,
+            stampUrl: data.stampUrl || null,
+            signatureUrl: data.signatureUrl || null
+          });
+        }
+      } catch {
+        // non-blocking
+      }
+    };
+    void fetchBranding();
+  }, [order]);
 
   const currentTheme = NEUTRAL_MINIMAL_THEME;
 
@@ -462,14 +495,14 @@ export function PurchaseOrderReceiptModal({
   const buyerSignature = buyerReg.signatureUrl || null;
   const buyerStamp = buyerReg.stampUrl || null;
 
-  const effectiveSellerLogo = sellerLogo || (isViewingSeller ? (currentUserReg.logoUrl || lsLogo) : null);
-  const effectiveBuyerLogo = buyerLogo || (isViewingBuyer ? (currentUserReg.logoUrl || lsLogo) : null);
+  const effectiveSellerLogo = sellerLogo || (isViewingSeller ? (currentUserReg.logoUrl || liveBranding.logoUrl || lsLogo) : null);
+  const effectiveBuyerLogo = buyerLogo || (isViewingBuyer ? (currentUserReg.logoUrl || liveBranding.logoUrl || lsLogo) : null);
 
-  const effectiveSellerSignature = sellerSignature || (isViewingSeller ? (currentUserReg.signatureUrl || lsSig) : null);
-  const effectiveSellerStamp = sellerStamp || (isViewingSeller ? (currentUserReg.stampUrl || lsStamp) : null);
+  const effectiveSellerSignature = sellerSignature || (isViewingSeller ? (currentUserReg.signatureUrl || liveBranding.signatureUrl || lsSig) : null);
+  const effectiveSellerStamp = sellerStamp || (isViewingSeller ? (currentUserReg.stampUrl || liveBranding.stampUrl || lsStamp) : null);
 
-  const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || lsSig) : null);
-  const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || lsStamp) : null);
+  const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || liveBranding.signatureUrl || lsSig) : null);
+  const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || liveBranding.stampUrl || lsStamp) : null);
 
   const topLogo = effectiveSellerLogo || effectiveBuyerLogo;
   const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');
@@ -1562,14 +1595,26 @@ export function PurchaseOrderReceiptModal({
               </Button>
             )}
 
-            {isSeller && isAccepted && (
-              <Button
-                onClick={handleCreateInvoiceAction}
-                className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-              >
-                <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
-              </Button>
-            )}
+            {(() => {
+              const hasInvoice = Boolean(
+                (order as any)?.invoices?.length > 0 ||
+                (order as any)?.invoiceId ||
+                (order as any)?.invoiceNumber ||
+                (order as any)?.invoice ||
+                ['invoiced', 'invoice_submitted', 'payment_initiated', 'completed', 'paid'].includes(viewingStatusLower)
+              );
+              if (isSeller && isAccepted && !hasInvoice) {
+                return (
+                  <Button
+                    onClick={handleCreateInvoiceAction}
+                    className="h-9 bg-emerald-600 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <FileText className="mr-1.5 h-3.5 w-3.5" /> Convert PO to Invoice
+                  </Button>
+                );
+              }
+              return null;
+            })()}
 
             {isSeller && (isAccepted || viewingStatusLower === 'delivered') && (
               <Button
@@ -1583,8 +1628,16 @@ export function PurchaseOrderReceiptModal({
             {(() => {
               const hasGrn = Boolean((order as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'completed'].includes(viewingStatusLower));
               const isPaid = viewingStatusLower.includes('paid');
-              const payRoute = isBuyer ? '/buyer/payments' : '/payments';
+              const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
               if (hasGrn && !isPaid) {
+                if (!isBuyer) {
+                  return (
+                    <span className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs font-bold text-amber-800">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Payment Pending from Buyer</span>
+                    </span>
+                  );
+                }
                 return (
                   <Button
                     onClick={() => {
@@ -1622,24 +1675,49 @@ export function PurchaseOrderReceiptModal({
               </Button>
             )}
 
-            {isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip && (
-              <Button
-                onClick={() => onUploadPaymentSlip(order)}
-                className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap"
-              >
-                <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
-              </Button>
-            )}
+            {(() => {
+              const activeInvoice = (order as any)?.invoices?.find(
+                (inv: any) =>
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+              ) || (order as any)?.invoices?.[0];
 
-            {onViewPaymentSlip && viewingStatusLower !== 'cancelled' && (
-              <Button
-                variant="outline"
-                onClick={() => onViewPaymentSlip(order)}
-                className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap"
-              >
-                <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> Payment Slip
-              </Button>
-            )}
+              const hasSlip = Boolean(
+                activeInvoice?.paymentSlipFileId ||
+                activeInvoice?.paymentSlipFile ||
+                (activeInvoice as any)?.offlineProof ||
+                (order as any)?.paymentSlipFileId ||
+                (order as any)?.paymentSlip ||
+                (order as any)?.offlineProof ||
+                (order as any)?.paymentProof ||
+                viewingStatusLower.includes('paid')
+              );
+
+              if (hasSlip && onViewPaymentSlip && viewingStatusLower !== 'cancelled') {
+                return (
+                  <Button
+                    variant="outline"
+                    onClick={() => onViewPaymentSlip(order)}
+                    className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Slip
+                  </Button>
+                );
+              }
+
+              if (!hasSlip && isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip) {
+                return (
+                  <Button
+                    onClick={() => onUploadPaymentSlip(order)}
+                    className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
+                  </Button>
+                );
+              }
+
+              return null;
+            })()}
 
             {isBuyer && viewingStatusLower === 'delivered' && onRepeatOrder && (
               <Button

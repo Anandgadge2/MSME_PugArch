@@ -1212,7 +1212,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           state: requirement.organization?.state || '',
           district: requirement.organization?.district || '',
           startDate: schedule.publishDate ? parseDateIST(schedule.publishDate) : (schedule.submissionStartDate ? parseDateIST(schedule.submissionStartDate) : requirement.createdAt),
-          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy) : requirement.createdAt),
+          endDate: (schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate) ? parseDateIST(schedule.submissionDate || schedule.submissionDeadline || payload.tender?.bidClosingDate, true) : (requirement.requiredBy ? parseDateIST(requirement.requiredBy, true) : requirement.createdAt),
           submissionStartDate: (schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) ? parseDateIST(schedule.submissionStartDate || schedule.startDate || payload.tender?.bidStartDate) : null,
           technicalOpeningDate: (schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) ? parseDateIST(schedule.technicalOpeningDate || payload.tender?.technicalEvaluationDate || payload.technicalOpeningDate) : null,
           financialOpeningDate: (schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) ? parseDateIST(schedule.financialOpeningDate || payload.tender?.financialEvaluationDate || payload.financialOpeningDate) : null,
@@ -1489,6 +1489,21 @@ router.post('/buyer/procurement-bids', authenticate, requireAccountType('buyer')
 router.put('/buyer/procurement-bids/:bidId', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), validate({ params: idParamSchema, body: bidBaseSchema.partial() }), asyncRoute(async (req, res) => {
   const bid = await service.updateBuyerBid(req, req.params.bidId, req.body);
   return apiResponse.success(res, bid, 200, 'Bid updated');
+}));
+
+const extendScheduleSchema = z.object({
+  closingDate: z.string().min(1, 'Closing date is required'),
+  technicalOpeningDate: z.string().nullable().optional(),
+  financialOpeningDate: z.string().nullable().optional(),
+  requiredByDate: z.string().nullable().optional(),
+  bidValidityDate: z.string().nullable().optional(),
+  reason: z.string().trim().min(5, 'Please provide an extension reason (min 5 characters)').max(500),
+});
+
+router.post('/buyer/procurement-bids/:bidId/extend-schedule', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), validate({ params: idParamSchema, body: extendScheduleSchema }), asyncRoute(async (req, res) => {
+  const bid = await service.extendBidSchedule(req, req.params.bidId, req.body);
+  await invalidateBidCaches(bid.id);
+  return apiResponse.success(res, bid, 200, 'Tender schedule extended and corrigendum issued');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/documents', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), upload.single('file'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -2065,22 +2080,31 @@ router.get('/orders/procurement/:orderId', authenticate, validate({ params: orde
   return apiResponse.success(res, data, 200, 'Procurement order fetched');
 }));
 
-router.get('/seller/awards', authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+router.get('/seller/pending-awards-and-pos', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
+  const data = await orderService.listPendingAwardsAndPOsForSeller(req.user!);
+  return apiResponse.success(res, data, 200, 'Pending awards and purchase orders fetched');
+}));
+
+router.get('/seller/awards', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
   const data = await orderService.listSellerAwards(req.user!);
   return apiResponse.success(res, data, 200, 'Seller awards fetched');
 }));
 
-router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller'), asyncRoute(async (req, res) => {
+router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/accept-po', '/seller/purchase-orders/:id/accept'], authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
   const targetId = Number(req.params.id || req.params.awardId);
   if (req.path.includes('purchase-orders')) {
     const data = await orderService.acceptPO(req, targetId, req.body || {});
+    const targetBidId = data?.purchaseOrder?.bidId || (data?.purchaseOrder?.metadata as any)?.bidId || req.body?.bidId;
+    if (targetBidId) await invalidateBidCaches(targetBidId);
     return apiResponse.success(res, data, 200, 'Purchase Order accepted and fulfillment committed');
   }
   const data = await orderService.acceptSellerAward(req, targetId, req.body || {});
+  const targetBidId = data?.award?.bidId || req.body?.bidId;
+  if (targetBidId) await invalidateBidCaches(targetBidId);
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 
-router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('seller'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('seller', 'shg'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
   const data = await orderService.rejectSellerAward(req, Number(req.params.awardId), req.body.reason);
   return apiResponse.success(res, data, 200, 'Award rejected');
 }));

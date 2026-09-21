@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   TrendingUp, 
@@ -71,7 +71,42 @@ export function BuyerProcurementSpendChart({
   procurementFunnel = [],
   isLoading = false
 }: BuyerProcurementSpendChartProps) {
-  const [activeView, setActiveView] = useState<'trend' | 'funnel' | 'methods'>('trend');
+  const [activeView, setActiveView] = useState<'trend' | 'funnel' | 'methods'>(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const viewParam = sp.get('chartView');
+      if (viewParam && ['trend', 'funnel', 'methods'].includes(viewParam)) {
+        return viewParam as 'trend' | 'funnel' | 'methods';
+      }
+      const saved = sessionStorage.getItem('dashboard_buyer_chart_view');
+      if (saved && ['trend', 'funnel', 'methods'].includes(saved)) {
+        return saved as 'trend' | 'funnel' | 'methods';
+      }
+    }
+    return 'trend';
+  });
+
+  const handleViewChange = useCallback((newView: 'trend' | 'funnel' | 'methods') => {
+    setActiveView(newView);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('dashboard_buyer_chart_view', newView);
+      const url = new URL(window.location.href);
+      url.searchParams.set('chartView', newView);
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const viewParam = sp.get('chartView');
+      if (viewParam && ['trend', 'funnel', 'methods'].includes(viewParam)) {
+        setActiveView(viewParam as 'trend' | 'funnel' | 'methods');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const totalPeriodSpend = spendTrend.reduce((sum, item) => sum + (item.totalSpend || 0), 0);
   const totalPeriodMseSpend = spendTrend.reduce((sum, item) => sum + (item.msmeSpend || 0), 0);
@@ -107,7 +142,7 @@ export function BuyerProcurementSpendChart({
             type="button"
             role="tab"
             aria-selected={activeView === 'trend'}
-            onClick={() => setActiveView('trend')}
+            onClick={() => handleViewChange('trend')}
             className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition ${
               activeView === 'trend'
                 ? 'bg-[#12335f] text-white shadow-xs'
@@ -121,7 +156,7 @@ export function BuyerProcurementSpendChart({
             type="button"
             role="tab"
             aria-selected={activeView === 'funnel'}
-            onClick={() => setActiveView('funnel')}
+            onClick={() => handleViewChange('funnel')}
             className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition ${
               activeView === 'funnel'
                 ? 'bg-[#12335f] text-white shadow-xs'
@@ -135,7 +170,7 @@ export function BuyerProcurementSpendChart({
             type="button"
             role="tab"
             aria-selected={activeView === 'methods'}
-            onClick={() => setActiveView('methods')}
+            onClick={() => handleViewChange('methods')}
             className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide rounded-md transition ${
               activeView === 'methods'
                 ? 'bg-[#12335f] text-white shadow-xs'

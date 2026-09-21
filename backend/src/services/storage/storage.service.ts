@@ -403,35 +403,73 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
   }
 
-  // Offline Payment Proof check (either direct receiptFileId or via URL / key)
-  const offlineProof = await (prisma as any).offlinePaymentProof.findFirst({
-    where: {
-      OR: [
-        { receiptFileId: asset.id },
-        { receiptFileUrl: { contains: `/files/${asset.id}/` } },
-        ...(asset.key ? [{ receiptFileUrl: { contains: asset.key } }] : [])
-      ]
-    },
-    include: {
-      purchaseOrder: true,
-      paymentTransaction: {
-        include: {
-          purchaseOrder: true,
-          invoice: true
-        }
+  // Offline Payment Proof check (either direct receiptFileId or via URL / key / entityId)
+  let offlineProof: any = null;
+  if (asset.entityType === 'offline_payment_proof' && asset.entityId) {
+    offlineProof = await (prisma as any).offlinePaymentProof.findUnique({
+      where: { id: asset.entityId }
+    }).catch(() => null);
+  }
+  if (!offlineProof) {
+    offlineProof = await (prisma as any).offlinePaymentProof.findFirst({
+      where: {
+        OR: [
+          { receiptFileId: asset.id },
+          { receiptFileUrl: { contains: `/files/${asset.id}` } },
+          ...(asset.key ? [{ receiptFileUrl: { contains: asset.key } }] : [])
+        ]
       }
-    }
-  }).catch(() => null);
+    }).catch(() => null);
+  }
 
   if (offlineProof) {
     if (user.role === 'admin' || user.role === 'master_admin') return true;
     if (offlineProof.uploadedByUserId === user.id) return true;
-    const po = offlineProof.purchaseOrder || offlineProof.paymentTransaction?.purchaseOrder;
-    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
-    const inv = offlineProof.paymentTransaction?.invoice;
-    if (inv && (inv.buyerId === user.id || inv.sellerId === user.id)) return true;
-    if (user.role === 'buyer' && offlineProof.buyerOrgId && (user as any).organizationId === offlineProof.buyerOrgId) return true;
-    if (user.role === 'seller' && offlineProof.sellerOrgId && (user as any).organizationId === offlineProof.sellerOrgId) return true;
+    if (offlineProof.verifiedByUserId === user.id || offlineProof.rejectedByUserId === user.id) return true;
+
+    const userOrgId = (user as any).organizationId ? Number((user as any).organizationId) : null;
+    if (user.role === 'buyer' && offlineProof.buyerOrgId && userOrgId === offlineProof.buyerOrgId) return true;
+    if (user.role === 'seller' && offlineProof.sellerOrgId && userOrgId === offlineProof.sellerOrgId) return true;
+
+    if (offlineProof.purchaseOrderId) {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id: offlineProof.purchaseOrderId },
+        select: { buyerId: true, sellerId: true }
+      }).catch(() => null);
+      if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    }
+
+    if (offlineProof.paymentTransactionId) {
+      const payTx = await prisma.paymentTransaction.findUnique({
+        where: { id: offlineProof.paymentTransactionId },
+        include: {
+          purchaseOrder: { select: { buyerId: true, sellerId: true } },
+          invoice: { select: { buyerId: true, sellerId: true } }
+        }
+      }).catch(() => null);
+
+      if (payTx) {
+        if (payTx.payerId === user.id || payTx.payeeId === user.id) return true;
+        if (payTx.purchaseOrder && (payTx.purchaseOrder.buyerId === user.id || payTx.purchaseOrder.sellerId === user.id)) return true;
+        if (payTx.invoice && (payTx.invoice.buyerId === user.id || payTx.invoice.sellerId === user.id)) return true;
+      }
+    }
+  }
+
+  // Direct PaymentTransaction check (e.g. metadata or entityId)
+  if (asset.entityType === 'payment' && asset.entityId) {
+    const directTx = await prisma.paymentTransaction.findUnique({
+      where: { id: asset.entityId },
+      include: {
+        purchaseOrder: { select: { buyerId: true, sellerId: true } },
+        invoice: { select: { buyerId: true, sellerId: true } }
+      }
+    }).catch(() => null);
+    if (directTx) {
+      if (directTx.payerId === user.id || directTx.payeeId === user.id) return true;
+      if (directTx.purchaseOrder && (directTx.purchaseOrder.buyerId === user.id || directTx.purchaseOrder.sellerId === user.id)) return true;
+      if (directTx.invoice && (directTx.invoice.buyerId === user.id || directTx.invoice.sellerId === user.id)) return true;
+    }
   }
 
   // Purchase Order counterparty branding check (logos, stamps, signatures)

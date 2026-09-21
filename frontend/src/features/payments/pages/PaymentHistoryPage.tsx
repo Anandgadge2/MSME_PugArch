@@ -20,7 +20,6 @@ import {
   ChevronDown,
   IndianRupee,
   Download,
-  Printer,
   Upload,
   FileCheck,
   RotateCcw,
@@ -28,7 +27,8 @@ import {
   AlertCircle,
   MoreVertical,
   FileText,
-  Truck
+  Truck,
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
@@ -48,6 +48,7 @@ import { PaymentReceiptUploadModal } from '../components/PaymentReceiptUploadMod
 import { PaymentReceiptViewModal } from '../components/PaymentReceiptViewModal';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useOrgRole } from '../../../hooks/useOrgRole';
+import { useAuth } from '../../../hooks/useAuth';
 
 type PaymentRow = {
   id: number;
@@ -82,7 +83,7 @@ type PaymentRow = {
     releasedAt?: string;
   };
 };
-type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'ledger' | 'status' | 'date';
+type PaymentSortKey = 'reference' | 'parties' | 'gateway' | 'amount' | 'tax' | 'escrow' | 'status' | 'date';
 
 function PaymentRowActionCell({
   payment,
@@ -90,7 +91,6 @@ function PaymentRowActionCell({
   onToggle,
   onClose,
   onViewProof,
-  onUploadSlip,
   onViewReceipt,
   onTrackTimeline,
 }: {
@@ -99,7 +99,6 @@ function PaymentRowActionCell({
   onToggle: () => void;
   onClose: () => void;
   onViewProof: () => void;
-  onUploadSlip: () => void;
   onViewReceipt: () => void;
   onTrackTimeline: () => void;
 }) {
@@ -256,42 +255,27 @@ function PaymentRowActionCell({
               e.preventDefault();
               e.stopPropagation();
               onClose();
+              onViewReceipt();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-800 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-600" aria-hidden="true" />
+            <span>View Receipt</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
               onViewProof();
             }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
           >
             <FileCheck className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-            <span>View Proof</span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-              onUploadSlip();
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-          >
-            <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
-            <span>Upload Slip</span>
-          </button>
-
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-              onViewReceipt();
-            }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-          >
-            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
-            <span>View Receipt</span>
+            <span>View Slip / Proof</span>
           </button>
 
           <button
@@ -334,12 +318,21 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
 
-  const { records: payments, warning, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
+  const { records: payments, warning, loading, refreshing, error, reload, setRecords, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<PaymentRow>('/api/payments', {
     ...(searchTerm.trim() ? { q: searchTerm.trim() } : {}),
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(gatewayFilter ? { gateway: gatewayFilter } : {}),
     ...(escrowFilter ? { escrow: escrowFilter } : {})
   }, 20);
+
+  const handlePaymentStatusUpdated = useCallback((updatedId?: number, newStatus: string = 'offline_proof_verified') => {
+    if (updatedId) {
+      setRecords(prev => prev.map(p => p.id === updatedId ? { ...p, status: newStatus, completedAt: new Date().toISOString() } : p));
+      setViewProofPayment(prev => prev && prev.id === updatedId ? { ...prev, status: newStatus, completedAt: new Date().toISOString() } : prev);
+      setSelected(prev => prev && prev.id === updatedId ? { ...prev, status: newStatus, completedAt: new Date().toISOString() } : prev);
+    }
+    void reload();
+  }, [setRecords, reload]);
 
   const paymentSummary = useMemo(() => {
     const totalAmount = payments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -428,7 +421,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Reference',
       sortable: true,
       sortKey: 'reference',
-      width: 'w-[14%]',
+      width: 'w-[15%]',
       cell: (payment) => (
         <div onClick={(e) => e.stopPropagation()}>
           <EntityIdLink
@@ -436,8 +429,9 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
             id={payment.id}
             size="sm"
             onClick={() => {
+              setViewProofPayment(payment);
               setDetailTab('receipt');
-              setSelected(payment);
+              setViewProofModalOpen(true);
             }}
           />
           <p className="mt-1 text-[10px] font-semibold text-slate-500">
@@ -451,7 +445,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Parties',
       sortable: true,
       sortKey: 'parties',
-      width: 'w-[14%]',
+      width: 'w-[15%]',
       cell: (payment) => (
         <div className="text-[10px] font-bold text-slate-500">
           From {payment.payer?.name || `#${payment.payer?.id || '-'}`}
@@ -465,7 +459,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Gateway',
       sortable: true,
       sortKey: 'gateway',
-      width: 'w-[12%]',
+      width: 'w-[13%]',
       cell: (payment) => (
         <span className="text-xs font-bold uppercase text-slate-600">
           {payment.gateway || 'manual'} / {payment.method || 'bank_transfer'}
@@ -477,7 +471,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Amount',
       sortable: true,
       sortKey: 'amount',
-      width: 'w-[10%]',
+      width: 'w-[11%]',
       cell: (payment) => (
         <span className="text-xs font-black text-slate-900">
           {formatCurrency(payment.amount)}
@@ -489,7 +483,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       header: 'Tax/TDS',
       sortable: true,
       sortKey: 'tax',
-      width: 'w-[12%]',
+      width: 'w-[13%]',
       cell: (payment) => {
         const tax = payment.metadata?.taxSummary || {};
         return (
@@ -523,36 +517,39 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       }
     },
     {
-      key: 'ledger',
-      header: 'Ledger Entries',
-      sortable: true,
-      sortKey: 'ledger',
-      width: 'w-[9%]',
-      cell: (payment) => (
-        <span className="flex items-center gap-1 font-mono text-xs text-slate-900 bg-slate-50 px-2 py-0.5 rounded w-max border border-slate-100">
-          <FileSpreadsheet className="h-3 w-3" /> {payment.ledgerEntries?.length || 0} items
-        </span>
-      )
-    },
-    {
       key: 'status',
       header: 'Status',
       sortable: true,
       sortKey: 'status',
-      width: 'w-[9%]',
+      width: 'w-[13%]',
       cell: (payment) => {
-        const isSuccess = ['success', 'escrow_released'].includes(payment.status || '');
+        const rawStatus = String(payment.status || '').toLowerCase();
+        const isSuccess = ['success', 'completed', 'escrow_released', 'offline_proof_verified', 'paid'].includes(rawStatus);
+        const isFailed = ['failed', 'cancelled', 'rejected', 'offline_proof_rejected'].includes(rawStatus);
+        const isUnderReview = ['offline_proof_uploaded', 'under_review'].includes(rawStatus);
+
+        const label = isSuccess
+          ? (rawStatus === 'escrow_released' ? 'Escrow Released' : 'Verified')
+          : isFailed
+          ? (rawStatus === 'offline_proof_rejected' ? 'Proof Rejected' : 'Failed')
+          : isUnderReview
+          ? 'Under Review'
+          : String(payment.status || 'initiated').replace(/_/g, ' ');
+
         return (
           <span
-            className={`rounded-lg border px-2.5 py-0.5 text-[9px] font-black uppercase ${
+            className={cn(
+              "inline-flex items-center rounded-lg border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide whitespace-nowrap leading-none",
               isSuccess
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                : payment.status === 'failed'
-                ? 'border-red-200 bg-red-50 text-red-700'
-                : 'border-blue-200 bg-slate-50 text-[#12335f]'
-            }`}
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                : isFailed
+                ? "border-red-200 bg-red-50 text-red-700"
+                : isUnderReview
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : "border-blue-200 bg-slate-50 text-[#12335f]"
+            )}
           >
-            {String(payment.status || 'initiated').replace(/_/g, ' ')}
+            {label}
           </span>
         );
       }
@@ -582,19 +579,18 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           onClose={() => setOpenKebabId(null)}
           onViewProof={() => {
             setViewProofPayment(payment);
+            setDetailTab('receipt');
             setViewProofModalOpen(true);
           }}
-          onUploadSlip={() => {
-            setSelectedProofPayment(payment);
-            setUploadProofModalOpen(true);
-          }}
           onViewReceipt={() => {
+            setViewProofPayment(payment);
             setDetailTab('receipt');
-            setSelected(payment);
+            setViewProofModalOpen(true);
           }}
           onTrackTimeline={() => {
+            setViewProofPayment(payment);
             setDetailTab('timeline');
-            setSelected(payment);
+            setViewProofModalOpen(true);
           }}
         />
       )
@@ -609,7 +605,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <PageTableSkeleton
           kpiCount={5}
           title="Payment History"
-          subtitle="Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries."
+          subtitle="Payment status, escrow linkage, and tax/TDS summary."
         />
       </div>
     );
@@ -622,7 +618,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         <div className="min-w-0">
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Payment History</h1>
           <p className="text-xs font-semibold text-slate-500 mt-1">
-            Payment status, escrow linkage, tax/TDS summary, and immutable ledger entries.
+            Payment status, escrow linkage, and tax/TDS summary.
           </p>
         </div>
 
@@ -832,7 +828,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                           {String(rowIndex).padStart(2, '0')}
                         </span>
-                        <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setDetailTab('receipt'); setSelected(payment); }} />
+                        <EntityIdLink label={payment.referenceId} id={payment.id} size="sm" onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }} />
                       </div>
                       <p className="mt-1.5 text-[10px] text-slate-500 font-semibold">Invoice: {payment.invoice?.invoiceNumber || payment.invoiceId || '-'}</p>
                     </div>
@@ -865,7 +861,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           size="sm"
                           variant="outline"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100"
-                          onClick={() => { setViewProofPayment(payment); setViewProofModalOpen(true); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }}
                         >
                           <FileCheck className="mr-1.5 h-3.5 w-3.5" /> Proof
                         </Button>
@@ -881,6 +877,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           onClick={() => {
                             if (hasUploadedProof) {
                               setViewProofPayment(payment);
+                              setDetailTab('receipt');
                               setViewProofModalOpen(true);
                             } else {
                               setSelectedProofPayment(payment);
@@ -895,14 +892,14 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
                           size="sm"
                           variant="outline"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase text-slate-700 border-slate-200 hover:bg-slate-50"
-                          onClick={() => { setDetailTab('receipt'); setSelected(payment); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('receipt'); setViewProofModalOpen(true); }}
                         >
                           <Receipt className="mr-1.5 h-3.5 w-3.5" /> Receipt
                         </Button>
                         <Button
                           size="sm"
                           className="h-8 flex-1 rounded-lg text-[10px] font-black uppercase bg-[#12335f] text-white hover:bg-[#0b2445]"
-                          onClick={() => { setDetailTab('timeline'); setSelected(payment); }}
+                          onClick={() => { setViewProofPayment(payment); setDetailTab('timeline'); setViewProofModalOpen(true); }}
                         >
                           <Clock3 className="mr-1.5 h-3.5 w-3.5" /> Track
                         </Button>
@@ -934,23 +931,10 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
           srNoHeader="Sr. No"
           srNoWidth="w-16"
           minWidth="min-w-[1080px]"
-          onRowClick={(payment) => {
-            setDetailTab('receipt');
-            setSelected(payment);
-          }}
         />
       )}
 
-      {selected && (
-        <PaymentDetail
-          key={`${selected.id}-${detailTab}`}
-          payment={selected}
-          initialTab={detailTab}
-          onClose={() => setSelected(null)}
-        />
-      )}
-
-      {/* Offline Payment Proof Modals */}
+      {/* Offline Payment Proof & Receipt Modals */}
       <PaymentReceiptUploadModal
         isOpen={uploadProofModalOpen}
         onClose={() => { setUploadProofModalOpen(false); setSelectedProofPayment(null); }}
@@ -959,12 +943,28 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
       />
 
       <PaymentReceiptViewModal
-        isOpen={viewProofModalOpen}
-        onClose={() => { setViewProofModalOpen(false); setViewProofPayment(null); }}
-        paymentId={viewProofPayment?.id}
-        orderId={viewProofPayment?.purchaseOrderId}
-        invoiceId={viewProofPayment?.invoiceId}
-        onStatusChange={() => { void reload(); }}
+        isOpen={viewProofModalOpen || Boolean(selected)}
+        onClose={() => {
+          setViewProofModalOpen(false);
+          setViewProofPayment(null);
+          setSelected(null);
+        }}
+        payment={viewProofPayment || selected}
+        paymentId={viewProofPayment?.id || selected?.id}
+        orderId={viewProofPayment?.purchaseOrderId || selected?.purchaseOrderId}
+        invoiceId={viewProofPayment?.invoiceId || selected?.invoiceId}
+        orderPoNumber={viewProofPayment?.purchaseOrder?.poNumber || selected?.purchaseOrder?.poNumber}
+        invoiceNumber={viewProofPayment?.invoice?.invoiceNumber || selected?.invoice?.invoiceNumber}
+        sellerName={viewProofPayment?.payee?.name || selected?.payee?.name}
+        buyerName={viewProofPayment?.payer?.name || selected?.payer?.name}
+        initialTab={detailTab}
+        onUploadSlip={(p) => {
+          setSelectedProofPayment(p);
+          setUploadProofModalOpen(true);
+        }}
+        onStatusChange={(updatedPaymentId, newStatus) => {
+          handlePaymentStatusUpdated(updatedPaymentId || viewProofPayment?.id || selected?.id, newStatus);
+        }}
       />
     </div>
   );
@@ -1001,7 +1001,20 @@ const paymentTimeline = (payment: PaymentRow) => {
   return events.filter(event => event.timestamp).sort((a, b) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
 };
 
-function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; initialTab?: 'receipt' | 'timeline'; onClose: () => void }) {
+function PaymentDetail({
+  payment,
+  initialTab,
+  onClose,
+  onOpenProof
+}: {
+  payment: PaymentRow;
+  initialTab?: 'receipt' | 'timeline';
+  onClose: () => void;
+  onOpenProof?: (payment: PaymentRow) => void;
+}) {
+  const { user } = useAuth();
+  const isSeller = user?.role === 'seller' || user?.role === 'shg';
+
   const [activeTab, setActiveTab] = useState<'receipt' | 'timeline'>(initialTab || 'receipt');
   const tax = payment.metadata?.taxSummary || {};
   const status = String(payment.status || 'initiated').replace(/_/g, ' ');
@@ -1009,6 +1022,53 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
   const method = String(payment.method || 'bank transfer').replace(/_/g, ' ');
   const receiptDate = payment.completedAt || payment.createdAt;
   const timelineItems = paymentTimeline(payment);
+
+  const poNumber = payment.purchaseOrder?.poNumber;
+  const poId = payment.purchaseOrderId || payment.purchaseOrder?.id;
+  const invNumber = payment.invoice?.invoiceNumber || (payment.purchaseOrder as any)?.invoices?.[0]?.invoiceNumber;
+  const invId = payment.invoiceId || (payment.purchaseOrder as any)?.invoices?.[0]?.id;
+
+  const hasUploadedProof = Boolean(
+    payment.metadata?.offlineProofId ||
+    payment.metadata?.receiptFileUrl ||
+    ['offline_proof_uploaded', 'offline_proof_verified', 'under_review', 'payment_initiated'].includes(String(payment.status || '').toLowerCase())
+  );
+
+  const handleOpenPo = () => {
+    const query = poNumber || poId;
+    if (!query) return;
+    const url = isSeller
+      ? `/seller/orders?search=${encodeURIComponent(query)}`
+      : `/orders?search=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleDownloadPo = () => {
+    if (!poId) return;
+    window.open(`/api/purchase-orders/${poId}/pdf`, '_blank');
+  };
+
+  const handleOpenInvoice = () => {
+    const query = invNumber || invId;
+    if (!query) return;
+    const url = isSeller
+      ? `/seller/invoices?viewInvoiceNo=${encodeURIComponent(query)}`
+      : `/payments/invoices?viewInvoiceNo=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenDelivery = () => {
+    const query = poNumber || payment.referenceId;
+    const url = isSeller
+      ? `/seller/delivery-management?search=${encodeURIComponent(query)}`
+      : `/orders/tracking?search=${encodeURIComponent(query)}`;
+    window.open(url, '_blank');
+  };
+
+  const handleOpenGrn = () => {
+    const query = poNumber || payment.referenceId;
+    window.open(`/grn?search=${encodeURIComponent(query)}`, '_blank');
+  };
 
   const handleDownloadReceipt = () => {
     const printWindow = window.open('', '_blank', 'width=900,height=1100');
@@ -1164,7 +1224,7 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
               onClick={handleDownloadReceipt}
               className="h-9 bg-[#12335f] text-white hover:bg-[#0b2445] text-xs font-black uppercase tracking-wider rounded-lg shadow-sm"
             >
-              <Download className="mr-1.5 h-4 w-4" /> Download / Print PDF
+              <Download className="mr-1.5 h-4 w-4" /> Download Receipt
             </Button>
             <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px] font-black uppercase text-emerald-700">
               {status}
@@ -1190,33 +1250,86 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {((payment.purchaseOrder as any)?.bidId || (payment as any).bidId) && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/bids/${(payment.purchaseOrder as any)?.bidId || (payment as any).bidId}`, '_blank')} className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`/bids/${(payment.purchaseOrder as any)?.bidId || (payment as any).bidId}`, '_blank')}
+                    className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer"
+                  >
                     <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Quotation
                   </Button>
                 )}
-                {payment.purchaseOrderId && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/orders?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.purchaseOrderId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-indigo-200 text-indigo-700 font-bold shadow-2xs cursor-pointer">
-                    <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View PO
-                  </Button>
+                {poId && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleOpenPo}
+                      className="bg-white hover:bg-indigo-50 border-indigo-200 text-indigo-700 font-bold shadow-2xs cursor-pointer"
+                    >
+                      <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View PO
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadPo}
+                      className="bg-white hover:bg-slate-50 border-slate-300 text-slate-700 font-bold shadow-2xs cursor-pointer"
+                      title="Download Official Purchase Order PDF"
+                    >
+                      <Download className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> PO PDF
+                    </Button>
+                  </>
                 )}
-                <Button variant="outline" size="sm" onClick={() => window.open(`/seller/delivery-management?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenDelivery}
+                  className="bg-white hover:bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer"
+                >
                   <Truck className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> Delivery
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => window.open(`/grn?search=${encodeURIComponent(payment.purchaseOrder?.poNumber || payment.referenceId || '')}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-800 font-bold shadow-2xs cursor-pointer">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenGrn}
+                  className="bg-white hover:bg-emerald-50 border-emerald-200 text-emerald-800 font-bold shadow-2xs cursor-pointer"
+                >
                   <CheckCircle2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> GRN
                 </Button>
-                {payment.invoiceId && (
-                  <Button variant="outline" size="sm" onClick={() => window.open(`/seller/invoices?viewInvoiceNo=${payment.invoice?.invoiceNumber || payment.invoiceId}`, '_blank')} className="bg-white hover:bg-slate-50 border-emerald-200 text-emerald-700 font-bold shadow-2xs cursor-pointer">
+                {(invNumber || invId) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenInvoice}
+                    className="bg-white hover:bg-emerald-50 border-emerald-200 text-emerald-700 font-bold shadow-2xs cursor-pointer"
+                  >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> View Invoice
                   </Button>
                 )}
-                <Button variant="outline" size="sm" onClick={handleDownloadReceipt} className="bg-white hover:bg-slate-50 border-slate-300 font-bold text-slate-800 shadow-2xs cursor-pointer">
-                  <Printer className="mr-1.5 h-3.5 w-3.5 text-[#12335f]" /> Print
-                </Button>
-                <Button variant={activeTab === 'receipt' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('receipt')}>
+                {hasUploadedProof && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenProof?.(payment)}
+                    className="bg-white hover:bg-blue-50 border-blue-200 text-blue-700 font-bold shadow-2xs cursor-pointer"
+                  >
+                    <FileCheck className="mr-1.5 h-3.5 w-3.5 text-blue-600" /> View Slip
+                  </Button>
+                )}
+                <Button
+                  variant={activeTab === 'receipt' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('receipt')}
+                  className="cursor-pointer"
+                >
                   <Receipt className="mr-1 h-3.5 w-3.5" />Receipt
                 </Button>
-                <Button variant={activeTab === 'timeline' ? 'primary' : 'outline'} size="sm" onClick={() => setActiveTab('timeline')}>
+                <Button
+                  variant={activeTab === 'timeline' ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setActiveTab('timeline')}
+                  className="cursor-pointer"
+                >
                   <Clock3 className="mr-1 h-3.5 w-3.5" />Timeline
                 </Button>
               </div>
@@ -1240,8 +1353,40 @@ function PaymentDetail({ payment, initialTab, onClose }: { payment: PaymentRow; 
                 </div>
 
                 <div className="grid border-b border-slate-200 md:grid-cols-3">
-                  <ReceiptField label="Invoice" value={String(payment.invoice?.invoiceNumber || payment.invoiceId || '-')} />
-                  <ReceiptField label="Purchase Order" value={String(payment.purchaseOrder?.poNumber || '-')} />
+                  <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Invoice</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="break-words text-sm font-black text-slate-900">
+                        {invNumber || (invId ? `INV #${invId}` : '-')}
+                      </span>
+                      {(invNumber || invId) && (
+                        <button
+                          type="button"
+                          onClick={handleOpenInvoice}
+                          className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Purchase Order</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <span className="break-words text-sm font-black text-slate-900">
+                        {poNumber || (poId ? `PO #${poId}` : '-')}
+                      </span>
+                      {poId && (
+                        <button
+                          type="button"
+                          onClick={handleOpenPo}
+                          className="text-[10px] font-bold text-indigo-700 hover:underline cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <ExternalLink className="h-3 w-3" /> View
+                        </button>
+                      )}
+                    </div>
+                  </div>
                   <ReceiptField label="Gateway / Method" value={`${gateway} / ${method}`} />
                 </div>
 

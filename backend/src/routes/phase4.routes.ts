@@ -22,6 +22,7 @@ import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
 import { invalidateUserAuthCache } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
+import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -50,11 +51,12 @@ import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.s
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
 import { ratingWorkflow } from '../services/workflow/rating-workflow.service.js';
 import { ratingsService } from '../modules/ratings/ratings.service.js';
-import { enrichBidsWithResponses } from '../modules/procurementBid/procurement-bid.routes.js';
+import { enrichBidsWithResponses, invalidateBidCaches } from '../modules/procurementBid/procurement-bid.routes.js';
 import { STRICT_VERIFICATION } from '../config/verification.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { nextBidNumber, deriveVisibility, syncBidInvitations, extractInvitedSellerIds } from '../modules/procurementBid/procurement-bid.service.js';
 import { canonicalMethodFromRecord } from '../utils/procurement-methods.js';
+import { isValidCanonicalRef } from '../utils/refIdUtils.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
 import { createApprovalChain } from '../services/approval-chain.service.js';
 import { parseDateIST } from '../utils/dateUtils.js';
@@ -494,6 +496,9 @@ const assertBuyerProcurementApproved = async (req: AuthRequest) => {
 
   const isApproved =
     approvedProcurementStatuses.has(String(user.onboardingStatus)) ||
+    user.onboardingStatus === 'completed' ||
+    user.registrationStatus === 'completed' ||
+    user.accountStatus === 'ACTIVE' ||
     buyerProfileVerified ||
     organizationVerified ||
     allSectionsApproved;
@@ -1287,6 +1292,17 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (!hasConsigneeLocation || totalItemQuantity <= 0 || totalItemQuantity !== totalConsigneeQuantity) {
     throw new ApiError(400, 'Total consignee quantity must equal total procurement quantity', 'PROCUREMENT_CONSIGNEE_QUANTITY_INVALID');
   }
+
+  // Ensure submission deadline is set in the future
+  const schedule = payload.schedule || {};
+  const rawSubDate = schedule.submissionDate || schedule.submissionDeadline || tender.bidClosingDate;
+  if (rawSubDate) {
+    const subTime = new Date(rawSubDate).getTime();
+    if (Number.isFinite(subTime) && subTime <= Date.now()) {
+      throw new ApiError(400, 'Submission deadline date and time must be set in the future', 'PROCUREMENT_DEADLINE_PAST');
+    }
+  }
+
   // Timeline validations for tender-family, BOQ, PAC, rate-contract, and bid-with-reverse-auction methods
   const timelineMethodSlugs = [
     'open-tender', 'sealed-tender', 'limited-tender', 'two-packet-bid',
@@ -1900,7 +1916,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
   const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
   const rawEndDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const effectiveEndDate = parseDateIST(rawEndDate) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const effectiveEndDate = parseDateIST(rawEndDate, true) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({
     where: {
@@ -1987,7 +2003,9 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
       })
     : await db.procurementBid.create({
         data: {
-          bidNumber: requirement.requirementNumber || await nextBidNumber(),
+          bidNumber: (requirement.requirementNumber && isValidCanonicalRef(requirement.requirementNumber))
+            ? requirement.requirementNumber
+            : await nextBidNumber(requirement.procurementMethod),
           ...baseData
         }
       });
@@ -3100,11 +3118,20 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
         { receiptFileId: fileId },
         { receiptFileUrl: { contains: `/files/${fileId}/` } }
       ]
-    },
-    include: { purchaseOrder: true }
+    }
   }).catch(() => null);
   if (offlineProof) {
-    const actorId = offlineProof.uploadedByUserId || offlineProof.purchaseOrder?.buyerId || offlineProof.purchaseOrder?.sellerId;
+    let poBuyerId = null;
+    let poSellerId = null;
+    if (offlineProof.purchaseOrderId) {
+      const po = await db.purchaseOrder.findUnique({
+        where: { id: offlineProof.purchaseOrderId },
+        select: { buyerId: true, sellerId: true }
+      }).catch(() => null);
+      poBuyerId = po?.buyerId;
+      poSellerId = po?.sellerId;
+    }
+    const actorId = offlineProof.uploadedByUserId || poBuyerId || poSellerId;
     if (actorId) return { id: Number(actorId), role: 'buyer' };
   }
 
@@ -3341,6 +3368,51 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   } else {
     res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
   }
+  return res.end(file.buffer);
+}));
+
+router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
+  const { id } = parse(idParams, req.params);
+  let actor: any = req.user;
+  if (!actor && typeof req.query.token === 'string' && req.query.token.trim()) {
+    try {
+      const decoded = verifyAccessToken(req.query.token.trim());
+      if (decoded?.id) {
+        const u = await db.user.findUnique({
+          where: { id: Number(decoded.id) },
+          select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
+        });
+        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+          actor = {
+            id: u.id,
+            role: u.role,
+            sessionVersion: u.sessionVersion,
+            permissions: [],
+            organizationId: u.organizationId,
+            enabledFeatures: []
+          };
+        }
+      }
+    } catch {
+      // ignore invalid query token
+    }
+  }
+  if (!actor) {
+    actor = (await getPublicFileActor(id)) || undefined;
+  }
+  if (!actor) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+
+  const file = await getFileContent(id, actor, {
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+  const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
+
+  res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+  res.setHeader('Content-Length', file.buffer.length);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'private, no-store');
   return res.end(file.buffer);
 }));
 
@@ -6206,8 +6278,48 @@ router.get('/buyer/requirements', authenticate, authorize('buyer'), asyncRoute(a
   ok(res, paged(requirements, total, query));
 }));
 
+const resolveRequirementId = async (idParam: string | number): Promise<number | null> => {
+  const rawId = String(idParam || '').trim();
+  if (!rawId) return null;
+  const numId = Number(rawId);
+  if (!isNaN(numId) && Number.isFinite(numId) && numId > 0) {
+    return numId;
+  }
+  const variants = getCanonicalLookupVariants(rawId);
+  const found = await db.requirement.findFirst({
+    where: {
+      OR: [
+        { requirementNumber: { in: variants } },
+        { requirementNumber: rawId }
+      ]
+    },
+    select: { id: true }
+  });
+  if (found) return found.id;
+
+  const matchingBid = await db.procurementBid.findFirst({
+    where: {
+      OR: [
+        { bidNumber: { in: variants } },
+        { bidNumber: rawId }
+      ]
+    },
+    select: { id: true, technicalPacket: true }
+  });
+  if (matchingBid) {
+    const packet = typeof matchingBid.technicalPacket === 'object' && matchingBid.technicalPacket !== null
+      ? (matchingBid.technicalPacket as any)
+      : {};
+    const linkedId = Number(packet.sourceRequirementId || packet.requirementId || 0);
+    if (linkedId > 0) return linkedId;
+  }
+  return null;
+};
+
 router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   const requirement = await db.requirement.findUnique({
     where: { id },
     include: {
@@ -6247,7 +6359,9 @@ router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
@@ -6257,7 +6371,9 @@ router.put('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRou
   ok(res, requirement);
 }));
 router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) }, include: { tenders: { select: { id: true } } } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
@@ -6276,7 +6392,9 @@ router.delete('/buyer/requirements/:id', authenticate, authorize('buyer'), async
 }));
 
 router.post('/buyer/requirements/:id/submit', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
+  const resolvedId = await resolveRequirementId(req.params.id);
+  if (!resolvedId) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
+  const id = resolvedId;
   await assertBuyerProcurementApproved(req);
   const existing = await db.requirement.findFirst({ where: { id, buyerId: userId(req) } });
   if (!existing) throw new ApiError(404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
@@ -6661,6 +6779,18 @@ router.post('/quote-requests/:id/responses', authenticate, authorize('seller'), 
   if (!quote || quote.sellerId !== userId(req)) throw new ApiError(404, 'Quote request not found', 'QUOTE_REQUEST_NOT_FOUND');
   const body = parse(quoteResponseBody, req.body);
   const response = await procurementWorkflow.createQuoteResponse(actorFrom(req), id, body);
+  try {
+    broadcastToProcurement(id, {
+      type: 'QUOTATION_SUBMITTED',
+      requirementId: id,
+      responseId: (response as any)?.id,
+      offeredPrice: (response as any)?.totalAmount,
+      sellerOrgId: (req.user as any)?.organizationId || null,
+      timestamp: new Date().toISOString()
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[QuoteRequest Response] Failed to broadcast');
+  }
   ok(res, response, 201);
 }));
 
@@ -7013,7 +7143,7 @@ const findQuoteRequestRecord = async (idParam: string | number) => {
       return {
         id: req.id,
         subject: req.title,
-        requirementNumber: `REQ-${req.id}`,
+        requirementNumber: req.referenceNumber || `RFQ-${new Date(req.createdAt).getFullYear()}-${String(req.id).padStart(5, '0')}`,
         buyerId: req.createdById,
         buyerOrganizationId: (req as any).buyerOrganizationId || null,
         sellerId: null,
@@ -8439,7 +8569,8 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
         },
         items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
         deliveryTrackings: { include: { events: { orderBy: { occurredAt: 'desc' }, take: 8 } } },
-        invoices: { orderBy: { createdAt: 'desc' }, take: 5 }
+        invoices: { orderBy: { createdAt: 'desc' }, take: 5 },
+        grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true }, take: 5 }
       },
       orderBy: { updatedAt: 'desc' },
       ...window
@@ -8513,7 +8644,8 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
       items: { include: { product: { select: { name: true, unitOfMeasure: true } } } },
       invoices: true,
       deliveryTrackings: true,
-      inspectionReports: true
+      inspectionReports: true,
+      grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
     }
   });
   
@@ -8570,6 +8702,8 @@ router.post('/purchase-orders/:id/acknowledge', authenticate, authorize('seller'
   if (!po || !isAllowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
   const updated = await fulfillmentWorkflow.acknowledgePO(actorFrom(req), id);
   await auditWrite(req, 'purchase_order.acknowledged', 'purchaseOrder', id);
+  const targetBidId = (updated as any)?.bidId || ((updated as any)?.metadata as any)?.bidId || (po as any)?.bidId || ((po as any)?.metadata as any)?.bidId;
+  if (targetBidId) await invalidateBidCaches(targetBidId).catch(() => null);
   ok(res, updated);
 }));
 
@@ -8962,8 +9096,17 @@ router.get('/invoices', authenticate, asyncRoute(async (req, res) => {
   ok(res, paged(invoices, total, query, 'invoices'));
 }));
 
-router.get('/invoices/summary', authenticate, asyncRoute(async (req, res) => {
-  const where: any = isAdmin(req) ? {} : req.user?.role === 'buyer' ? { buyerId: userId(req) } : { sellerId: userId(req) };
+router.get('/invoices/summary', authenticate, authorize('buyer', 'seller', 'admin'), asyncRoute(async (req, res) => {
+  const uid = userId(req);
+  const orgId = req.user?.organizationId;
+  let where: any = {};
+  if (!isAdmin(req)) {
+    if (req.user?.role === 'buyer') {
+      where = orgId ? { OR: [{ buyerId: uid }, { buyer: { organizationId: orgId } }] } : { buyerId: uid };
+    } else {
+      where = orgId ? { OR: [{ sellerId: uid }, { seller: { organizationId: orgId } }] } : { sellerId: uid };
+    }
+  }
 
   const invoices = await db.invoice.findMany({
     where,
@@ -9025,7 +9168,7 @@ router.get('/invoices/summary', authenticate, asyncRoute(async (req, res) => {
   }));
 }));
 
-router.get('/invoices/:id', authenticate, asyncRoute(async (req, res) => {
+router.get('/invoices/:id(\\d+)', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const invoice = await db.invoice.findUnique({
     where: { id },
@@ -9087,8 +9230,10 @@ for (const [path, data, action] of [
   router.post(path, authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
     const { id } = parse(idParams, req.params);
     await assertBuyerProcurementApproved(req);
-    const existing = await db.invoice.findUnique({ where: { id } });
-    if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req))) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    const existing = await db.invoice.findUnique({ where: { id }, include: { purchaseOrder: true } });
+    if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req) && existing.purchaseOrder?.buyerId !== userId(req))) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
     const invoice = await fulfillmentWorkflow.decideInvoice(actorFrom(req), id, data.invoiceStatus === 'APPROVED');
     await auditWrite(req, action, 'invoice', id);
     ok(res, invoice);
