@@ -379,8 +379,8 @@ export function MarketplaceHeader({ user }: Props) {
                 {isSearching
                     ? 'Searching marketplace...'
                     : totalSuggestions > 0
-                    ? `${totalSuggestions} search results found. Use up and down arrows to review.`
-                    : ''}
+                        ? `${totalSuggestions} search results found. Use up and down arrows to review.`
+                        : ''}
             </div>
 
             {/* ════════════════════════════════════════════════════════════════════
@@ -396,7 +396,7 @@ export function MarketplaceHeader({ user }: Props) {
                         </div>
                         <div className="min-w-0 leading-tight">
                             <p className="truncate text-base font-black tracking-tight text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
-                            <p className="truncate text-[9.5px] font-bold text-slate-400">MSME Marketplace Portal</p>
+                            <p className="truncate text-[9.5px] font-bold text-slate-400">Jharsuguda MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
@@ -1115,7 +1115,7 @@ export function MarketplaceHeader({ user }: Props) {
                             {!user ? (
                                 <div className="space-y-2.5">
                                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Account Access</p>
-                                    
+
                                     {/* Primary Login Card */}
                                     <Link
                                         href="/login"
@@ -1138,8 +1138,8 @@ export function MarketplaceHeader({ user }: Props) {
                                             const iconColor = idx === 0
                                                 ? 'bg-blue-50 text-blue-600 border border-blue-100'
                                                 : idx === 1
-                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                : 'bg-purple-50 text-purple-600 border border-purple-100';
+                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                    : 'bg-purple-50 text-purple-600 border border-purple-100';
 
                                             return (
                                                 <Link
@@ -1189,7 +1189,7 @@ export function MarketplaceHeader({ user }: Props) {
                             {/* Navigation Quick Links */}
                             <div className="space-y-1 pt-3 border-t border-slate-100">
                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 mb-1.5">Explore Marketplace</p>
-                                
+
                                 <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
