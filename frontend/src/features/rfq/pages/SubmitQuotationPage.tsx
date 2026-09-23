@@ -28,22 +28,25 @@ import {
   AlertCircle,
   Circle,
   Truck,
+  ExternalLink,
+  Check,
+  Download,
+  Lock,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { SupplierAgreementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
 import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
-import { BASE_URL, api } from '../../../lib/api';
+import { BASE_URL, api, resolveMediaUrl } from '../../../lib/api';
 import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
 import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
-import { getDocumentPreviewMode, type DocumentPreview } from '../../../lib/files';
-import { parseQuoteRequestItems, cleanItemName } from '../utils/quoteItemParser';
-import { formatDate, formatDateTime, formatTime } from '../../shared/format';
+import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
+import { formatDate, formatDateTime, formatTime, hasExplicitTime } from '../../shared/format';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -107,6 +110,8 @@ const formatCurrency = (val?: number | string) => {
 };
 
 type UploadState = {
+  id?: number | string;
+  fileAssetId?: number | null;
   file?: File;
   fileName?: string;
   fileSize?: number;
@@ -132,6 +137,19 @@ type RequestedDocUpload = {
   url?: string;
 };
 
+export type LineItemAttachment = {
+  id: string;
+  name: string;
+  fileName: string;
+  fileSize?: number;
+  fileUrl?: string;
+  url?: string;
+  fileAssetId?: number | null;
+  documentType: string;
+  customNote?: string;
+  uploadedAt: string;
+};
+
 // Seller's quote against each buyer line item.
 type LineQuote = {
   itemName: string;
@@ -141,6 +159,12 @@ type LineQuote = {
   gstPercent: string;
   makeBrand: string;
   remarks: string;
+  model?: string;
+  specifications?: string;
+  complianceStatus?: string;
+  hsnCode?: string;
+  brandPolicy?: string;
+  attachments?: LineItemAttachment[];
 };
 
 const parseResponseData = (value: any) => {
@@ -172,11 +196,15 @@ const dedupeDocuments = (documents: any[]) => {
 };
 
 const submittedStatus = (response: any) =>
-  String(response?.status || response?.submissionStatus || response?.responseStatus || '').trim().toUpperCase();
+  String(response?.submissionStatus || response?.status || response?.responseStatus || '').trim().toUpperCase();
 
 const isFinalSubmittedResponse = (response: any) => {
+  if (!response) return false;
   const status = submittedStatus(response);
-  return Boolean(response) && status !== '' && status !== 'DRAFT';
+  if (!status || ['DRAFT', 'PENDING', 'LOCKED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED'].includes(status)) {
+    return false;
+  }
+  return status === 'SUBMITTED' || status === 'ACCEPTED' || status === 'AWARDED';
 };
 
 const fileNameFromUrl = (url?: string) => {
@@ -223,17 +251,18 @@ const normalizeOwnResponse = (raw: any) => {
     : toArray(raw.lineItems).length
     ? toArray(raw.lineItems)
     : toArray(raw.lineQuotes);
-  const status = raw.status || raw.submissionStatus || responseData.status || 'SUBMITTED';
+  const status = raw.submissionStatus || raw.status || responseData.status || 'DRAFT';
   const supportingAttachment = findSupportingAttachment({ ...raw, responseData }, documents);
 
   return {
     ...raw,
     status,
-    submissionStatus: raw.submissionStatus || status,
+    submissionStatus: raw.submissionStatus || status || 'DRAFT',
     responseData: {
       ...responseData,
       documents,
-      lineItems
+      lineItems,
+      lineQuotes: toArray(responseData.lineQuotes).length ? toArray(responseData.lineQuotes) : lineItems
     },
     offeredPrice: firstPresent(raw.offeredPrice, responseData.offeredPrice, raw.quotedAmount, raw.totalAmount, responseData.quotedAmount, responseData.totalAmount),
     offeredQuantity: firstPresent(raw.offeredQuantity, responseData.offeredQuantity, responseData.quantity),
@@ -251,15 +280,18 @@ const normalizeOwnResponse = (raw: any) => {
 const findSellerParticipation = (bidData: any, user: any) => {
   const participations = [
     ...toArray(bidData?.participations),
-    ...toArray(bidData?.results),
     ...toArray(bidData?.quoteResponses)
   ];
-  return participations.find((p: any) => {
+  const found = participations.find((p: any) => {
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
     return String(sellerId || '') === String(user?.id || '') ||
       (user?.organizationId && String(orgId || '') === String(user.organizationId));
   });
+  if (found) {
+    return { ...found, _isFromUserParticipation: true };
+  }
+  return null;
 };
 
 const participationToOwnResponse = (participation: any) => {
@@ -272,34 +304,55 @@ const participationToOwnResponse = (participation: any) => {
   ]);
   const supportingAttachment = findSupportingAttachment({ ...participation, responseData }, documents);
 
+  const lineItems = toArray(participation.lineItems).length
+    ? toArray(participation.lineItems)
+    : toArray(responseData.lineItems).length
+    ? toArray(responseData.lineItems)
+    : toArray(responseData.lineQuotes).length
+    ? toArray(responseData.lineQuotes)
+    : toArray(participation.lineQuotes).length
+    ? toArray(participation.lineQuotes)
+    : [];
+
+  const sellerId = participation.sellerId || participation.seller?.id || participation.sellerUserId;
+  const orgId = participation.organizationId || participation.sellerOrganizationId || participation.seller?.organizationId || participation.seller?.organization?.id;
+
   return normalizeOwnResponse({
+    ...participation,
     id: participation.id,
-    status: participation.status || participation.submissionStatus || 'SUBMITTED',
-    submissionStatus: participation.submissionStatus || participation.status || 'SUBMITTED',
+    sellerId,
+    sellerUserId: sellerId,
+    organizationId: orgId,
+    sellerOrganizationId: orgId,
+    seller: participation.seller,
+    _isFromUserParticipation: true,
+    status: participation.submissionStatus || participation.status || 'DRAFT',
+    submissionStatus: participation.submissionStatus || participation.status || 'DRAFT',
     offeredPrice: firstPresent(participation.offeredPrice, participation.quotedAmount, participation.totalAmount, responseData.offeredPrice),
     offeredQuantity: firstPresent(participation.offeredQuantity, responseData.offeredQuantity),
     deliveryTimeline: firstPresent(participation.deliveryTimeline, responseData.deliveryTimeline),
     terms: firstPresent(participation.terms, responseData.terms),
     message: firstPresent(participation.message, responseData.message, participation.coverNote, responseData.coverNote, participation.offeredItemDescription),
     attachmentUrl: firstPresent(participation.attachmentUrl, responseData.attachmentUrl, supportingAttachment?.fileUrl, supportingAttachment?.url),
-    createdAt: participation.submittedAt || participation.createdAt,
-    updatedAt: participation.updatedAt || participation.submittedAt || participation.createdAt,
-    submittedAt: participation.submittedAt || participation.createdAt,
+    createdAt: participation.createdAt,
+    updatedAt: participation.updatedAt || participation.createdAt,
+    submittedAt: participation.submittedAt || null,
     responseData: {
       ...responseData,
       documents,
-      lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems),
-      lineQuotes: toArray(responseData.lineQuotes)
+      lineItems,
+      lineQuotes: toArray(responseData.lineQuotes).length ? toArray(responseData.lineQuotes) : lineItems
     },
     documents,
-    lineItems: toArray(participation.lineItems).length ? toArray(participation.lineItems) : toArray(responseData.lineItems)
+    lineItems
   });
 };
 
 const isBelongingToUser = (resp: any, currentUser: any) => {
   if (!resp || !currentUser) return false;
+  if (resp._isFromUserParticipation) return true;
   const sellerId = resp.sellerId || resp.seller?.id || resp.sellerUserId || resp.userId;
-  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId;
+  const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId || resp.seller?.organization?.id;
   return (currentUser.id && String(sellerId || '') === String(currentUser.id)) ||
     (currentUser.organizationId && String(orgId || '') === String(currentUser.organizationId));
 };
@@ -311,6 +364,457 @@ const chooseOwnResponse = (primary: any, fallback: any) => {
   if (isFinalSubmittedResponse(normalizedFallback)) return normalizedFallback;
   return normalizedPrimary || normalizedFallback;
 };
+
+const getFileTypeDetails = (fileName: string) => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (['pdf'].includes(ext)) return { label: 'PDF', bg: 'bg-red-50 text-red-700 border-red-200' };
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return { label: 'IMG', bg: 'bg-blue-50 text-blue-700 border-blue-200' };
+  if (['doc', 'docx'].includes(ext)) return { label: 'DOC', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+  if (['xls', 'xlsx', 'csv'].includes(ext)) return { label: 'XLS', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  return { label: ext.toUpperCase() || 'FILE', bg: 'bg-slate-50 text-slate-700 border-slate-200' };
+};
+
+function LineItemSpecsAndDocsPanel({
+  line,
+  idx,
+  itemsList,
+  isReadOnly,
+  updateLineQuote,
+  onUploadAttachment,
+  onRemoveAttachment,
+  onPreviewAttachment,
+  onClose,
+}: {
+  line: LineQuote;
+  idx: number;
+  itemsList: any[];
+  isReadOnly: boolean;
+  updateLineQuote: (idx: number, patch: Partial<LineQuote>) => void;
+  onUploadAttachment: (lineIdx: number, file: File, docType: string, customNote?: string) => Promise<void>;
+  onRemoveAttachment: (lineIdx: number, attachmentId: string) => void;
+  onPreviewAttachment: (item: any) => void;
+  onClose: () => void;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState('Technical Specification');
+  const [customDocName, setCustomDocName] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const buyerItem = idx < itemsList.length ? itemsList[idx] : null;
+  const buyerDesc = buyerItem?.description;
+
+  const qty = Number(line.quantity) || 1;
+  const unitRate = Number(line.unitPrice) || 0;
+  const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
+  const computedTotal = unitRate * qty * (1 + gstPercent / 100);
+
+  const attachments = Array.isArray(line.attachments) ? line.attachments : [];
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 10 MB limit`);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      await onUploadAttachment(idx, file, selectedCategory, customDocName.trim());
+      setCustomDocName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {
+      // Handled in parent
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (isReadOnly) return;
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 10 MB limit`);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      await onUploadAttachment(idx, file, selectedCategory, customDocName.trim());
+      setCustomDocName('');
+    } catch {
+      // Handled in parent
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-700 border border-blue-200/80">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-5 w-5 rounded bg-slate-900 text-white font-mono text-[10px] font-black flex items-center justify-center shrink-0">
+                {idx + 1}
+              </span>
+              <h3 className="text-xs sm:text-sm font-black text-slate-900">
+                Technical Specifications &amp; Attachments: {line.itemName}
+              </h3>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Specify technical parameters, brand conformity, catalog references, and upload supporting cut-sheets.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {attachments.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+              <Paperclip className="h-3 w-3" /> {attachments.length} document{attachments.length > 1 ? 's' : ''} attached
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+          >
+            Close Specs ▲
+          </button>
+        </div>
+      </div>
+
+      {/* Buyer Required Specification Banner */}
+      {buyerDesc && (
+        <div className="rounded-xl bg-blue-50/70 border border-blue-200/70 p-3 text-xs text-blue-950 shadow-2xs">
+          <span className="font-bold uppercase text-[10px] text-blue-700 block mb-0.5 tracking-wider">
+            Buyer Required Specification:
+          </span>
+          <p className="font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">{buyerDesc}</p>
+        </div>
+      )}
+
+      {/* Form Fields Matching Image 2 Layout */}
+      <div className="space-y-4">
+        {/* Row 1: Item Name & HSN/SAC Code */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Item Name <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={line.itemName}
+              disabled
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-xs font-bold text-slate-700 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              HSN / SAC Code
+            </label>
+            <input
+              type="text"
+              value={line.hsnCode || ''}
+              onChange={e => updateLineQuote(idx, { hsnCode: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. 84713010, 998313"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-mono font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+        </div>
+
+        {/* Detailed Technical Specifications with 0/500 Counter */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider">
+              Detailed Technical Specifications &amp; Scope
+            </label>
+            <span className={cn(
+              "text-[10px] font-mono font-bold",
+              (line.specifications?.length || 0) > 500 ? "text-amber-600" : "text-slate-400"
+            )}>
+              {line.specifications?.length || 0}/500
+            </span>
+          </div>
+          <textarea
+            value={line.specifications || ''}
+            onChange={e => updateLineQuote(idx, { specifications: e.target.value })}
+            disabled={isReadOnly}
+            rows={3}
+            maxLength={1000}
+            placeholder="Detail technical parameters, dimensions, materials, tolerances, certifications, or deviations for this specific item..."
+            className="w-full rounded-xl border border-slate-200 p-3 text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition resize-y disabled:bg-slate-50 disabled:text-slate-500 leading-relaxed"
+          />
+        </div>
+
+        {/* Row 2: Make/Brand & Brand Policy */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Make / Brand
+            </label>
+            <input
+              type="text"
+              value={line.makeBrand || ''}
+              onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. Tata, Schneider, Havells, Dell, Custom"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Brand Policy
+            </label>
+            <select
+              value={line.brandPolicy || 'EQUIVALENT_ACCEPTED'}
+              onChange={e => updateLineQuote(idx, { brandPolicy: e.target.value })}
+              disabled={isReadOnly}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              <option value="EQUIVALENT_ACCEPTED">Equivalent Make Accepted</option>
+              <option value="STRICT_BRAND_LOCK">Strict - Exact Make Required</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Row 3: Model & Compliance Status */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Offered Model / Catalog / Part Number
+            </label>
+            <input
+              type="text"
+              value={line.model || ''}
+              onChange={e => updateLineQuote(idx, { model: e.target.value })}
+              disabled={isReadOnly}
+              placeholder="e.g. MOD-2026-X, Series 5, Part #7842"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+              Technical Compliance Status
+            </label>
+            <select
+              value={line.complianceStatus || 'COMPLIANT'}
+              onChange={e => updateLineQuote(idx, { complianceStatus: e.target.value })}
+              disabled={isReadOnly}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
+            >
+              <option value="COMPLIANT">✓ 100% Fully Compliant</option>
+              <option value="DEVIATION">⚠ Minor Technical Deviation</option>
+              <option value="ALTERNATIVE">✦ Equivalent Alternative Offered</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Live Commercials Summary */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <span className="font-bold uppercase text-[10px] tracking-wider">Offered Commercials:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
+            <span className="text-slate-700">
+              Qty: <span className="text-slate-900">{qty} {line.unitOfMeasure || 'Nos'}</span>
+            </span>
+            <span className="text-slate-700">
+              Unit Rate: <span className="text-slate-900">₹{unitRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+            </span>
+            <span className="text-slate-700">
+              GST: <span className="text-slate-900">{gstPercent}%</span>
+            </span>
+            <span className="text-slate-900 font-extrabold bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
+              Line Total: ₹{computedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* DOCUMENT UPLOAD SECTION FOR THIS SPECIFIC ITEM */}
+      <div className="rounded-xl border border-blue-200/80 bg-blue-50/30 p-4 space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-100 pb-2">
+          <div className="flex items-center gap-2">
+            <FileUp className="h-4 w-4 text-blue-700" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-950">
+              Attach Technical Documents for this Item
+            </h4>
+          </div>
+          <span className="text-[10.5px] text-slate-500 font-medium">
+            Upload spec sheets, product brochures, test certificates (PDF/DOC/Images up to 10MB)
+          </span>
+        </div>
+
+        {!isReadOnly && (
+          <div className="space-y-3">
+            {/* Document metadata inputs */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10.5px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                  Document Type
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={e => setSelectedCategory(e.target.value)}
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                >
+                  <option value="Technical Specification">Technical Specification Sheet</option>
+                  <option value="Brochure / Catalog">Product Brochure / Catalog</option>
+                  <option value="Test Certificate">Test Certificate / Lab Report</option>
+                  <option value="OEM Authorization">OEM Authorization (MAF)</option>
+                  <option value="Warranty Certificate">Warranty Certificate</option>
+                  <option value="Compliance Sheet">Compliance Matrix Sheet</option>
+                  <option value="Other">Other Supporting Document</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10.5px] font-bold uppercase text-slate-600 tracking-wider mb-1">
+                  Custom Title / Note (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={customDocName}
+                  onChange={e => setCustomDocName(e.target.value)}
+                  placeholder="e.g. BIS Certificate, Datasheet v2"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-800 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                />
+              </div>
+            </div>
+
+            {/* Drop Zone & File Browser */}
+            <div
+              onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all duration-200",
+                isDragOver ? "border-blue-500 bg-blue-50/80 scale-[1.01]" : "border-slate-300 bg-white hover:border-blue-400 hover:bg-slate-50/50",
+                isUploading ? "opacity-60 pointer-events-none" : ""
+              )}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp,.xls,.xlsx"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              <div className="flex flex-col items-center justify-center gap-1.5">
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+                    <span className="text-xs font-bold text-blue-700">Uploading document...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="h-9 w-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Upload className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 hover:text-blue-700">
+                        Click to upload specification document
+                      </span>
+                      <span className="text-xs text-slate-500"> or drag &amp; drop file here</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      PDF, DOC, DOCX, JPG, PNG up to 10MB
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Uploaded Documents List for This Item */}
+        <div className="space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-600">
+              Attached Documents for Item #{idx + 1} ({attachments.length}):
+            </span>
+            {attachments.length === 0 && (
+              <span className="text-[10px] text-slate-400 font-medium italic">
+                Optional: Upload cut-sheets or compliance files
+              </span>
+            )}
+          </div>
+
+          {attachments.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-3 text-center text-xs text-slate-400">
+              No documents attached yet for this item. Upload technical cut-sheets, certificates, or brochures above.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {attachments.map((att: any, attIdx: number) => {
+                const typeInfo = getFileTypeDetails(att.fileName || att.name || '');
+                return (
+                  <div
+                    key={att.id || attIdx}
+                    className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 text-xs shadow-2xs hover:border-slate-300 transition"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                      <span className={cn("px-1.5 py-0.5 rounded text-[9px] font-black border uppercase shrink-0", typeInfo.bg)}>
+                        {typeInfo.label}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate text-[11px]" title={att.fileName || att.name}>
+                          {att.fileName || att.name}
+                        </p>
+                        <p className="text-[9.5px] font-medium text-slate-500">
+                          {att.documentType}
+                          {att.customNote ? ` • ${att.customNote}` : ''}
+                          {att.fileSize ? ` • ${formatBytes(att.fileSize)}` : ''}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => onPreviewAttachment(att)}
+                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-200 px-2 py-1 text-[10px] font-bold text-blue-700 hover:bg-blue-100 transition cursor-pointer"
+                        title="Preview document"
+                      >
+                        <Eye className="h-3 w-3 text-blue-600" />
+                        View
+                      </button>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => onRemoveAttachment(idx, att.id)}
+                          className="inline-flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                          title="Remove document"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function SubmitQuotationPage() {
   const router = useRouter();
@@ -344,6 +848,11 @@ export default function SubmitQuotationPage() {
   const [deliveryTimeline, setDeliveryTimeline] = useState('');
   const [message, setMessage] = useState('');
   const [terms, setTerms] = useState('');
+  const [offeredMakeBrand, setOfferedMakeBrand] = useState('');
+  const [offeredModel, setOfferedModel] = useState('');
+  const [technicalSpecifications, setTechnicalSpecifications] = useState('');
+  const [complianceStatement, setComplianceStatement] = useState<'FULL_COMPLIANCE' | 'WITH_DEVIATION' | 'ALTERNATIVE_OFFERED' | ''>('FULL_COMPLIANCE');
+  const [expandedLineSpecs, setExpandedLineSpecs] = useState<Record<number, boolean>>({});
   const [declared, setDeclared] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -353,16 +862,19 @@ export default function SubmitQuotationPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
+  const [userSelectedTab, setUserSelectedTab] = useState(false);
 
   const scrollToSection = (id: string) => {
     if (id === 'quotation-details' || id === 'message-documents' || id === 'item-wise-pricing' || id === 'requested-documents' || id === 'submit-action') {
       setActiveTab(id as TabKey);
+      setUserSelectedTab(true);
     }
     setTimeout(() => {
       const el = document.getElementById(id) || document.getElementById('tab-content-container');
@@ -832,12 +1344,20 @@ export default function SubmitQuotationPage() {
     const targetTerms = ownResponse.terms || ownResponse.responseData?.terms;
     const targetMessage = ownResponse.message || ownResponse.responseData?.message || ownResponse.coverNote || ownResponse.responseData?.coverNote;
     const targetAttachment = ownResponse.attachmentUrl || ownResponse.responseData?.attachmentUrl;
+    const targetMakeBrand = ownResponse.makeBrand || ownResponse.responseData?.makeBrand || ownResponse.acknowledgement?.makeBrand || '';
+    const targetModel = ownResponse.model || ownResponse.responseData?.model || ownResponse.acknowledgement?.model || '';
+    const targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
+    const targetCompliance = ownResponse.complianceStatement || ownResponse.responseData?.complianceStatement || ownResponse.acknowledgement?.complianceStatement || 'FULL_COMPLIANCE';
 
     setOfferedPrice(targetPrice != null ? String(targetPrice) : '');
     setOfferedQuantity(targetQty != null ? String(targetQty) : '');
     setDeliveryTimeline(targetTimeline != null ? String(targetTimeline) : '');
     setTerms(targetTerms != null ? String(targetTerms) : '');
     setMessage(targetMessage != null ? String(targetMessage) : '');
+    setOfferedMakeBrand(String(targetMakeBrand || ''));
+    setOfferedModel(String(targetModel || ''));
+    setTechnicalSpecifications(String(targetTechSpecs || ''));
+    setComplianceStatement((targetCompliance as any) || 'FULL_COMPLIANCE');
     if (targetAttachment) {
       setUploadState({
         fileName: ownResponse.attachmentFileName || fileNameFromUrl(String(targetAttachment)) || 'Attachment',
@@ -871,10 +1391,6 @@ export default function SubmitQuotationPage() {
     if (isOwnSubmitted) {
       setSubmitted(true);
       setDeclared(true);
-      toast.info('Loaded your submitted quotation from the server.');
-    } else if (submittedStatus(ownResponse) === 'DRAFT') {
-      setSubmitted(false);
-      toast.info('Restored your draft quotation from the server.');
     } else {
       setSubmitted(false);
     }
@@ -883,9 +1399,38 @@ export default function SubmitQuotationPage() {
   // Use the canonical token from fetched data; RFQ bid numbers are resolved server-side.
   const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
 
-  // Save draft to database
+  // Submission and read-only states
+  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
+  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED', 'EXPIRED'].includes(rfqData?.status);
+  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && (() => {
+    try {
+      const dStr = String(rfqData.deadlineDate).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dStr)) {
+        const endOfDay = new Date(`${dStr}T23:59:59.999`);
+        return endOfDay.getTime() < Date.now();
+      }
+      return new Date(rfqData.deadlineDate).getTime() < Date.now();
+    } catch {
+      return false;
+    }
+  })();
+  const isExpiredOrClosed = isClosed || isDeadlinePassed || rfqData?.status === 'EXPIRED';
+  const isReadOnly = isExpiredOrClosed || isSubmittedQuote;
+
+  const techStatusRaw = String(ownResponse?.technicalStatus || (ownResponse as any)?.status || '').toUpperCase();
+  const isTechQualified = techStatusRaw === 'QUALIFIED';
+  const isTechDisqualified = techStatusRaw === 'DISQUALIFIED' || Boolean((ownResponse as any)?.isDisqualified);
+  const techEvaluationRemarks = String(
+    (ownResponse as any)?.technicalRemarks ||
+    (ownResponse as any)?.rejectionReason ||
+    (ownResponse as any)?.remarks ||
+    ''
+  ).trim();
+
+  // Save draft strictly when user clicks "Save Draft" button
   const saveDraft = useCallback(async () => {
-    if (!resolvedId || isMarketplaceQuoteFlow) return;
+    if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting || savingDraft) return;
+    setSavingDraft(true);
     try {
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
@@ -893,6 +1438,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim() || undefined,
         message: message.trim() || 'Draft quotation response', // default placeholder
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'DRAFT'
       };
       if (uploadState?.url) {
@@ -909,15 +1458,16 @@ export default function SubmitQuotationPage() {
       toast.success('Draft saved successfully');
       setTimeout(() => setDraftSaved(false), 2000);
     } catch (err: any) {
+      if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        setSubmitted(true);
+        return;
+      }
       console.warn('Failed to save draft to server', err);
       toast.error(err?.message || 'Failed to save draft to server');
+    } finally {
+      setSavingDraft(false);
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes]);
-
-  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
-  const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(rfqData?.status);
-  const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && new Date(rfqData.deadlineDate).getTime() < Date.now();
-  const isReadOnly = isClosed || isDeadlinePassed || isSubmittedQuote;
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, offeredMakeBrand, offeredModel, technicalSpecifications, complianceStatement, uploadState, docUploads, lineQuotes]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -953,24 +1503,14 @@ export default function SubmitQuotationPage() {
     : isLimitedTender ? 'Back to Limited Tender'
     : 'Back to RFQ';
 
-  // Auto-save on field changes (debounced at 5 seconds)
-  React.useEffect(() => {
-    if (!resolvedId || isReadOnly || !rfqData) return;
-    const hasDynamicInput = docUploads.some(doc => doc.status === 'done') || lineQuotes.some(line => line.unitPrice !== '');
-    if (!offeredPrice && !offeredQuantity && !deliveryTimeline && !terms && !message && !uploadState && !hasDynamicInput) {
-      return;
-    }
 
-    const timer = setTimeout(() => {
-      saveDraft();
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [offeredPrice, offeredQuantity, deliveryTimeline, terms, message, uploadState, docUploads, lineQuotes, resolvedId, rfqData, saveDraft, ownResponse]);
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
   const rfqNumber = formatRefId('RFQ', requirementId || rfqData?.id, rfqData?.requirementNumber, rfqData?.procurementMethod || rfqData?.canonicalMethod || 'RFQ');
-  const deadline = rfqData?.deadlineDate ? formatDate(rfqData.deadlineDate) : '—';
+  const deadline = rfqData?.deadlineDate
+    ? (hasExplicitTime(rfqData.deadlineDate) ? formatDateTime(rfqData.deadlineDate) : formatDate(rfqData.deadlineDate))
+    : '—';
 
   const itemsList: Array<{
     itemName: string;
@@ -1019,9 +1559,14 @@ export default function SubmitQuotationPage() {
 
     const stripAutoDesc = (desc?: string): string => {
       if (!desc) return '';
-      const str = String(desc).trim();
-      if (str.includes('Sourcing Method:') && str.includes('Urgency:')) return '';
-      return str;
+      let text = String(desc).replace(/\r/g, '');
+      text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
+      text = text.replace(/RFP\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Estimated\s?Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Value:\s*[^|\n]*/gi, '');
+      text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
+      text = text.replace(/Priority:\s*[^|\n]*/gi, '');
+      return text.trim();
     };
 
     const isGenericName = (val?: any): boolean => {
@@ -1117,8 +1662,6 @@ export default function SubmitQuotationPage() {
             item?.category,
             rfqData?.category,
             queryData?.requirement?.category,
-            rfqData?.subCategory,
-            queryData?.requirement?.subCategory,
           ];
           for (const catCand of catCandidates) {
             const catStr = typeof catCand === 'string' ? catCand : catCand?.name;
@@ -1137,11 +1680,17 @@ export default function SubmitQuotationPage() {
           finalName = `Item #${idx + 1}`;
         }
 
+        const hasDistinctDesc = Boolean(
+          cleanedDesc &&
+          cleanedDesc.toLowerCase().trim() !== finalName.toLowerCase().trim() &&
+          !finalName.toLowerCase().trim().includes(cleanedDesc.toLowerCase().trim())
+        );
+
         return {
           itemName: finalName,
           quantity: item?.quantity || item?.qty || item?.count || item?.estimatedAnnualQuantity || item?.annualQuantity || item?.estimatedRateQuantity || rfqData?.quantity || 1,
-          unitOfMeasure: item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos',
-          description: cleanedDesc !== finalName ? cleanedDesc : '',
+          unitOfMeasure: sanitizeUom(item?.unitOfMeasure || item?.unit || item?.uom || item?.unitType || item?.uomName || specs?.unit || rfqData?.unit || 'Nos'),
+          description: hasDistinctDesc ? cleanedDesc : '',
         };
       });
     } else if (rfqData || queryData?.requirement) {
@@ -1176,12 +1725,18 @@ export default function SubmitQuotationPage() {
         finalTitle = 'Requirement Item';
       }
 
+      const hasDistinctReqDesc = Boolean(
+        cleanedReqDesc &&
+        cleanedReqDesc.toLowerCase().trim() !== finalTitle.toLowerCase().trim() &&
+        !finalTitle.toLowerCase().trim().includes(cleanedReqDesc.toLowerCase().trim())
+      );
+
       parsedList = [
         {
           itemName: finalTitle,
           quantity: rfqData?.quantity || queryData?.requirement?.quantity || 1,
-          unitOfMeasure: rfqData?.unit || queryData?.requirement?.unit || 'Nos',
-          description: cleanedReqDesc !== finalTitle ? cleanedReqDesc : '',
+          unitOfMeasure: sanitizeUom(rfqData?.unit || queryData?.requirement?.unit || 'Nos'),
+          description: hasDistinctReqDesc ? cleanedReqDesc : '',
         }
       ];
     }
@@ -1206,53 +1761,93 @@ export default function SubmitQuotationPage() {
   const documents = Array.isArray(rfqData?.documents) ? rfqData?.documents : [];
 
   // Buyer-requested documents come from three shapes depending on how the procurement was
+  // Buyer-requested documents come from multiple shapes depending on how the procurement was
   // created: wizard payload.documents ({name, required}), marketplace requiredDocuments
-  // (string[]), or attached requirement documents. Merge + dedupe by name.
+  // (string[]), attached requirement documents, technical packet, etc. Merge + dedupe by name.
   const requestedDocs = React.useMemo(() => {
     const out: Array<{ name: string; required: boolean }> = [];
-    const seen = new Set<string>();
-    const push = (name: unknown, required: boolean) => {
+    const seen = new Map<string, number>();
+    const authoritative = new Set<string>();
+
+    const push = (name: unknown, required: boolean, isAuthoritative = false) => {
       const label = String(name || '').trim();
       const key = label.toLowerCase();
-      if (!label || seen.has(key)) return;
-      seen.add(key);
-      out.push({ name: label, required });
+      if (!label) return;
+
+      // Internal PAC/administrative documents are buyer justifications, not supplier compliance
+      const isInternalBuyerDoc = key.includes('emergency approval') || key.includes('pac justification') || key.includes('competent authority approval');
+      const effectiveRequired = isInternalBuyerDoc ? false : required;
+
+      if (seen.has(key)) {
+        const existingIdx = seen.get(key)!;
+        if (isAuthoritative) {
+          out[existingIdx].required = effectiveRequired;
+          authoritative.add(key);
+        } else if (!authoritative.has(key) && effectiveRequired && !out[existingIdx].required) {
+          out[existingIdx].required = true;
+        }
+        return;
+      }
+      seen.set(key, out.length);
+      if (isAuthoritative) authoritative.add(key);
+      out.push({ name: label, required: effectiveRequired });
     };
 
     // 1. Authoritative: payload / technicalPacket documents array with explicit required flags
-    const payloadDocs = rfqData?.payload?.documents ||
-      rfqData?.payload?.documentsRequested ||
-      rfqData?.technicalPacket?.documents ||
-      rfqData?.payload?.technicalPacket?.documents;
+    const authoritativeDocsArrays = [
+      rfqData?.payload?.requiredDocs,
+      rfqData?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.technicalPacket?.requiredDocs,
+      rfqData?.payload?.documents,
+      rfqData?.technicalPacket?.documents,
+      rfqData?.payload?.technicalPacket?.documents,
+      rfqData?.payload?.documentsRequested,
+      queryData?.requirement?.payload?.requiredDocs,
+      queryData?.requirement?.payload?.documents,
+      queryData?.requirement?.technicalPacket?.documents,
+      queryData?.requirement?.technicalPacket?.requiredDocs
+    ];
 
-    if (Array.isArray(payloadDocs) && payloadDocs.length > 0) {
-      payloadDocs.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName);
-        const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
-        push(name, isReq);
-      });
+    for (const arr of authoritativeDocsArrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        arr.forEach((d: any) => {
+          const name = typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName || d?.title);
+          const isReq = typeof d === 'object' && d !== null ? Boolean(d?.required === true || d?.isRequired === true) : false;
+          push(name, isReq, true);
+        });
+      }
     }
 
     // 2. Attached requirement documents
     if (Array.isArray(documents) && documents.length > 0) {
       documents.forEach((d: any) => {
-        const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName);
-        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false);
+        const name = typeof d === 'string' ? d : (d?.documentType || d?.name || d?.documentName || d?.title);
+        push(name, typeof d === 'object' && d !== null ? Boolean(d?.required === true) : false, false);
       });
     }
 
-    // 3. Fallback requiredDocuments / requestedDocuments strings ONLY if payloadDocs didn't provide documents
-    if (out.length === 0) {
-      if (Array.isArray(rfqData?.requiredDocuments)) {
-        rfqData.requiredDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
-      }
-      if (Array.isArray(rfqData?.requestedDocuments)) {
-        rfqData.requestedDocuments.forEach((d: any) => push(typeof d === 'string' ? d : d?.name, true));
+    // 3. Fallback buyer-specified string arrays (e.g. requiredDocuments)
+    const fallbackDocArrays = [
+      rfqData?.requiredDocuments,
+      queryData?.requirement?.requiredDocuments,
+      rfqData?.payload?.requiredDocuments,
+      rfqData?.payload?.documentsRequired,
+      rfqData?.payload?.rules?.requiredDocuments,
+      rfqData?.payload?.rules?.documentsRequired,
+      rfqData?.payload?.rateContractConfig?.requiredDocuments,
+      rfqData?.payload?.tender?.requiredDocuments,
+      rfqData?.payload?.wizardData?.requiredDocuments,
+      rfqData?.technicalPacket?.requiredDocuments,
+    ];
+
+    for (const arr of fallbackDocArrays) {
+      if (Array.isArray(arr) && arr.length > 0) {
+        arr.forEach((d: any) => push(typeof d === 'string' ? d : (d?.name || d?.documentType || d?.documentName), true, false));
       }
     }
 
     return out;
-  }, [rfqData, documents]);
+  }, [rfqData, documents, queryData]);
 
   // Initialise upload slots per requested document and quote rows per buyer line item
   const restoredLineQuotesKeyRef = useRef<any>(null);
@@ -1260,53 +1855,94 @@ export default function SubmitQuotationPage() {
     const currentId = rfqData?.id || requirementId;
     if (!rfqData || !currentId) return;
 
+    const saved = ownResponse?.responseData || ownResponse || {};
+    const extractLines = (...candidates: any[]): any[] => {
+      for (const cand of candidates) {
+        if (Array.isArray(cand) && cand.length > 0) return cand;
+      }
+      return [];
+    };
+    const savedLines = extractLines(
+      saved.lineItems,
+      saved.lineQuotes,
+      ownResponse?.lineItems,
+      ownResponse?.lineQuotes,
+      ownResponse?.responseData?.lineItems,
+      ownResponse?.responseData?.lineQuotes,
+      queryData?.ownResponse?.lineItems,
+      queryData?.ownResponse?.responseData?.lineItems
+    );
+
+    const rawSavedDocsList: any[] = [
+      ...toArray(ownResponse?.responseData?.documents),
+      ...toArray(ownResponse?.responseData?.requestedDocuments),
+      ...toArray(ownResponse?.documents),
+      ...toArray(ownResponse?.requestedDocuments),
+      ...toArray(saved.documents),
+      ...toArray(saved.requestedDocuments)
+    ];
+
+    // Include primary response attachment if present and not already listed
+    if (ownResponse?.attachmentUrl && !rawSavedDocsList.some((d: any) => (d?.fileUrl || d?.url) === ownResponse.attachmentUrl)) {
+      rawSavedDocsList.push({
+        id: 'att-main',
+        name: ownResponse.attachmentFileName || 'Quotation Attachment',
+        fileName: ownResponse.attachmentFileName || fileNameFromUrl(ownResponse.attachmentUrl) || 'Quotation Attachment',
+        fileUrl: ownResponse.attachmentUrl,
+        url: ownResponse.attachmentUrl,
+        fileSize: ownResponse.attachmentFileSize,
+        taggedAs: 'Quotation Supporting Document'
+      });
+    }
+
+    const savedDocs = dedupeDocuments(rawSavedDocsList);
+
     const ownRespId = ownResponse?.id || (ownResponse ? 'present' : 'none');
-    const restoreKey = `${currentId}_${ownRespId}`;
+    const restoreKey = `${currentId}_${ownRespId}_${savedLines.length}_${savedDocs.length}`;
     if (restoredLineQuotesKeyRef.current === restoreKey) return;
     restoredLineQuotesKeyRef.current = restoreKey;
 
-    const saved = ownResponse?.responseData || ownResponse || {};
-    const savedDocs: any[] = Array.isArray(saved.documents)
-      ? saved.documents
-      : Array.isArray(saved.requestedDocuments)
-      ? saved.requestedDocuments
-      : Array.isArray(ownResponse?.documents)
-      ? ownResponse.documents
-      : Array.isArray(ownResponse?.responseData?.documents)
-      ? ownResponse.responseData.documents
-      : [];
-
-    const savedLines: any[] = Array.isArray(saved.lineQuotes)
-      ? saved.lineQuotes
-      : Array.isArray(saved.lineItems)
-      ? saved.lineItems
-      : Array.isArray(ownResponse?.responseData?.lineQuotes)
-      ? ownResponse.responseData.lineQuotes
-      : Array.isArray(ownResponse?.responseData?.lineItems)
-      ? ownResponse.responseData.lineItems
-      : Array.isArray(ownResponse?.lineQuotes)
-      ? ownResponse.lineQuotes
-      : Array.isArray(ownResponse?.lineItems)
-      ? ownResponse.lineItems
-      : [];
-
     const restoreSaved = !!ownResponse;
+    const matchedSavedKeys = new Set<string>();
 
-    setDocUploads(requestedDocs.map((doc, idx) => {
-      const match = restoreSaved
-        ? (savedDocs.find(d => String(d?.name || d?.documentType || '').toLowerCase().trim() === doc.name.toLowerCase().trim()) || savedDocs[idx])
-        : null;
+    // 1. Map requestedDocs to existing uploaded files or create upload slots
+    const requestedUploads: RequestedDocUpload[] = requestedDocs.map((doc, idx) => {
+      let match: any = null;
+      if (restoreSaved) {
+        match = savedDocs.find(d => {
+          const docKey = String(d?.fileAssetId || d?.id || d?.fileUrl || d?.url || d?.fileName || d?.name || '');
+          if (matchedSavedKeys.has(docKey)) return false;
+          const candidateName = String(d?.taggedAs || d?.name || d?.documentType || '').toLowerCase().trim();
+          return candidateName === doc.name.toLowerCase().trim();
+        });
+        if (!match && savedDocs[idx]) {
+          const fallbackDoc = savedDocs[idx];
+          const fallbackKey = String(fallbackDoc?.fileAssetId || fallbackDoc?.id || fallbackDoc?.fileUrl || fallbackDoc?.url || fallbackDoc?.fileName || fallbackDoc?.name || '');
+          if (!matchedSavedKeys.has(fallbackKey)) {
+            match = fallbackDoc;
+          }
+        }
+      }
+
+      if (match) {
+        const matchKey = String(match?.fileAssetId || match?.id || match?.fileUrl || match?.url || match?.fileName || match?.name || '');
+        if (matchKey) matchedSavedKeys.add(matchKey);
+      }
+
       const uniqueId = `doc-init-${idx}-${match?.fileAssetId || match?.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      return match?.fileAssetId || match?.fileUrl || match?.url
+      const hasFile = Boolean(match?.fileAssetId || match?.fileUrl || match?.url || match?.fileName);
+
+      return hasFile
         ? {
             ...doc,
             id: uniqueId,
             fileAssetId: match.fileAssetId || match.id,
             fileName: match.fileName || match.name || doc.name,
             fileUrl: match.fileUrl || match.url || '',
+            fileSize: match.fileSize,
             status: 'done' as const,
             progress: 100,
-            taggedAs: doc.name
+            taggedAs: match.taggedAs || doc.name
           }
         : {
             ...doc,
@@ -1314,23 +1950,100 @@ export default function SubmitQuotationPage() {
             status: 'empty' as const,
             progress: 0
           };
-    }));
+    });
 
-    setLineQuotes(itemsList.map((item, idx) => {
-      const match = restoreSaved
-        ? (savedLines.find(l => String(l?.itemName || l?.name || '').toLowerCase().trim() === String(item.itemName).toLowerCase().trim()) || savedLines[idx])
-        : null;
-      return {
+    // 2. Preserve ALL extra/unmatched saved documents so uploaded documents are never lost or blank!
+    const extraUploads: RequestedDocUpload[] = [];
+    if (restoreSaved) {
+      savedDocs.forEach((d: any, extraIdx: number) => {
+        const docKey = String(d?.fileAssetId || d?.id || d?.fileUrl || d?.url || d?.fileName || d?.name || '');
+        if (docKey && matchedSavedKeys.has(docKey)) return;
+        const hasFile = Boolean(d?.fileAssetId || d?.fileUrl || d?.url || d?.fileName || d?.name);
+        if (!hasFile) return;
+
+        matchedSavedKeys.add(docKey);
+        extraUploads.push({
+          id: `doc-saved-${extraIdx}-${d.fileAssetId || d.id || Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: d.taggedAs || d.name || d.fileName || 'Compliance Document',
+          required: Boolean(d.required),
+          fileName: d.fileName || d.name || 'Document',
+          fileUrl: d.fileUrl || d.url || '',
+          fileSize: d.fileSize,
+          status: 'done' as const,
+          progress: 100,
+          taggedAs: d.taggedAs || d.name || 'Compliance Document'
+        });
+      });
+    }
+
+    setDocUploads([...requestedUploads, ...extraUploads]);
+
+    // 3. Populate line quotes: if the seller previously saved/submitted custom lines, preserve ALL of them!
+    if (restoreSaved && savedLines.length > 0) {
+      const restored = savedLines.map((line: any, idx: number) => {
+        const matchingBuyerItem = itemsList.find(i => String(i.itemName).toLowerCase().trim() === String(line?.itemName || line?.name || '').toLowerCase().trim()) || (idx < itemsList.length ? itemsList[idx] : null);
+        const resolvedName = line?.itemName || line?.name || line?.itemDescription || matchingBuyerItem?.itemName || `Item #${idx + 1}`;
+        const rawUnitPrice = line?.unitPrice ?? line?.unitRate ?? line?.rate ?? line?.price ?? '';
+        return {
+          itemName: resolvedName,
+          quantity: line?.quantity != null ? line.quantity : (matchingBuyerItem?.quantity != null ? matchingBuyerItem.quantity : 1),
+          unitOfMeasure: sanitizeUom(line?.unitOfMeasure || line?.unit || line?.uom || matchingBuyerItem?.unitOfMeasure || 'Nos'),
+          unitPrice: rawUnitPrice !== '' && rawUnitPrice != null ? String(rawUnitPrice) : '',
+          gstPercent: line?.gstPercent != null ? String(line?.gstPercent) : (line?.gstPercentage != null ? String(line?.gstPercentage) : '18'),
+          makeBrand: line?.makeBrand || line?.brand || (matchingBuyerItem as any)?.makeBrand || '',
+          model: line?.model || line?.modelNumber || line?.partNumber || '',
+          specifications: line?.specifications || line?.technicalSpecs || line?.itemDescription || '',
+          complianceStatus: line?.complianceStatus || line?.compliance || '',
+          hsnCode: line?.hsnCode || line?.hsn_sac_code || (matchingBuyerItem as any)?.hsnCode || '',
+          brandPolicy: line?.brandPolicy || (matchingBuyerItem as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+          attachments: Array.isArray(line?.attachments) ? line.attachments : [],
+          remarks: line?.remarks || ''
+        };
+      });
+
+      // If buyer requirement had more items than seller saved, append them
+      if (itemsList.length > savedLines.length) {
+        const coveredNames = new Set(restored.map(r => r.itemName.toLowerCase().trim()));
+        itemsList.forEach((buyerItem, idx) => {
+          if (!coveredNames.has(buyerItem.itemName.toLowerCase().trim()) && idx >= savedLines.length) {
+            restored.push({
+              itemName: buyerItem.itemName,
+              quantity: buyerItem.quantity != null ? buyerItem.quantity : 1,
+              unitOfMeasure: sanitizeUom(buyerItem.unitOfMeasure || 'Nos'),
+              unitPrice: '',
+              gstPercent: '18',
+              makeBrand: (buyerItem as any)?.makeBrand || '',
+              model: '',
+              specifications: '',
+              complianceStatus: '',
+              hsnCode: (buyerItem as any)?.hsnCode || '',
+              brandPolicy: (buyerItem as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+              attachments: [],
+              remarks: ''
+            });
+          }
+        });
+      }
+
+      setLineQuotes(restored);
+    } else {
+      setLineQuotes(itemsList.map(item => ({
         itemName: item.itemName,
-        quantity: match?.quantity != null ? match.quantity : (item.quantity != null ? item.quantity : 1),
-        unitOfMeasure: match?.unitOfMeasure || item?.unitOfMeasure || 'Nos',
-        unitPrice: match?.unitPrice != null ? String(match.unitPrice) : '',
-        gstPercent: match?.gstPercent != null ? String(match.gstPercent) : '18',
-        makeBrand: match?.makeBrand || match?.brand || '',
-        remarks: match?.remarks || ''
-      };
-    }));
-  }, [rfqData, ownResponse, requestedDocs, itemsList, requirementId]);
+        quantity: item.quantity != null ? item.quantity : 1,
+        unitOfMeasure: sanitizeUom(item.unitOfMeasure || 'Nos'),
+        unitPrice: '',
+        gstPercent: '18',
+        makeBrand: (item as any)?.makeBrand || '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
+        hsnCode: (item as any)?.hsnCode || '',
+        brandPolicy: (item as any)?.brandPolicy || 'EQUIVALENT_ACCEPTED',
+        attachments: [],
+        remarks: ''
+      })));
+    }
+  }, [rfqData, ownResponse, requestedDocs, itemsList, requirementId, queryData?.ownResponse]);
 
   // Line-quote totals: when the seller prices per line, keep the headline offered price/qty in sync.
   const lineTotals = React.useMemo(() => {
@@ -1350,6 +2063,14 @@ export default function SubmitQuotationPage() {
     return { total: Math.round(total * 100) / 100, qty: Math.round(qty * 100) / 100, priced };
   }, [lineQuotes]);
 
+  const hasLineItems = itemsList.length > 0 || lineQuotes.length > 0;
+
+  React.useEffect(() => {
+    if (!userSelectedTab && hasLineItems && !isSubmittedQuote) {
+      setActiveTab('item-wise-pricing');
+    }
+  }, [hasLineItems, userSelectedTab, isSubmittedQuote]);
+
   React.useEffect(() => {
     if (isSubmittedQuote || lineTotals.priced === 0) return;
     if (!offeredPrice || Number(offeredPrice) === 0) {
@@ -1362,14 +2083,19 @@ export default function SubmitQuotationPage() {
   // Function declaration (hoisted) so saveDraft, defined earlier in the component, can call it.
   function buildResponseData() {
     const docs = docUploads
-      .filter(doc => doc.status === 'done' && (doc.fileAssetId || doc.fileUrl))
+      .filter(doc => doc.status === 'done' && (doc.fileAssetId || doc.fileUrl || (doc as any).url || doc.fileName))
       .map(doc => {
-        const item: any = { name: doc.name };
+        const item: any = {
+          name: doc.taggedAs || doc.name || doc.fileName,
+          taggedAs: doc.taggedAs || doc.name,
+          fileName: doc.fileName || doc.name,
+          fileUrl: doc.fileUrl || (doc as any).url || '',
+          url: doc.fileUrl || (doc as any).url || '',
+        };
         if (doc.fileAssetId && !isNaN(Number(doc.fileAssetId)) && Number(doc.fileAssetId) > 0) {
           item.fileAssetId = Number(doc.fileAssetId);
         }
-        if (doc.fileName) item.fileName = doc.fileName;
-        if (doc.fileUrl) item.fileUrl = doc.fileUrl;
+        if (doc.fileSize) item.fileSize = doc.fileSize;
         return item;
       });
     const lines = lineQuotes
@@ -1387,13 +2113,28 @@ export default function SubmitQuotationPage() {
           unitRate: unitPrice,
           gstPercent,
           makeBrand: line.makeBrand.trim() || null,
+          model: (line.model || '').trim() || null,
+          specifications: (line.specifications || '').trim() || null,
+          complianceStatus: line.complianceStatus || null,
+          hsnCode: (line.hsnCode || '').trim() || null,
+          brandPolicy: line.brandPolicy || null,
+          attachments: Array.isArray(line.attachments) ? line.attachments : [],
           remarks: line.remarks.trim() || null,
           lineTotal: Math.round(lineTotal * 100) / 100,
           totalAmount: Math.round(lineTotal * 100) / 100,
         };
       });
-    if (!docs.length && !lines.length) return undefined;
-    return { documents: docs, lineItems: lines };
+    const primaryLine = lines[0];
+    const hasAnyContent = docs.length > 0 || lines.length > 0 || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim();
+    if (!hasAnyContent) return undefined;
+    return {
+      documents: docs,
+      lineItems: lines,
+      makeBrand: (offeredMakeBrand.trim() || primaryLine?.makeBrand || undefined),
+      model: (offeredModel.trim() || primaryLine?.model || undefined),
+      technicalSpecifications: (technicalSpecifications.trim() || primaryLine?.specifications || undefined),
+      complianceStatement: (complianceStatement || (primaryLine?.complianceStatus === 'DEVIATION' ? 'WITH_DEVIATION' : primaryLine?.complianceStatus === 'ALTERNATIVE' ? 'ALTERNATIVE_OFFERED' : 'FULL_COMPLIANCE')),
+    };
   }
 
   const handleUploadFiles = useCallback(async (files: FileList | File[], targetTag?: string) => {
@@ -1492,6 +2233,67 @@ export default function SubmitQuotationPage() {
     setLineQuotes(prev => prev.map((line, i) => i === index ? { ...line, ...patch } : line));
   };
 
+  const handleUploadItemAttachment = async (
+    lineIdx: number,
+    file: File,
+    docType: string,
+    customNote?: string
+  ) => {
+    try {
+      const res = await uploadFile(file);
+      const newAttachment: LineItemAttachment = {
+        id: `line-att-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: customNote ? `${customNote} (${file.name})` : file.name,
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: res.url,
+        url: res.url,
+        fileAssetId: res.id || null,
+        documentType: docType || 'Technical Specification',
+        customNote: customNote || '',
+        uploadedAt: new Date().toISOString(),
+      };
+
+      setLineQuotes(prev => {
+        const next = [...prev];
+        if (next[lineIdx]) {
+          const currentAtts = Array.isArray(next[lineIdx].attachments)
+            ? next[lineIdx].attachments
+            : [];
+          next[lineIdx] = {
+            ...next[lineIdx],
+            attachments: [...currentAtts, newAttachment],
+          };
+        }
+        return next;
+      });
+
+      toast.success(`${file.name} uploaded for item #${lineIdx + 1}`);
+    } catch (err: any) {
+      console.error('Failed to upload line item attachment:', err);
+      toast.error(`Failed to upload ${file.name}: ${err?.message || 'Unknown error'}`);
+      throw err;
+    }
+  };
+
+  const handleRemoveItemAttachment = (lineIdx: number, attachmentId: string) => {
+    if (isReadOnly) return;
+    setLineQuotes(prev => {
+      const next = [...prev];
+      if (next[lineIdx]) {
+        const currentAtts = Array.isArray(next[lineIdx].attachments)
+          ? next[lineIdx].attachments
+          : [];
+        next[lineIdx] = {
+          ...next[lineIdx],
+          attachments: currentAtts.filter(a => a.id !== attachmentId),
+        };
+      }
+      return next;
+    });
+    toast.info('Document removed from item.');
+  };
+
   const handleAddCustomLine = () => {
     if (isReadOnly) return;
     setLineQuotes(prev => [
@@ -1503,6 +2305,9 @@ export default function SubmitQuotationPage() {
         unitPrice: '',
         gstPercent: '18',
         makeBrand: '',
+        model: '',
+        specifications: '',
+        complianceStatus: '',
         remarks: ''
       }
     ]);
@@ -1513,13 +2318,55 @@ export default function SubmitQuotationPage() {
     setLineQuotes(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handlePreviewDocument = (item: any) => {
-    const url = item.fileUrl || item.url || '';
-    if (!url) return;
+  const handlePreviewDocument = async (item: any) => {
+    if (!item) return;
+    const fileName = item.fileName || item.name || item.file?.name || 'Document Preview';
+    const rawUrl = item.fileUrl || item.url || '';
+
+    // 1. If it's a local File object in memory, preview immediately via local blob URL
+    if (item.file instanceof File) {
+      try {
+        const blobUrl = URL.createObjectURL(item.file);
+        setPreviewDocument({
+          label: fileName,
+          url: blobUrl,
+          mode: getDocumentPreviewMode(blobUrl, item.file.type || '', fileName.split('.').pop() || '')
+        });
+        return;
+      } catch (err) {
+        console.error('Failed to create preview for local file:', err);
+      }
+    }
+
+    if (!rawUrl && !item.fileAssetId && !item.id) {
+      toast.error('Preview is not available for this document.');
+      return;
+    }
+
+    // 2. Fetch preview via getFileAssetPreview
+    try {
+      const prev = await getFileAssetPreview(
+        {
+          id: item.fileAssetId || item.id,
+          fileAssetId: item.fileAssetId,
+          url: rawUrl,
+          fileName,
+        },
+        fileName
+      );
+      if (prev) {
+        setPreviewDocument(prev);
+        return;
+      }
+    } catch {
+      // Fallback to direct resolution below
+    }
+
+    const resolved = resolveMediaUrl(rawUrl) || rawUrl;
     setPreviewDocument({
-      label: item.fileName || item.name || 'Document Preview',
-      url,
-      mode: getDocumentPreviewMode(url, '', (item.fileName || item.name || '').split('.').pop() || '')
+      label: fileName,
+      url: resolved,
+      mode: getDocumentPreviewMode(resolved, item.file?.type || '', fileName.split('.').pop() || '')
     });
   };
 
@@ -1540,24 +2387,32 @@ export default function SubmitQuotationPage() {
     );
     const missingDocs = requestedDocs.filter(doc => doc.required && !coveredNames.has(doc.name.trim().toLowerCase()));
     if (missingDocs.length > 0) {
-      errs.requestedDocs = `Tag each uploaded file with the required document it satisfies. Missing: ${missingDocs.map(d => d.name).join(', ')}`;
+      errs.requestedDocs = `Please upload the required compliance document(s): ${missingDocs.map(d => d.name).join(', ')}`;
     }
     if (!declared) errs.declared = 'You must declare the information is accurate';
     setErrors(errs);
 
     if (Object.keys(errs).length > 0) {
-      if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
+      if (hasLineItems && (errs.offeredPrice || errs.offeredQuantity)) {
+        setActiveTab('item-wise-pricing');
+        scrollToSection('item-wise-pricing');
+        toast.error('Please specify valid pricing and quantities in Item-Wise Quotation before submitting.');
+      } else if (errs.offeredPrice || errs.offeredQuantity || errs.deliveryTimeline) {
         setActiveTab('quotation-details');
         scrollToSection('quotation-details');
+        toast.error('Please complete all required commercial and delivery details.');
       } else if (errs.message) {
         setActiveTab('message-documents');
         scrollToSection('message-documents');
+        toast.error('Please enter a quotation message / cover note.');
       } else if (errs.requestedDocs) {
         setActiveTab('requested-documents');
         scrollToSection('requested-documents');
+        toast.error(`Please upload the ${missingDocs.length} required document(s) in Requested Documents: ${missingDocs.map(d => d.name).join(', ')}`);
       } else if (errs.declared) {
         setActiveTab('submit-action');
         scrollToSection('submit-action');
+        toast.error('Please accept the declaration before submitting.');
       }
       return false;
     }
@@ -1572,7 +2427,7 @@ export default function SubmitQuotationPage() {
       toast.error('File size must be under 10 MB');
       return;
     }
-    setUploadState({ file, progress: 0, status: 'pending' });
+    setUploadState({ file, fileName: file.name, fileSize: file.size, progress: 0, status: 'pending' });
     setErrors(prev => {
       const next = { ...prev };
       delete next.attachment;
@@ -1587,7 +2442,15 @@ export default function SubmitQuotationPage() {
       const result = await uploadFile(uploadState.file, (percent) => {
         setUploadState(prev => prev ? { ...prev, progress: percent } : prev);
       });
-      setUploadState(prev => prev ? { ...prev, status: 'done', progress: 100, url: result.url } : prev);
+      setUploadState(prev => prev ? {
+        ...prev,
+        id: result.id,
+        fileAssetId: result.id,
+        status: 'done',
+        progress: 100,
+        url: result.url,
+        fileName: uploadState.file?.name || prev.fileName || prev.file?.name
+      } : prev);
       toast.success('Document uploaded');
     } catch (err: any) {
       setUploadState(prev => prev ? { ...prev, status: 'error', error: err?.message || 'Upload failed' } : prev);
@@ -1609,7 +2472,6 @@ export default function SubmitQuotationPage() {
 
   const handleSubmit = async () => {
     if (isSubmittedQuote) {
-      toast.error('You have already submitted your quotation for this procurement.');
       return;
     }
     // EMD check commented out as requested
@@ -1632,6 +2494,10 @@ export default function SubmitQuotationPage() {
         deliveryTimeline: deliveryTimeline.trim(),
         message: message.trim(),
         terms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || undefined,
+        model: offeredModel.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        complianceStatement: complianceStatement || undefined,
         status: 'SUBMITTED',
       };
       if (uploadState?.url) {
@@ -1659,16 +2525,41 @@ export default function SubmitQuotationPage() {
       localStorage.removeItem(`rfq_draft_${requirementId || conversationId}`);
       if (typeof window !== 'undefined') {
         const currentUserId = user?.id ? String(user.id) : null;
-        const keysToClear = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
-        keysToClear.forEach(k => {
+        const submittedRecord = {
+          id: Date.now(),
+          userId: currentUserId,
+          status: 'SUBMITTED',
+          submissionStatus: 'SUBMITTED',
+          submittedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          offeredPrice: payload.offeredPrice,
+          offeredQuantity: payload.offeredQuantity,
+          deliveryTimeline: payload.deliveryTimeline,
+          message: payload.message,
+          terms: payload.terms,
+          makeBrand: payload.makeBrand,
+          model: payload.model,
+          technicalSpecifications: payload.technicalSpecifications,
+          complianceStatement: payload.complianceStatement,
+          attachmentUrl: payload.attachmentUrl,
+          responseData: payload.responseData
+        };
+        const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+        keysToSet.forEach(k => {
           try {
-            localStorage.removeItem(`rfq_submitted_${k}`);
-            if (currentUserId) localStorage.removeItem(`rfq_submitted_${currentUserId}_${k}`);
+            localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+            if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
           } catch {}
         });
       }
+      queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+      queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
       queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
       queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
       queryClient.invalidateQueries({ queryKey: ['marketplace-opportunities'] });
       queryClient.invalidateQueries({ queryKey: ['seller-opportunities'] });
@@ -1676,9 +2567,34 @@ export default function SubmitQuotationPage() {
       toast.success('Your quotation has been submitted successfully.');
     } catch (err: any) {
       if (err?.message?.includes('already submitted') || err?.code === 'REQUIREMENT_RESPONSE_EXISTS' || err?.status === 409) {
+        if (typeof window !== 'undefined') {
+          const currentUserId = user?.id ? String(user.id) : null;
+          const submittedRecord = {
+            id: Date.now(),
+            userId: currentUserId,
+            status: 'SUBMITTED',
+            submissionStatus: 'SUBMITTED',
+            submittedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString()
+          };
+          const keysToSet = Array.from(new Set([resolvedId, requirementId, conversationId, searchParams?.get('requestId'), searchParams?.get('id'), searchParams?.get('requirementId')].filter(Boolean)));
+          keysToSet.forEach(k => {
+            try {
+              localStorage.setItem(`rfq_submitted_${k}`, JSON.stringify(submittedRecord));
+              if (currentUserId) localStorage.setItem(`rfq_submitted_${currentUserId}_${k}`, JSON.stringify(submittedRecord));
+            } catch {}
+          });
+        }
         setSubmitted(true);
+        queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+        queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail-submit'] });
         queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-own-response'] });
+        queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
+        queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
         toast.info('You have already submitted your quotation for this procurement.');
       } else {
         toast.error(err?.message || 'Failed to submit quotation');
@@ -1766,95 +2682,122 @@ export default function SubmitQuotationPage() {
   const submittedAtDisplay = submittedAtValue ? formatDateTime(submittedAtValue) : null;
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-6 px-4 py-6 md:px-8 pb-12">
-      {/* Navigation & Breadcrumb */}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleBackToRfq}
-          className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
-          aria-label={backButtonLabelText}
-        >
-          <ArrowLeft className="h-4 w-4 text-slate-500" />
-          <span>{backButtonLabelText}</span>
-        </Button>
-
-        <nav className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 bg-white border border-slate-200/80 rounded-xl px-4 py-1.5 shadow-2xs" aria-label="Breadcrumb">
-          <button
+    <div className="mx-auto max-w-[1400px] space-y-3.5 px-4 py-3 md:px-6 pb-12">
+      {/* Top Bar: Navigation & Live Status */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
             type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
-          >
-            Opportunities
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors"
-            onClick={() => navigateTo(procurementBackRoute)}
-          >
-            {procurementTypePluralLabel}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <button
-            type="button"
-            className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+            variant="outline"
+            size="sm"
             onClick={handleBackToRfq}
+            className="h-7 gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
+            aria-label={backButtonLabelText}
           >
-            {rfqNumber}
-          </button>
-          <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-          <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
-            {submitActionHeaderLabel}
-          </span>
-        </nav>
+            <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+            <span>{backButtonLabelText}</span>
+          </Button>
+
+          <nav className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-slate-500 bg-white border border-slate-200/80 rounded-lg px-2.5 py-1 shadow-2xs" aria-label="Breadcrumb">
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(rolePrefix === '/shg' ? '/shg/opportunities' : '/seller/opportunities')}
+            >
+              Opportunities
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors"
+              onClick={() => navigateTo(procurementBackRoute)}
+            >
+              {procurementTypePluralLabel}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <button
+              type="button"
+              className="hover:text-indigo-600 cursor-pointer transition-colors font-mono font-semibold text-slate-700"
+              onClick={handleBackToRfq}
+            >
+              {rfqNumber}
+            </button>
+            <ChevronRight className="h-3 w-3 text-slate-300" />
+            <span className="text-indigo-600 font-bold uppercase tracking-wider bg-indigo-50 px-1.5 py-0.5 rounded text-[10px] border border-indigo-100" aria-current="page">
+              {submitActionHeaderLabel}
+            </span>
+          </nav>
+        </div>
+
+        {/* Live Status Chip */}
+        <div>
+          {isSubmittedQuote ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <CheckCircle2 className="h-3 w-3" /> Submitted
+            </span>
+          ) : isExpiredOrClosed ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+              <Lock className="h-3 w-3 text-amber-600" /> Submission Closed
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+              <Circle className="h-2 w-2 fill-emerald-500 text-emerald-500 animate-pulse" /> Accepting Quotations
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Header Card */}
-      <section className="relative overflow-hidden border border-slate-200/90 rounded-2xl bg-white p-6 md:p-7 shadow-xs">
+      {/* Header Card (Compact & High-Density) */}
+      <section className="relative overflow-hidden border border-slate-200/90 rounded-xl bg-white px-4 py-3 md:px-5 md:py-3.5 shadow-2xs">
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-400" />
 
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pt-1">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-                {submitActionHeaderLabel}
-              </h1>
-              <span className="inline-flex items-center rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold tracking-wider text-indigo-700 border border-indigo-200">
-                {procurementTypeBadgeLabel}
-              </span>
+        <div className="flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between pt-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-900">
+              {submitActionHeaderLabel}
+            </h1>
+            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold tracking-wider text-indigo-700 border border-indigo-200">
+              {procurementTypeBadgeLabel}
+            </span>
+            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
+              {rfqNumber}
+            </span>
+            <span className="text-slate-300 hidden sm:inline">•</span>
+            <span className="text-xs md:text-sm font-semibold text-slate-800 truncate max-w-xs md:max-w-md" title={subject}>
+              {subject}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200">
+              <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <span className="font-semibold text-slate-800 truncate max-w-[200px]" title={orgName}>{orgName}</span>
             </div>
-            <p className="text-xs md:text-sm font-medium text-slate-500 flex flex-wrap items-center gap-2">
-              <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">{rfqNumber}</span>
-              <span className="text-slate-300">•</span>
-              <span className="font-semibold text-slate-800">{subject}</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-3 pt-0.5">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Building2 className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">{orgName}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200">
-                <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-800">Deadline: {deadline}</span>
-              </div>
+            <div className={cn(
+              "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg border",
+              isExpiredOrClosed
+                ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                : "bg-slate-50 border-slate-200 text-slate-600"
+            )}>
+              <Calendar className={cn("h-3.5 w-3.5 shrink-0", isExpiredOrClosed ? "text-amber-600" : "text-slate-400")} />
+              <span className="font-semibold">
+                Deadline: <strong className={isExpiredOrClosed ? "text-amber-950 font-bold" : "text-slate-800"}>{deadline}</strong>
+              </span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Status Banner (Submitted or Closed) ── */}
+      {/* ── Status Banner (Submitted, Expired, or Closed) ── */}
       {isSubmittedQuote ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
-            <CheckCircle2 className="h-5 w-5" />
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white font-bold">
+            <CheckCircle2 className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
-              <span className="rounded-full bg-emerald-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-850">
+              <h3 className="text-xs md:text-sm font-extrabold text-emerald-950">Quotation Submitted</h3>
+              <span className="rounded-full bg-emerald-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-emerald-850">
                 {submittedStatus(ownResponse) || 'SUBMITTED'}
               </span>
             </div>
@@ -1863,22 +2806,68 @@ export default function SubmitQuotationPage() {
             </p>
           </div>
         </div>
-      ) : isClosed ? (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-500 text-white font-bold">
-            <AlertTriangle className="h-5 w-5" />
+      ) : isExpiredOrClosed ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 shadow-2xs flex items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white font-bold">
+            <AlertTriangle className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-black text-slate-800">Requirement {rfqData?.status}</h3>
-            <p className="text-xs font-semibold text-slate-500 mt-0.5">This requirement is no longer accepting new quotations.</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs md:text-sm font-extrabold text-amber-950">Quotation Submission Closed</h3>
+              <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900">
+                {rfqData?.status === 'EXPIRED' ? 'EXPIRED' : isDeadlinePassed ? 'DEADLINE ELAPSED' : (rfqData?.status || 'CLOSED')}
+              </span>
+            </div>
+            <p className="text-xs font-medium text-amber-800 mt-0.5">
+              The submission deadline for this requirement was <strong>{deadline}</strong>. This requirement is no longer accepting quotations, so all form fields are locked in read-only mode.
+            </p>
           </div>
         </div>
       ) : null}
 
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
-      <div className="sticky top-4 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl p-1.5 shadow-xs" role="tablist" aria-label="Quotation Sections">
+      <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-          {[
+          {(hasLineItems ? [
+            {
+              id: 'item-wise-pricing' as const,
+              label: 'Item-Wise Quotation',
+              icon: Package,
+              iconColor: 'text-amber-500',
+              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
+            },
+            {
+              id: 'quotation-details' as const,
+              label: isRfp ? 'Commercial & Delivery Details' : 'Quotation Details',
+              icon: IndianRupee,
+              iconColor: 'text-emerald-500',
+              hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
+            },
+            {
+              id: 'message-documents' as const,
+              label: isRfp ? 'Proposal Message & Documents' : 'Message & Documents',
+              icon: FileText,
+              iconColor: 'text-indigo-500',
+              hasError: !!(errors.message || errors.attachment),
+            },
+            {
+              id: 'requested-documents' as const,
+              label: 'Requested Documents',
+              icon: Paperclip,
+              iconColor: 'text-purple-500',
+              count: requestedDocs.length > 0
+                ? requestedDocs.length
+                : (docUploads.filter(d => d.status === 'done').length > 0 ? docUploads.filter(d => d.status === 'done').length : undefined),
+              hasError: !!errors.requestedDocs,
+            },
+            {
+              id: 'submit-action' as const,
+              label: isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit',
+              icon: ShieldCheck,
+              iconColor: 'text-indigo-500',
+              hasError: !!errors.declared,
+            },
+          ] : [
             {
               id: 'quotation-details' as const,
               label: isRfp ? 'Proposal Details' : 'Quotation Details',
@@ -1894,18 +2883,13 @@ export default function SubmitQuotationPage() {
               hasError: !!(errors.message || errors.attachment),
             },
             {
-              id: 'item-wise-pricing' as const,
-              label: 'Item-Wise Quotation',
-              icon: Package,
-              iconColor: 'text-amber-500',
-              count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
-            },
-            {
               id: 'requested-documents' as const,
               label: 'Requested Documents',
               icon: Paperclip,
               iconColor: 'text-purple-500',
-              count: requestedDocs.length > 0 ? requestedDocs.length : undefined,
+              count: requestedDocs.length > 0
+                ? requestedDocs.length
+                : (docUploads.filter(d => d.status === 'done').length > 0 ? docUploads.filter(d => d.status === 'done').length : undefined),
               hasError: !!errors.requestedDocs,
             },
             {
@@ -1915,7 +2899,7 @@ export default function SubmitQuotationPage() {
               iconColor: 'text-indigo-500',
               hasError: !!errors.declared,
             },
-          ].map(tab => {
+          ]).map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
@@ -1927,6 +2911,7 @@ export default function SubmitQuotationPage() {
                 aria-controls={`panel-${tab.id}`}
                 type="button"
                 onClick={() => {
+                  setUserSelectedTab(true);
                   setActiveTab(tab.id);
                   scrollToSection(tab.id);
                 }}
@@ -1963,28 +2948,43 @@ export default function SubmitQuotationPage() {
             id="quotation-details"
             role="tabpanel"
             aria-labelledby="tab-quotation-details"
-            className="border border-slate-200/90 rounded-2xl bg-white p-6 md:p-8 shadow-xs space-y-6"
+            className="border border-slate-200/90 rounded-xl bg-white p-5 md:p-6 shadow-2xs space-y-5"
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  {isRfp ? 'Proposal Details' : 'Quotation Details'}
+                  {isRfp ? 'Commercial & Delivery Details' : 'Quotation Details'}
                 </h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Specify your commercial terms, total price, supply quantity, and delivery timeline.
+                  {hasLineItems
+                    ? 'Review your total price & quantity (calculated from item rates), and specify delivery timeline and commercial terms.'
+                    : 'Specify your commercial terms, total price, supply quantity, and delivery timeline.'}
                 </p>
               </div>
               {lineQuotes.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold hover:bg-amber-100 transition shadow-2xs cursor-pointer"
                 >
                   <Package className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Price line-by-line ({lineQuotes.length} items) &rarr;</span>
+                  <span>&larr; Edit Line Items ({lineQuotes.length} items)</span>
                 </button>
               )}
             </div>
+
+            {isReadOnly && (
+              <div className="flex items-center gap-2.5 rounded-lg border border-amber-200 bg-amber-50/70 px-3.5 py-2 text-xs text-amber-900 font-medium">
+                <Lock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span>
+                  {isSubmittedQuote
+                    ? 'This quotation has already been submitted and cannot be edited.'
+                    : isExpiredOrClosed
+                    ? `Quotation submission has closed (${deadline}). Inputs are displayed in read-only mode.`
+                    : 'This requirement is closed and no longer accepting inputs.'}
+                </span>
+              </div>
+            )}
 
             <div className="grid gap-6 md:grid-cols-2">
               {/* Offered Price */}
@@ -2029,7 +3029,7 @@ export default function SubmitQuotationPage() {
                 {lineTotals.total > 0 && (
                   <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
                     <span className="text-slate-500 font-medium">
-                      Item-wise total: <strong className="text-slate-800 font-bold">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong>
+                      Item-wise total: <strong className="text-slate-800 font-bold">₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
                     </span>
                     {String(lineTotals.total) !== String(offeredPrice) && !isReadOnly && (
                       <button
@@ -2117,6 +3117,8 @@ export default function SubmitQuotationPage() {
               {fieldError('deliveryTimeline')}
             </div>
 
+          
+
             {/* Terms & Conditions */}
             <div>
               <label htmlFor="quotation-terms" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
@@ -2135,23 +3137,48 @@ export default function SubmitQuotationPage() {
 
             {/* Tab Navigation Footer */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={saveDraft}
-                disabled={submitting || isReadOnly}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-              >
-                Save Draft
-              </Button>
-              <Button
-                type="button"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-              >
-                <span>Next: Message & Documents</span>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              {hasLineItems ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>Previous: Item-Wise Quotation</span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={saveDraft}
+                  disabled={submitting || savingDraft || isReadOnly}
+                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                >
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
+                </Button>
+              )}
+              <div className="flex items-center gap-2.5 ml-auto">
+                {hasLineItems && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || savingDraft || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
+                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Next: Message & Documents</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </section>
         )}
@@ -2211,47 +3238,80 @@ export default function SubmitQuotationPage() {
               </p>
 
               {uploadState ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-[#12335f]">
-                      <FileText className="h-4 w-4" />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 text-[#12335f]">
+                        <FileText className="h-4 w-4" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        {(uploadState.url || uploadState.file) && uploadState.status !== 'uploading' ? (
+                          <button
+                            type="button"
+                            onClick={() => handlePreviewDocument(uploadState)}
+                            className="text-left group/fn block max-w-full cursor-pointer"
+                            title="Click to preview document"
+                            aria-label={`Preview ${uploadState.file?.name || uploadState.fileName || 'Attachment'}`}
+                          >
+                            <p className="text-xs font-bold text-slate-800 group-hover/fn:text-[#12335f] group-hover/fn:underline truncate">
+                              {uploadState.file?.name || uploadState.fileName || 'Attachment'}
+                            </p>
+                          </button>
+                        ) : (
+                          <p className="text-xs font-bold text-slate-800 truncate">
+                            {uploadState.file?.name || uploadState.fileName || 'Attachment'}
+                          </p>
+                        )}
+                        {(uploadState.file?.size || uploadState.fileSize) && (
+                          <p className="text-[10px] font-medium text-slate-500">
+                            {(((uploadState.file?.size || uploadState.fileSize || 0) / 1024)).toFixed(1)} KB
+                          </p>
+                        )}
+                        {uploadState.status === 'uploading' && (
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-[#12335f] transition-all duration-300"
+                              style={{ width: `${uploadState.progress}%` }}
+                            />
+                          </div>
+                        )}
+                        {uploadState.status === 'done' && (
+                          <div className="flex items-center gap-1 mt-1">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                            <span className="text-[10px] font-bold text-emerald-700">Uploaded</span>
+                          </div>
+                        )}
+                        {uploadState.status === 'error' && (
+                          <p className="text-[10px] font-bold text-red-600 mt-1">{uploadState.error || 'Upload failed'}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">
-                        {uploadState.file?.name || uploadState.fileName || 'Attachment'}
-                      </p>
-                      {(uploadState.file?.size || uploadState.fileSize) && (
-                        <p className="text-[10px] font-medium text-slate-500">
-                          {(((uploadState.file?.size || uploadState.fileSize || 0) / 1024)).toFixed(1)} KB
-                        </p>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(uploadState.url || uploadState.file) && uploadState.status !== 'uploading' && (
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDocument(uploadState)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f] shadow-2xs transition-colors cursor-pointer"
+                          title="Preview Document"
+                          aria-label={`Preview ${uploadState.file?.name || uploadState.fileName || 'Attachment'}`}
+                        >
+                          <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+                          <span>Preview</span>
+                        </button>
                       )}
-                      {uploadState.status === 'uploading' && (
-                        <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                          <div
-                            className="h-full rounded-full bg-[#12335f] transition-all duration-300"
-                            style={{ width: `${uploadState.progress}%` }}
-                          />
-                        </div>
-                      )}
-                      {uploadState.status === 'done' && (
-                        <div className="flex items-center gap-1 mt-1">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                          <span className="text-[10px] font-bold text-emerald-700">Uploaded</span>
-                        </div>
-                      )}
-                      {uploadState.status === 'error' && (
-                        <p className="text-[10px] font-bold text-red-600 mt-1">{uploadState.error || 'Upload failed'}</p>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={removeFile}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors cursor-pointer"
+                          title="Remove uploaded document"
+                          aria-label="Remove uploaded document"
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
                       )}
                     </div>
-                    {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={removeFile}
-                        className="shrink-0 rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition cursor-pointer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    )}
                   </div>
                 </div>
               ) : isReadOnly ? (
@@ -2315,7 +3375,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -2326,17 +3386,17 @@ export default function SubmitQuotationPage() {
                   type="button"
                   variant="outline"
                   onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
+                  disabled={submitting || savingDraft || isReadOnly}
                   className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
                 >
-                  Save Draft
+                  {savingDraft ? 'Saving...' : 'Save Draft'}
                 </Button>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Item-Wise Quotation</span>
+                  <span>Next: Requested Documents</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -2368,7 +3428,7 @@ export default function SubmitQuotationPage() {
                     </div>
                     <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                       <span className="text-slate-600 font-medium">Subtotal (incl. GST): </span>
-                      <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                      <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {!isReadOnly && lineTotals.total > 0 && (
                       <button
@@ -2385,6 +3445,29 @@ export default function SubmitQuotationPage() {
                     )}
                   </>
                 )}
+                {lineQuotes.length > 0 && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const anyOpen = Object.values(expandedLineSpecs).some(Boolean);
+                      if (anyOpen) {
+                        setExpandedLineSpecs({});
+                      } else {
+                        const allOpen: Record<number, boolean> = {};
+                        lineQuotes.forEach((_, i) => { allOpen[i] = true; });
+                        setExpandedLineSpecs(allOpen);
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-lg border-slate-200 text-slate-700 bg-white px-3 text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
+                  >
+                    <FileText className="h-3.5 w-3.5 text-blue-600" />
+                    <span>
+                      {Object.values(expandedLineSpecs).some(Boolean) ? 'Collapse Specs' : 'Item Specifications'}
+                    </span>
+                  </Button>
+                )}
                 {!isReadOnly && (
                   <Button
                     type="button"
@@ -2400,6 +3483,8 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
+
+
             {lineQuotes.length === 0 ? (
               <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                 <Package className="h-10 w-10 text-slate-400 mx-auto mb-3" />
@@ -2409,7 +3494,7 @@ export default function SubmitQuotationPage() {
                 </p>
                 <Button
                   type="button"
-                  onClick={() => { setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('quotation-details'); scrollToSection('quotation-details'); }}
                   className="mt-4 h-9 rounded-xl bg-[#12335f] text-white text-xs font-bold cursor-pointer"
                 >
                   Go to Quotation Details
@@ -2420,12 +3505,13 @@ export default function SubmitQuotationPage() {
                 <table data-ux-wrapped="true" className="min-w-[860px] w-full text-left border-collapse text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider">ITEM</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right">QTY / UNIT</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
-                      <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-32">LINE TOTAL (₹)</th>
+                      <th scope="col" className="px-3.5 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-12 text-center">#</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider min-w-[260px]">ITEM DESCRIPTION</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-44">QTY / UNIT</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">LINE TOTAL (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -2433,106 +3519,237 @@ export default function SubmitQuotationPage() {
                       const price = Number(line.unitPrice);
                       const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
                       const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
+                      const cleanUom = sanitizeUom(line.unitOfMeasure);
                       return (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3 text-xs font-bold text-slate-900">
-                            {idx < itemsList.length ? (
-                              <>
-                                {line.itemName}
-                                {itemsList[idx]?.description && (
-                                  <p className="mt-0.5 text-[10px] font-medium text-slate-500 line-clamp-1">{itemsList[idx].description}</p>
-                                )}
-                              </>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={line.itemName}
-                                  onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
-                                  disabled={isReadOnly}
-                                  placeholder="Item Name / Service"
-                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                                />
-                                {!isReadOnly && (
+                        <React.Fragment key={idx}>
+                          <tr className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-3.5 py-3 text-center text-xs font-bold text-slate-400 align-middle">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold text-slate-900 align-middle max-w-md">
+                              {isReadOnly ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName || `Item #${idx + 1}`}>
+                                    {line.itemName || `Item #${idx + 1}`}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = line.remarks || (idx < itemsList.length ? itemsList[idx]?.description : '');
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10.5px] font-normal text-slate-500 leading-tight line-clamp-2 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : idx < itemsList.length ? (
+                                <div className="space-y-0.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 break-words block" title={line.itemName}>
+                                    {line.itemName}
+                                  </span>
+                                  {(() => {
+                                    const subDesc = itemsList[idx]?.description;
+                                    const isDupe = subDesc && line.itemName && (
+                                      subDesc.toLowerCase().trim() === line.itemName.toLowerCase().trim() ||
+                                      line.itemName.toLowerCase().trim().includes(subDesc.toLowerCase().trim())
+                                    );
+                                    return subDesc && !isDupe ? (
+                                      <p className="text-[10px] font-medium text-slate-500 line-clamp-1 break-words" title={subDesc}>
+                                        {subDesc}
+                                      </p>
+                                    ) : null;
+                                  })()}
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={line.itemName}
+                                    onChange={e => updateLineQuote(idx, { itemName: e.target.value })}
+                                    aria-label={`Item description for item ${idx + 1}`}
+                                    placeholder="Item Name / Service"
+                                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveCustomLine(idx)}
                                     className="text-red-500 hover:text-red-700 p-1 cursor-pointer shrink-0"
                                     title="Remove item"
+                                    aria-label={`Remove item ${idx + 1}`}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
+                                </div>
+                              )}
+
+                              {/* Item Specifications & Model Action Toggler */}
+                              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                  className={cn(
+                                    "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold transition cursor-pointer border",
+                                    (line.model || line.specifications || (Array.isArray(line.attachments) && line.attachments.length > 0))
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100"
+                                      : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                  )}
+                                  title="Add or view offered model number, technical specifications, and documents for this item"
+                                >
+                                  <FileText className="h-3 w-3" />
+                                  <span>
+                                    {(line.model || line.specifications || (Array.isArray(line.attachments) && line.attachments.length > 0)) ? 'Specs & Docs' : '+ Specs & Docs'}
+                                    {' '}{expandedLineSpecs[idx] ? '▲' : '▼'}
+                                  </span>
+                                </button>
+                                {line.hsnCode && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    HSN: {line.hsnCode}
+                                  </span>
+                                )}
+                                {line.model && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                    Model: {line.model}
+                                  </span>
+                                )}
+                                {Array.isArray(line.attachments) && line.attachments.length > 0 && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <Paperclip className="h-2.5 w-2.5" /> {line.attachments.length} doc{line.attachments.length > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                                {line.complianceStatus && !expandedLineSpecs[idx] && (
+                                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    {line.complianceStatus === 'DEVIATION' ? '⚠ Deviation' : line.complianceStatus === 'ALTERNATIVE' ? '✦ Alternative' : '✓ Compliant'}
+                                  </span>
                                 )}
                               </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={line.quantity}
-                                onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
-                                disabled={isReadOnly}
-                                placeholder="1"
-                                className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                              />
-                              <span className="text-[10px] font-bold text-slate-500 uppercase shrink-0 min-w-[28px] text-left">
-                                {line.unitOfMeasure || 'Nos'}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={line.unitPrice}
-                              onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="0.00"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
-                          </td>
-                          <td className="px-4 py-2 text-right">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.1"
-                              value={line.gstPercent}
-                              onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="18"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
-                          </td>
-                          <td className="px-4 py-2">
-                            <input
-                              type="text"
-                              value={line.makeBrand}
-                              onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
-                              disabled={isReadOnly}
-                              placeholder="Optional"
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20 disabled:bg-slate-50 disabled:text-slate-500"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-xs font-extrabold text-slate-900 text-right tabular-nums">
-                            {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    {Number(line.quantity || 0).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    value={line.quantity}
+                                    onChange={e => updateLineQuote(idx, { quantity: e.target.value })}
+                                    aria-label={`Quantity for ${line.itemName || 'item ' + (idx + 1)}`}
+                                    placeholder="1"
+                                    className="h-8 w-20 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                  />
+                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[65px] text-left shrink" title={line.unitOfMeasure || 'Nos'}>
+                                    {cleanUom}
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                hasPrice ? (
+                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                    ₹{price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-medium text-slate-400">—</span>
+                                )
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={line.unitPrice}
+                                  onChange={e => updateLineQuote(idx, { unitPrice: e.target.value })}
+                                  aria-label={`Unit price for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="0.00"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-right align-middle">
+                              {isReadOnly ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200/70 tabular-nums">
+                                  {line.gstPercent !== '' && line.gstPercent != null ? `${line.gstPercent}%` : '0%'}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={line.gstPercent}
+                                  onChange={e => updateLineQuote(idx, { gstPercent: e.target.value })}
+                                  aria-label={`GST percent for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="18"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-right text-xs font-bold text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-left align-middle">
+                              {isReadOnly ? (
+                                line.makeBrand ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200/60">
+                                    {line.makeBrand}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-400 font-normal italic">—</span>
+                                )
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={line.makeBrand}
+                                  onChange={e => updateLineQuote(idx, { makeBrand: e.target.value })}
+                                  aria-label={`Make or brand for ${line.itemName || 'item ' + (idx + 1)}`}
+                                  placeholder="Optional"
+                                  className="h-8 w-full rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-900 outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/20"
+                                />
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-black text-slate-900 text-right tabular-nums align-middle">
+                              {hasPrice ? `₹${lineTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                            </td>
+                          </tr>
+
+                          {/* Expandable Specifications Sub-Row */}
+                          {expandedLineSpecs[idx] && (
+                            <tr key={`specs-${idx}`} className="bg-slate-50/70 border-b border-slate-200">
+                              <td colSpan={7} className="p-3 sm:p-4">
+                                <LineItemSpecsAndDocsPanel
+                                  line={line}
+                                  idx={idx}
+                                  itemsList={itemsList}
+                                  isReadOnly={isReadOnly}
+                                  updateLineQuote={updateLineQuote}
+                                  onUploadAttachment={handleUploadItemAttachment}
+                                  onRemoveAttachment={handleRemoveItemAttachment}
+                                  onPreviewAttachment={handlePreviewDocument}
+                                  onClose={() => setExpandedLineSpecs(prev => ({ ...prev, [idx]: false }))}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                   {lineTotals.priced > 0 && (
-                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                    <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-medium">
                       <tr>
-                        <td colSpan={5} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-600 text-right">
-                          Total ({lineTotals.priced}/{lineQuotes.length} items priced, incl. GST)
+                        <td colSpan={6} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-700 text-right">
+                          Total ({lineTotals.priced} of {lineQuotes.length} items priced, incl. GST):
                         </td>
-                        <td className="px-4 py-3 text-sm font-extrabold text-[#12335f] text-right tabular-nums">
-                          ₹{lineTotals.total.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                        <td className="px-4 py-3 text-sm font-black text-[#12335f] text-right tabular-nums">
+                          ₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     </tfoot>
@@ -2546,31 +3763,28 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('message-documents'); scrollToSection('message-documents'); }}
-                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
+                onClick={saveDraft}
+                disabled={submitting || savingDraft || isReadOnly}
+                className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
-                <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Message & Documents</span>
+                {savingDraft ? 'Saving...' : 'Save Draft'}
               </Button>
-              <div className="flex items-center gap-2.5 ml-auto">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  Save Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
-                  className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
-                >
-                  <span>Next: Requested Documents</span>
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (lineTotals.total > 0 && (!offeredPrice || Number(offeredPrice) === 0 || Number(offeredPrice) !== lineTotals.total)) {
+                    setOfferedPrice(String(lineTotals.total));
+                    setOfferedQuantity(String(lineTotals.qty));
+                  }
+                  setUserSelectedTab(true);
+                  setActiveTab('quotation-details');
+                  scrollToSection('quotation-details');
+                }}
+                className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
+              >
+                <span>Next: Commercial & Delivery Details</span>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </section>
         )}
@@ -2610,6 +3824,9 @@ export default function SubmitQuotationPage() {
                       const isDocUploading = docUploads.some(
                         d => d.status === 'uploading' && (d.taggedAs || d.name)?.trim().toLowerCase() === doc.name.trim().toLowerCase()
                       );
+                      const matchedUpload = docUploads.find(
+                        d => d.status === 'done' && (d.taggedAs || d.name)?.trim().toLowerCase() === doc.name.trim().toLowerCase() && (d.fileUrl || d.url)
+                      );
 
                       return (
                         <div
@@ -2643,47 +3860,64 @@ export default function SubmitQuotationPage() {
                               </span>
                             )}
                           </div>
-                          {!isReadOnly && (
-                            <label className={cn(
-                              "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer shrink-0",
-                              isDocUploading
-                                ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
-                                : "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f] hover:text-white"
-                            )}>
-                              {isDocUploading ? (
-                                <>
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  <span>Uploading...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Upload className="h-3.5 w-3.5" />
-                                  <span>{isCovered ? 'Replace' : 'Upload'}</span>
-                                  <input
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-                                    className="hidden"
-                                    disabled={isDocUploading}
-                                    onChange={e => {
-                                      if (e.target.files?.length) {
-                                        handleUploadFiles(e.target.files, doc.name);
-                                      }
-                                      e.target.value = '';
-                                    }}
-                                  />
-                                </>
-                              )}
-                            </label>
-                          )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {isCovered && matchedUpload && (
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewDocument(matchedUpload)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 shadow-2xs transition cursor-pointer shrink-0"
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                <span>Preview</span>
+                              </button>
+                            )}
+                            {!isReadOnly && (
+                              <label className={cn(
+                                "inline-flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer shrink-0",
+                                isDocUploading
+                                  ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed pointer-events-none"
+                                  : "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f] hover:text-white"
+                              )}>
+                                {isDocUploading ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    <span>Uploading...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Upload className="h-3.5 w-3.5" />
+                                    <span>{isCovered ? 'Replace' : 'Upload'}</span>
+                                    <input
+                                      type="file"
+                                      accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+                                      className="hidden"
+                                      disabled={isDocUploading}
+                                      onChange={e => {
+                                        if (e.target.files?.length) {
+                                          handleUploadFiles(e.target.files, doc.name);
+                                        }
+                                        e.target.value = '';
+                                      }}
+                                    />
+                                  </>
+                                )}
+                              </label>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
                   </div>
 
                   {missingReqList.length > 0 && (
-                    <p className="mt-3.5 text-xs font-bold text-[#c2410c] leading-relaxed">
-                      Tag each uploaded file with the required document it satisfies. Missing: {missingReqList.map(d => d.name).join(', ')}
-                    </p>
+                    <div className="mt-3.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-bold text-amber-900 flex items-start gap-2.5 shadow-2xs">
+                      <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <span>Please upload the {missingReqList.length} required compliance document(s) listed above before submitting: </span>
+                        <span className="text-amber-950 font-black">{missingReqList.map(d => d.name).join(', ')}</span>
+                        <p className="text-[11px] font-normal text-amber-800 mt-0.5">Click the "Upload" button next to each required item to select your file.</p>
+                      </div>
+                    </div>
                   )}
                 </div>
               );
@@ -2724,6 +3958,9 @@ export default function SubmitQuotationPage() {
             {/* Card 3: Uploaded Files List with Dropdown Tagging */}
             {docUploads.filter(d => d.status !== 'empty').length > 0 && (
               <div className="space-y-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  SUBMITTED / UPLOADED DOCUMENTS ({docUploads.filter(d => d.status !== 'empty').length})
+                </p>
                 {docUploads.filter(d => d.status !== 'empty').map((item: any, idx: number) => {
                   const docKey = item.id || `doc-${idx}-${item.fileName || 'file'}`;
                   const isUploading = item.status === 'uploading';
@@ -2747,7 +3984,7 @@ export default function SubmitQuotationPage() {
                           <p className="text-xs font-bold text-slate-900 truncate">
                             {item.fileName || item.name}
                           </p>
-                          <div className="flex items-center gap-2 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-2 mt-0.5">
                             {item.fileSize ? (
                               <span className="text-[11px] font-medium text-slate-500">{formatBytes(item.fileSize)}</span>
                             ) : null}
@@ -2763,6 +4000,11 @@ export default function SubmitQuotationPage() {
                               </span>
                             ) : (
                               <span className="text-[11px] font-bold text-red-600">{item.error || 'Upload error'}</span>
+                            )}
+                            {(item.taggedAs || item.name) && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200 text-[#12335f] text-[10px] font-bold">
+                                Tag: {item.taggedAs || item.name}
+                              </span>
                             )}
                           </div>
                           {/* Progress bar visible at the time of uploading only */}
@@ -2783,7 +4025,7 @@ export default function SubmitQuotationPage() {
                           <select
                             value={item.taggedAs || ''}
                             onChange={e => handleTagDocument(item.id || docKey, e.target.value)}
-                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden"
+                            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 shadow-2xs transition focus:border-[#12335f] focus:outline-hidden cursor-pointer"
                             title="Tag as required document..."
                           >
                             <option value="">Tag as required document...</option>
@@ -2804,6 +4046,7 @@ export default function SubmitQuotationPage() {
                             <Eye className="h-3.5 w-3.5" /> Preview
                           </button>
                         )}
+                       
                         {!isReadOnly && !isUploading && (
                           <button
                             type="button"
@@ -2820,33 +4063,50 @@ export default function SubmitQuotationPage() {
               </div>
             )}
 
+            {/* Empty State when no buyer requirements and no uploaded documents */}
+            {requestedDocs.length === 0 && docUploads.filter(d => d.status !== 'empty').length === 0 && (
+              <div className="flex flex-col items-center justify-center p-8 rounded-2xl border border-slate-200/80 bg-slate-50/50 text-center space-y-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white border border-slate-200/80 shadow-2xs text-slate-400">
+                  <FileText className="h-6 w-6 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800">No Compliance Documents</h3>
+                <p className="text-xs text-slate-500 max-w-md">
+                  {isReadOnly
+                    ? 'No specific compliance documents were requested by the buyer or submitted for this quotation.'
+                    : 'The buyer did not mandate specific compliance documents. You can still upload optional compliance documents, certificates, or brochures using the upload area above.'}
+                </p>
+              </div>
+            )}
+
             {/* Tab Navigation Footer */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-slate-100">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('item-wise-pricing'); scrollToSection('item-wise-pricing'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('message-documents'); scrollToSection('message-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer"
               >
                 <ChevronLeft className="h-4 w-4" />
-                <span>Previous: Item-Wise Quotation</span>
+                <span>Previous: Message & Documents</span>
               </Button>
               <div className="flex items-center gap-2.5 ml-auto">
+                {!isSubmittedQuote && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={saveDraft}
+                    disabled={submitting || savingDraft || isReadOnly}
+                    className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
+                  </Button>
+                )}
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={submitting || isReadOnly}
-                  className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 cursor-pointer"
-                >
-                  Save Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => { setActiveTab('submit-action'); scrollToSection('submit-action'); }}
+                  onClick={() => { setUserSelectedTab(true); setActiveTab('submit-action'); scrollToSection('submit-action'); }}
                   className="h-10 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white px-5 text-xs font-bold uppercase tracking-wider shadow-xs flex items-center gap-2 cursor-pointer"
                 >
-                  <span>Next: Declaration & Submit</span>
+                  <span>{isSubmittedQuote ? 'Next: Submission Status' : 'Next: Declaration & Submit'}</span>
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
@@ -2867,26 +4127,36 @@ export default function SubmitQuotationPage() {
                 {isSubmittedQuote ? 'Submission Status' : 'Declaration & Submit'}
               </h2>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Review your complete quotation summary and declare accuracy before submitting.
+                {isSubmittedQuote
+                  ? 'Your quotation has been successfully submitted and is locked for buyer review.'
+                  : 'Review your complete quotation summary and declare accuracy before submitting.'}
               </p>
             </div>
 
             {/* Quotation Executive Summary Card */}
             <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-5 space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">Quotation Summary Review</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
+              <div className={cn("grid gap-3.5 pt-1", lineQuotes.length > 0 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" : "grid-cols-2 sm:grid-cols-4")}>
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Price</span>
-                  <p className="text-base font-black text-[#12335f] mt-0.5">
-                    {offeredPrice ? `₹${Number(offeredPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 })}` : '—'}
+                  <p className="text-base font-black text-[#12335f] mt-0.5 tabular-nums">
+                    {offeredPrice ? `₹${Number(offeredPrice).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                   </p>
                 </div>
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Total Quantity</span>
-                  <p className="text-base font-extrabold text-slate-800 mt-0.5">
+                  <p className="text-base font-extrabold text-slate-800 mt-0.5 tabular-nums">
                     {offeredQuantity || '—'}
                   </p>
                 </div>
+                {lineQuotes.length > 0 && (
+                  <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Priced Items</span>
+                    <p className="text-base font-extrabold text-slate-800 mt-0.5 tabular-nums">
+                      {lineTotals.priced} / {lineQuotes.length}
+                    </p>
+                  </div>
+                )}
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400">Delivery Timeline</span>
                   <p className="text-sm font-bold text-slate-800 mt-0.5 truncate">
@@ -2900,6 +4170,23 @@ export default function SubmitQuotationPage() {
                   </p>
                 </div>
               </div>
+              {(offeredMakeBrand || offeredModel || technicalSpecifications) && (
+                <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-700 shadow-2xs space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Technical Specifications &amp; Compliance</span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {complianceStatement === 'WITH_DEVIATION' ? '⚠ Minor Deviation' : complianceStatement === 'ALTERNATIVE_OFFERED' ? '✦ Alternative Offered' : '✓ 100% Fully Compliant'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-semibold">
+                    {offeredMakeBrand && <div><span className="text-slate-400 font-normal">Make: </span><span className="text-slate-800 font-bold">{offeredMakeBrand}</span></div>}
+                    {offeredModel && <div><span className="text-slate-400 font-normal">Model: </span><span className="text-slate-800 font-bold">{offeredModel}</span></div>}
+                  </div>
+                  {technicalSpecifications && (
+                    <p className="line-clamp-2 text-slate-600 font-medium whitespace-pre-wrap">{technicalSpecifications}</p>
+                  )}
+                </div>
+              )}
               {message && (
                 <div className="rounded-xl bg-white border border-slate-200/80 p-3.5 text-xs text-slate-600 shadow-2xs">
                   <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cover Note Preview</span>
@@ -2908,24 +4195,130 @@ export default function SubmitQuotationPage() {
               )}
             </div>
 
+          
+
+            {(() => {
+              const coveredDocNames = new Set(
+                docUploads
+                  .filter(d => d.status === 'done' && (d.taggedAs || d.name))
+                  .map(d => String(d.taggedAs || d.name).trim().toLowerCase())
+              );
+              const missingReqList = requestedDocs.filter(req => req.required && !coveredDocNames.has(req.name.trim().toLowerCase()));
+              if (missingReqList.length === 0 || isSubmittedQuote) return null;
+
+              return (
+                <div className="rounded-2xl border border-amber-300 bg-amber-50/90 p-4 sm:p-5 flex items-start gap-3.5 shadow-2xs">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
+                    <AlertCircle className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <h4 className="text-xs sm:text-sm font-extrabold text-amber-950 uppercase tracking-wider">
+                      Required Compliance Documents Incomplete ({missingReqList.length} Missing)
+                    </h4>
+                    <p className="text-xs text-amber-900 leading-relaxed font-medium">
+                      The buyer mandates the following compliance document(s) before final quotation submission. Please upload them to proceed:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {missingReqList.map((d, i) => (
+                        <span key={i} className="inline-flex items-center gap-1 rounded-lg bg-white border border-amber-200 px-2.5 py-1 text-xs font-bold text-amber-900 shadow-2xs">
+                          <Paperclip className="h-3.5 w-3.5 text-amber-600" />
+                          {d.name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setUserSelectedTab(true);
+                          setActiveTab('requested-documents');
+                          scrollToSection('requested-documents');
+                        }}
+                        className="h-9 rounded-xl bg-[#12335f] hover:bg-[#07172e] text-white text-xs font-bold px-4 shadow-2xs cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                        <span>Go to Requested Documents to Upload &rarr;</span>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {!isSubmittedQuote && (
               <div className="pt-2">
-                <ComplianceConsentCard
-                  title="MSME Registration & Supplier Participation Agreement"
-                  subtitle="Statutory supplier undertaking governing commercial offers, bid authenticity, and delivery commitment."
-                  pdfFile="MSME_Registration_Supplier_Participation_Agreement.pdf"
-                  accepted={declared}
-                  onAcceptedChange={val => {
-                    setDeclared(val);
-                    setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
-                  }}
-                  checkboxLabel="I certify quotation authenticity & accept the MSME Supplier Participation Agreement"
-                  checkboxDescription="I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE."
-                  readerHeightClassName="h-[120px] sm:h-[135px]"
-                  showPolicyLibrary
+                <div
+                  className={cn(
+                    'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+                    declared
+                      ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+                      : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+                  )}
                 >
-                  <SupplierAgreementPolicyContent />
-                </ComplianceConsentCard>
+                  <label
+                    htmlFor="submit-quotation-supplier-consent"
+                    className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+                  >
+                    <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        id="submit-quotation-supplier-consent"
+                        checked={declared}
+                        onChange={(e) => {
+                          setDeclared(e.target.checked);
+                          setErrors(prev => { const n = { ...prev }; delete n.declared; return n; });
+                        }}
+                        aria-required="true"
+                        className="peer sr-only"
+                      />
+                      <div
+                        className={cn(
+                          'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                          declared
+                            ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                            : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                        )}
+                        aria-hidden="true"
+                      >
+                        <Check
+                          className={cn(
+                            'h-3 w-3 stroke-[3] transition-transform duration-150',
+                            declared ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+                      <span className="font-bold">
+                        I certify quotation authenticity &amp; accept the{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const pdfUrl = '/docs/MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            const link = document.createElement('a');
+                            link.href = pdfUrl;
+                            link.download = 'MSME_Registration_Supplier_Participation_Agreement.pdf';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                          title="Click to download MSME Supplier Participation Agreement (PDF)"
+                        >
+                          <span>MSME Supplier Participation Agreement (T&amp;C)</span>
+                          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                        </button>
+                        <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+                      </span>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                        I hereby certify that the quoted rates, technical specifications, and delivery schedules are firm, binding, and compliant with the MSME Supplier Participation Agreement and platform policies of JSG SMILE.
+                      </p>
+                    </div>
+                  </label>
+                </div>
                 {fieldError('declared')}
               </div>
             )}
@@ -2934,7 +4327,7 @@ export default function SubmitQuotationPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => { setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
+                onClick={() => { setUserSelectedTab(true); setActiveTab('requested-documents'); scrollToSection('requested-documents'); }}
                 className="h-10 rounded-xl border-slate-200 px-4 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer w-full sm:w-auto"
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -2943,26 +4336,78 @@ export default function SubmitQuotationPage() {
 
               {isSubmittedQuote ? (
                 <>
-                  <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
-                      <CheckCircle2 className="h-5 w-5" />
+                  {isTechDisqualified ? (
+                    <div className="flex w-full flex-col gap-3 rounded-2xl border border-rose-250 bg-rose-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-rose-200 bg-white text-rose-700 shadow-2xs">
+                          <XCircle className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-rose-900">
+                              Stage 1 Technical Scrutiny: Disqualified
+                            </h2>
+                            <span className="rounded-md bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                              Non-Compliant
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            The buyer's technical evaluation committee has completed technical scrutiny. Your submission was not qualified to proceed to Stage 2 financial opening.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-2 rounded-xl border border-rose-200 bg-white/90 p-3 text-xs shadow-2xs">
+                              <span className="font-bold text-slate-800 block text-[10.5px] uppercase tracking-wide">
+                                Committee Justification Remarks:
+                              </span>
+                              <p className="text-slate-700 mt-1 italic font-medium leading-relaxed">
+                                "{techEvaluationRemarks}"
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
-                      <p className="mt-1 text-xs font-semibold text-slate-600">
-                        {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}.`}
-                      </p>
+                  ) : isTechQualified ? (
+                    <div className="flex w-full flex-col gap-2 rounded-2xl border border-emerald-250 bg-emerald-50/80 p-4 text-left sm:flex-1 shadow-2xs">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-700 shadow-2xs">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-900">
+                              Stage 1 Technical Scrutiny: Qualified
+                            </h2>
+                            <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              Eligible for Stage 2
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-slate-700">
+                            Your technical proposal and compliance documents have met all specification criteria. Your financial bid will be unsealed during Stage 2 Financial Opening / Reverse Auction.
+                          </p>
+                          {techEvaluationRemarks && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              <span className="font-bold">Committee Remarks: </span>
+                              <span className="italic">{techEvaluationRemarks}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleBackToRfq}
-                    className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 w-full sm:w-auto cursor-pointer flex items-center gap-1.5"
-                  >
-                    <ArrowLeft className="h-3.5 w-3.5" />
-                    <span>{backButtonLabelText}</span>
-                  </Button>
+                  ) : (
+                    <div className="flex w-full items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left sm:flex-1">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-emerald-200 bg-white text-emerald-700">
+                        <CheckCircle2 className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800">Quotation Submitted</h2>
+                        <p className="mt-1 text-xs font-semibold text-slate-600">
+                          {`This quotation is locked and shown exactly as submitted${submittedAtDisplay ? ` on ${submittedAtDisplay}` : ''}. Technical scrutiny by buyer is pending.`}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                
                 </>
               ) : (
                 <>
@@ -2978,18 +4423,18 @@ export default function SubmitQuotationPage() {
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
+                        <ShieldCheck className="h-4 w-4" /> {isSubmittedQuote ? (isRfp ? 'Proposal Submitted' : 'Quotation Submitted') : isExpiredOrClosed ? 'Submission Closed (Deadline Elapsed)' : isRfp ? 'Submit Proposal' : isRateContract ? 'Submit Rate Quotation' : 'Submit Quotation'}
                       </>
                     )}
                   </Button>
                   <Button
                     type="button"
                     onClick={saveDraft}
-                    disabled={submitting || isReadOnly}
+                    disabled={submitting || savingDraft || isReadOnly}
                     variant="outline"
                     className="rounded-xl border-slate-200 h-10 text-xs font-bold uppercase tracking-wider text-[#12335f] hover:bg-slate-50 w-full sm:w-auto cursor-pointer"
                   >
-                    Save Draft
+                    {savingDraft ? 'Saving...' : 'Save Draft'}
                   </Button>
                   <Button
                     type="button"
@@ -3023,21 +4468,7 @@ export default function SubmitQuotationPage() {
         )}
       </div>
 
-      {/* EMD Payment Gateway Modal (Commented out as requested) */}
-      {/* <EmdPaymentModal
-        isOpen={isEmdModalOpen}
-        onClose={() => setIsEmdModalOpen(false)}
-        requirementId={targetReqId}
-        rfqTitle={subject}
-        rfqNumber={rfqNumber}
-        emdAmount={emdInfo?.emdAmount || 0}
-        onSuccess={() => {
-          setIsEmdModalOpen(false);
-          refetchEmd();
-          toast.success("EMD Payment verified successfully!");
-        }}
-      /> */}
-
+     
       <DocumentPreviewModal previewDocument={previewDocument} onClose={() => setPreviewDocument(null)} />
     </div>
   );

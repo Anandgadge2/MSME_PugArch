@@ -23,6 +23,7 @@ import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { PageToolbar } from '../../shared/PageToolbar';
 import { SortableHeader, type SortDirection } from '../../shared/SortableHeader';
 import { ListSkeleton } from '../../../components/ui/skeleton';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { formatDateTime, formatRelative } from '../../shared/format';
 import { runWithToast } from '../../../lib/toast';
@@ -203,11 +204,8 @@ export default function FraudAlertsPage() {
             cell: (alert) => (
                 <button
                     type="button"
-                    onClick={e => {
-                        e.stopPropagation();
-                        setOpenId(alert.id);
-                    }}
-                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f]"
+                    onClick={() => setOpenId(alert.id)}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-slate-700 hover:border-[#12335f] hover:text-[#12335f] cursor-pointer"
                 >
                     Review
                 </button>
@@ -327,7 +325,6 @@ export default function FraudAlertsPage() {
                 sortKey={sortKey}
                 sortDirection={sortDirection}
                 onSort={(key) => toggleSort(key as FraudSortKey)}
-                onRowClick={(alert) => setOpenId(alert.id)}
                 page={page}
                 pageSize={pageSize}
                 total={total}
@@ -377,9 +374,11 @@ function FraudAlertDetail({ id, onClose }: { id: number; onClose: () => void }) 
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
             role="dialog"
             aria-modal="true"
+            aria-label="Fraud Alert Details"
             onClick={e => e.target === e.currentTarget && onClose()}
         >
-            <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl animate-in zoom-in-95 duration-200">
+            <FocusTrap onEscape={onClose} className="w-full max-w-2xl">
+                <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl animate-in zoom-in-95 duration-200">
                 <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div className="min-w-0">
                         <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-300">Fraud Alert · #{id}</p>
@@ -519,6 +518,7 @@ function FraudAlertDetail({ id, onClose }: { id: number; onClose: () => void }) 
                     )}
                 </div>
             </div>
+            </FocusTrap>
         </div>
     );
 }

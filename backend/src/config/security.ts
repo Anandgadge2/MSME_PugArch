@@ -28,6 +28,7 @@ export const applySecurityMiddleware = (app: Express) => {
   });
   app.use(express.json({
     limit: env.REQUEST_BODY_LIMIT,
+    strict: false,
     verify: (req, _res, buffer) => {
       (req as any).rawBody = Buffer.from(buffer);
     }

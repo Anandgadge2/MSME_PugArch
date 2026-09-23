@@ -62,18 +62,20 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
       const po = invoice.purchaseOrder || {};
       const seller = invoice.seller || po.seller || {};
       const buyer = invoice.buyer || po.buyer || {};
+      const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+      const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
 
-      const sellerName = seller.organization?.organizationName || seller.sellerProfile?.businessName || seller.name || 'MSME Enterprise Supplier';
-      const sellerAddress = seller.sellerProfile?.registeredAddress || seller.organization?.profile?.registeredAddress || 'Block No. 78, SSBT Complex, Jalgaon, Maharashtra - 425001';
-      const sellerGstin = seller.organization?.gstin || seller.sellerProfile?.gst || '27BMOPP7706E2Z1';
-      const sellerCin = seller.organization?.cinNumber || seller.sellerProfile?.cin || 'U62013MH2023PTC416118';
-      const sellerPhone = seller.mobile || seller.sellerProfile?.mobile || '9326546128';
-      const sellerEmail = seller.email || 'info@msme-portal.in';
+      const sellerName = seller.organization?.organizationName || seller.sellerProfile?.businessName || seller.sellerProfile?.companyName || sellerReg.companyName || sellerReg.businessName || seller.name || 'N/A';
+      const sellerAddress = seller.organization?.address || seller.sellerProfile?.registeredAddress || seller.organization?.profile?.registeredAddress || sellerReg.registeredAddress || sellerReg.address || 'N/A';
+      const sellerGstin = seller.organization?.gstin || seller.sellerProfile?.gst || sellerReg.gstin || sellerReg.gstDetails?.gstin || 'N/A';
+      const sellerCin = seller.organization?.cinNumber || seller.sellerProfile?.cin || sellerReg.cin || 'N/A';
+      const sellerPhone = seller.mobile || seller.sellerProfile?.mobile || sellerReg.mobile || 'N/A';
+      const sellerEmail = seller.email || sellerReg.email || 'N/A';
 
-      const buyerName = buyer.organization?.organizationName || buyer.buyerProfile?.organizationName || buyer.name || 'PROAID Buyer Organization';
-      const buyerAddress = po.deliveryAddress || buyer.buyerProfile?.registeredAddress || 'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201';
-      const buyerGstin = buyer.organization?.gstin || buyer.buyerProfile?.gst || '27AALCS2063D1ZG';
-      const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || 'PFGPK6340B';
+      const buyerName = buyer.organization?.organizationName || buyer.buyerProfile?.organizationName || buyer.buyerProfile?.companyName || buyerReg.companyName || buyerReg.businessName || buyer.name || 'N/A';
+      const buyerAddress = po.deliveryAddress || buyer.organization?.address || buyer.buyerProfile?.registeredAddress || buyerReg.registeredAddress || buyerReg.address || 'N/A';
+      const buyerGstin = buyer.organization?.gstin || buyer.buyerProfile?.gst || buyerReg.gstin || buyerReg.gstDetails?.gstin || 'N/A';
+      const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || buyerReg.pan || buyerReg.gstDetails?.pan || 'N/A';
 
       const invNo = invoice.invoiceNumber || `INV-${po.poNumber || invoice.id || '2026-001'}`;
       const dateStr = formatDate(invoice.createdAt || new Date());
@@ -282,66 +284,86 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       const deliveryDetails = (meta.deliveryDetails || {}) as Record<string, any>;
       const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
 
+      const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
+      const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+
       const buyerName =
         billingDetails.companyName ||
         buyer.organization?.organizationName ||
         buyer.buyerProfile?.organizationName ||
         buyer.buyerProfile?.companyName ||
+        buyerReg.companyName ||
+        buyerReg.businessName ||
         buyer.name ||
-        'MSME Portal Buyer';
+        'N/A';
 
       const buyerAddress =
         po.deliveryAddress ||
         billingDetails.billingAddress ||
         deliveryDetails.address ||
+        buyer.organization?.address ||
         buyer.buyerProfile?.registeredAddress ||
-        buyer.organization?.profile?.registeredAddress ||
-        'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201';
+        buyerReg.registeredAddress ||
+        buyerReg.address ||
+        'N/A';
 
       const buyerGstin =
         billingDetails.gstin ||
         buyer.organization?.gstin ||
         buyer.buyerProfile?.gst ||
-        '27AALCS2063D1ZG';
+        buyerReg.gstin ||
+        buyerReg.gstDetails?.gstin ||
+        'N/A';
 
       const buyerPan =
         buyer.organization?.panNumber ||
         buyer.buyerProfile?.pan ||
-        'PFGPK6340B';
+        buyerReg.pan ||
+        buyerReg.gstDetails?.pan ||
+        'N/A';
 
       const buyerPhone =
         deliveryDetails.mobileNumber ||
         buyer.mobile ||
         buyer.buyerProfile?.mobile ||
-        '8010762086';
+        buyerReg.mobile ||
+        'N/A';
 
-      const buyerEmail = buyer.email || 'buyer@msme-portal.in';
+      const buyerEmail = buyer.email || buyerReg.email || 'N/A';
 
       const sellerName =
         seller.organization?.organizationName ||
         seller.sellerProfile?.businessName ||
         seller.sellerProfile?.companyName ||
+        sellerReg.companyName ||
+        sellerReg.businessName ||
         seller.name ||
-        'MSME Enterprise Supplier';
+        'N/A';
 
       const sellerAddress =
+        seller.organization?.address ||
         seller.sellerProfile?.registeredAddress ||
         seller.organization?.profile?.registeredAddress ||
-        'Ganesh Complex, Jharsuguda, Odisha - 345678';
+        sellerReg.registeredAddress ||
+        sellerReg.address ||
+        'N/A';
 
       const sellerGstin =
         seller.organization?.gstin ||
         seller.sellerProfile?.gst ||
-        '27BMOPP7706E2Z1';
+        sellerReg.gstin ||
+        sellerReg.gstDetails?.gstin ||
+        'N/A';
 
       const sellerPhone =
         seller.mobile ||
         seller.sellerProfile?.mobile ||
-        '9326546128';
+        sellerReg.mobile ||
+        'N/A';
 
-      const sellerEmail = seller.email || 'seller@msme-portal.in';
+      const sellerEmail = seller.email || sellerReg.email || 'N/A';
 
-      const poNum = po.poNumber || `PO-${po.id || '2026-001'}`;
+      const poNum = po.poNumber || `PO-${po.id || 'N/A'}`;
       const dateStr = formatDate(po.createdAt || new Date());
       const deliveryDateStr = po.expectedDelivery ? formatDate(po.expectedDelivery) : 'As per schedule';
 
@@ -356,7 +378,7 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
             return {
               srNo: idx + 1,
               description: item.itemName || po.title || 'Order Item',
-              hsn: item.hsnCode || '84719000',
+              hsn: item.hsnCode || 'N/A',
               qty,
               unitPrice: unitPrice || (lineTotal / Math.max(qty, 1)),
               totalAmount: lineTotal
@@ -365,7 +387,7 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
         : [{
             srNo: 1,
             description: po.title || `Purchase Order #${poNum}`,
-            hsn: '84719000',
+            hsn: 'N/A',
             qty: 1,
             unitPrice: totalAmountNum,
             totalAmount: totalAmountNum
@@ -377,8 +399,8 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
 
       // Header Banner (Dark Navy)
       doc.rect(pageMargin, 30, contentWidth, 36).fill('#12335f');
-      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold').text('OFFICIAL PURCHASE ORDER', pageMargin + 15, 38);
-      doc.fontSize(9).font('Helvetica').text('MSME PROCUREMENT PORTAL - CONFIRMED ORDER', pageMargin + 15, 56);
+      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold').text('PURCHASE ORDER', pageMargin + 15, 38);
+      doc.fontSize(9).font('Helvetica').text(buyerName !== 'N/A' ? buyerName : 'Enterprise Procurement Order', pageMargin + 15, 56);
 
       doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text(poNum, pageMargin + contentWidth - 180, 38, { width: 165, align: 'right' });
       doc.fontSize(8.5).font('Helvetica').text(`Date: ${dateStr}`, pageMargin + contentWidth - 180, 54, { width: 165, align: 'right' });

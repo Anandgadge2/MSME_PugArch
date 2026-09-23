@@ -214,8 +214,8 @@ const canSellerViewBid = (sellerId: number, bid: any) => {
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
   if (
-    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'].includes(asset.entityType) ||
-    (asset.entityType === 'general' && typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/')) ||
+    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding'].includes(asset.entityType) ||
+    (typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/') && ['general', 'onboarding', 'registration', 'procurement_draft', 'seller_profile', 'buyer_profile'].includes(asset.entityType)) ||
     await isPublicCatalogueAsset(asset.id)
   ) return true;
   if (!user || !user.id) return false;
@@ -266,6 +266,272 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     if (req) {
       if (user.role === 'buyer' && (req.createdById === user.id || (req as any).buyerId === user.id)) return true;
       if (user.role === 'seller') return true;
+    }
+  }
+
+  // Delivery Document check (regardless of entityId or entityType)
+  const deliveryDoc = await prisma.deliveryDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: {
+      deliveryTracking: {
+        include: {
+          purchaseOrder: true,
+          participants: true
+        }
+      }
+    }
+  }).catch(() => null);
+
+  if (deliveryDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (deliveryDoc.uploadedById === user.id) return true;
+    const po = deliveryDoc.deliveryTracking?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    const participants = deliveryDoc.deliveryTracking?.participants || [];
+    if (participants.some((p: any) => p.userId === user.id && p.isActive !== false)) return true;
+  }
+
+  // Delivery Status Log check (e.g. POD photos attached on checkpoint)
+  const deliveryLog = await prisma.deliveryStatusLog.findFirst({
+    where: { fileAssetId: asset.id },
+    include: {
+      deliveryTracking: {
+        include: {
+          purchaseOrder: true,
+          participants: true
+        }
+      }
+    }
+  }).catch(() => null);
+
+  if (deliveryLog) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (deliveryLog.changedById === user.id) return true;
+    const po = deliveryLog.deliveryTracking?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    const participants = deliveryLog.deliveryTracking?.participants || [];
+    if (participants.some((p: any) => p.userId === user.id && p.isActive !== false)) return true;
+  }
+
+  // Invoice file check
+  const invoiceDoc = await prisma.invoice.findFirst({
+    where: { OR: [{ invoiceFileId: asset.id }, { fileAssetId: asset.id }] },
+    include: { purchaseOrder: true }
+  }).catch(() => null);
+
+  if (invoiceDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (invoiceDoc.sellerId === user.id || invoiceDoc.buyerId === user.id) return true;
+    const po = invoiceDoc.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+  }
+
+  // GRN Document check
+  const grnDoc = await prisma.grnDocument.findFirst({
+    where: { fileAssetId: asset.id },
+    include: { grn: { include: { purchaseOrder: true } } }
+  }).catch(() => null);
+
+  if (grnDoc) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (grnDoc.uploadedById === user.id) return true;
+    const po = (grnDoc as any).grn?.purchaseOrder;
+    if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+  }
+
+  // Offline Payment Proof check (either direct receiptFileId or via URL / key / entityId)
+  let offlineProof: any = null;
+  if (asset.entityType === 'offline_payment_proof' && asset.entityId) {
+    offlineProof = await (prisma as any).offlinePaymentProof.findUnique({
+      where: { id: asset.entityId }
+    }).catch(() => null);
+  }
+  if (!offlineProof) {
+    offlineProof = await (prisma as any).offlinePaymentProof.findFirst({
+      where: {
+        OR: [
+          { receiptFileId: asset.id },
+          { receiptFileUrl: { contains: `/files/${asset.id}` } },
+          ...(asset.key ? [{ receiptFileUrl: { contains: asset.key } }] : [])
+        ]
+      }
+    }).catch(() => null);
+  }
+
+  if (offlineProof) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (offlineProof.uploadedByUserId === user.id) return true;
+    if (offlineProof.verifiedByUserId === user.id || offlineProof.rejectedByUserId === user.id) return true;
+
+    const userOrgId = (user as any).organizationId ? Number((user as any).organizationId) : null;
+    if (user.role === 'buyer' && offlineProof.buyerOrgId && userOrgId === offlineProof.buyerOrgId) return true;
+    if (user.role === 'seller' && offlineProof.sellerOrgId && userOrgId === offlineProof.sellerOrgId) return true;
+
+    if (offlineProof.purchaseOrderId) {
+      const po = await prisma.purchaseOrder.findUnique({
+        where: { id: offlineProof.purchaseOrderId },
+        select: { buyerId: true, sellerId: true }
+      }).catch(() => null);
+      if (po && (po.buyerId === user.id || po.sellerId === user.id)) return true;
+    }
+
+    if (offlineProof.paymentTransactionId) {
+      const payTx = await prisma.paymentTransaction.findUnique({
+        where: { id: offlineProof.paymentTransactionId },
+        include: {
+          purchaseOrder: { select: { buyerId: true, sellerId: true } },
+          invoice: { select: { buyerId: true, sellerId: true } }
+        }
+      }).catch(() => null);
+
+      if (payTx) {
+        if (payTx.payerId === user.id || payTx.payeeId === user.id) return true;
+        if (payTx.purchaseOrder && (payTx.purchaseOrder.buyerId === user.id || payTx.purchaseOrder.sellerId === user.id)) return true;
+        if (payTx.invoice && (payTx.invoice.buyerId === user.id || payTx.invoice.sellerId === user.id)) return true;
+      }
+    }
+  }
+
+  // Direct PaymentTransaction check (e.g. metadata or entityId)
+  if (asset.entityType === 'payment' && asset.entityId) {
+    const directTx = await prisma.paymentTransaction.findUnique({
+      where: { id: asset.entityId },
+      include: {
+        purchaseOrder: { select: { buyerId: true, sellerId: true } },
+        invoice: { select: { buyerId: true, sellerId: true } }
+      }
+    }).catch(() => null);
+    if (directTx) {
+      if (directTx.payerId === user.id || directTx.payeeId === user.id) return true;
+      if (directTx.purchaseOrder && (directTx.purchaseOrder.buyerId === user.id || directTx.purchaseOrder.sellerId === user.id)) return true;
+      if (directTx.invoice && (directTx.invoice.buyerId === user.id || directTx.invoice.sellerId === user.id)) return true;
+    }
+  }
+
+  // Purchase Order counterparty branding check (logos, stamps, signatures)
+  if (user?.id) {
+    const poWithBranding = await prisma.purchaseOrder.findFirst({
+      where: {
+        OR: [{ buyerId: user.id }, { sellerId: user.id }]
+      },
+      include: {
+        buyer: { select: { id: true, registrationDetails: true, organization: { select: { organizationLogoFileId: true } } } },
+        seller: { select: { id: true, registrationDetails: true, organization: { select: { organizationLogoFileId: true } } } }
+      }
+    }).catch(() => null);
+
+    if (poWithBranding) {
+      const bReg = (poWithBranding.buyer?.registrationDetails as Record<string, any>) || {};
+      const sReg = (poWithBranding.seller?.registrationDetails as Record<string, any>) || {};
+      const bLogoId = poWithBranding.buyer?.organization?.organizationLogoFileId;
+      const sLogoId = poWithBranding.seller?.organization?.organizationLogoFileId;
+
+      const keysAndUrls = [
+        bReg.logoUrl, bReg.stampUrl, bReg.signatureUrl,
+        sReg.logoUrl, sReg.stampUrl, sReg.signatureUrl
+      ].filter(Boolean);
+
+      if (bLogoId === asset.id || sLogoId === asset.id) return true;
+      if (keysAndUrls.some(u => typeof u === 'string' && (u.includes(`/files/${asset.id}/`) || (asset.key && u.includes(asset.key))))) {
+        return true;
+      }
+    }
+  }
+
+  // Quotation and Proposal documents uploaded by suppliers for buyer requirements / procurement bids
+  if (['quotation', 'quote', 'requirement_response', 'technical_proposal', 'commercial_bid', 'procurement_participation_document', 'procurement_bid_participation'].includes(asset.entityType) || !asset.entityId) {
+    if (user.role === 'buyer') {
+      const fileIdStr = String(asset.id);
+      const userOrgId = (user as any).organizationId ? Number((user as any).organizationId) : null;
+
+      // 1. Direct attachmentUrl match on RequirementResponses for this buyer
+      const matchedReqResponse = await prisma.requirementResponse.findFirst({
+        where: {
+          OR: [
+            { attachmentUrl: { contains: `/files/${fileIdStr}` } },
+            ...(asset.key ? [{ attachmentUrl: { contains: asset.key } }] : [])
+          ],
+          requirement: {
+            OR: [
+              { createdById: user.id },
+              ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+            ]
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (matchedReqResponse) return true;
+
+      // 2. Check if file is referenced in responseData of any requirement response for this buyer
+      const recentBuyerResponses = await prisma.requirementResponse.findMany({
+        where: {
+          requirement: {
+            OR: [
+              { createdById: user.id },
+              ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+            ]
+          }
+        },
+        select: { id: true, attachmentUrl: true, responseData: true }
+      }).catch(() => []);
+
+      for (const resp of recentBuyerResponses) {
+        if (resp.attachmentUrl && (resp.attachmentUrl.includes(`/files/${fileIdStr}`) || (asset.key && resp.attachmentUrl.includes(asset.key)))) {
+          return true;
+        }
+        if (resp.responseData) {
+          const respStr = typeof resp.responseData === 'string' ? resp.responseData : JSON.stringify(resp.responseData);
+          if (
+            respStr.includes(`"fileAssetId":${asset.id}`) ||
+            respStr.includes(`"fileAssetId": "${asset.id}"`) ||
+            respStr.includes(`"id":${asset.id}`) ||
+            respStr.includes(`"id": "${asset.id}"`) ||
+            (asset.key && respStr.includes(asset.key)) ||
+            respStr.includes(`/files/${fileIdStr}`)
+          ) {
+            return true;
+          }
+        }
+      }
+
+      // 3. Check procurement bid participations for this buyer
+      const bidParticipationDoc = await prisma.procurementBidParticipationDocument.findFirst({
+        where: {
+          OR: [
+            { fileAssetId: asset.id },
+            ...(asset.key ? [{ fileKey: asset.key }] : []),
+            { fileUrl: { contains: `/files/${fileIdStr}` } }
+          ],
+          participation: {
+            bid: {
+              OR: [
+                { buyerId: user.id },
+                ...(userOrgId ? [{ buyerOrganizationId: userOrgId }] : [])
+              ]
+            }
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (bidParticipationDoc) return true;
+
+      // 4. Check QuoteResponses for this buyer's QuoteRequests
+      const quoteResp = await prisma.quoteResponse.findFirst({
+        where: {
+          OR: [
+            { documentUrl: { contains: `/files/${fileIdStr}` } },
+            ...(asset.key ? [{ documentUrl: { contains: asset.key } }] : [])
+          ],
+          quoteRequest: {
+            buyerId: user.id
+          }
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      if (quoteResp) return true;
     }
   }
 
@@ -473,6 +739,25 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
       asset = await prisma.fileAsset.findUnique({ where: { id: sellerDoc.fileAssetId } }).catch(() => null);
     }
   }
+  if (!asset) {
+    const delDoc = await prisma.deliveryDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (delDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: delDoc.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
+    const grnDocItem = await prisma.grnDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (grnDocItem?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: grnDocItem.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
+    const inv = await prisma.invoice.findUnique({ where: { id: fileId } }).catch(() => null);
+    const invFid = inv?.invoiceFileId || inv?.fileAssetId;
+    if (invFid) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: invFid } }).catch(() => null);
+    }
+  }
   if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
 
   if (!(await canAccessFileAsset(asset, user))) {
@@ -515,9 +800,53 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
   return { asset, signedUrl, expiresInSeconds: 5 * 60 };
 };
 
+interface CachedFileContent {
+  asset: any;
+  buffer: Buffer;
+  contentType: string;
+  signedUrl: string;
+  expiresInSeconds: number;
+  timestamp: number;
+}
+const fileContentMemoryCache = new Map<number, CachedFileContent>();
+const FILE_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes cache
+const MAX_CACHE_ENTRIES = 200;
+
 export const getFileContent = async (fileId: number, user: { id: number; role: string }, request?: { ipAddress?: string; userAgent?: string }) => {
+  const cached = fileContentMemoryCache.get(fileId);
+  if (cached && Date.now() - cached.timestamp < FILE_CACHE_TTL_MS) {
+    return {
+      asset: cached.asset,
+      signedUrl: cached.signedUrl,
+      expiresInSeconds: cached.expiresInSeconds,
+      buffer: cached.buffer,
+      contentType: cached.contentType
+    };
+  }
+
   const signed = await getSignedUrl(fileId, user, request);
   const assetObj = signed.asset as any;
+
+  const cacheAndReturn = (buffer: Buffer, contentType: string) => {
+    const result = {
+      ...signed,
+      buffer,
+      contentType
+    };
+    if (fileContentMemoryCache.size >= MAX_CACHE_ENTRIES) {
+      const firstKey = fileContentMemoryCache.keys().next().value;
+      if (firstKey !== undefined) fileContentMemoryCache.delete(firstKey);
+    }
+    fileContentMemoryCache.set(fileId, {
+      asset: result.asset,
+      buffer: result.buffer,
+      contentType: result.contentType,
+      signedUrl: result.signedUrl,
+      expiresInSeconds: result.expiresInSeconds,
+      timestamp: Date.now()
+    });
+    return result;
+  };
 
   const localCandidates = [
     path.resolve(process.cwd(), 'uploads', assetObj?.key || ''),
@@ -528,11 +857,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
   for (const cand of localCandidates) {
     if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
       const buffer = fs.readFileSync(cand);
-      return {
-        ...signed,
-        buffer,
-        contentType: assetObj?.mimeType || 'application/octet-stream'
-      };
+      return cacheAndReturn(buffer, assetObj?.mimeType || 'application/octet-stream');
     }
   }
 

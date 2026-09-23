@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { api, unwrapApiData } from '../lib/api';
+import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
@@ -8,7 +8,7 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare, Lock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   validateField,
@@ -25,8 +25,7 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 
 const PRIMARY_USER_TYPES = [
-  'Primary User (HOD)',
-  'Primary User (Co-operative)',
+ 
   'Proprietorship',
   'Partnership Firm',
   'Company (Pvt Ltd / Ltd)',
@@ -58,39 +57,7 @@ const DESIGNATION_OPTIONS = [
   'Executive',
   'Others'
 ];
-const PROCUREMENT_CATEGORY_OPTIONS = [
-  'Cement Industry',
-  'Steel & Metal Industry',
-  'Mining & Coal Industry',
-  'Oil & Gas Industry',
-  'Power & Energy Sector',
-  'Construction & Infrastructure',
-  'Manufacturing Industry',
-  'Industrial Equipment & Machinery',
-  'Automobile & Transport',
-  'Electrical & Electronics',
-  'Chemicals & Refractories',
-  'IT & Technology Services',
-  'Medical & Healthcare Supplies',
-  'Agriculture & Agro Products',
-  'Trading & Distribution',
-  'Industrial Consumables',
-  'Hydraulics & Engineering Services',
-  'Safety Equipment & Industrial Safety',
-  'Building Materials & Hardware',
-  'Fuel & Lubricants',
-  'Fabrication & Mechanical Works',
-  'Logistics & Supply Chain',
-  'Packaging & Printing',
-  'Polymer & Plastic Industry',
-  'Tyres & Rubber Products',
-  'Tools & Industrial Hardware',
-  'Nursery & Environmental Services',
-  'Office Equipment & Stationery',
-  'Telecom & Automation',
-  'General Industrial Supplier',
-  'Others'
-];
+
 const ANNUAL_BUDGET_OPTIONS = ['< ₹10 Lakh', '₹10 Lakh – ₹1 Crore', '₹1 Crore – ₹10 Crore', '₹10 Crore+'];
 const PROCUREMENT_METHOD_OPTIONS = ['Direct Purchase', 'Quotation Based', 'Tender / Bidding', 'Reverse Auction', 'Others'];
 const BUYER_ONBOARDING_DRAFT_KEY = 'buyer-onboarding-draft';
@@ -209,9 +176,8 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 
 const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
-  if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified', 'under_compliance_review', 'resubmission_required', 'rejected'].includes(status);
 };
 
 const DEFAULT_BUYER_FORM_DATA: any = {
@@ -296,8 +262,13 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
   const hasDraftPresetDesignation = DESIGNATION_OPTIONS.includes(draftDesignation) && draftDesignation !== 'Others';
 
   const profileProcurementCategories = Array.isArray(data?.profile?.procurementCategories) ? data.profile.procurementCategories : [];
-  const savedPresetProcurementCategories = profileProcurementCategories.filter((category: string) => PROCUREMENT_CATEGORY_OPTIONS.includes(category) && category !== 'Others');
-  const savedCustomProcurementCategories = profileProcurementCategories.filter((category: string) => !PROCUREMENT_CATEGORY_OPTIONS.includes(category));
+  const rawCustomCats = Array.isArray(data?.profile?.otherCategoryDetails)
+    ? data.profile.otherCategoryDetails
+    : (typeof data?.profile?.otherCategoryDetails === 'string' && data.profile.otherCategoryDetails.trim()
+      ? data.profile.otherCategoryDetails.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : []);
+  const savedCustomProcurementCategories = rawCustomCats;
+  const savedPresetProcurementCategories = profileProcurementCategories.filter((category: string) => category !== 'Others' && !savedCustomProcurementCategories.includes(category));
   const normalizedProcurementCategories = savedCustomProcurementCategories.length > 0
     ? [...savedPresetProcurementCategories, 'Others']
     : savedPresetProcurementCategories;
@@ -343,11 +314,14 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
         gst: data?.profile?.gst || org.gstin || regDetails.gstin || fallback.gst,
         pan: data?.profile?.pan || org.panNumber || regDetails.pan || fallback.pan,
 
-        state: cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
-        district: cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
-        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
-        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || fallback.pincode),
-        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || fallback.registeredAddress),
+        state: findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')) || cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
+        district: findMatchedDistrict(
+          findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')),
+          String(cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district || '')
+        ) || cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
+        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || regDetails.pincode || fallback.pincode),
+        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || regDetails.address || fallback.registeredAddress),
     };
 };
 
@@ -378,6 +352,35 @@ export default function BuyerOnboarding() {
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [formData, setFormData] = useState<any>(initialFormData);
 
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const valid = cats
+            .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+            .filter(c => Boolean(c.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCategoriesList(valid);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [isUploading, setIsUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(isStale);
@@ -404,10 +407,20 @@ export default function BuyerOnboarding() {
   const gstFetchedFieldsRef = React.useRef<Record<string, string>>({});
   const registrationDetails = user?.registrationDetails || cachedProfile?.user?.registrationDetails || {};
   const registrationVerifiedGstin = String(registrationDetails.gstin || '').trim().toUpperCase();
+  const orgGstin = String((org as any)?.gstin || (user?.organization as any)?.gstin || '').trim().toUpperCase();
   const profileVerifiedGstin = String(cachedProfile?.profile?.gst || formData.gst || '').trim().toUpperCase();
-  const hasVerifiedGst =
-    profileGstVerified ||
+
+  const isGstFromRegistration = Boolean(
+    registrationVerifiedGstin ||
+    (orgGstin && orgGstin.length === 15) ||
     Boolean(cachedProfile?.profile?.gstFingerprint) ||
+    Boolean(cachedProfile?.profile?.gstMasked) ||
+    Boolean(cachedProfile?.profile?.gst && cachedProfile?.profile?.gst.length === 15)
+  );
+
+  const hasVerifiedGst =
+    isGstFromRegistration ||
+    profileGstVerified ||
     Boolean(registrationDetails.gstVerified && registrationVerifiedGstin) ||
     Boolean(profileVerifiedGstin && cachedProfile?.profile?.gstMasked) ||
     Boolean(orgVerified && org.gstin);
@@ -510,22 +523,6 @@ export default function BuyerOnboarding() {
     setIsFetchingGst(true);
     activeGstinLookupRef.current = gstin;
     setErrors(prev => ({ ...prev, gst: '', registeredAddress: '' }));
-    
-    if (!isForcedString) {
-      setFormData((prev: any) => {
-        const cleared = { ...prev, gst: gstin };
-        cleared.country = 'India';
-        cleared.registeredAddress = '';
-        // Preserve state and district for primary user types (auto-loaded from registration)
-        if (!isPrimaryUserType(prev.businessType)) {
-          cleared.state = '';
-          cleared.district = '';
-        }
-        cleared.city = '';
-        cleared.pincode = '';
-        return cleared;
-      });
-    }
 
     try {
       const res = await api.fetch(`/api/utils/gst-verify/${gstin}`, {
@@ -547,11 +544,13 @@ export default function BuyerOnboarding() {
 
         setFormData((prev: any) => ({
           ...prev,
-          organizationName: data.legalName?.trim() || prev.organizationName,
+          gst: gstin,
+          organizationName: data.legalName?.trim() || data.tradeName?.trim() || prev.organizationName,
           registeredAddress: data.address?.trim() || prev.registeredAddress,
+          country: 'India',
           state: matchedState || prev.state,
           district: matchedDistrict || prev.district,
-          city: data.city?.trim() || prev.city,
+          city: data.city?.trim() || matchedDistrict || prev.city,
           pincode: String(data.pincode || '').replace(/\D/g, '').slice(0, 6) || prev.pincode,
           pan: resolvedPan || prev.pan,
         }));
@@ -561,7 +560,7 @@ export default function BuyerOnboarding() {
         if (data.partial) {
           toast.message(data.message || 'Partial GST details applied. Please verify manually.');
         } else {
-          toast.success(`GST verified and address auto-filled: ${data.status || 'Status available'}`);
+          toast.success(`GST verified and details auto-filled: ${data.legalName || data.status || 'Active'}`);
         }
       } else {
         const err = await res.json().catch(() => ({}));
@@ -576,35 +575,6 @@ export default function BuyerOnboarding() {
       setIsFetchingGst(false);
     }
   };
-
-  // Auto-fetch GST details on mount if GST is verified but address details are not fully filled
-  useEffect(() => {
-    if (isFetching || isProfileLocked) return;
-
-    const gstin = String(formData.gst || profileVerifiedGstin || registrationVerifiedGstin || '').trim().toUpperCase();
-    if (!gstin || !hasVerifiedGst) return;
-
-    // Check if the address fields are empty or incomplete/placeholders
-    const stateVal = String(formData.state || '').trim();
-    const districtVal = String(formData.district || '').trim();
-    const addressVal = String(formData.registeredAddress || '').trim();
-    const pincodeVal = String(formData.pincode || '').trim();
-    const cityVal = String(formData.city || '').trim();
-
-    const isAddressIncomplete = 
-      !addressVal || 
-      addressVal.toLowerCase() === 'maharashtra' ||
-      addressVal.toLowerCase() === stateVal.toLowerCase() ||
-      isPlaceholderValue(addressVal) ||
-      !stateVal ||
-      !districtVal ||
-      !pincodeVal ||
-      !cityVal;
-
-    if (isAddressIncomplete && lastFetchedGstinRef.current !== gstin && activeGstinLookupRef.current !== gstin) {
-      fetchGstDetails(gstin);
-    }
-  }, [isFetching, isProfileLocked, hasVerifiedGst, formData.gst, registrationVerifiedGstin, profileVerifiedGstin]);
 
 
   useEffect(() => {
@@ -904,8 +874,26 @@ export default function BuyerOnboarding() {
     });
   };
 
+  const isDocFieldEditable = (fieldName: string) => {
+    if (!isProfileLocked) return true;
+    const docField = fieldName.startsWith('documents.') ? fieldName.replace('documents.', '') : fieldName;
+    const reasons = (user?.sectionRejectionReasons as Record<string, string>) ||
+                    (cachedProfile?.user?.sectionRejectionReasons as Record<string, string>) || {};
+    const docRejectionReason = reasons[docField] ||
+      (docField === 'panCard' && (reasons.pan || reasons.panCard)) ||
+      (docField === 'gstCert' && (reasons.gst || reasons.gstCert)) ||
+      (docField === 'regCert' && (reasons.cin || reasons.registration || reasons.regCert)) ||
+      (docField === 'addressProof' && reasons.addressProof) ||
+      (docField === 'authLetter' && reasons.authLetter) ||
+      null;
+    return Boolean(docRejectionReason);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && !isDocFieldEditable(fieldName)) {
+      toast.info('This document is locked and cannot be modified.');
+      return;
+    }
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -966,19 +954,26 @@ export default function BuyerOnboarding() {
       // (NOT as a side-effect inside setFormData) so the PUT call is always reliably made.
       let nextDocumentsForSave: any = null;
       if (fieldPath.length > 1 && fieldPath[0] === 'documents') {
-        const currentFiles = getDocumentFiles(formData[fieldPath[0]]?.[fieldPath[1]]);
+        const docField = fieldPath[1];
+        const currentFiles = getDocumentFiles(formData[fieldPath[0]]?.[docField]);
+        // When replacing an existing file or uploading for a rejected/correction slot, replace with the newly uploaded file(s)
+        const shouldReplace = isProfileLocked || currentFiles.length > 0;
+        const nextFiles = shouldReplace ? uploadedFiles : [...currentFiles, ...uploadedFiles];
         nextDocumentsForSave = {
           ...(formData.documents || {}),
-          [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+          [docField]: nextFiles
         };
       }
       // Update local state
       setFormData((prev: any) => {
         if (fieldPath.length > 1) {
-          const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[fieldPath[1]]);
+          const docField = fieldPath[1];
+          const currentFiles = getDocumentFiles(prev[fieldPath[0]]?.[docField]);
+          const shouldReplace = isProfileLocked || currentFiles.length > 0;
+          const nextFiles = shouldReplace ? uploadedFiles : [...currentFiles, ...uploadedFiles];
           const nextNested = {
             ...prev[fieldPath[0]],
-            [fieldPath[1]]: [...currentFiles, ...uploadedFiles]
+            [docField]: nextFiles
           };
           return {
             ...prev,
@@ -987,7 +982,7 @@ export default function BuyerOnboarding() {
         }
         return {
           ...prev,
-          [fieldName]: [...getDocumentFiles(prev[fieldName]), ...uploadedFiles]
+          [fieldName]: uploadedFiles
         };
       });
       // Persist documents to backend immediately after upload
@@ -1000,7 +995,7 @@ export default function BuyerOnboarding() {
           throw new Error(errData.message || 'Document uploaded, but profile document save failed.');
         }
       }
-      toast.success(files.length === 1 ? 'Document uploaded successfully' : `${files.length} documents uploaded successfully`);
+      toast.success(files.length === 1 ? 'Document replaced successfully' : `${files.length} documents uploaded successfully`);
     } catch (err: any) {
       console.error('Upload error:', err);
       toast.error(`Upload error: ${err.message || 'Check network'}`);
@@ -1012,10 +1007,14 @@ export default function BuyerOnboarding() {
   };
 
   const removeUploadedDocument = async (fieldName: string, index: number) => {
-    if (isProfileLocked) return;
+    if (isProfileLocked && !isDocFieldEditable(fieldName)) {
+      toast.info('This document is locked and cannot be modified.');
+      return;
+    }
     let nextDocumentsForSave: any = null;
     setFormData((prev: any) => {
-      const nextFiles = getDocumentFiles(prev.documents?.[fieldName]).filter((_, fileIndex) => fileIndex !== index);
+      const currentFiles = getDocumentFiles(prev.documents?.[fieldName]);
+      const nextFiles = currentFiles.filter((_, fileIndex) => fileIndex !== index);
       nextDocumentsForSave = {
         ...prev.documents,
         [fieldName]: nextFiles
@@ -1029,7 +1028,11 @@ export default function BuyerOnboarding() {
       const saveRes = await api.put('/api/buyer/onboarding', { documents: nextDocumentsForSave }, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
-      if (!saveRes.ok) toast.error('Removed locally, but failed to save the document list.');
+      if (!saveRes.ok) {
+        toast.error('Removed locally, but failed to save the document list.');
+      } else {
+        toast.success('Document removed successfully');
+      }
     }
   };
 
@@ -1335,9 +1338,71 @@ export default function BuyerOnboarding() {
     }
   };
 
+  const isResubmissionActive = Boolean(
+    user?.onboardingStatus === 'resubmission_required' ||
+    (user?.sectionStatus as any)?.docs === 'resubmission_required' ||
+    cachedProfile?.user?.onboardingStatus === 'resubmission_required' ||
+    (cachedProfile?.user?.sectionStatus as any)?.docs === 'resubmission_required'
+  );
+
+  const handleResubmitBuyerDocuments = async () => {
+    const reasons = (user?.sectionRejectionReasons as Record<string, string>) ||
+                    (cachedProfile?.user?.sectionRejectionReasons as Record<string, string>) || {};
+    const keyToDocField: Record<string, string> = {
+      pan: 'panCard',
+      panCard: 'panCard',
+      gst: 'gstCert',
+      gstCert: 'gstCert',
+      cin: 'regCert',
+      registration: 'regCert',
+      regCert: 'regCert',
+      addressProof: 'addressProof',
+      authLetter: 'authLetter'
+    };
+
+    for (const rKey of Object.keys(reasons)) {
+      const docField = keyToDocField[rKey] || rKey;
+      const files = getDocumentFiles(formData.documents?.[docField]);
+      if (!files || files.length === 0) {
+        toast.error(`Please upload the requested document (${docField}) before submitting.`);
+        return;
+      }
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await api.post('/api/onboarding/submit', {}, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.message || 'Failed to submit updated documents.');
+        return;
+      }
+      toast.success('Updated documents submitted for compliance review successfully!');
+      const refreshRes = await api.fetch('/api/auth/me', authHeaders);
+      const refreshData = await refreshRes.json();
+      if (refreshData.user) {
+        setOnboardingStatus(refreshData.user.onboardingStatus || 'under_compliance_review');
+        setIsProfileLocked(shouldLockBuyerProfile(refreshData.user, refreshData.profile));
+        setShowSuccessOverlay(shouldShowSubmissionOverlay(refreshData.user, refreshData.profile));
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Network error while submitting updated documents.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitAttempted(true);
+
+    if (activeSection === 'docs' && isResubmissionActive) {
+      await handleResubmitBuyerDocuments();
+      return;
+    }
+
     if (isProfileLocked) {
       toast.info('Approved profiles are locked');
       return;
@@ -1424,7 +1489,7 @@ export default function BuyerOnboarding() {
     }
   };
 
-  if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">Loading JsgSmile Portal - Jharsuguda Synergy for MSME and Industry Linkage Ecosystem form...</div>;
+  if (isFetching) return <div className="buyer-font flex min-h-dvh items-center justify-center px-4 text-center font-bold text-indigo-600">Loading JsgSmile Portal...</div>;
 
   if (showSuccessOverlay) {
     return (
@@ -1481,13 +1546,27 @@ export default function BuyerOnboarding() {
           </div>
         </div>
 
+        {user?.adminFeedback && (
+          <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm animate-in fade-in duration-200">
+            <div className="flex items-center gap-2 text-amber-900">
+              <MessageSquare className="h-4 w-4 shrink-0 text-amber-700" />
+              <h4 className="text-xs font-bold uppercase tracking-wider">
+                Registration Scrutiny Desk Remark / Feedback
+              </h4>
+            </div>
+            <p className="mt-1.5 text-xs font-medium text-slate-800 leading-relaxed pl-6">
+              {user.adminFeedback}
+            </p>
+          </div>
+        )}
+
         {/* Main Content Layout with Left Vertical Sidebar */}
         <div className="flex flex-col md:flex-row items-start gap-4 sm:gap-6 mb-3">
           {/* Vertical Left Navigation Sidebar */}
           <div className="w-full md:w-64 lg:w-72 shrink-0 bg-white border border-slate-200 rounded-xl shadow-xs p-3.5 space-y-3 md:sticky md:top-4">
             <div className="pb-2 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Registration Steps</h3>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Onboarding Steps</h3>
                 <p className="text-[10px] text-slate-400 font-medium">Click any step to navigate</p>
               </div>
               <span className="text-[10px] font-bold text-[#12335f] bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
@@ -1556,15 +1635,21 @@ export default function BuyerOnboarding() {
                             'Confirm declarations and verify with OTP.'}
                 </p>
               </div>
-              {user?.onboardingStatus === 'approved_for_procurement' && (
-                <p className="mt-1 inline-flex rounded-full border border-slate-100 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-widest text-[#12335f] animate-pulse">
-                  Approved Profile: Unlocked for Manual Updates
-                </p>
-              )}
+              {user?.onboardingStatus === 'approved_for_procurement' ? (
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
+                  <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                  Verified & Approved Profile (Read-Only)
+                </span>
+              ) : isProfileLocked ? (
+                <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-600">
+                  <Lock className="h-3 w-3 text-slate-500" />
+                  Application Locked Under Compliance
+                </span>
+              ) : null}
             </div>
 
             <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="space-y-4">
-              <fieldset disabled={isProfileLocked && activeSection !== 'docs'} className={cn(isProfileLocked && "opacity-70")}>
+              <fieldset disabled={isProfileLocked && user?.sectionStatus?.[activeSection] !== 'resubmission_required' && activeSection !== 'docs'} className={cn(isProfileLocked && user?.sectionStatus?.[activeSection] !== 'resubmission_required' && activeSection !== 'docs' && "opacity-75")}>
                 {/* Section Content */}
                 {activeSection === 'org' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1577,10 +1662,6 @@ export default function BuyerOnboarding() {
                       <option value="LLP">LLP</option>
                       <option value="Proprietorship">Proprietorship</option>
                       <option value="Startup">Startup</option>
-                      <option value="NGO / Trust">NGO / Trust</option>
-                      <option value="Educational Institution">Educational Institution</option>
-                      <option value="Primary User (HOD)">Primary User (HOD)</option>
-                      <option value="Primary User (Co-operative)">Primary User (Co-operative)</option>
                     </Select>
                     <SearchableSelect
                       label="Industry / Sector"
@@ -1597,44 +1678,67 @@ export default function BuyerOnboarding() {
                     <Input label="PAN of Organization" name="pan" value={formData.pan} onChange={handleChange} onBlur={handleBlur} error={getFieldError('pan')} placeholder="ABCDE1234F" maxLength={10} required />
                     <div className="flex flex-col gap-1">
                       {hasVerifiedGst ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-2">
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 transition-all">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                              GSTIN (Verified)
+                            </label>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              Verified at Registration
+                            </span>
+                          </div>
                           <Input
-                            label="GSTIN (Verified)"
                             name="gst"
-                            value={formData.gst || registrationVerifiedGstin}
+                            value={formData.gst || registrationVerifiedGstin || profileVerifiedGstin}
                             onChange={handleChange}
                             onBlur={handleBlur}
                             error=""
                             disabled
-                            className="bg-white/80"
+                            className="bg-white/90 border-slate-200 font-mono font-semibold text-slate-800 text-xs h-9 cursor-not-allowed"
                           />
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-                            GST details already verified. No re-verification is required.
+                          <p className="mt-1.5 text-[11px] text-emerald-700 flex items-center gap-1 font-medium">
+                            <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            GST details verified with government registry. No re-verification required.
                           </p>
                         </div>
                       ) : (
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <Input
-                              label="GSTIN (Optional)"
-                              name="gst"
-                              value={formData.gst}
-                              onChange={handleChange}
-                              onBlur={handleBlur}
-                              error={getFieldError('gst')}
-                              placeholder="22ABCDE1234F1Z5"
-                              maxLength={15}
-                            />
+                        <div className="space-y-1">
+                          <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                            GSTIN (Optional)
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <Input
+                                name="gst"
+                                value={formData.gst}
+                                onChange={handleChange}
+                                onBlur={handleBlur}
+                                error={getFieldError('gst')}
+                                placeholder="22ABCDE1234F1Z5"
+                                maxLength={15}
+                                className="h-10 text-xs font-mono uppercase"
+                              />
+                            </div>
+                            <Button
+                              type="button"
+                              onClick={fetchGstDetails}
+                              disabled={isFetchingGst || !formData.gst}
+                              className="h-10 px-4 rounded-lg bg-[#12335f] hover:bg-[#0d2342] text-white font-bold text-xs uppercase tracking-wider transition-colors flex items-center gap-1.5 shrink-0 shadow-xs disabled:opacity-50"
+                            >
+                              {isFetchingGst ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <span>Fetching...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Search className="h-3.5 w-3.5" />
+                                  <span>Fetch Details</span>
+                                </>
+                              )}
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={fetchGstDetails}
-                            disabled={isFetchingGst || !formData.gst}
-                            className="h-9 px-3 rounded-lg border-slate-200 text-[#12335f] font-bold uppercase text-[9px] hover:bg-slate-50"
-                          >
-                            {isFetchingGst ? 'Wait...' : /* 'Fetch Details' */ ''}
-                          </Button>
                         </div>
                       )}
                     </div>
@@ -1653,7 +1757,20 @@ export default function BuyerOnboarding() {
                     {isPrimaryUserType(formData.businessType) ? (
                       <Input label="STATE" name="state" value={formData.state} onChange={handleChange} onBlur={handleBlur} error={getFieldError('state')} required disabled />
                     ) : (
-                      <Select label="STATE" name="state" value={formData.state} onChange={(e) => { if (!isProfileLocked) setFormData((prev: any) => ({ ...prev, state: e.target.value, district: '' })); }} onBlur={handleBlur} error={getFieldError('state')} required>
+                      <Select
+                        label="STATE"
+                        name="state"
+                        value={findMatchedState(formData.state) || formData.state}
+                        onChange={(e) => {
+                          if (!isProfileLocked) {
+                            const nextState = e.target.value;
+                            setFormData((prev: any) => ({ ...prev, state: nextState, district: '' }));
+                          }
+                        }}
+                        onBlur={handleBlur}
+                        error={getFieldError('state')}
+                        required
+                      >
                         <option value="">Select State</option>
                         {indiaStates.map((s) => (
                           <option key={s} value={s}>{s}</option>
@@ -1663,9 +1780,25 @@ export default function BuyerOnboarding() {
                     {isPrimaryUserType(formData.businessType) ? (
                       <Input label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled />
                     ) : (
-                      <Select label="DISTRICT" name="district" value={formData.district} onChange={handleChange} onBlur={handleBlur} error={getFieldError('district')} required disabled={!formData.state}>
+                      <Select
+                        label="DISTRICT"
+                        name="district"
+                        value={
+                          findMatchedDistrict(findMatchedState(formData.state) || formData.state, formData.district) ||
+                          formData.district
+                        }
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        error={getFieldError('district')}
+                        required
+                        disabled={!formData.state}
+                      >
                         <option value="">Select District</option>
-                        {(formData.state ? indiaStatesDistricts[formData.state] || [] : []).map((d: string) => (
+                        {(
+                          indiaStatesDistricts[findMatchedState(formData.state) || formData.state] ||
+                          indiaStatesDistricts[formData.state] ||
+                          []
+                        ).map((d: string) => (
                           <option key={d} value={d}>{d}</option>
                         ))}
                       </Select>
@@ -1689,12 +1822,12 @@ export default function BuyerOnboarding() {
                           </div>
                         </div>
                         <div className="flex gap-3 shrink-0 self-end sm:self-auto">
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-3.5 w-3.5" />
+                          <label htmlFor="buyer-jharsuguda-yes" className="flex items-center gap-1.5 cursor-pointer">
+                            <input id="buyer-jharsuguda-yes" type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === true} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: true }))} className="accent-blue-600 h-3.5 w-3.5" />
                             <span className="text-xs uppercase font-bold text-emerald-700">Yes</span>
                           </label>
-                          <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-3.5 w-3.5" />
+                          <label htmlFor="buyer-jharsuguda-no" className="flex items-center gap-1.5 cursor-pointer">
+                            <input id="buyer-jharsuguda-no" type="radio" name="isJharsugudaOrg" checked={formData['isJharsugudaOrg'] === false} onChange={() => setFormData((prev: any) => ({ ...prev, isJharsugudaOrg: false }))} className="accent-blue-600 h-3.5 w-3.5" />
                             <span className="text-xs uppercase font-semibold text-slate-500">No</span>
                           </label>
                         </div>
@@ -1762,12 +1895,17 @@ export default function BuyerOnboarding() {
                           onChange={handleProcurementCategorySelect}
                           error={submitAttempted ? errors.procurementCategories : ''}
                         >
-                          <option value="" disabled>Select a category</option>
-                          {PROCUREMENT_CATEGORY_OPTIONS.map((cat) => (
-                            <option key={cat} value={cat} disabled={formData.procurementCategories.includes(cat)}>
-                              {cat}
+                          <option value="" disabled>
+                            {loadingCategories ? 'Loading categories...' : 'Select a category'}
+                          </option>
+                          {categoriesList.map((cat) => (
+                            <option key={cat.id || cat.name} value={cat.name} disabled={formData.procurementCategories.includes(cat.name)}>
+                              {cat.name}
                             </option>
                           ))}
+                          <option value="Others" disabled={formData.procurementCategories.includes('Others')}>
+                            Others
+                          </option>
                         </Select>
 
                         <div className="flex flex-wrap gap-1">
@@ -1918,14 +2056,28 @@ export default function BuyerOnboarding() {
                         const isVerifiedOrgDoc = false;
                         const isInvalid = submitAttempted && isRequired && !hasFile;
 
+                        // Check if admin requested re-upload for this specific document
+                        const reasons = (user?.sectionRejectionReasons as Record<string, string>) || {};
+                        const docRejectionReason = reasons[doc.field] ||
+                          (doc.field === 'panCard' && (reasons.pan || reasons.panCard)) ||
+                          (doc.field === 'gstCert' && (reasons.gst || reasons.gstCert)) ||
+                          (doc.field === 'regCert' && (reasons.cin || reasons.registration || reasons.regCert)) ||
+                          (doc.field === 'addressProof' && reasons.addressProof) ||
+                          (doc.field === 'authLetter' && reasons.authLetter) ||
+                          null;
+
+                        const isDocSlotEditable = !isSubmittedOrApproved || Boolean(docRejectionReason);
+
                         return (
                           <div
                             key={doc.field}
                             className={cn(
                               "p-3 rounded-lg border flex flex-col gap-2 transition-all duration-300",
-                              isInvalid
-                                ? "border-red-400 bg-red-50/30 animate-shake"
-                                : "border-slate-100 bg-slate-50/50"
+                              docRejectionReason
+                                ? "border-amber-300 bg-amber-50/40 shadow-xs ring-1 ring-amber-300/60"
+                                : isInvalid
+                                  ? "border-red-400 bg-red-50/30 animate-shake"
+                                  : "border-slate-100 bg-slate-50/50"
                             )}
                           >
                             <div className="flex items-start justify-between">
@@ -1934,12 +2086,31 @@ export default function BuyerOnboarding() {
                                 <span className="inline-flex items-center gap-1 rounded bg-green-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-700 border border-green-200">
                                   <Check className="h-3 w-3" /> Verified Org Document
                                 </span>
+                              ) : docRejectionReason ? (
+                                <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-2 py-0.5 text-[8px] font-extrabold uppercase tracking-wide text-amber-800 border border-amber-300 animate-pulse">
+                                  <AlertTriangle className="h-3 w-3 text-amber-600" /> Action Required
+                                </span>
                               ) : isRequired ? (
                                 <span className="text-[8px] font-extrabold uppercase text-red-500 tracking-wider">Required</span>
                               ) : null}
                             </div>
+
+                            {docRejectionReason && (
+                              <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-start gap-2 animate-in fade-in duration-300">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800">
+                                    Correction Requested by Admin
+                                  </p>
+                                  <p className="text-[11px] font-semibold text-amber-950 mt-0.5">
+                                    {docRejectionReason}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-between gap-2">
-                              {!isSubmittedOrApproved && !isVerifiedOrgDoc && (
+                              {isDocSlotEditable && !isVerifiedOrgDoc ? (
                                 <>
                                   <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, `documents.${doc.field}`)} id={`upload-${doc.field}`} className="hidden" />
                                   {isFieldUploading ? (
@@ -1947,11 +2118,15 @@ export default function BuyerOnboarding() {
                                       <Loader2 className="h-3.5 w-3.5 animate-spin text-[#12335f]" /> Uploading...
                                     </span>
                                   ) : (
-                                    <label htmlFor={`upload-${doc.field}`} className="cursor-pointer text-[11px] font-bold text-[#12335f] hover:text-slate-800 underline transition-colors">
-                                      {hasFile ? 'Add Files' : 'Upload Files'}
+                                    <label htmlFor={`upload-${doc.field}`} className="cursor-pointer inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:text-[#0b2445] underline transition-colors">
+                                      <Upload className="h-3 w-3" /> {hasFile ? 'Replace Document' : 'Upload Files'}
                                     </label>
                                   )}
                                 </>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">
+                                  <Lock className="h-3 w-3 text-slate-400" /> Locked & Verified
+                                </span>
                               )}
                             </div>
                             {hasFile && (
@@ -1968,7 +2143,7 @@ export default function BuyerOnboarding() {
                                       <button type="button" onClick={() => openDocumentPreview(doc.label, file)} className="text-[11px] font-bold text-[#12335f] hover:underline">
                                         View
                                       </button>
-                                      {!isSubmittedOrApproved && (
+                                      {isDocSlotEditable && (
                                         <button type="button" onClick={() => removeUploadedDocument(doc.field, fileIndex)} className="text-[11px] font-bold text-red-500 hover:underline">
                                           Remove
                                         </button>
@@ -1987,14 +2162,36 @@ export default function BuyerOnboarding() {
 
                 {activeSection === 'account' && (
                   <div className="max-w-2xl space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="space-y-2">
-                      <label className="flex items-start gap-2.5 cursor-pointer group">
-                        <input type="checkbox" checked={formData.declaration} onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span></span>
+                    <div className="space-y-3">
+                      <label htmlFor="buyer-declaration" className="flex items-start gap-3 cursor-pointer group select-none">
+                        <div className="relative flex items-center justify-center mt-0.5 shrink-0">
+                          <input
+                            id="buyer-declaration"
+                            type="checkbox"
+                            checked={formData.declaration}
+                            onChange={(e) => setFormData({ ...formData, declaration: e.target.checked })}
+                            className="peer h-4.5 w-4.5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                          />
+                          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                        </div>
+                        <span className="text-xs text-slate-700 font-medium leading-relaxed group-hover:text-slate-900 transition-colors">
+                          I confirm that the information provided is accurate. <span className="text-red-500 font-bold">*</span>
+                        </span>
                       </label>
-                      <label className="flex items-start gap-2.5 cursor-pointer group">
-                        <input type="checkbox" checked={formData.agreeTerms} onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })} className="mt-0.5 w-3.5 h-3.5 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]" />
-                        <span className="text-xs text-slate-600 font-medium">I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span></span>
+                      <label htmlFor="buyer-agree-terms" className="flex items-start gap-3 cursor-pointer group select-none">
+                        <div className="relative flex items-center justify-center mt-0.5 shrink-0">
+                          <input
+                            id="buyer-agree-terms"
+                            type="checkbox"
+                            checked={formData.agreeTerms}
+                            onChange={(e) => setFormData({ ...formData, agreeTerms: e.target.checked })}
+                            className="peer h-4.5 w-4.5 cursor-pointer appearance-none rounded-md border-2 border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                          />
+                          <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-3 w-3 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                        </div>
+                        <span className="text-xs text-slate-700 font-medium leading-relaxed group-hover:text-slate-900 transition-colors">
+                          I agree to the platform Terms & Conditions. <span className="text-red-500 font-bold">*</span>
+                        </span>
                       </label>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
@@ -2002,12 +2199,14 @@ export default function BuyerOnboarding() {
                       
                       {(user?.mobile || formData.mobile) ? (
                         <div className="mt-2 space-y-1.5">
-                          <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
-                          <div className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
+                          <label id="otp-channel-label" className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Select OTP Channel</label>
+                          <div role="radiogroup" aria-labelledby="otp-channel-label" className="grid grid-cols-2 gap-2 bg-slate-100 p-0.5 rounded-lg max-w-xs">
                             {(['email', 'sms'] as const).map((ch) => (
                               <button
                                 key={ch}
                                 type="button"
+                                role="radio"
+                                aria-checked={submissionChannel === ch}
                                 disabled={buyerSubmissionOtpSent}
                                 onClick={() => setSubmissionChannel(ch)}
                                 className={`py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all ${
@@ -2076,15 +2275,27 @@ export default function BuyerOnboarding() {
                   <Button
                     type="submit"
                     isLoading={isLoading}
-                    loadingText={activeSection === 'account' ? 'Submitting...' : 'Processing...'}
+                    loadingText={
+                      isResubmissionActive && activeSection === 'docs'
+                        ? 'Submitting...'
+                        : activeSection === 'account'
+                          ? 'Submitting...'
+                          : 'Processing...'
+                    }
                     disabled={
                       isLoading ||
-                      isProfileLocked ||
+                      (isProfileLocked && !(isResubmissionActive && activeSection === 'docs')) ||
                       (activeSection === 'account' && (!buyerSubmissionOtpSent || !/^\d{6}$/.test(buyerSubmissionOtp)))
                     }
                     className="bg-[#12335f] hover:bg-[#0b2445] text-white font-bold px-6 rounded-lg h-9 text-xs flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isProfileLocked ? 'Locked' : activeSection === 'account' ? 'Final Submission' : 'Continue'}
+                    {isResubmissionActive && activeSection === 'docs'
+                      ? 'Submit Updated Documents'
+                      : isProfileLocked
+                        ? 'Locked'
+                        : activeSection === 'account'
+                          ? 'Final Submission'
+                          : 'Continue'}
                     <ArrowRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>

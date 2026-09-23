@@ -68,58 +68,8 @@ export const REGISTRATION_TYPES = [
 ] as const;
 
 // ── Product / Service Categories ────────────────────────────────────────────
-export const PRODUCT_CATEGORIES = [
-  'Electrical & Electronics',
-  'Mechanical & Engineering',
-  'Construction & Building Materials',
-  'Industrial Chemicals',
-  'Refractories',
-  'Automobile Parts & Services',
-  'Tyres & Rubber Products',
-  'IT & Computer Equipment',
-  'Office Equipment & Stationery',
-  'Medical & Healthcare Supplies',
-  'Agriculture & Nursery',
-  'Safety Equipment & Industrial Safety',
-  'Fuel, Oil & Gas',
-  'Hydraulics & Pneumatics',
-  'Steel & Metal Products',
-  'Cement & Concrete Products',
-  'Pipes, Tiles & Hardware',
-  'Industrial Machinery & Spare Parts',
-  'Automation & Robotics',
-  'Fabrication & Welding Services',
-  'Bearings & Mechanical Components',
-  'Electrical Cables & Power Equipment',
-  'Industrial Consumables',
-  'Packaging & Printing',
-  'Polymer & Plastic Products',
-  'Trading & Distribution',
-  'Logistics & Supply Services',
-  'Tools & Industrial Hardware',
-  'Laboratory Equipment & Chemicals',
-  'Engineering Consultancy Services',
-  'Industrial Maintenance Services',
-  'Construction & Civil Work Services',
-  'Environmental & Waste Management',
-  'Telecom & Communication Equipment',
-  'Furniture & Interior Supplies',
-  'General Industrial Supplier',
-  'Mining & Coal Equipment',
-  'Power & Energy Equipment',
-  'Gas Equipment & Cylinders',
-  'Conveyor & Material Handling Equipment',
-  'Pumps, Motors & Hydraulics',
-  'Industrial Seals & Gaskets',
-  'Welding & Cutting Equipment',
-  'Industrial Fasteners & Components',
-  'Retail & Commercial Supply',
-  'FMCG & Daily Utility Supply',
-  'Textile & Garments Supply',
-  'OEM / Manufacturing Vendor',
-  'Repair & Service Provider',
-  'Multi-category Industrial Vendor',
-] as const;
+// Categories are fetched dynamically from the database (/api/categories).
+export const PRODUCT_CATEGORIES: readonly string[] = [];
 
 // Sentinel value for the "Other" option that lets users type a custom category.
 export const PRODUCT_CATEGORY_OTHER = 'Other';
@@ -180,9 +130,12 @@ export const PAYMENT_TERMS = [
 
 // ── Delivery Type ───────────────────────────────────────────────────────────
 export const DELIVERY_TYPES = [
+  { value: 'Door delivery to site', label: 'Door delivery to site' },
   { value: 'IMMEDIATE_DELIVERY', label: 'Immediate Delivery' },
   { value: 'SCHEDULED_DELIVERY', label: 'Scheduled Delivery' },
   { value: 'URGENT_DELIVERY', label: 'Urgent Delivery' },
   { value: 'PARTIAL_DELIVERY', label: 'Partial Delivery' },
   { value: 'PROJECT_DELIVERY', label: 'Project Delivery' },
+  { value: 'Buyer pickup', label: 'Buyer pickup' },
+  { value: 'Seller dispatch', label: 'Seller dispatch' },
 ] as const;

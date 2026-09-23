@@ -39,6 +39,7 @@ import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import type { DocumentPreview } from '../lib/files';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { MarketplaceFooter } from '../features/marketplace/components/MarketplaceFooter';
 
 type RoleCategory = 'buyer' | 'seller' | 'shg' | 'admin';
 
@@ -85,8 +86,8 @@ const SOP_WORKFLOWS: SopWorkflow[] = [
         title: 'Supplier Response & Clarifications',
         description: 'Receive quotations and bids from verified district sellers. Use in-platform messaging for transparent, auditable technical clarifications.',
         prerequisites: ['Active Bid Listing', 'Portal In-App Messaging'],
-        actionLabel: 'View Responses',
-        actionHref: '/buyer/procurement/responses'
+        actionLabel: 'View Procurements',
+        actionHref: '/buyer/my-procurements'
       },
       {
         title: 'Evaluation, Approval & Contract Award',
@@ -1122,6 +1123,7 @@ export default function HelpPage() {
           onClose={() => setPreviewDoc(null)}
         />
       )}
+      {!user && <MarketplaceFooter />}
     </div>
   );
 }

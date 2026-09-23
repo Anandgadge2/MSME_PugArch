@@ -40,6 +40,7 @@ import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { getBuyerProcurementsData } from './phase4.routes.js';
 import { invalidateUserAuthCache, invalidateRoleMembersAuthCache } from '../services/rbac.service.js';
+import { dashboardAnalyticsService } from '../services/dashboard-analytics.service.js';
 
 const router = Router();
 
@@ -99,7 +100,7 @@ const activeQuoteRequestStatuses = [
     'draft', 'pending', 'sent', 'responded',
     'DRAFT', 'PENDING', 'SENT', 'RESPONDED'
 ];
-const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED'];
+const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'PUBLISHED', 'OPEN_FOR_BIDDING'];
 
 const generateToken = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -411,6 +412,24 @@ router.post('/org/roles/:id/clone', authenticate, requireAccountType('buyer', 's
     ok(res, role, 201);
 }));
 
+// ─── GET /api/dashboard/analytics — authentic graphs & compliance analytics ─────
+router.get('/dashboard/analytics', authenticate, shortCache(30), asyncRoute(async (req, res) => {
+    if (!req.user) return ok(res, null);
+    const orgId = req.user.organizationId;
+    const userIdNum = req.user.id;
+    const role = req.user.role;
+
+    if (role === 'buyer') {
+        const data = await dashboardAnalyticsService.getBuyerAnalytics(userIdNum, orgId);
+        return ok(res, data);
+    } else if (role === 'seller' || role === 'shg') {
+        const data = await dashboardAnalyticsService.getSellerAnalytics(userIdNum, orgId);
+        return ok(res, data);
+    } else {
+        return ok(res, { role, message: 'Analytics currently focused on buyer and seller portals' });
+    }
+}));
+
 // ─── GET /api/dashboard/summary — unified dashboard counts ───────────────────
 // Returns all counts the dashboard cards need in ONE call instead of 5.
 router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async (req, res) => {
@@ -490,15 +509,11 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 myPendingInvoices,
                 myRfqs,
                 // Seller-facing core counts
-                sellerOpenTenders,
                 sellerActivePOs,
                 sellerCatalogueItems,
                 sellerPendingInvoices,
                 sellerSubmittedProposals,
-                sellerRfqs,
                 sellerReceivedRfqs,
-                sellerOpportunities,
-                sellerActiveAuctions,
                 buyerProcurementActiveBids,
                 buyerProcurementTotalSpent,
                 sellerInvoiceFactoring
@@ -585,40 +600,6 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         : Promise.resolve(0),
                     // ─── Seller baseline counts ───
                     isSeller
-                        ? Promise.all([
-                            (prisma as any).procurementBid.count({
-                                where: {
-                                    AND: [
-                                        {
-                                            OR: [
-                                                { procurementType: { in: ['OPEN_TENDER', 'TENDER', 'LIMITED_TENDER', 'open_tender', 'tender'] } },
-                                                { bidType: { in: ['OPEN_TENDER', 'TENDER', 'open_tender', 'tender'] } }
-                                            ]
-                                        },
-                                        {
-                                            OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
-                                        }
-                                    ],
-                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                                    status: { in: publicProcurementBidStatuses }
-                                }
-                            }).catch(() => 0),
-                            prisma.requirement.count({
-                                where: {
-                                    procurementMethod: 'TENDER',
-                                    status: { in: ['APPROVED', 'SOURCING'] },
-                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
-                                }
-                            }).catch(() => 0),
-                            prisma.tender.count({
-                                where: {
-                                    status: { in: openTenderStatuses as any },
-                                    OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
-                                }
-                            }).catch(() => 0)
-                        ]).then(([b, r, t]) => b + r + t).catch(() => 0)
-                        : Promise.resolve(0),
-                    isSeller
                         ? prisma.purchaseOrder.count({
                             where: { ...sellerRecordWhere, status: { in: activePoStatuses } }
                         }).catch(() => 0)
@@ -631,7 +612,13 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         : Promise.resolve(0),
                     isSeller
                         ? prisma.invoice.count({
-                            where: { ...sellerRecordWhere, status: { in: pendingInvoiceStatuses } }
+                            where: {
+                                ...sellerRecordWhere,
+                                OR: [
+                                    { status: { in: pendingInvoiceStatuses } },
+                                    { invoiceStatus: { in: ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'PENDING', 'UNPAID', 'PARTIALLY_PAID'] as any } }
+                                ]
+                            }
                         }).catch(() => 0)
                         : Promise.resolve(0),
                     // Seller's submitted proposals/bids across procurement bids, marketplace requirements, and tender bids
@@ -643,87 +630,18 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                                     : { sellerId: userIdNum, status: { in: ['SUBMITTED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED', 'QUALIFIED', 'AWARDED', 'ACCEPTED'] } }
                             }).catch(() => 0),
                             (prisma as any).requirementResponse.count({
-                                where: {
-                                    sellerUserId: userIdNum,
-                                    status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] }
-                                }
+                                where: orgId
+                                    ? { OR: [{ sellerUserId: userIdNum }, { sellerOrganizationId: orgId }], status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] } }
+                                    : { sellerUserId: userIdNum, status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED'] } }
                             }).catch(() => 0),
                             prisma.bid.count({
                                 where: { ...sellerRecordWhere, status: { in: activeQuotationStatuses } }
                             }).catch(() => 0)
                         ]).then(([p, r, b]) => p + r + b).catch(() => 0)
                         : Promise.resolve(0),
-                    // RFQ requests & opportunities available for the seller
-                    isSeller
-                        ? Promise.all([
-                            prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0),
-                            (prisma as any).procurementBid.count({
-                                where: {
-                                    AND: [
-                                        { OR: [{ procurementType: 'RFQ' }, { bidType: 'RFQ' }] },
-                                        { OR: [{ endDate: null }, { endDate: { gt: new Date() } }] }
-                                    ],
-                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                                    status: { in: publicProcurementBidStatuses }
-                                }
-                            }).catch(() => 0),
-                            prisma.requirement.count({
-                                where: {
-                                    procurementMethod: 'RFQ',
-                                    status: { in: ['APPROVED', 'SOURCING'] },
-                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
-                                }
-                            }).catch(() => 0)
-                        ]).then(([qr, pb, req]) => qr + pb + req).catch(() => 0)
-                        : Promise.resolve(0),
                     // Directly received quote requests
                     isSeller
                         ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
-                        : Promise.resolve(0),
-                    // All open opportunities available for the seller
-                    isSeller
-                        ? Promise.all([
-                            (prisma as any).procurementBid.count({
-                                where: {
-                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                                    status: { in: publicProcurementBidStatuses },
-                                    OR: [{ endDate: null }, { endDate: { gt: new Date() } }]
-                                }
-                            }).catch(() => 0),
-                            prisma.tender.count({
-                                where: {
-                                    status: { in: openTenderStatuses as any },
-                                    OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }]
-                                }
-                            }).catch(() => 0)
-                        ]).then(([pb, t]) => pb + t).catch(() => 0)
-                        : Promise.resolve(0),
-                    // Live / Active reverse auctions
-                    isSeller
-                        ? Promise.all([
-                            prisma.auction.count({
-                                where: {
-                                    status: { in: ['SCHEDULED', 'LIVE', 'PAUSED', 'scheduled', 'live', 'paused', 'active', 'ACTIVE'] }
-                                }
-                            }).catch(() => 0),
-                            (prisma as any).procurementBid.count({
-                                where: {
-                                    AND: [
-                                        { OR: [{ procurementType: 'REVERSE_AUCTION' }, { bidType: 'REVERSE_AUCTION' }] },
-                                        { OR: [{ endDate: null }, { endDate: { gt: new Date() } }] }
-                                    ],
-                                    approvalStatus: { in: ['APPROVED', 'PENDING'] },
-                                    status: { in: publicProcurementBidStatuses }
-                                }
-                            }).catch(() => 0),
-                            prisma.requirement.count({
-                                where: {
-                                    procurementMethod: 'REVERSE_AUCTION',
-                                    status: { in: ['APPROVED', 'SOURCING'] },
-                                    AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: new Date() } }] }]
-                                }
-                            }).catch(() => 0)
-                        ]).then(([a, pb, r]) => a + pb + r).catch(() => 0)
                         : Promise.resolve(0),
                     // buyer procurement active bids
                     isBuyer
@@ -765,6 +683,149 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 }
             }
 
+            // Synchronize seller opportunities & fast paths with unified procurement catalog
+            let sellerOppsData = { total: 0, openTenders: 0, rfps: 0, rfqs: 0, auctions: 0, rateContracts: 0 };
+            if (isSeller) {
+                try {
+                    const actorInviteIds = [Number(userIdNum), Number(orgId)].filter(Number.isFinite);
+                    const invitedBidFilters = actorInviteIds.flatMap(value => ([
+                        { technicalPacket: { path: ['vendors', 'invitedSellers'], array_contains: value } },
+                        { technicalPacket: { path: ['qualifiedVendors'], array_contains: value } }
+                    ]));
+                    const restrictedProcurementMethods = ['DIRECT_PURCHASE', 'L1_PURCHASE', 'PROPRIETARY', 'NOMINATION', 'PAC'];
+                    const privateBidPredicate = {
+                        OR: [
+                            { visibility: 'PRIVATE' as const },
+                            { procurementType: { in: restrictedProcurementMethods } },
+                            { bidType: { in: restrictedProcurementMethods } }
+                        ]
+                    };
+                    const publicBidPredicate = {
+                        visibility: 'PUBLIC' as const,
+                        NOT: {
+                            OR: [
+                                { procurementType: { in: restrictedProcurementMethods } },
+                                { bidType: { in: restrictedProcurementMethods } }
+                            ]
+                        }
+                    };
+                    const restrictedBidsCondition = {
+                        OR: [
+                            publicBidPredicate,
+                            {
+                                AND: [
+                                    privateBidPredicate,
+                                    { invitations: { some: { OR: [{ sellerOrgId: { in: actorInviteIds } }, { sellerUserId: { in: actorInviteIds } }] } } }
+                                ]
+                            },
+                            ...invitedBidFilters,
+                            {
+                                participations: {
+                                    some: { sellerId: userIdNum }
+                                }
+                            }
+                        ]
+                    };
+                    const now = new Date();
+                    const publicBidStatusesList = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED', 'EXPIRED'];
+                    const sellerBaseBidWhere: any = {
+                        approvalStatus: { in: ['APPROVED', 'PENDING'] },
+                        status: { in: publicBidStatusesList as any },
+                        ...restrictedBidsCondition
+                    };
+
+                    const [sellerBids, allBidNumbers, tendersCount, participantAuctionIds] = await Promise.all([
+                        (prisma as any).procurementBid.findMany({
+                            where: sellerBaseBidWhere,
+                            select: { id: true, bidNumber: true, procurementType: true, bidType: true }
+                        }).catch(() => []),
+                        (prisma as any).procurementBid.findMany({
+                            select: { bidNumber: true }
+                        }).catch(() => []),
+                        prisma.tender.count({
+                            where: {
+                                status: { in: openTenderStatuses as any },
+                                OR: [{ closesAt: null }, { closesAt: { gt: now } }]
+                            }
+                        }).catch(() => 0),
+                        prisma.auctionParticipant.findMany({
+                            where: {
+                                OR: [
+                                    ...(orgId ? [{ sellerOrgId: orgId }] : []),
+                                    { sellerUserId: userIdNum }
+                                ]
+                            },
+                            select: { auctionId: true }
+                        }).then(rows => rows.map(r => r.auctionId)).catch(() => [])
+                    ]);
+
+                    const liveAuctionsCount = participantAuctionIds.length > 0 ? await prisma.auction.count({
+                        where: {
+                            id: { in: participantAuctionIds },
+                            status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] },
+                            endTime: { gt: now }
+                        }
+                    }).catch(() => 0) : 0;
+
+                    const knownBidNumbers = new Set<string>(allBidNumbers.map((b: any) => String(b.bidNumber)));
+                    const sellerUnlinkedReqs = await prisma.requirement.findMany({
+                        where: {
+                            status: { in: ['APPROVED', 'SOURCING'] },
+                            AND: [{ OR: [{ requiredBy: null }, { requiredBy: { gte: now } }] }],
+                            requirementNumber: { notIn: Array.from(knownBidNumbers) }
+                        },
+                        select: { id: true, requirementNumber: true, procurementMethod: true }
+                    }).catch(() => []);
+
+                    const isAuctionMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('AUCTION') || s === 'REVERSE_AUCTION';
+                    };
+                    const isTenderMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('TENDER') || s === 'OPEN_TENDER';
+                    };
+                    const isRfqMethod = (m?: string | null) => {
+                        const s = String(m || '').toUpperCase();
+                        return s.includes('RFQ') || s === 'DIRECT_RFQ' || s === 'PRODUCT' || s === 'SERVICE' || (!isTenderMethod(m) && !isAuctionMethod(m));
+                    };
+                    const isRfpMethod = (m?: string | null) => ['RFP', 'rfp'].includes(String(m || ''));
+                    const isRateContractMethod = (m?: string | null) => ['RATE_CONTRACT', 'rate_contract'].includes(String(m || ''));
+
+                    const tenderBids = sellerBids.filter((b: any) => isTenderMethod(b.procurementType) || isTenderMethod(b.bidType)).length;
+                    const tenderReqs = sellerUnlinkedReqs.filter((r: any) => isTenderMethod(r.procurementMethod)).length;
+
+                    const rfqBids = sellerBids.filter((b: any) => isRfqMethod(b.procurementType) || isRfqMethod(b.bidType)).length;
+                    const rfqReqs = sellerUnlinkedReqs.filter((r: any) => isRfqMethod(r.procurementMethod)).length;
+
+                    const rfpBids = sellerBids.filter((b: any) => isRfpMethod(b.procurementType) || isRfpMethod(b.bidType)).length;
+                    const rfpReqs = sellerUnlinkedReqs.filter((r: any) => isRfpMethod(r.procurementMethod)).length;
+
+                    const auctionBids = sellerBids.filter((b: any) => isAuctionMethod(b.procurementType) || isAuctionMethod(b.bidType)).length;
+                    const auctionReqs = sellerUnlinkedReqs.filter((r: any) => isAuctionMethod(r.procurementMethod)).length;
+
+                    const rateContractBids = sellerBids.filter((b: any) => isRateContractMethod(b.procurementType) || isRateContractMethod(b.bidType)).length;
+                    const rateContractReqs = sellerUnlinkedReqs.filter((r: any) => isRateContractMethod(r.procurementMethod)).length;
+
+                    const totalAuctions = Math.max(liveAuctionsCount, 0) + auctionBids + auctionReqs;
+                    const totalOpenTenders = tenderBids + tenderReqs + tendersCount;
+                    const totalRfps = rfpBids + rfpReqs;
+                    const totalRfqs = rfqBids + rfqReqs;
+                    const totalRateContracts = rateContractBids + rateContractReqs;
+
+                    sellerOppsData = {
+                        total: totalOpenTenders + totalRfqs + totalAuctions,
+                        openTenders: totalOpenTenders,
+                        rfps: totalRfps,
+                        rfqs: totalRfqs,
+                        auctions: totalAuctions,
+                        rateContracts: totalRateContracts
+                    };
+                } catch (err) {
+                    console.error("Error computing seller opportunities for summary:", err);
+                }
+            }
+
             const finalMyTenders = buyerProcData ? buyerProcData.kpis.active : myTenders;
             const finalBuyerProcurementActiveBids = buyerProcData
                 ? buyerProcData.all.filter((p: any) => (p.type === 'bid_tender' || p.type === 'requirement') && p.statusGroup === 'active').length
@@ -800,17 +861,19 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 reverseAuctionsActive,
                 reverseAuctionsScheduled,
                 // Seller-side
-                sellerOpenTendersCount: sellerOpenTenders,
+                sellerOpenTendersCount: sellerOppsData.openTenders,
+                sellerRfpsCount: sellerOppsData.rfps,
                 sellerActivePOsCount: sellerActivePOs,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
                 sellerQuotationsCount: sellerSubmittedProposals,
                 sellerSubmittedBidsCount: sellerSubmittedProposals,
-                sellerRfqsCount: sellerRfqs,
+                sellerRfqsCount: sellerOppsData.rfqs + sellerReceivedRfqs,
                 sellerReceivedRfqsCount: sellerReceivedRfqs,
-                sellerOpportunitiesCount: sellerOpportunities,
-                reverseAuctionsLive: sellerActiveAuctions,
-                reverseAuctionInvites: sellerActiveAuctions,
+                sellerOpportunitiesCount: sellerOppsData.total,
+                sellerRateContractsCount: sellerOppsData.rateContracts,
+                reverseAuctionsLive: sellerOppsData.auctions,
+                reverseAuctionInvites: sellerOppsData.auctions,
                 invoiceFactoringCount: sellerInvoiceFactoring,
                 orgRole
             };

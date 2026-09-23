@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { X, Upload, Check, RefreshCw, Stamp, FileSignature, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { toast } from 'sonner';
 import { putApi } from '../../shared/apiClient';
 
@@ -149,8 +150,14 @@ export function SignatureStampUploadModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md">
-      <div className="relative w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <FocusTrap active onEscape={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Official Stamp and Authorized Signature Utility"
+        className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md"
+      >
+        <div className="relative w-full max-w-2xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-150 pb-4 mb-4">
           <div>
@@ -381,5 +388,6 @@ export function SignatureStampUploadModal({
         </div>
       </div>
     </div>
-  );
+  </FocusTrap>
+);
 }

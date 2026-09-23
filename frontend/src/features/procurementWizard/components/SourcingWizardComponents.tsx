@@ -273,24 +273,24 @@ export function SectionCard({
   className
 }: SectionCardProps) {
   return (
-    <div className={cn("group space-y-2.5 sm:space-y-4 rounded-[20px] sm:rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-3 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
-      <div className="flex items-start justify-between gap-2.5 sm:gap-3">
-        <div className="flex items-center gap-2.5 sm:gap-3">
+    <div className={cn("group w-full min-w-0 max-w-full space-y-2.5 sm:space-y-4 rounded-[20px] sm:rounded-[24px] border-0 bg-white/95 backdrop-blur-sm p-3 sm:p-6 shadow-[0_12px_36px_rgba(15,23,42,0.06)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)] ring-1 ring-slate-200/80 transition-all duration-300 ease-out", className)}>
+      <div className="flex items-start justify-between gap-2.5 sm:gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           {Icon && (
-            <span className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f]/10 to-[#12335f]/5 text-[#12335f] ring-1 ring-[#12335f]/15 group-hover:scale-110 group-hover:bg-[#12335f] group-hover:text-white transition-all duration-300 shadow-sm">
+            <span className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f]/10 to-[#12335f]/5 text-[#12335f] ring-1 ring-[#12335f]/15 group-hover:scale-110 group-hover:bg-[#12335f] group-hover:text-white transition-all duration-300 shadow-sm">
               <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
             </span>
           )}
-          <div>
-            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-wide leading-none">{title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-[11px] sm:text-[13px] font-black text-slate-900 uppercase tracking-wide leading-none truncate">{title}</h3>
             {description && (
-              <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1 leading-normal">{description}</p>
+              <p className="text-[10px] sm:text-[11px] text-slate-500 font-semibold mt-1 leading-normal truncate">{description}</p>
             )}
           </div>
         </div>
         {rightAction && <div className="shrink-0">{rightAction}</div>}
       </div>
-      <div>{children}</div>
+      <div className="w-full min-w-0">{children}</div>
     </div>
   );
 }
@@ -330,7 +330,7 @@ export function StickyActionBar({
   showSubmit = false
 }: StickyActionBarProps) {
   return (
-    <div className="sticky bottom-2 sm:bottom-4 z-50 flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 rounded-[18px] sm:rounded-[22px] border border-slate-200/80 bg-white/95 p-1.5 px-2.5 sm:p-4 shadow-lg sm:shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
+    <div className="sticky bottom-2 sm:bottom-4 z-20 flex flex-wrap items-center justify-between gap-1.5 sm:gap-3 rounded-[18px] sm:rounded-[22px] border border-slate-200/80 bg-white/95 p-1.5 px-2.5 sm:p-4 shadow-lg sm:shadow-[0_20px_50px_-12px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all duration-300">
       <Button
         variant="outline"
         onClick={onBack}
@@ -565,14 +565,29 @@ export function BOQTable({
 </div>
       </div>
 
-      <div className="flex justify-between items-center bg-slate-50 p-3.5 rounded-lg border border-slate-200 font-bold text-xs">
-        <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700">
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
-        </Button>
-        <span className="text-sm font-extrabold text-[#12335f]">
-          BOQ Total Value: {formatCurrency(estimatedTotal)}
-        </span>
-      </div>
+      {(() => {
+        const baseTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0)), 0);
+        const taxTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (Number(r.taxPercent ?? 18) / 100)), 0);
+        const grossTotal = baseTotal + taxTotal;
+        return (
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 font-bold text-xs">
+            <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700 bg-white hover:bg-slate-100">
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
+            </Button>
+            <div className="flex items-center gap-4 flex-wrap text-xs">
+              <div className="text-slate-600">
+                Base: <span className="text-slate-900 font-extrabold">{formatCurrency(baseTotal)}</span>
+              </div>
+              <div className="text-slate-600">
+                GST (Tax): <span className="text-slate-900 font-extrabold">+{formatCurrency(taxTotal)}</span>
+              </div>
+              <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-[#12335f] text-sm font-black">
+                BOQ Total (Gross): {formatCurrency(grossTotal)}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

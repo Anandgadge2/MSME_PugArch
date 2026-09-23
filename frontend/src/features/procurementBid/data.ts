@@ -32,6 +32,8 @@ export interface ClarificationRecord {
 
 export interface BidResultRow {
   participationId?: number;
+  id?: string | number;
+  sellerId?: number;
   sellerName: string;
   sellerType: string;
   offeredItem: string;
@@ -39,9 +41,11 @@ export interface BidResultRow {
   model: string;
   technicalStatus: 'Qualified' | 'Disqualified' | 'Pending' | 'Under Review' | 'Clarification Required';
   financialStatus: 'Opened' | 'Pending' | 'Rejected';
+  finalStatus?: string;
   totalPrice: number;
+  quotedAmount?: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
-  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected';
+  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected' | 'Not Selected' | 'Ineligible';
   contactPerson?: string;
   details?: Record<string, any>;
   documents?: any[];
@@ -49,6 +53,7 @@ export interface BidResultRow {
   sellerEmail?: string;
   sellerMobile?: string;
   seller?: Record<string, any>;
+  rawParticipation?: Record<string, any>;
 }
 
 export interface ProcurementBid {
@@ -73,6 +78,8 @@ export interface ProcurementBid {
   endDate: string;
   rawStartDate?: string | null;
   rawEndDate?: string | null;
+  submissionStartDate?: string | null;
+  rawSubmissionStartDate?: string | null;
   publishedAt?: string | null;
   approvedAt?: string | null;
   createdAt?: string;
@@ -94,9 +101,13 @@ export interface ProcurementBid {
   currentStage: EvaluationStatus;
   clarifications: ClarificationRecord[];
   results: BidResultRow[];
+  urgency?: string;
+  priority?: string;
   bidDocuments?: Array<{ id: number | string; name: string; meta: string; fileAssetId?: number | null }>;
   participations?: ProcurementBidParticipation[];
   awards?: ProcurementBidAward[];
+  purchaseOrders?: any[];
+  activeOrder?: any;
   technicalPacket?: any;
   documents?: any[];
   consigneeDetails?: any;
@@ -109,6 +120,13 @@ export interface ProcurementBid {
   version?: number;
   buyer?: any;
   buyerOrganization?: any;
+  buyerOrganizationName?: string;
+  buyerPersonName?: string;
+  buyerOrgName?: string;
+  buyerEmail?: string;
+  buyerMobile?: string;
+  buyerAddress?: string;
+  buyerProfile?: any;
   invitations?: any[];
   invitedCount?: number;
   invitationsCount?: number;
@@ -150,8 +168,25 @@ export interface ProcurementEvaluation {
 }
 
 export interface ProcurementBidAward {
-  id?: number;
-  participationId?: number;
+  id?: number | string;
+  bidId?: number | string;
+  participationId?: number | string;
+  sellerId?: number | string;
+  awardedSellerId?: number | string;
+  awardedSellerOrgId?: number | string;
+  awardedSellerUserId?: number | string;
+  awardStatus?: string;
+  counterOfferStatus?: string | null;
+  counterOfferDeadline?: string | null;
+  counterOfferNotes?: string | null;
+  priceMatchTargetPrice?: number | null;
+  originalBidAmount?: number | null;
+  isPriceMatched?: boolean;
+  justificationReason?: string | null;
+  acceptedAt?: string | null;
+  declinedAt?: string | null;
+  declinedReason?: string | null;
+  order?: any;
   status?: string;
   remarks?: string;
   createdAt?: string;

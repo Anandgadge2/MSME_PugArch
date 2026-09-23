@@ -66,4 +66,4 @@ export const runWithToast = async <T>(
     }
 };
 
-export { errorMessage };
+export { errorMessage, sonner as toast };

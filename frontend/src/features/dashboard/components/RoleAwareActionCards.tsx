@@ -9,7 +9,8 @@ import { useQuery } from '@tanstack/react-query';
 import React, { useCallback, useMemo, useEffect } from 'react';
 import {
     ClipboardCheck, ClipboardList, FileText, Gavel,
-    Inbox, Package, Receipt, Send, Store, Truck, Landmark, IndianRupee
+    Inbox, Package, Receipt, Send, Store, Truck, Landmark, IndianRupee,
+    Layers, RotateCcw
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
@@ -34,6 +35,7 @@ interface DashboardSummary {
     supplierResponsesCount?: number;
     // Seller-side
     sellerOpenTendersCount?: number;
+    sellerRfpsCount?: number;
     sellerOpportunitiesCount?: number;
     sellerActivePOsCount?: number;
     sellerCatalogueItemsCount?: number;
@@ -42,6 +44,7 @@ interface DashboardSummary {
     sellerSubmittedBidsCount?: number;
     sellerRfqsCount?: number;
     sellerReceivedRfqsCount?: number;
+    sellerRateContractsCount?: number;
     invoiceFactoringCount?: number;
     reverseAuctionsActive?: number;
     reverseAuctionsScheduled?: number;
@@ -154,9 +157,9 @@ function RoleAwareActionCards() {
             subtext: 'Orders in fulfillment'
         },
         {
-            label: 'Supplier Responses',
+            label: 'My Procurements',
             count: data.supplierResponsesCount ?? data.myRfqsCount ?? 0,
-            href: '/buyer/procurement/responses',
+            href: '/buyer/my-procurements',
             icon: Send,
             tone: 'blue',
             show: isBuyer,
@@ -214,7 +217,7 @@ function RoleAwareActionCards() {
             subtext: (data.pendingApprovalsCount || 0) > 0 ? 'Requires your review' : 'No pending items'
         },
 
-        // ─── Seller baseline tiles ───
+        // ─── Seller baseline tiles (Exactly 8 most critical cards) ───
         {
             label: 'New Opportunities',
             count: data.sellerOpportunitiesCount || 0,
@@ -223,7 +226,17 @@ function RoleAwareActionCards() {
             tone: 'indigo',
             show: isSeller,
             priority: false,
-            subtext: 'Open opportunities available'
+            subtext: 'Live opportunities available'
+        },
+        {
+            label: 'Direct RFQs',
+            count: data.sellerRfqsCount ?? data.sellerReceivedRfqsCount ?? 0,
+            href: `${sellerPrefix}/opportunities/rfqs`,
+            icon: FileText,
+            tone: 'purple',
+            show: isSeller,
+            priority: false,
+            subtext: 'Live buyer RFQs'
         },
         {
             label: 'Public Tenders',
@@ -256,16 +269,6 @@ function RoleAwareActionCards() {
             subtext: 'Orders to fulfill'
         },
         {
-            label: 'Catalogue Items',
-            count: data.sellerCatalogueItemsCount || 0,
-            href: isShgAccount ? '/shg/products' : '/seller/catalogue',
-            icon: Store,
-            tone: 'cyan',
-            show: isSeller,
-            priority: false,
-            subtext: 'Listed products & services'
-        },
-        {
             label: 'Active Deliveries',
             count: data.activeDeliveriesCount || 0,
             href: `${sellerPrefix}/delivery-management`,
@@ -286,34 +289,14 @@ function RoleAwareActionCards() {
             subtext: 'Invoices under settlement'
         },
         {
-            label: 'Request Quotations',
-            count: data.sellerRfqsCount ?? data.sellerReceivedRfqsCount ?? 0,
-            href: `${sellerPrefix}/opportunities/rfqs`,
-            icon: FileText,
-            tone: 'purple',
+            label: 'Catalogue Items',
+            count: data.sellerCatalogueItemsCount || 0,
+            href: isShgAccount ? '/shg/products' : '/seller/catalogue',
+            icon: Store,
+            tone: 'cyan',
             show: isSeller,
             priority: false,
-            subtext: 'Buyer RFQ requests'
-        },
-        {
-            label: 'Live Auctions',
-            count: data.reverseAuctionsLive || data.reverseAuctionInvites || 0,
-            href: `${sellerPrefix}/opportunities/auctions`,
-            icon: Gavel,
-            tone: 'amber',
-            show: isSeller,
-            priority: false,
-            subtext: 'Real-time bidding events'
-        },
-        {
-            label: 'Invoice Factoring',
-            count: data.invoiceFactoringCount || 0,
-            href: '/factoring',
-            icon: Landmark,
-            tone: 'slate',
-            show: isSeller,
-            priority: false,
-            subtext: 'Early payment financing'
+            subtext: 'Listed products & services'
         }
     ], [data, isBuyer, isSeller, isShgAccount, sellerPrefix, hasPermission]);
 
@@ -324,10 +307,18 @@ function RoleAwareActionCards() {
 
     return (
         <div className="space-y-3">
-            <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-0.5">
-                Overview Metrics & Fast Paths
-            </h4>
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-0.5 flex items-center gap-1.5">
+                    Overview Metrics & Fast Paths
+                    <span className="text-[9px] font-bold text-slate-400/80 bg-slate-100 px-1.5 py-0.2 rounded">
+                        {visible.length} KPIs
+                    </span>
+                </h4>
+            </div>
+            <div className={isSeller 
+                ? "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4" 
+                : "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+            }>
                 {visible.map(card => (
                     <KpiCard
                         key={card.label}

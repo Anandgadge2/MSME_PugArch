@@ -40,12 +40,6 @@ export default function SellerAuctionPlannedBanner({
             Follow-On Auction
           </span>
         </div>
-
-        {/* Anti-collusion badge */}
-        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700">
-          <EyeOff className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-          <span>Anti-Collusion Masked (Competitor IDs Hidden)</span>
-        </div>
       </div>
 
       {/* Informational notice */}

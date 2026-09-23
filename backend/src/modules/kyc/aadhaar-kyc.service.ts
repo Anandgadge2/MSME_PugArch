@@ -107,7 +107,7 @@ const parseState = (state: string): { path: string; origin?: string } => {
         const allowedOrigins = [
           'https://www.jsgsmile.in',
           'https://jsgsmile.in',
-          'https://msme-pugarchdev-frontend.vercel.app',
+          'https://msme-pugarch-frontend.vercel.app',
           'http://localhost:3000'
         ];
         try {
@@ -215,13 +215,216 @@ const extractSafeProfile = (userinfo: any, idTokenPayload: any): SafeProfile => 
 
 const fetchUserInfo = async (url: string | undefined, accessToken: string) => {
   if (!url) return null;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-  });
-  if (!response.ok) {
-    throw Object.assign(new Error('Failed to fetch MeriPehchaan user info'), { statusCode: 502, code: 'USERINFO_FAILED' });
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
+    });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      logger.warn({ status: response.status, statusText: response.statusText, errorText }, '[MeriPehchaan] UserInfo endpoint returned non-OK response; will rely on ID token claims');
+      return null;
+    }
+    return await response.json().catch(() => null);
+  } catch (err: any) {
+    logger.warn({ error: err?.message || String(err) }, '[MeriPehchaan] Error querying UserInfo endpoint; falling back to ID token claims');
+    return null;
   }
-  return response.json();
+};
+
+type TokenExchangeResult = {
+  access_token: string;
+  id_token?: string;
+  token_type?: string;
+  expires_in?: number;
+  [key: string]: any;
+};
+
+const exchangeTokenWithProvider = async (
+  config: ReturnType<typeof requiredConfig>,
+  code: string,
+  codeVerifier?: string,
+  redirectUri?: string
+): Promise<TokenExchangeResult> => {
+  const actualRedirectUri = redirectUri || config.redirectUri;
+
+  // Sanitize: trim whitespace/quotes that may have leaked from env var
+  const clientId = config.clientId.trim().replace(/^["']|["']$/g, '');
+  const clientSecret = config.clientSecret.trim().replace(/^["']|["']$/g, '');
+
+  // Diagnostic log (masked) to surface config issues in production
+  const masked = clientId.length > 8
+    ? `${clientId.slice(0, 4)}...${clientId.slice(-4)} (len=${clientId.length})`
+    : `[TOO_SHORT len=${clientId.length}]`;
+  logger.info(
+    { clientIdMasked: masked, tokenUrl: config.tokenUrl, redirectUri: actualRedirectUri },
+    '[MeriPehchaan] Starting token exchange'
+  );
+
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+
+  // Multi-strategy token exchange for DigiLocker / MeriPehchaan / API Setu compatibility:
+  // 1. Basic Auth Header (Official DigiLocker / MeriPehchaan recommendation) with PKCE
+  // 2. Basic Auth Header + Body client credentials (hybrid gateway support) with PKCE
+  // 3. Body credentials only without Basic Auth Header (Standard OAuth2 post) with PKCE
+  // 4. Basic Auth Header without PKCE (in case server didn't record or support PKCE)
+  // 5. Body credentials only without PKCE
+  const attempts: Array<{
+    name: string;
+    headers: Record<string, string>;
+    body: Record<string, string>;
+  }> = [
+    {
+      name: 'Basic Auth Header + PKCE',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'Authorization': `Basic ${basicAuth}`,
+      },
+      body: {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: actualRedirectUri,
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+      },
+    },
+    {
+      name: 'Basic Auth Header + Body Credentials + PKCE',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+        'Authorization': `Basic ${basicAuth}`,
+      },
+      body: {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: actualRedirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+      },
+    },
+    {
+      name: 'Body Credentials Only + PKCE',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json',
+      },
+      body: {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: actualRedirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
+        ...(codeVerifier ? { code_verifier: codeVerifier } : {}),
+      },
+    },
+  ];
+
+  if (codeVerifier) {
+    attempts.push(
+      {
+        name: 'Basic Auth Header without PKCE',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+          'Authorization': `Basic ${basicAuth}`,
+        },
+        body: {
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: actualRedirectUri,
+        },
+      },
+      {
+        name: 'Body Credentials Only without PKCE',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+        },
+        body: {
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: actualRedirectUri,
+          client_id: clientId,
+          client_secret: clientSecret,
+        },
+      }
+    );
+  }
+
+  let lastErrorDetail = '';
+  let lastStatus = 0;
+
+  for (let i = 0; i < attempts.length; i++) {
+    const attempt = attempts[i];
+    try {
+      const response = await fetch(config.tokenUrl, {
+        method: 'POST',
+        headers: attempt.headers,
+        body: new URLSearchParams(attempt.body),
+      });
+
+      const rawText = await response.text();
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        parsed = null;
+      }
+
+      const accessToken = parsed?.access_token || parsed?.accessToken || parsed?.token;
+
+      if (response.ok && accessToken) {
+        logger.info({ strategy: attempt.name }, '[MeriPehchaan] Token exchange succeeded');
+        return {
+          ...parsed,
+          access_token: accessToken,
+        };
+      }
+
+      lastStatus = response.status;
+      lastErrorDetail =
+        (parsed && (parsed.error_description || parsed.error || parsed.message)) ||
+        rawText ||
+        response.statusText;
+
+      logger.warn(
+        {
+          strategy: attempt.name,
+          status: response.status,
+          statusText: response.statusText,
+          error: lastErrorDetail,
+        },
+        '[MeriPehchaan] Token exchange attempt failed'
+      );
+
+      // If the code is already expired or consumed, retry won't succeed
+      if (
+        parsed?.error === 'invalid_grant' &&
+        /expired|already used|consumed/i.test(String(parsed?.error_description || ''))
+      ) {
+        break;
+      }
+    } catch (fetchErr: any) {
+      lastErrorDetail = fetchErr?.message || String(fetchErr);
+      logger.warn({ strategy: attempt.name, error: lastErrorDetail }, '[MeriPehchaan] Token exchange attempt threw network error');
+    }
+  }
+
+  logger.error(
+    {
+      tokenUrl: config.tokenUrl,
+      redirectUri: actualRedirectUri,
+      lastStatus,
+      lastError: lastErrorDetail,
+    },
+    '[MeriPehchaan] All token exchange attempts failed'
+  );
+
+  throw Object.assign(
+    new Error(`MeriPehchaan token exchange failed${lastStatus ? ` [HTTP ${lastStatus}]` : ''}: ${lastErrorDetail || 'Invalid token response'}`),
+    { statusCode: 502, code: 'TOKEN_EXCHANGE_FAILED' }
+  );
 };
 
 const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typeof requiredConfig>) => {
@@ -435,25 +638,7 @@ export const aadhaarKycService = {
     }
 
     try {
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: config.redirectUri,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        code_verifier: session.codeVerifier,
-      });
-
-      const tokenResponse = await fetch(config.tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body
-      });
-
-      const tokenBody = await tokenResponse.json().catch(() => null) as any;
-      if (!tokenResponse.ok || !tokenBody?.access_token) {
-        throw Object.assign(new Error('MeriPehchaan token exchange failed'), { statusCode: 502, code: 'TOKEN_EXCHANGE_FAILED' });
-      }
+      const tokenBody = await exchangeTokenWithProvider(config, code, session.codeVerifier, session.redirectUri);
 
       let idPayload: any = null;
       let idTokenVerified = false;
@@ -473,6 +658,9 @@ export const aadhaarKycService = {
       }
 
       const userInfo = await fetchUserInfo(config.userInfoUrl, tokenBody.access_token);
+      if (!userInfo && !idPayload) {
+        throw Object.assign(new Error('Failed to fetch MeriPehchaan user profile and no ID token was provided'), { statusCode: 502, code: 'USERINFO_FAILED' });
+      }
       const profile = extractSafeProfile(userInfo, idPayload);
 
       await prisma.$transaction([
@@ -663,25 +851,7 @@ export const aadhaarKycService = {
     }
 
     try {
-      const body = new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: config.redirectUri,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        code_verifier: session.codeVerifier,
-      });
-
-      const tokenResponse = await fetch(config.tokenUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body
-      });
-
-      const tokenBody = await tokenResponse.json().catch(() => null) as any;
-      if (!tokenResponse.ok || !tokenBody?.access_token) {
-        throw new Error('MeriPehchaan token exchange failed');
-      }
+      const tokenBody = await exchangeTokenWithProvider(config, code, session.codeVerifier, session.redirectUri);
 
       let idPayload: any = null;
       let idTokenVerified = false;
@@ -696,6 +866,9 @@ export const aadhaarKycService = {
       }
 
       const userInfo = await fetchUserInfo(config.userInfoUrl, tokenBody.access_token);
+      if (!userInfo && !idPayload) {
+        throw Object.assign(new Error('Failed to fetch MeriPehchaan user profile and no ID token was provided'), { statusCode: 502, code: 'USERINFO_FAILED' });
+      }
       const profile = extractSafeProfile(userInfo, idPayload);
 
       if (session.aadhaarLast4 && profile.aadhaarLast4 && session.aadhaarLast4 !== profile.aadhaarLast4) {
@@ -717,7 +890,8 @@ export const aadhaarKycService = {
           referenceKey: profile.referenceKey,
           idTokenSubject: profile.subject,
           idTokenVerified,
-          verifiedAt: new Date()
+          verifiedAt: new Date(),
+          aadhaarLast4: profile.aadhaarLast4 || session.aadhaarLast4,
         }
       });
 
@@ -729,7 +903,7 @@ export const aadhaarKycService = {
         where: { id: session.id },
         data: { used: true, status: `FAILED: ${errMsg.slice(0, 190)}` }
       });
-      return redirectUrl('failed', 'Failed to retrieve Aadhaar details.', redirectPath, origin);
+      return redirectUrl('failed', safeMessage(errMsg), redirectPath, origin);
     }
   },
 

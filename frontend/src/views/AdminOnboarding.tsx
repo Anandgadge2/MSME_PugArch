@@ -30,6 +30,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { toast } from "sonner";
 import { getFileAssetPreview, type DocumentPreview } from "../lib/files";
 import { DocumentPreviewModal } from "../components/DocumentPreviewModal";
+import { FocusTrap } from "../components/ui/FocusTrap";
 import { isShgUser } from "../lib/shg";
 import {
   Search,
@@ -255,8 +256,32 @@ export default function AdminOnboarding() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "sellers";
     const tab = new URLSearchParams(window.location.search).get("tab");
-    return ["sellers", "buyers", "shg"].includes(String(tab)) ? String(tab) : "sellers";
+    if (["sellers", "buyers", "shg"].includes(String(tab))) return String(tab);
+    const saved = sessionStorage.getItem("admin_onboarding_tab");
+    return ["sellers", "buyers", "shg"].includes(String(saved)) ? String(saved) : "sellers";
   });
+
+  const handleTabChange = useCallback((newTab: string) => {
+    setActiveTab(newTab);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("admin_onboarding_tab", newTab);
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", newTab);
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const sp = new URLSearchParams(window.location.search);
+      const tab = sp.get("tab");
+      if (["sellers", "buyers", "shg"].includes(String(tab))) {
+        setActiveTab(String(tab));
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 400);
 
@@ -269,7 +294,6 @@ export default function AdminOnboarding() {
   const [showcaseActive, setShowcaseActive] = useState(true);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const handleClosePreview = useCallback(() => setPreviewDocument(null), []);
-  const [feedback, setFeedback] = useState("");
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
@@ -279,6 +303,22 @@ export default function AdminOnboarding() {
   const [activeSectionForRejection, setActiveSectionForRejection] =
     useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+
+  // Document-Level Targeted Request State
+  const [isDocRequestModalOpen, setIsDocRequestModalOpen] = useState(false);
+  const [docRequestTarget, setDocRequestTarget] = useState<{ documentType: string; label: string } | null>(null);
+  const [docRequestReason, setDocRequestReason] = useState("");
+  const [isSubmittingDocRequest, setIsSubmittingDocRequest] = useState(false);
+
+  // Application Correction Modal State
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [correctionReason, setCorrectionReason] = useState("");
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+
+  // Application Rejection Modal State
+  const [isAppRejectModalOpen, setIsAppRejectModalOpen] = useState(false);
+  const [appRejectReason, setAppRejectReason] = useState("");
+  const [isSubmittingAppReject, setIsSubmittingAppReject] = useState(false);
 
   // Override Modal State
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -486,7 +526,13 @@ export default function AdminOnboarding() {
 
   const openItemForReview = async (item: any) => {
     const key = String(item._id || item.id);
-    setFeedback(item.adminFeedback || "");
+    setDocRequestReason("");
+    setIsDocRequestModalOpen(false);
+    setDocRequestTarget(null);
+    setCorrectionReason("");
+    setIsCorrectionModalOpen(false);
+    setAppRejectReason("");
+    setIsAppRejectModalOpen(false);
 
     // If detail is already cached, render the complete record immediately.
     const cached = detailCacheRef.current.get(key);
@@ -856,6 +902,128 @@ export default function AdminOnboarding() {
     setIsRejectModalOpen(true);
   };
 
+  const handleOpenDocRequestModal = (documentType: string, label: string) => {
+    setDocRequestTarget({ documentType, label });
+    setDocRequestReason("");
+    setIsDocRequestModalOpen(true);
+  };
+
+  const handleConfirmDocRequest = async () => {
+    if (!selectedItem || !docRequestTarget) return;
+    const trimmed = docRequestReason.trim();
+    if (!trimmed || trimmed.length < 3) {
+      toast.error("Please enter a reason of at least 3 characters.");
+      return;
+    }
+    const numericId = Number(selectedItem._id) || Number(selectedItem.id);
+    setIsSubmittingDocRequest(true);
+    try {
+      const res = await api.post(
+        `/api/admin/onboarding/${numericId}/document-request`,
+        {
+          documentType: docRequestTarget.documentType,
+          reason: trimmed
+        },
+        authOptions
+      );
+      if (res.ok) {
+        toast.success(`Re-upload requested for ${docRequestTarget.label}. Stakeholder notified.`);
+        setIsDocRequestModalOpen(false);
+        setDocRequestReason("");
+
+        const docKey = selectedItem.role === 'buyer' ? 'docs' : 'documents';
+        const updatedReasons = {
+          ...(selectedItem.sectionRejectionReasons || {}),
+          [docRequestTarget.documentType]: trimmed
+        };
+        const updatedSectionStatus = {
+          ...(selectedItem.sectionStatus || {}),
+          [docKey]: 'resubmission_required'
+        };
+        const updatedItem = {
+          ...selectedItem,
+          onboardingStatus: 'resubmission_required',
+          sectionStatus: updatedSectionStatus,
+          sectionRejectionReasons: updatedReasons,
+          adminFeedback: trimmed
+        };
+        setSelectedItem(updatedItem);
+
+        // Keep detail cache in sync
+        const cacheKey = String(selectedItem._id || selectedItem.id);
+        const cachedDetail = detailCacheRef.current.get(cacheKey);
+        if (cachedDetail) {
+          detailCacheRef.current.set(cacheKey, {
+            ...cachedDetail,
+            ...updatedItem
+          });
+        }
+
+        const updateListItem = (prevList: any[]) =>
+          prevList.map((item) =>
+            item._id === selectedItem._id || item.id === numericId
+              ? {
+                  ...item,
+                  onboardingStatus: 'resubmission_required',
+                  sectionStatus: updatedSectionStatus,
+                  sectionRejectionReasons: updatedReasons,
+                  adminFeedback: trimmed
+                }
+              : item
+          );
+
+        if (selectedItem.role === "buyer") {
+          setBuyers(updateListItem);
+        } else {
+          setSellers(updateListItem);
+        }
+        queryClient.invalidateQueries({ queryKey: ['adminOnboardingList'] });
+        queryClient.invalidateQueries({ queryKey: ['adminStats'] });
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.message || "Failed to request document re-upload");
+      }
+    } catch {
+      toast.error("Network error while requesting document re-upload");
+    } finally {
+      setIsSubmittingDocRequest(false);
+    }
+  };
+
+  const handleConfirmCorrection = async () => {
+    if (!selectedItem) return;
+    const trimmed = correctionReason.trim();
+    if (!trimmed || trimmed.length < 3) {
+      toast.error("Please specify correction instructions of at least 3 characters.");
+      return;
+    }
+    setIsSubmittingCorrection(true);
+    try {
+      await handleUpdateStatus(selectedItem._id, "resubmission_required", trimmed);
+      setIsCorrectionModalOpen(false);
+      setCorrectionReason("");
+    } finally {
+      setIsSubmittingCorrection(false);
+    }
+  };
+
+  const handleConfirmAppRejection = async () => {
+    if (!selectedItem) return;
+    const trimmed = appRejectReason.trim();
+    if (!trimmed || trimmed.length < 3) {
+      toast.error("Please specify a rejection reason of at least 3 characters.");
+      return;
+    }
+    setIsSubmittingAppReject(true);
+    try {
+      await handleUpdateStatus(selectedItem._id, "rejected", trimmed);
+      setIsAppRejectModalOpen(false);
+      setAppRejectReason("");
+    } finally {
+      setIsSubmittingAppReject(false);
+    }
+  };
+
   const handleViewDocument = async (fileAsset: any, label: string) => {
     try {
       const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
@@ -868,29 +1036,6 @@ export default function AdminOnboarding() {
       setPreviewDocument(await getFileAssetPreview(fileAssetObj, label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to open document");
-    }
-  };
-
-  const handleSendFeedback = async () => {
-    if (!selectedItem || !feedback.trim()) return;
-    try {
-      const res = await api.post(
-        "/api/admin/feedback",
-        { userId: selectedItem._id, feedback },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-        },
-      );
-      if (res.ok) {
-        toast.success("Feedback sent to stakeholder");
-        setSelectedItem({ ...selectedItem, adminFeedback: feedback });
-      } else {
-        toast.error("Failed to send feedback");
-      }
-    } catch (err) {
-      toast.error("Network error");
     }
   };
 
@@ -1595,7 +1740,7 @@ export default function AdminOnboarding() {
                     { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
                   ]}
                   activeTab={activeTab}
-                  onChange={setActiveTab}
+                  onChange={handleTabChange}
                   className="px-4 pt-3 space-x-6"
                 />
               </CardHeader>
@@ -2103,7 +2248,6 @@ export default function AdminOnboarding() {
                   <button
                     onClick={() => {
                       setSelectedItem(null);
-                      setFeedback("");
                     }}
                     className="flex h-10 w-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-all hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
                     aria-label="Close application review"
@@ -2233,28 +2377,11 @@ export default function AdminOnboarding() {
                     )}
                   </div>
 
-                  {/* Admin Feedback Section */}
+                  {/* Quick Decision Buttons */}
                   <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
-                      Admin Feedback / Query
+                      Scrutiny Decision Desk
                     </h3>
-                    <div className="space-y-4">
-                      <textarea
-                        value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Type feedback..."
-                        className="h-24 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#12335f]"
-                      />
-                      <Button
-                        onClick={handleSendFeedback}
-                        className="h-10 w-full rounded-md bg-[#12335f] text-[10px] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
-                      >
-                        Send Message
-                      </Button>
-                    </div>
-                  </div>
-                  {/* Quick Status Buttons */}
-                  <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <Button
                       onClick={() =>
                         handleUpdateStatus(
@@ -2265,32 +2392,31 @@ export default function AdminOnboarding() {
                       disabled={
                         selectedItem.onboardingStatus === "approved_for_procurement"
                       }
-                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445]"
+                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all shadow-xs"
                     >
                       <CheckCircle className="h-5 w-5" />
                       <span>Approve Organization</span>
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        handleUpdateStatus(
-                          selectedItem._id,
-                          "resubmission_required",
-                        )
-                      }
-                      disabled={selectedItem.status === "resubmission_required"}
-                      className="h-12 w-full rounded-md border-amber-300 bg-white font-bold uppercase tracking-wide text-amber-700 hover:bg-amber-50"
+                      onClick={() => {
+                        setCorrectionReason("");
+                        setIsCorrectionModalOpen(true);
+                      }}
+                      disabled={selectedItem.onboardingStatus === "resubmission_required"}
+                      className="h-12 w-full rounded-md border-amber-300 bg-white font-bold uppercase tracking-wide text-amber-700 hover:bg-amber-50 transition-all"
                     >
                       <AlertTriangle className="h-5 w-5" />
                       <span>Request Correction</span>
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        handleUpdateStatus(selectedItem._id, "rejected")
-                      }
+                      onClick={() => {
+                        setAppRejectReason("");
+                        setIsAppRejectModalOpen(true);
+                      }}
                       disabled={selectedItem.onboardingStatus === "rejected"}
-                      className="h-12 w-full rounded-md border-red-300 bg-white font-bold uppercase tracking-wide text-red-700 hover:bg-red-50"
+                      className="h-12 w-full rounded-md border-red-300 bg-white font-bold uppercase tracking-wide text-red-700 hover:bg-red-50 transition-all"
                     >
                       <XCircle className="h-5 w-5" />
                       <span>Reject Application</span>
@@ -2695,18 +2821,71 @@ export default function AdminOnboarding() {
                                     const fileName = getDocumentFileName(file, `${label} Document`);
                                     const uploadedAt = getDocumentUploadedAt(file);
                                     const cardKey = `${key}-${index}-${file?.fileId || file?.url || fileName}`;
+                                    const reasons = (selectedItem.sectionRejectionReasons as Record<string, string>) || {};
+                                    const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                    const normLabel = label.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                                    let docRejectionReason: string | null = null;
+                                    for (const [rKey, rVal] of Object.entries(reasons)) {
+                                      const normR = rKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                      if (normR === normKey || normR === normLabel) {
+                                        docRejectionReason = String(rVal);
+                                        break;
+                                      }
+                                    }
+                                    if (!docRejectionReason) {
+                                      if (normKey.includes('pan') && (reasons.pan || reasons.panCard || reasons.pan_copy || reasons.PAN_COPY)) {
+                                        docRejectionReason = String(reasons.pan || reasons.panCard || reasons.pan_copy || reasons.PAN_COPY);
+                                      } else if (normKey.includes('gst') && (reasons.gst || reasons.gstCert || reasons.gst_certificate || reasons.GST_CERTIFICATE)) {
+                                        docRejectionReason = String(reasons.gst || reasons.gstCert || reasons.gst_certificate || reasons.GST_CERTIFICATE);
+                                      } else if (normKey.includes('reg') && (reasons.regCert || reasons.cin || reasons.registration_certificate || reasons.REGISTRATION_CERTIFICATE)) {
+                                        docRejectionReason = String(reasons.regCert || reasons.cin || reasons.registration_certificate || reasons.REGISTRATION_CERTIFICATE);
+                                      } else if (normKey.includes('address') && (reasons.addressProof || reasons.address_proof || reasons.ADDRESS_PROOF)) {
+                                        docRejectionReason = String(reasons.addressProof || reasons.address_proof || reasons.ADDRESS_PROOF);
+                                      } else if (normKey.includes('auth') && (reasons.authLetter || reasons.authorization_letter || reasons.AUTHORIZATION_LETTER)) {
+                                        docRejectionReason = String(reasons.authLetter || reasons.authorization_letter || reasons.AUTHORIZATION_LETTER);
+                                      }
+                                    }
+
+                                     const isReupload = Boolean(docRejectionReason) && (selectedItem.sectionStatus?.docs === 'resubmission_required' || selectedItem.onboardingStatus === 'resubmission_required');
+                                     const isApproved = selectedItem.sectionStatus?.docs === 'approved';
+                                     const isRejected = selectedItem.sectionStatus?.docs === 'rejected';
+
                                     return (
                                       <div
                                         key={cardKey}
-                                        className="p-4 bg-slate-50 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between"
+                                        className={cn(
+                                          "p-4 rounded-xl border space-y-2 flex flex-col justify-between transition-all",
+                                          isReupload
+                                            ? "bg-amber-50/40 border-amber-300 ring-1 ring-amber-300/60 shadow-xs"
+                                            : "bg-slate-50 border-slate-100"
+                                        )}
                                       >
                                         <div>
                                           <div className="flex items-center justify-between gap-2.5 sm:gap-3">
                                             <span className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
                                               {label}
                                             </span>
-                                            <Badge variant="default" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[9px] font-bold px-1.5 py-0.5">
-                                              VERIFIED
+                                            <Badge
+                                              variant="default"
+                                              className={cn(
+                                                "text-[9px] font-bold px-1.5 py-0.5",
+                                                isReupload
+                                                  ? "bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse"
+                                                  : isApproved
+                                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                                    : isRejected
+                                                      ? "bg-red-50 text-red-700 border-red-200"
+                                                      : "bg-blue-50 text-blue-700 border-blue-200"
+                                              )}
+                                            >
+                                              {isReupload
+                                                ? "RE-UPLOAD REQUESTED"
+                                                : isApproved
+                                                  ? "VERIFIED"
+                                                  : isRejected
+                                                    ? "REJECTED"
+                                                    : "PENDING REVIEW"}
                                             </Badge>
                                           </div>
                                           <p className="text-xs font-bold text-slate-700 mt-1 line-clamp-1" title={fileName}>
@@ -2717,14 +2896,34 @@ export default function AdminOnboarding() {
                                               Uploaded: {formatDate(uploadedAt)}
                                             </p>
                                           )}
+                                          {docRejectionReason && (
+                                            <div className="mt-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[10px] text-amber-900">
+                                              <span className="font-extrabold uppercase tracking-wider block text-amber-800 text-[8px]">
+                                                Defect / Re-upload Note:
+                                              </span>
+                                              <span className="font-semibold text-amber-950 block mt-0.5">{docRejectionReason}</span>
+                                            </div>
+                                          )}
                                         </div>
-                                        <div className="pt-2 border-t border-slate-100 mt-2">
+                                        <div className="pt-2 border-t border-slate-100 mt-2 flex items-center justify-between gap-2">
                                           <button
                                             type="button"
                                             onClick={() => handleViewDocument({ fileId: file?.fileId, url: getDocumentUrl(file) }, label)}
                                             className="text-xs font-bold text-[#12335f] hover:underline inline-flex items-center gap-1"
                                           >
                                             <Eye className="h-3 w-3" /> View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenDocRequestModal(key, label)}
+                                            className={cn(
+                                              "text-[10px] font-bold inline-flex items-center gap-1 rounded px-2 py-1 border transition-colors shadow-2xs",
+                                              isReupload
+                                                ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
+                                                : "text-amber-700 hover:text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                                            )}
+                                          >
+                                            <AlertTriangle className="h-3 w-3" /> {isReupload ? "Update Request" : "Request Re-upload"}
                                           </button>
                                         </div>
                                       </div>
@@ -2818,7 +3017,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Logo</span>
                             {selectedItem.profile?.logoUrl ? (
                               <div className="border rounded-xl p-3 bg-white flex items-center justify-center h-24 w-24">
-                                <img src={resolveMediaUrl(selectedItem.profile.logoUrl) || ''} alt="Logo" className="max-h-full max-w-full object-contain" />
+                                <img src={resolveMediaUrl(selectedItem.profile.logoUrl) || undefined} alt="Logo" className="max-h-full max-w-full object-contain" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No logo uploaded</p>
@@ -2828,7 +3027,7 @@ export default function AdminOnboarding() {
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">Showcase Banner</span>
                             {selectedItem.profile?.bannerUrl ? (
                               <div className="border rounded-xl bg-slate-50 overflow-hidden h-24 w-full">
-                                <img src={resolveMediaUrl(selectedItem.profile.bannerUrl) || ''} alt="Banner" className="w-full h-full object-cover" />
+                                <img src={resolveMediaUrl(selectedItem.profile.bannerUrl) || undefined} alt="Banner" className="w-full h-full object-cover" />
                               </div>
                             ) : (
                               <p className="text-[10px] font-bold text-slate-400 uppercase italic">No banner uploaded</p>
@@ -3410,14 +3609,37 @@ export default function AdminOnboarding() {
                               {sellerDocuments.length > 0 ? (
                                 sellerDocuments.map((doc: any) => {
                                   const file = doc.fileAsset;
-                                  if (!file) return null;
                                   const fileName = getDocumentFileName(file, `${doc.documentType || "Document"} File`);
                                   const uploadedAt = doc.uploadedAt || getDocumentUploadedAt(file);
                                   const status = doc.verificationStatus || "PENDING";
+
+                                  const reasons = (selectedItem.sectionRejectionReasons as Record<string, string>) || {};
+                                  const normDocType = (doc.documentType || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                                  let sellerDocRejectionReason: string | null = doc.remarks || null;
+                                  if (!sellerDocRejectionReason) {
+                                    for (const [rKey, rVal] of Object.entries(reasons)) {
+                                      if (rKey.toLowerCase().replace(/[^a-z0-9]/g, "") === normDocType) {
+                                        sellerDocRejectionReason = String(rVal);
+                                        break;
+                                      }
+                                    }
+                                  }
+
+                                  const isSellerReupload =
+                                    (status === "REJECTED" || Boolean(sellerDocRejectionReason)) &&
+                                    (selectedItem.sectionStatus?.documents === "resubmission_required" ||
+                                      selectedItem.onboardingStatus === "resubmission_required");
+
                                   return (
                                     <div
                                       key={doc.id}
-                                      className="h-full min-w-0 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 flex flex-col justify-between transition-all hover:bg-slate-50 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                                      className={cn(
+                                        "h-full min-w-0 rounded-xl border p-4 flex flex-col justify-between transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]",
+                                        isSellerReupload
+                                          ? "bg-amber-50/40 border-amber-300 ring-1 ring-amber-300/60 shadow-xs"
+                                          : "bg-slate-50/70 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
+                                      )}
                                     >
                                       <div className="space-y-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2 min-w-0 pb-0.5">
@@ -3431,14 +3653,22 @@ export default function AdminOnboarding() {
                                             variant="default"
                                             className={cn(
                                               "shrink-0 text-[9px] font-bold px-2 py-0.5 whitespace-nowrap",
-                                              status === "APPROVED"
-                                                ? "bg-green-50 text-green-700 border-green-200"
-                                                : status === "REJECTED"
-                                                  ? "bg-red-50 text-red-700 border-red-200"
-                                                  : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                              isSellerReupload
+                                                ? "bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse"
+                                                : status === "APPROVED"
+                                                  ? "bg-green-50 text-green-700 border-green-200"
+                                                  : status === "REJECTED"
+                                                    ? "bg-red-50 text-red-700 border-red-200"
+                                                    : "bg-yellow-50 text-yellow-700 border-yellow-200"
                                             )}
                                           >
-                                            {status}
+                                            {isSellerReupload
+                                              ? "RE-UPLOAD REQUESTED"
+                                              : status === "APPROVED"
+                                                ? "VERIFIED"
+                                                : status === "REJECTED"
+                                                  ? "REJECTED"
+                                                  : "PENDING REVIEW"}
                                           </Badge>
                                         </div>
                                         <p
@@ -3452,7 +3682,17 @@ export default function AdminOnboarding() {
                                             Uploaded: {formatDate(uploadedAt)}
                                           </p>
                                         )}
-                                        {doc.remarks && (
+                                        {sellerDocRejectionReason && (
+                                          <div className="mt-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[10px] text-amber-900">
+                                            <span className="font-extrabold uppercase tracking-wider block text-amber-800 text-[8px]">
+                                              Defect / Re-upload Note:
+                                            </span>
+                                            <span className="font-semibold text-amber-950 block mt-0.5 break-words">
+                                              {sellerDocRejectionReason}
+                                            </span>
+                                          </div>
+                                        )}
+                                        {!sellerDocRejectionReason && doc.remarks && (
                                           <p
                                             className="text-[10px] text-slate-500 mt-1 italic truncate"
                                             title={doc.remarks}
@@ -3461,7 +3701,7 @@ export default function AdminOnboarding() {
                                           </p>
                                         )}
                                       </div>
-                                      <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between">
+                                      <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between gap-2">
                                         <button
                                           type="button"
                                           onClick={() => handleViewDocument(file, doc.documentType)}
@@ -3470,6 +3710,19 @@ export default function AdminOnboarding() {
                                         >
                                           <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                           <span>View Document</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenDocRequestModal(doc.documentType, doc.documentType)}
+                                          className={cn(
+                                            "text-[10px] font-bold inline-flex items-center gap-1 rounded px-2 py-1 border transition-colors shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+                                            isSellerReupload
+                                              ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
+                                              : "text-amber-700 hover:text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                                          )}
+                                        >
+                                          <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                          <span>{isSellerReupload ? "Update Request" : "Request Re-upload"}</span>
                                         </button>
                                       </div>
                                     </div>
@@ -3483,15 +3736,36 @@ export default function AdminOnboarding() {
                                   const documentFiles = getDocumentFiles(url).filter(getDocumentUrl);
                                   if (documentFiles.length === 0) return null;
                                   const label = getDocumentLabel(key);
+                                  const reasons = (selectedItem.sectionRejectionReasons as Record<string, string>) || {};
+                                  const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+                                  let docRejectionReason: string | null = null;
+                                  for (const [rKey, rVal] of Object.entries(reasons)) {
+                                    if (rKey.toLowerCase().replace(/[^a-z0-9]/g, "") === normKey) {
+                                      docRejectionReason = String(rVal);
+                                      break;
+                                    }
+                                  }
+
+                                  const isReupload =
+                                    Boolean(docRejectionReason) &&
+                                    (selectedItem.sectionStatus?.documents === "resubmission_required" ||
+                                      selectedItem.onboardingStatus === "resubmission_required");
+
                                   return documentFiles.map((file: any, index: number) => {
                                     const fileName = getDocumentFileName(file, `${label} Document`);
                                     const uploadedAt = getDocumentUploadedAt(file);
                                     const cardKey = `legacy-${key}-${index}-${file?.fileId || file?.url || fileName}`;
-                                    const status = "PENDING";
+                                    const status = isReupload ? "RE-UPLOAD REQUESTED" : "PENDING";
                                     return (
                                       <div
                                         key={cardKey}
-                                        className="h-full min-w-0 rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 flex flex-col justify-between transition-all hover:bg-slate-50 hover:border-slate-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
+                                        className={cn(
+                                          "h-full min-w-0 rounded-xl border p-4 flex flex-col justify-between transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]",
+                                          isReupload
+                                            ? "bg-amber-50/40 border-amber-300 ring-1 ring-amber-300/60 shadow-xs"
+                                            : "bg-slate-50/70 border-slate-200/80 hover:bg-slate-50 hover:border-slate-300"
+                                        )}
                                       >
                                         <div className="space-y-1 min-w-0">
                                           <div className="flex items-start justify-between gap-2 min-w-0 pb-0.5">
@@ -3503,7 +3777,12 @@ export default function AdminOnboarding() {
                                             </span>
                                             <Badge
                                               variant="default"
-                                              className="shrink-0 text-[9px] font-bold px-2 py-0.5 whitespace-nowrap bg-yellow-50 text-yellow-700 border-yellow-200"
+                                              className={cn(
+                                                "shrink-0 text-[9px] font-bold px-2 py-0.5 whitespace-nowrap",
+                                                isReupload
+                                                  ? "bg-amber-100 text-amber-900 border-amber-300 font-extrabold animate-pulse"
+                                                  : "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                              )}
                                             >
                                               {status}
                                             </Badge>
@@ -3519,8 +3798,18 @@ export default function AdminOnboarding() {
                                               Uploaded: {formatDate(uploadedAt)}
                                             </p>
                                           )}
+                                          {docRejectionReason && (
+                                            <div className="mt-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[10px] text-amber-900">
+                                              <span className="font-extrabold uppercase tracking-wider block text-amber-800 text-[8px]">
+                                                Defect / Re-upload Note:
+                                              </span>
+                                              <span className="font-semibold text-amber-950 block mt-0.5 break-words">
+                                                {docRejectionReason}
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
-                                        <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between">
+                                        <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between gap-2">
                                           <button
                                             type="button"
                                             onClick={() =>
@@ -3536,6 +3825,19 @@ export default function AdminOnboarding() {
                                             <span>
                                               View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
                                             </span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenDocRequestModal(key, label)}
+                                            className={cn(
+                                              "text-[10px] font-bold inline-flex items-center gap-1 rounded px-2 py-1 border transition-colors shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500",
+                                              isReupload
+                                                ? "bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200"
+                                                : "text-amber-700 hover:text-amber-800 bg-amber-50 border-amber-200 hover:bg-amber-100"
+                                            )}
+                                          >
+                                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                            <span>{isReupload ? "Update Request" : "Request Re-upload"}</span>
                                           </button>
                                         </div>
                                       </div>
@@ -3638,113 +3940,421 @@ export default function AdminOnboarding() {
       )}
       {/* COMPLIANCE OVERRIDE MODAL */}
       {isOverrideModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <FocusTrap active onEscape={() => {
+          setIsOverrideModalOpen(false);
+          setOverrideReason("");
+        }}>
           <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
-            onClick={() => {
-              setIsOverrideModalOpen(false);
-              setOverrideReason("");
-            }}
-          />
-          <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-300 animate-pulse" />
-                <div className="space-y-0.5">
-                  <h3 className="text-base font-extrabold uppercase tracking-tight">
-                    Compliance Override Required
-                  </h3>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
-                    Admin Approval Authorization
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsOverrideModalOpen(false);
-                  setOverrideReason("");
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="space-y-5 p-6 max-h-[75vh] overflow-y-auto">
-              <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="override-modal-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                setIsOverrideModalOpen(false);
+                setOverrideReason("");
+              }}
+            />
+            <div className="relative w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-700" />
-                  <p className="text-xs font-bold text-amber-900">
-                    Open Compliance Warnings Detected
-                  </p>
-                </div>
-                <p className="text-xs font-medium leading-relaxed text-slate-600">
-                  This profile has active compliance violations. Approving this organization requires providing a justification to log the override.
-                </p>
-
-                {/* List of violations */}
-                {selectedItem?.complianceViolations && selectedItem.complianceViolations.length > 0 && (
-                  <div className="mt-2 space-y-2 max-h-40 overflow-y-auto pr-1">
-                    {selectedItem.complianceViolations.map((flag: any) => (
-                      <div key={flag.id || flag._id} className="rounded-md border border-amber-200 bg-white p-2.5 shadow-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-[#12335f]">
-                            {flag.type?.replace(/_/g, " ")}
-                          </p>
-                          <span className={cn(
-                            "rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
-                            flag.severity === "critical" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"
-                          )}>
-                            {flag.severity}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-[11px] font-semibold text-slate-600">
-                          {flag.description}
-                        </p>
-                      </div>
-                    ))}
+                  <AlertTriangle className="h-5 w-5 text-amber-300 animate-pulse" aria-hidden="true" />
+                  <div className="space-y-0.5">
+                    <h3 id="override-modal-title" className="text-base font-extrabold uppercase tracking-tight">
+                      Compliance Override Required
+                    </h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
+                      Admin Approval Authorization
+                    </p>
                   </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  Admin Override Reason
-                </label>
-                <textarea
-                  value={overrideReason}
-                  onChange={(e) => setOverrideReason(e.target.value)}
-                  placeholder="Explain why this profile is being approved despite compliance flags (e.g., Verified physical documents, verified alternate business representation...)"
-                  className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
-                  autoFocus
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col space-y-3 pt-2">
-                <Button
-                  onClick={() => handleUpdateStatus(selectedItem._id, "approved_for_procurement", overrideReason)}
-                  disabled={!overrideReason.trim()}
-                  className="h-11 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all"
-                >
-                  Confirm Override Approval
-                </Button>
-                <Button
-                  variant="outline"
+                </div>
+                <button
                   onClick={() => {
                     setIsOverrideModalOpen(false);
                     setOverrideReason("");
                   }}
-                  className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  aria-label="Close dialog"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
                 >
-                  Cancel
-                </Button>
+                  <X className="h-5 w-5" aria-hidden="true" />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="space-y-5 p-6 max-h-[75vh] overflow-y-auto">
+                <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-700" aria-hidden="true" />
+                    <p className="text-xs font-bold text-amber-900">
+                      Open Compliance Warnings Detected
+                    </p>
+                  </div>
+                  <p className="text-xs font-medium leading-relaxed text-slate-600">
+                    This profile has active compliance violations. Approving this organization requires providing a justification to log the override.
+                  </p>
+
+                  {/* List of violations */}
+                  {selectedItem?.complianceViolations && selectedItem.complianceViolations.length > 0 && (
+                    <div className="mt-2 space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {selectedItem.complianceViolations.map((flag: any) => (
+                        <div key={flag.id || flag._id} className="rounded-md border border-amber-200 bg-white p-2.5 shadow-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-[#12335f]">
+                              {flag.type?.replace(/_/g, " ")}
+                            </p>
+                            <span className={cn(
+                              "rounded px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider",
+                              flag.severity === "critical" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"
+                            )}>
+                              {flag.severity}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[11px] font-semibold text-slate-600">
+                            {flag.description}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="admin-override-reason" className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Admin Override Reason
+                  </label>
+                  <textarea
+                    id="admin-override-reason"
+                    value={overrideReason}
+                    onChange={(e) => setOverrideReason(e.target.value)}
+                    placeholder="Explain why this profile is being approved despite compliance flags (e.g., Verified physical documents, verified alternate business representation...)"
+                    className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col space-y-3 pt-2">
+                  <Button
+                    onClick={() => handleUpdateStatus(selectedItem._id, "approved_for_procurement", overrideReason)}
+                    disabled={!overrideReason.trim()}
+                    className="h-11 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all"
+                  >
+                    Confirm Override Approval
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsOverrideModalOpen(false);
+                      setOverrideReason("");
+                    }}
+                    className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </FocusTrap>
+      )}
+      {/* DOCUMENT RE-UPLOAD REQUEST MODAL */}
+      {isDocRequestModalOpen && docRequestTarget && (
+        <FocusTrap active onEscape={() => {
+          setIsDocRequestModalOpen(false);
+          setDocRequestReason("");
+        }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="doc-request-modal-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                setIsDocRequestModalOpen(false);
+                setDocRequestReason("");
+              }}
+            />
+            <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-300" aria-hidden="true" />
+                  <div className="space-y-0.5">
+                    <h3 id="doc-request-modal-title" className="text-base font-extrabold uppercase tracking-tight">
+                      Request Document Re-upload
+                    </h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-200">
+                      Document: {docRequestTarget.label}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsDocRequestModalOpen(false);
+                    setDocRequestReason("");
+                  }}
+                  aria-label="Close dialog"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <p className="text-xs font-medium leading-relaxed text-slate-600">
+                  Specify what is wrong with this document and what the stakeholder needs to provide (e.g., blurry image, expired document, wrong file). Only this document will be unlocked for re-upload.
+                </p>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="doc-request-reason-textarea" className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Defect / Correction Reason
+                  </label>
+                  <textarea
+                    id="doc-request-reason-textarea"
+                    value={docRequestReason}
+                    onChange={(e) => setDocRequestReason(e.target.value)}
+                    placeholder="e.g., The PAN card image is blurry. Please upload a clear color scan."
+                    className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    maxLength={1000}
+                    autoFocus
+                  />
+                  <div className="flex justify-end text-[10px] text-slate-400">
+                    {docRequestReason.length}/1000
+                  </div>
+                </div>
+
+                <div className="flex flex-col space-y-2 pt-2">
+                  <Button
+                    onClick={handleConfirmDocRequest}
+                    disabled={isSubmittingDocRequest || docRequestReason.trim().length < 3}
+                    className="h-11 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all"
+                  >
+                    {isSubmittingDocRequest ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending Request...
+                      </>
+                    ) : (
+                      "Send Re-upload Request"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDocRequestModalOpen(false);
+                      setDocRequestReason("");
+                    }}
+                    className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </FocusTrap>
+      )}
+
+      {/* APPLICATION CORRECTION MODAL */}
+      {isCorrectionModalOpen && (
+        <FocusTrap active onEscape={() => {
+          setIsCorrectionModalOpen(false);
+          setCorrectionReason("");
+        }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="app-correction-modal-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                setIsCorrectionModalOpen(false);
+                setCorrectionReason("");
+              }}
+            />
+            <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-amber-700 px-6 py-4 text-white">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-200" aria-hidden="true" />
+                  <div className="space-y-0.5">
+                    <h3 id="app-correction-modal-title" className="text-base font-extrabold uppercase tracking-tight">
+                      Request Application Correction
+                    </h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-amber-100">
+                      Overall Onboarding Resubmission
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsCorrectionModalOpen(false);
+                    setCorrectionReason("");
+                  }}
+                  aria-label="Close dialog"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <p className="text-xs font-medium leading-relaxed text-slate-600">
+                  Specify what corrections are required across the application. The stakeholder will be notified and their application status will transition to Resubmission Required.
+                </p>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="app-correction-reason-textarea" className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Correction Instructions / Remarks
+                  </label>
+                  <textarea
+                    id="app-correction-reason-textarea"
+                    value={correctionReason}
+                    onChange={(e) => setCorrectionReason(e.target.value)}
+                    placeholder="e.g., Business address does not match certificate; please update and re-upload supporting utility bill."
+                    className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-600/20"
+                    maxLength={1000}
+                    autoFocus
+                  />
+                  <div className="flex justify-end text-[10px] text-slate-400">
+                    {correctionReason.length}/1000
+                  </div>
+                </div>
+
+                <div className="flex flex-col space-y-2 pt-2">
+                  <Button
+                    onClick={handleConfirmCorrection}
+                    disabled={isSubmittingCorrection || correctionReason.trim().length < 3}
+                    className="h-11 w-full rounded-md bg-amber-700 font-bold uppercase tracking-wide text-white hover:bg-amber-800 transition-all"
+                  >
+                    {isSubmittingCorrection ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit Correction Request"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsCorrectionModalOpen(false);
+                      setCorrectionReason("");
+                    }}
+                    className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </FocusTrap>
+      )}
+
+      {/* APPLICATION REJECTION MODAL */}
+      {isAppRejectModalOpen && (
+        <FocusTrap active onEscape={() => {
+          setIsAppRejectModalOpen(false);
+          setAppRejectReason("");
+        }}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="app-reject-modal-title"
+            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                setIsAppRejectModalOpen(false);
+                setAppRejectReason("");
+              }}
+            />
+            <div className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-red-800 px-6 py-4 text-white">
+                <div className="flex items-center gap-2">
+                  <XCircle className="h-5 w-5 text-red-200" aria-hidden="true" />
+                  <div className="space-y-0.5">
+                    <h3 id="app-reject-modal-title" className="text-base font-extrabold uppercase tracking-tight">
+                      Reject Application
+                    </h3>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-red-100">
+                      Final Scrutiny Decision
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsAppRejectModalOpen(false);
+                    setAppRejectReason("");
+                  }}
+                  aria-label="Close dialog"
+                  className="flex h-8 w-8 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20"
+                >
+                  <X className="h-4 w-4" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <p className="text-xs font-medium leading-relaxed text-slate-600">
+                  Please provide the official reason for rejecting this onboarding application. This will be recorded in the audit log and communicated to the applicant.
+                </p>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="app-reject-reason-textarea" className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Official Rejection Reason
+                  </label>
+                  <textarea
+                    id="app-reject-reason-textarea"
+                    value={appRejectReason}
+                    onChange={(e) => setAppRejectReason(e.target.value)}
+                    placeholder="e.g., Entity does not meet eligibility criteria / Inauthentic documentation detected."
+                    className="h-28 w-full resize-none rounded-lg border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:border-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/20"
+                    maxLength={1000}
+                    autoFocus
+                  />
+                  <div className="flex justify-end text-[10px] text-slate-400">
+                    {appRejectReason.length}/1000
+                  </div>
+                </div>
+
+                <div className="flex flex-col space-y-2 pt-2">
+                  <Button
+                    onClick={handleConfirmAppRejection}
+                    disabled={isSubmittingAppReject || appRejectReason.trim().length < 3}
+                    className="h-11 w-full rounded-md bg-red-700 font-bold uppercase tracking-wide text-white hover:bg-red-800 transition-all"
+                  >
+                    {isSubmittingAppReject ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Rejecting...
+                      </>
+                    ) : (
+                      "Confirm Rejection"
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsAppRejectModalOpen(false);
+                      setAppRejectReason("");
+                    }}
+                    className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </FocusTrap>
       )}
       {Boolean(previewDocument) && (
         <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />

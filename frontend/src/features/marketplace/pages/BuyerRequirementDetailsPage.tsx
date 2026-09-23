@@ -20,7 +20,8 @@ import {
   Info,
   Clipboard,
   Truck,
-  Lock
+  Lock,
+  Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BuyerRequirementDetailSkeleton } from '@/components/ui/skeleton';
@@ -60,10 +61,6 @@ const formatOrgType = (type?: string | null) => {
     PRIVATE_LIMITED: 'Private Limited',
     PUBLIC_LIMITED: 'Public Limited',
     LLP: 'LLP',
-    TRUST: 'Trust',
-    SOCIETY: 'Society',
-    NGO: 'NGO',
-    EDUCATIONAL_INSTITUTION: 'Educational Institution',
     GOVERNMENT: 'Government',
     PSU: 'PSU',
     SHG: 'SHG',
@@ -659,8 +656,25 @@ const BuyerRequirementDetailsPage = () => {
                   {actionLabel}
                 </a>
               ) : ownResponse ? (
-                <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" /> You have already submitted a response (Status: {ownResponse.status})
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-6 text-sm font-bold text-emerald-800 cursor-not-allowed opacity-90 shadow-2xs"
+                  >
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    Quotation Submitted ({ownResponse.status || 'SUBMITTED'})
+                  </button>
+                  {detailRoute && (
+                    <a
+                      href={detailRoute}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition"
+                    >
+                      <Eye className="h-4 w-4 text-slate-500" />
+                      View Details
+                    </a>
+                  )}
                 </div>
               ) : isClosed ? (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">

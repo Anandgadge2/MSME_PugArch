@@ -1,19 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { api } from '../lib/api';
+import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { openFileAsset } from '../lib/files';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
-import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
+import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORY_OTHER } from '../constants/dropdowns';
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { isShgBusinessType, isShgUser } from '../lib/shg';
@@ -51,9 +51,8 @@ const shouldShowSubmissionOverlay = (userRecord: any, profileRecord: any) => {
 
 const shouldLockSellerProfile = (userRecord: any, profileRecord: any) => {
   const status = getProfileStatus(userRecord, profileRecord).toLowerCase();
-  if (status === 'resubmission_required') return false;
   if (userRecord?.sectionStatus?.submitted === true) return true;
-  return ['approved_for_procurement', 'approved', 'verified'].includes(status);
+  return ['approved_for_procurement', 'approved', 'verified', 'under_compliance_review', 'resubmission_required', 'rejected'].includes(status);
 };
 
 const SELLER_SAVED_SECTIONS_KEY_PREFIX = 'seller-onboarding-saved-sections';
@@ -281,6 +280,35 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const [additionalErrors, setAdditionalErrors] = useState<Record<string, string>>({});
   const [panErrors, setPanErrors] = useState<Record<string, string>>({});
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({});
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          const valid = cats
+            .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+            .filter(c => Boolean(c.name))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCategoriesList(valid);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories from database:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const addCustomCategory = async () => {
@@ -1546,6 +1574,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
         />
 
         <div className="p-3 sm:p-4 max-w-4xl mx-auto w-full">
+          {user?.adminFeedback && (
+            <div className="mb-4 rounded-xl border border-amber-200/90 bg-amber-50/90 p-4 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 text-amber-900">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-700" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">
+                  Registration Scrutiny Desk Remark / Feedback
+                </h4>
+              </div>
+              <p className="mt-1.5 text-xs font-medium text-slate-800 leading-relaxed pl-6">
+                {user.adminFeedback}
+              </p>
+            </div>
+          )}
+
           <Card className="rounded-2xl border border-gray-200/80 bg-white shadow-sm overflow-hidden">
             <div className="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
               <h3 className="text-base font-bold uppercase tracking-tight text-gray-800">
@@ -1762,11 +1804,14 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
 
                       {/* MSME Type */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                        <label htmlFor="seller-msme-type" className="block text-xs font-bold text-gray-700 mb-1">
                           MSME Type <span className="text-red-500 font-bold">*</span>
                         </label>
                         <select
+                          id="seller-msme-type"
                           value={formData.msmeType || ''}
+                          aria-invalid={!!additionalErrors.msmeType}
+                          aria-describedby={additionalErrors.msmeType ? "seller-msme-type-err" : undefined}
                           onChange={(e) => {
                             setFormData((prev: any) => ({ ...prev, msmeType: e.target.value }));
                             setAdditionalErrors((prev: any) => {
@@ -1781,17 +1826,20 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           {MSME_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                         {additionalErrors.msmeType && (
-                          <p className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.msmeType}</p>
+                          <p id="seller-msme-type-err" role="alert" className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.msmeType}</p>
                         )}
                       </div>
 
                       {/* Vendor Type */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                        <label htmlFor="seller-vendor-type" className="block text-xs font-bold text-gray-700 mb-1">
                           Vendor Type <span className="text-red-500 font-bold">*</span>
                         </label>
                         <select
+                          id="seller-vendor-type"
                           value={formData.vendorType || ''}
+                          aria-invalid={!!additionalErrors.vendorType}
+                          aria-describedby={additionalErrors.vendorType ? "seller-vendor-type-err" : undefined}
                           onChange={(e) => {
                             setFormData((prev: any) => ({ ...prev, vendorType: e.target.value }));
                             setAdditionalErrors((prev: any) => {
@@ -1806,17 +1854,18 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           {VENDOR_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                         </select>
                         {additionalErrors.vendorType && (
-                          <p className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.vendorType}</p>
+                          <p id="seller-vendor-type-err" role="alert" className="text-xs font-semibold text-red-600 pl-1 min-w-0 w-full sm:w-auto">{additionalErrors.vendorType}</p>
                         )}
                       </div>
 
                       {/* Product Categories (Multi-select tag list) */}
                       <div className="space-y-2">
-                        <label className="block text-xs font-bold text-gray-700 mb-1">
+                        <label htmlFor="seller-product-categories" className="block text-xs font-bold text-gray-700 mb-1">
                           Product Categories <span className="text-red-500 font-bold">*</span>
                         </label>
                         <p className="text-xs text-gray-500 font-medium mb-1.5">Select the categories of products or services you provide.</p>
                         <select
+                          id="seller-product-categories"
                           value=""
                           onChange={(e) => {
                             const val = e.target.value;
@@ -1838,10 +1887,10 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           }}
                           className={`w-full h-12 bg-white rounded-xl border text-sm px-4 shadow-sm focus:outline-none focus:ring-1 ${additionalErrors.productCategories ? 'border-red-400 focus:ring-red-500' : 'border-gray-300/80 focus:ring-[#12335f]'}`}
                         >
-                          <option value="">Select Categories</option>
-                          {PRODUCT_CATEGORIES
-                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat))
-                            .map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                          <option value="">{loadingCategories ? 'Loading categories...' : 'Select Categories'}</option>
+                          {categoriesList
+                            .filter(cat => !(Array.isArray(formData.productCategories) ? formData.productCategories : []).includes(cat.name))
+                            .map(cat => <option key={cat.id || cat.name} value={cat.name}>{cat.name}</option>)}
                           <option value={PRODUCT_CATEGORY_OTHER}>Other (type your own)</option>
                         </select>
 
@@ -1849,6 +1898,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center mt-2 min-w-0 w-full sm:w-auto">
                             <input
                               type="text"
+                              aria-label="Custom product category name"
                               value={customCategory}
                               onChange={(e) => setCustomCategory(e.target.value)}
                               onKeyDown={(e) => {
@@ -1998,30 +2048,55 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         <div className="pt-4 space-y-6 animate-in fade-in">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Name <span className="text-red-500 font-bold">*</span></label>
-                              <input value={officeForm.name} onChange={(e) => updateOfficeForm('name', e.target.value)} placeholder="Enter Office Name" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.name ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-                              {officeErrors.name && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.name}</p>}
+                              <label htmlFor="office-name" className="block text-xs font-bold text-gray-700 mb-1">Office Name <span className="text-red-500 font-bold">*</span></label>
+                              <input
+                                id="office-name"
+                                value={officeForm.name}
+                                onChange={(e) => updateOfficeForm('name', e.target.value)}
+                                placeholder="Enter Office Name"
+                                aria-invalid={!!officeErrors.name}
+                                aria-describedby={officeErrors.name ? "office-name-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.name ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              />
+                              {officeErrors.name && <p id="office-name-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{officeErrors.name}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Type Of Office <span className="text-red-500 font-bold">*</span></label>
-                              <select value={officeForm.type} onChange={(e) => updateOfficeForm('type', e.target.value)} className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white text-gray-500 ${officeErrors.type ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}>
+                              <label htmlFor="office-type" className="block text-xs font-bold text-gray-700 mb-1">Type Of Office <span className="text-red-500 font-bold">*</span></label>
+                              <select
+                                id="office-type"
+                                value={officeForm.type}
+                                onChange={(e) => updateOfficeForm('type', e.target.value)}
+                                aria-invalid={!!officeErrors.type}
+                                aria-describedby={officeErrors.type ? "office-type-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white text-gray-500 ${officeErrors.type ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              >
                                 <option value="">Select type of address</option>
                                 <option value="Registered">Registered Office</option>
                                 <option value="Branch">Branch</option>
                                 <option value="Warehouse">Warehouse</option>
                               </select>
-                              {officeErrors.type && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.type}</p>}
+                              {officeErrors.type && <p id="office-type-err" role="alert" className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.type}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Pincode <span className="text-red-500 font-bold">*</span></label>
-                              <input value={officeForm.pincode} onChange={(e) => updateOfficeForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Enter 6 digit pincode" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.pincode ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-                              {officeErrors.pincode && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.pincode}</p>}
+                              <label htmlFor="office-pincode" className="block text-xs font-bold text-gray-700 mb-1">Pincode <span className="text-red-500 font-bold">*</span></label>
+                              <input
+                                id="office-pincode"
+                                value={officeForm.pincode}
+                                onChange={(e) => updateOfficeForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                placeholder="Enter 6 digit pincode"
+                                aria-invalid={!!officeErrors.pincode}
+                                aria-describedby={officeErrors.pincode ? "office-pincode-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.pincode ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              />
+                              {officeErrors.pincode && <p id="office-pincode-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{officeErrors.pincode}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">State <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-office-state" className="block text-xs font-bold text-gray-700 mb-1">State <span className="text-red-500 font-bold">*</span></label>
                               <select
                                 id="new-office-state"
                                 value={officeForm.state}
+                                aria-invalid={!!officeErrors.state}
+                                aria-describedby={officeErrors.state ? "office-state-err" : undefined}
                                 onChange={(e) => {
                                   const next = { ...officeForm, state: e.target.value, city: '' };
                                   setOfficeForm(next);
@@ -2034,14 +2109,16 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   <option key={st} value={st}>{st}</option>
                                 ))}
                               </select>
-                              {officeErrors.state && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.state}</p>}
+                              {officeErrors.state && <p id="office-state-err" role="alert" className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.state}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Town/City/District <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-office-city" className="block text-xs font-bold text-gray-700 mb-1">Town/City/District <span className="text-red-500 font-bold">*</span></label>
                               <select
                                 id="new-office-city"
                                 value={officeForm.city}
                                 disabled={!officeForm.state}
+                                aria-invalid={!!officeErrors.city}
+                                aria-describedby={officeErrors.city ? "office-city-err" : undefined}
                                 onChange={(e) => updateOfficeForm('city', e.target.value)}
                                 className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white disabled:opacity-60 disabled:bg-gray-50 ${officeErrors.city ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               >
@@ -2050,34 +2127,71 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   <option key={dist} value={dist}>{dist}</option>
                                 ))}
                               </select>
-                              {officeErrors.city && <p className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.city}</p>}
+                              {officeErrors.city && <p id="office-city-err" role="alert" className="mt-1 text-xs font-medium text-red-600 min-w-0 w-full sm:w-auto">{officeErrors.city}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No <span className="text-red-500 font-bold">*</span></label>
-                              <input value={officeForm.flat} onChange={(e) => updateOfficeForm('flat', e.target.value)} placeholder="Enter Flat/Door/Block number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.flat ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-                              {officeErrors.flat && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.flat}</p>}
+                              <label htmlFor="office-flat" className="block text-xs font-bold text-gray-700 mb-1">Flat/Door/Block No <span className="text-red-500 font-bold">*</span></label>
+                              <input
+                                id="office-flat"
+                                value={officeForm.flat}
+                                onChange={(e) => updateOfficeForm('flat', e.target.value)}
+                                placeholder="Enter Flat/Door/Block number"
+                                aria-invalid={!!officeErrors.flat}
+                                aria-describedby={officeErrors.flat ? "office-flat-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.flat ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              />
+                              {officeErrors.flat && <p id="office-flat-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{officeErrors.flat}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Name of Premises/ Building/ Village</label>
-                              <input value={officeForm.premises} onChange={(e) => updateOfficeForm('premises', e.target.value)} placeholder="Enter Building/Premises/Village" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]" />
+                              <label htmlFor="office-premises" className="block text-xs font-bold text-gray-700 mb-1">Name of Premises/ Building/ Village</label>
+                              <input
+                                id="office-premises"
+                                value={officeForm.premises}
+                                onChange={(e) => updateOfficeForm('premises', e.target.value)}
+                                placeholder="Enter Building/Premises/Village"
+                                className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                              />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Road/Street/Post Office</label>
-                              <input value={officeForm.road} onChange={(e) => updateOfficeForm('road', e.target.value)} placeholder="Enter Road/Street/Post Office" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]" />
+                              <label htmlFor="office-road" className="block text-xs font-bold text-gray-700 mb-1">Road/Street/Post Office</label>
+                              <input
+                                id="office-road"
+                                value={officeForm.road}
+                                onChange={(e) => updateOfficeForm('road', e.target.value)}
+                                placeholder="Enter Road/Street/Post Office"
+                                className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                              />
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Area/Locality <span className="text-red-500 font-bold">*</span></label>
-                              <input value={officeForm.area} onChange={(e) => updateOfficeForm('area', e.target.value)} placeholder="Enter Area/Locality" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.area ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-                              {officeErrors.area && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.area}</p>}
+                              <label htmlFor="office-area" className="block text-xs font-bold text-gray-700 mb-1">Area/Locality <span className="text-red-500 font-bold">*</span></label>
+                              <input
+                                id="office-area"
+                                value={officeForm.area}
+                                onChange={(e) => updateOfficeForm('area', e.target.value)}
+                                placeholder="Enter Area/Locality"
+                                aria-invalid={!!officeErrors.area}
+                                aria-describedby={officeErrors.area ? "office-area-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.area ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              />
+                              {officeErrors.area && <p id="office-area-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{officeErrors.area}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Contact Number <span className="text-red-500 font-bold">*</span> <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
-                              <input value={officeForm.contact} onChange={(e) => updateOfficeForm('contact', sanitizeIndianMobileInput(e.target.value))} inputMode="numeric" maxLength={10} placeholder="Enter Contact Number" className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`} />
-
-                              {officeErrors.contact && <p className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
+                              <label htmlFor="office-contact" className="block text-xs font-bold text-gray-700 mb-1">Contact Number <span className="text-red-500 font-bold">*</span> <span className="text-gray-400 font-normal ml-1">ⓘ</span></label>
+                              <input
+                                id="office-contact"
+                                value={officeForm.contact}
+                                onChange={(e) => updateOfficeForm('contact', sanitizeIndianMobileInput(e.target.value))}
+                                inputMode="numeric"
+                                maxLength={10}
+                                placeholder="Enter Contact Number"
+                                aria-invalid={!!officeErrors.contact}
+                                aria-describedby={officeErrors.contact ? "office-contact-err" : undefined}
+                                className={`w-full h-12 px-4 rounded border text-sm focus:outline-none focus:ring-1 bg-white ${officeErrors.contact ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
+                              />
+                              {officeErrors.contact && <p id="office-contact-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{officeErrors.contact}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Office Email Address <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-office-email" className="block text-xs font-bold text-gray-700 mb-1">Office Email Address <span className="text-red-500 font-bold">*</span></label>
                               <select id="new-office-email" className="w-full h-12 px-4 rounded border border-gray-300 bg-white text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f] text-gray-500">
                                 <option value={user?.email || "registered@example.com"}>{user?.email || "registered@example.com"}</option>
                               </select>
@@ -2156,79 +2270,91 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         <div className="pt-4 space-y-6 animate-in fade-in">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">IFSC Code <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-bank-ifsc" className="block text-xs font-bold text-gray-700 mb-1">IFSC Code <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-ifsc"
                                 value={newBank.ifsc}
                                 onChange={(event) => updateNewBank('ifsc', event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11))}
                                 onBlur={handleIfscBlur}
                                 placeholder="Enter IFSC Code"
+                                aria-invalid={!!bankErrors.ifsc}
+                                aria-describedby={bankErrors.ifsc ? "new-bank-ifsc-err" : undefined}
                                 className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.ifsc ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
-                              {bankErrors.ifsc && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.ifsc}</p>}
+                              {bankErrors.ifsc && <p id="new-bank-ifsc-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.ifsc}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Name <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-bank-name" className="block text-xs font-bold text-gray-700 mb-1">Bank Name <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-name"
                                 value={newBank.bankName}
                                 onChange={(event) => updateNewBank('bankName', event.target.value.slice(0, 100))}
                                 placeholder="Bank Name"
+                                aria-invalid={!!bankErrors.bankName}
+                                aria-describedby={bankErrors.bankName ? "new-bank-name-err" : undefined}
                                 className={`w-full h-12 px-4 rounded border bg-gray-100 text-sm focus:outline-none focus:ring-1 ${bankErrors.bankName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
-                              {bankErrors.bankName && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankName}</p>}
+                              {bankErrors.bankName && <p id="new-bank-name-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankName}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Address <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-bank-address" className="block text-xs font-bold text-gray-700 mb-1">Bank Address <span className="text-red-500 font-bold">*</span></label>
                               <textarea
                                 id="new-bank-address"
                                 value={newBank.bankAddress}
                                 onChange={(event) => updateNewBank('bankAddress', event.target.value.slice(0, 250))}
                                 placeholder="Bank Address"
+                                aria-invalid={!!bankErrors.bankAddress}
+                                aria-describedby={bankErrors.bankAddress ? "new-bank-address-err" : undefined}
                                 className={`w-full h-24 p-4 rounded border bg-gray-100 text-sm resize-none focus:outline-none focus:ring-1 ${bankErrors.bankAddress ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
-                              {bankErrors.bankAddress && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankAddress}</p>}
+                              {bankErrors.bankAddress && <p id="new-bank-address-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.bankAddress}</p>}
                             </div>
                             <div className="space-y-6">
                               <div>
-                                <label className="block text-xs font-bold text-gray-700 mb-1">Account Holder Name <span className="text-red-500 font-bold">*</span></label>
+                                <label htmlFor="new-bank-holder" className="block text-xs font-bold text-gray-700 mb-1">Account Holder Name <span className="text-red-500 font-bold">*</span></label>
                                 <input
                                   id="new-bank-holder"
                                   value={newBank.holderName}
                                   onChange={(event) => updateNewBank('holderName', sanitizePersonNameInput(event.target.value))}
                                   placeholder="Enter Account Holder's Name"
+                                  aria-invalid={!!bankErrors.holderName}
+                                  aria-describedby={bankErrors.holderName ? "new-bank-holder-err" : undefined}
                                   className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.holderName ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                                 />
-                                {bankErrors.holderName && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.holderName}</p>}
+                                {bankErrors.holderName && <p id="new-bank-holder-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.holderName}</p>}
                               </div>
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Bank Account No <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-bank-number" className="block text-xs font-bold text-gray-700 mb-1">Bank Account No <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-number"
                                 value={newBank.accountNumber}
                                 onChange={(event) => updateNewBank('accountNumber', event.target.value.replace(/\D/g, '').slice(0, 18))}
                                 inputMode="numeric"
                                 placeholder="Enter Bank account number"
+                                aria-invalid={!!bankErrors.accountNumber}
+                                aria-describedby={bankErrors.accountNumber ? "new-bank-number-err" : undefined}
                                 className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.accountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
-                              {bankErrors.accountNumber && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.accountNumber}</p>}
+                              {bankErrors.accountNumber && <p id="new-bank-number-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.accountNumber}</p>}
                             </div>
                             <div>
-                              <label className="block text-xs font-bold text-gray-700 mb-1">Confirm Bank Account No <span className="text-red-500 font-bold">*</span></label>
+                              <label htmlFor="new-bank-confirm" className="block text-xs font-bold text-gray-700 mb-1">Confirm Bank Account No <span className="text-red-500 font-bold">*</span></label>
                               <input
                                 id="new-bank-confirm"
                                 value={newBank.confirmAccountNumber}
                                 onChange={(event) => updateNewBank('confirmAccountNumber', event.target.value.replace(/\D/g, '').slice(0, 18))}
                                 inputMode="numeric"
                                 placeholder="Confirm Bank account number"
+                                aria-invalid={!!bankErrors.confirmAccountNumber}
+                                aria-describedby={bankErrors.confirmAccountNumber ? "new-bank-confirm-err" : undefined}
                                 className={`w-full h-12 px-4 rounded border bg-gray-50/50 text-sm focus:outline-none focus:ring-1 ${bankErrors.confirmAccountNumber ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-[#12335f]'}`}
                               />
-                              {bankErrors.confirmAccountNumber && <p className="mt-1 text-xs font-medium text-red-600">{bankErrors.confirmAccountNumber}</p>}
+                              {bankErrors.confirmAccountNumber && <p id="new-bank-confirm-err" role="alert" className="mt-1 text-xs font-medium text-red-600">{bankErrors.confirmAccountNumber}</p>}
                             </div>
                           </div>
 
-                          <label className="flex items-center gap-2 mt-4 cursor-pointer">
+                          <label htmlFor="new-bank-primary" className="flex items-center gap-2 mt-4 cursor-pointer">
                             <input
                               id="new-bank-primary"
                               type="checkbox"
@@ -2240,7 +2366,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             <span className="text-sm font-medium text-gray-700">Is Primary Account?</span>
                           </label>
                           {normalizeList(formData.bankAccounts).length === 0 && <p className="text-xs font-medium text-[#12335f]">First bank account will be saved as the primary account.</p>}
-                          {bankErrors.isPrimary && <p className="text-xs font-medium text-red-600">{bankErrors.isPrimary}</p>}
+                          {bankErrors.isPrimary && <p id="new-bank-primary-err" role="alert" className="text-xs font-medium text-red-600">{bankErrors.isPrimary}</p>}
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mt-8 pt-6 border-t border-gray-100">
                             <p className="text-sm font-medium text-gray-800 mb-4 sm:mb-0">{editingBankId ? 'Complete validation to update the bank account' : 'Complete validation to add a new bank account'}</p>
                             <Button onClick={() => {
@@ -2364,7 +2490,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                   )}
 
                                   {/* Upload Action */}
-                                  {(!isProfileLocked || currentSection === 'documents' || isHerShg) && (
+                                  {(!isProfileLocked || status === 'REJECTED' || Boolean(remarks)) ? (
                                     <label className="relative cursor-pointer">
                                       <input
                                         type="file"
@@ -2390,16 +2516,25 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                         )}
                                       </span>
                                     </label>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+                                      <Lock className="h-3.5 w-3.5 text-slate-400" /> Locked & Verified
+                                    </span>
                                   )}
                                 </div>
                               </div>
 
-                              {/* Rejection Remarks */}
-                              {status === 'REJECTED' && remarks && (
-                                <div className="mt-3 p-3 bg-red-50/50 border border-red-100 rounded-lg flex items-start gap-2 text-xs text-red-800 animate-in fade-in duration-200">
-                                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                              {/* Correction / Rejection Remarks */}
+                              {Boolean(remarks) && (
+                                <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2.5 text-xs text-amber-900 animate-in fade-in duration-200">
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                                   <div>
-                                    <span className="font-bold">Rejection Reason:</span> {remarks}
+                                    <span className="font-extrabold text-[10px] uppercase tracking-wider text-amber-800 block">
+                                      Correction Requested by Admin
+                                    </span>
+                                    <span className="text-xs font-semibold text-amber-950 mt-0.5 block">
+                                      {remarks}
+                                    </span>
                                   </div>
                                 </div>
                               )}

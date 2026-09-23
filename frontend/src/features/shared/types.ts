@@ -43,6 +43,8 @@ export type PurchaseOrderDto = {
   items?: Array<{ itemName?: string; quantity?: number; unitPrice?: number | string; totalAmount?: number | string }>;
   deliveryTrackings?: DeliveryTrackingDto[];
   invoices?: Array<{ id: number; invoiceNumber: string; status?: string; amount?: number | string }>;
+  grns?: Array<{ id: number; grnNumber?: string; status?: string; createdAt?: string }>;
+  grnId?: number;
 };
 
 export type DeliveryTrackingDto = {

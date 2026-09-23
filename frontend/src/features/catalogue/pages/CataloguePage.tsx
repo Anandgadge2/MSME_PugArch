@@ -567,7 +567,10 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   };
 
   const sellerApproved = mode !== 'seller' || isProcurementApproved(user?.onboardingStatus);
-  const buyerApproved = mode !== 'buyer' || isProcurementApproved(user?.onboardingStatus);
+  const buyerApproved = mode !== 'buyer' ||
+    isProcurementApproved(user?.onboardingStatus) ||
+    Boolean((user as any)?.buyerProfile?.verificationStatusEnum === 'VERIFIED' || (user as any)?.buyerProfile?.verificationStatus === 'VERIFIED') ||
+    Boolean((user as any)?.organization?.verificationStatus === 'VERIFIED');
   const buyerProcurementLocked = mode === 'buyer' && !buyerApproved;
 
   const productsRef = useRef<CatalogueRecord[]>([]);

@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useActiveCart, useAddToCart, useUpdateCartItem, useRemoveCartItem } from '../../cart/hooks';
 import { removeCartItem, addItemToCart, fetchActiveCart, type CartDto } from '../../cart/api';
@@ -35,6 +36,7 @@ export function useMarketplaceCart() {
     const addToCartMut = useAddToCart();
     const updateCartItemMut = useUpdateCartItem();
     const removeCartItemMut = useRemoveCartItem();
+    const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
 
     if (isBuyer) {
         const dbItems = activeCartQuery.data?.items || [];
@@ -59,13 +61,14 @@ export function useMarketplaceCart() {
         const count = mappedItems.reduce((sum, item) => sum + item.quantity, 0);
 
         const getQuantity = (itemId: number, type: 'product' | 'service') => {
-            return mappedItems.find(i => i.id === itemId && i.type === type)?.quantity || 0;
+            return mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type)?.quantity || 0;
         };
 
         const add = (
             item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'>,
             options?: { source?: string; showToast?: boolean }
         ) => {
+            const itemKey = `${item.type}-${item.id}`;
             addToCartMut.mutate(
                 {
                     productId: item.type === 'product' ? item.id : undefined,
@@ -76,12 +79,28 @@ export function useMarketplaceCart() {
                     unitOfMeasure: item.unit
                 },
                 {
-                    onSuccess: () => {
+                    onSuccess: (createdCart: any) => {
+                        const pendingQty = pendingUpdatesRef.current.get(itemKey);
+                        pendingUpdatesRef.current.delete(itemKey);
                         if (options?.showToast !== false) {
                             toast.success(`${item.name} added to cart`);
                         }
+                        if (pendingQty !== undefined) {
+                            const dbItem = createdCart?.items?.find((i: any) =>
+                                (item.type === 'product' && i.productId === item.id) ||
+                                (item.type === 'service' && i.serviceId === item.id)
+                            );
+                            if (dbItem && dbItem.id > 0) {
+                                if (pendingQty <= 0) {
+                                    removeCartItemMut.mutate(dbItem.id);
+                                } else if (pendingQty !== Number(dbItem.quantity)) {
+                                    updateCartItemMut.mutate({ id: dbItem.id, quantity: pendingQty });
+                                }
+                            }
+                        }
                     },
                     onError: (err: any) => {
+                        pendingUpdatesRef.current.delete(itemKey);
                         toast.error(err?.message || `Failed to add ${item.name} to cart`);
                     }
                 }
@@ -97,8 +116,10 @@ export function useMarketplaceCart() {
         };
 
         const update = (itemId: number, type: 'product' | 'service', qty: number) => {
-            const mappedItem = mappedItems.find(i => i.id === itemId && i.type === type);
+            const mappedItem = mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type);
             if (!mappedItem) return;
+
+            const itemKey = `${type}-${itemId}`;
 
             if (qty <= 0) {
                 remove(itemId, type);
@@ -106,7 +127,25 @@ export function useMarketplaceCart() {
             }
 
             if (mappedItem.dbCartItemId) {
-                if (mappedItem.dbCartItemId < 0) return; // Ignore updates on optimistic items
+                if (mappedItem.dbCartItemId < 0) {
+                    // Item is optimistic (add request in flight).
+                    // Update cache immediately and save pending target quantity.
+                    pendingUpdatesRef.current.set(itemKey, qty);
+                    qc.setQueryData<CartDto>(['cart', 'active'], (old) => {
+                        if (!old) return old;
+                        return {
+                            ...old,
+                            items: old.items.map(i => {
+                                const isTarget = (type === 'product' && i.productId === itemId) ||
+                                                 (type === 'service' && i.serviceId === itemId) ||
+                                                 i.id === mappedItem.dbCartItemId;
+                                return isTarget ? { ...i, quantity: qty } : i;
+                            })
+                        };
+                    });
+                    return;
+                }
+
                 updateCartItemMut.mutate(
                     { id: mappedItem.dbCartItemId, quantity: qty },
                     {
@@ -119,9 +158,25 @@ export function useMarketplaceCart() {
         };
 
         const remove = (itemId: number, type: 'product' | 'service') => {
-            const mappedItem = mappedItems.find(i => i.id === itemId && i.type === type);
+            const mappedItem = mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type);
+            const itemKey = `${type}-${itemId}`;
             if (mappedItem?.dbCartItemId) {
-                if (mappedItem.dbCartItemId < 0) return; // Ignore deletions on optimistic items
+                if (mappedItem.dbCartItemId < 0) {
+                    pendingUpdatesRef.current.set(itemKey, 0);
+                    qc.setQueryData<CartDto>(['cart', 'active'], (old) => {
+                        if (!old) return old;
+                        return {
+                            ...old,
+                            items: old.items.filter(i => {
+                                const isTarget = (type === 'product' && i.productId === itemId) ||
+                                                 (type === 'service' && i.serviceId === itemId) ||
+                                                 i.id === mappedItem.dbCartItemId;
+                                return !isTarget;
+                            })
+                        };
+                    });
+                    return;
+                }
                 removeCartItemMut.mutate(mappedItem.dbCartItemId, {
                     onSuccess: () => {
                         toast.info(`${mappedItem.name} removed from cart`);
@@ -225,7 +280,7 @@ export function useMarketplaceCart() {
     }));
 
     const getQuantity = (itemId: number, type: 'product' | 'service') => {
-        return guestCart.items.find(i => i.id === itemId && i.type === type)?.quantity || 0;
+        return guestCart.items.find(i => Number(i.id) === Number(itemId) && i.type === type)?.quantity || 0;
     };
 
     const guestAdd = (

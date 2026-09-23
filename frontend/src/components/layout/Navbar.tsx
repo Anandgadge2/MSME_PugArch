@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { api, unwrapApiData, readJsonResponse, BASE_URL } from '../../lib/api';
+import { COOKIE_SESSION_TOKEN } from '../../lib/auth';
 import { formatDateTime } from '../../features/shared/format';
 import {
   AlertTriangle,
@@ -36,6 +37,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BarChart3,
+  FileCheck,
   FileSearch,
   Info,
   Check,
@@ -122,7 +124,6 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/messages': () => import('../../features/messages/pages/MessagesPage'),
   '/buyer/procurement': () => import('../../features/procurement/pages/BuyerProcurementHub'),
   '/buyer/my-procurements': () => import('../../features/procurement/pages/MyProcurementsPage'),
-  '/buyer/procurement/responses': () => import('../../features/procurement/pages/SupplierResponsesPage'),
   '/buyer/procurement/checkout': () => import('../../features/procurementCheckoutV2/pages/ProcurementCheckoutPage'),
   '/buyer/direct-purchase/orders': () => import('../../features/directPurchase/pages/DirectPurchasePage'),
   '/buyer/address-book': () => import('../../features/directPurchase/pages/AddressBookPage'),
@@ -203,7 +204,6 @@ const HIGH_PRIORITY_PREFETCH_ROUTES = [
 const ALL_MENU_PATHS = [
   '/buyer/procurement/create',
   '/buyer/procurement/drafts',
-  '/buyer/procurement/responses',
   '/buyer/procurement/approvals',
   '/seller/procurement/events',
   '/orders/delivery-confirmation',
@@ -215,7 +215,11 @@ const ALL_MENU_PATHS = [
 const isSidebarRouteActive = (targetPath: string | undefined, pathname?: string | null, currentPathWithQuery?: string) => {
   if (!targetPath || !pathname) return false;
   const [targetBase] = targetPath.split('?');
-  if (targetPath.includes('?')) return currentPathWithQuery === targetPath;
+  if (targetPath.includes('?')) {
+    if (currentPathWithQuery === targetPath) return true;
+    if (targetBase === '/seller/procurement/events' && pathname === targetBase) return true;
+    return false;
+  }
   if (targetBase === '/orders') return pathname === '/orders' || pathname === '/seller/orders' || pathname === '/buyer/orders';
 
   // Prevent parent routes (e.g. /buyer/procurement) from matching active when a distinct sub-item menu path is current
@@ -312,8 +316,15 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
   const active = children.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery));
 
   if (!children.length) {
+    const isOpportunities = item.label === 'Opportunities' || item.path?.includes('/opportunities');
     return item.path ? (
-      <SidebarNavLink item={item} isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)} isCollapsed={isCollapsed} onClose={onClose} count={counts?.[item.path]} />
+      <SidebarNavLink
+        item={item}
+        isActive={isSidebarRouteActive(item.path, pathname, currentPathWithQuery)}
+        isCollapsed={isCollapsed}
+        onClose={onClose}
+        count={isOpportunities ? undefined : counts?.[item.path]}
+      />
     ) : null;
   }
 
@@ -358,7 +369,7 @@ import { getResolvedOrgName } from '../../utils/organizationUtils';
 export { getResolvedOrgName };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, token, loading, logout } = useAuth();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const isShgAccount = isShgUser(user);
@@ -374,17 +385,47 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const [isHovered, setIsHovered] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // When collapsed, hovering over the sidebar smoothly opens/expands it
+  const effectivelyCollapsed = isCollapsed && !isHovered;
+
+  // Reset hover state immediately when route changes
+  useEffect(() => {
+    setIsHovered(false);
+  }, [pathname]);
 
   useEffect(() => {
     onHoverChange?.(isHovered);
   }, [isHovered, onHoverChange]);
 
-  const effectivelyCollapsed = isCollapsed && !isHovered;
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(true);
+    }, 60);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setIsHovered(false);
+    }, 120);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
+  const isAuthenticatedSeller = Boolean(!loading && token && user && (user?.role === 'seller' || user?.role === 'shg' || isShgAccount));
 
   const { data: countsData } = useQuery({
     queryKey: ['navigation-counts'],
     queryFn: async () => {
       const res = await api.get('/api/navigation/summary');
+      if (!res.ok) return {} as Record<string, number>;
       const body = await readJsonResponse(res);
       const data = unwrapApiData(body);
       if (!data) return {} as Record<string, number>;
@@ -396,8 +437,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       const auctionsCount = Number(data.auctionsCount || 0);
       const rateContractsCount = Number(data.rateContractsCount || 0);
 
-      const allCount = rfqsCount + rfpsCount + openTendersCount + invitationsCount + auctionsCount + rateContractsCount;
-
       return {
         '/seller/opportunities/rfqs': rfqsCount,
         '/seller/opportunities/rfps': rfpsCount,
@@ -405,7 +444,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/seller/opportunities/invitations': invitationsCount,
         '/seller/opportunities/auctions': auctionsCount,
         '/seller/opportunities/rate-contracts': rateContractsCount,
-        '/shg/opportunities': allCount,
         '/shg/opportunities/rfqs': rfqsCount,
         '/shg/opportunities/rfps': rfpsCount,
         '/shg/opportunities/open-tenders': openTendersCount,
@@ -414,9 +452,10 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         '/shg/opportunities/rate-contracts': rateContractsCount
       };
     },
-    enabled: user?.role === 'seller' || user?.role === 'shg' || isShgAccount,
+    enabled: isAuthenticatedSeller,
     staleTime: 60000,
-    refetchInterval: 60000,
+    refetchInterval: isAuthenticatedSeller ? 60000 : false,
+    retry: false
   });
 
   const counts = countsData || {};
@@ -480,16 +519,18 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Email Setup', path: '/master-admin/email', icon: Mail, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Audit Logs', path: '/master-admin/audit', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
       { label: 'Stakeholder Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
       { label: 'Tender Approvals', path: '/admin/bids', icon: FileText, roles: ['admin'], featureCode: 'admin-bid-approval' },
-      { label: 'Final Award Approvals', path: '/admin/procurement-orders', icon: Trophy, roles: ['admin'] },
+      { label: 'Final Award Approvals', path: '/admin/bids', icon: Trophy, roles: ['admin'] },
     ] },
     { label: 'Monitoring', icon: FileSearch, roles: ['admin'], children: [
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
       { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
+      { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ] },
     { label: 'Marketplace & Content', icon: ShoppingCart, roles: ['admin'], children: [
       { label: 'Catalogue Moderation', path: '/admin/catalogue-moderation', icon: ShoppingCart, roles: ['admin'] },
@@ -512,8 +553,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
       { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
       { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
-      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
-      { label: 'Supplier Responses', path: '/buyer/procurement/responses', icon: FileText, roles: ['buyer'], permission: 'requirement.view' }
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' }
     ] },
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [
@@ -553,7 +593,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Orders', icon: Truck, roles: ['seller'], children: [
       { label: 'Purchase Orders', path: '/orders', icon: ShoppingCart, roles: ['seller'], permission: 'purchase_order.view' },
       { label: 'Goods Receipt Note', path: '/grn', icon: ClipboardCheck, roles: ['seller'], permission: 'grn.view' },
-      { label: 'Repeat Orders', path: '/orders/repeat', icon: RotateCcw, roles: ['seller'], permission: 'purchase_order.view' },
       { label: 'Delivery Management', path: '/seller/delivery-management', icon: Truck, roles: ['seller'], permission: 'delivery.view' }
     ] },
     // Seller Marketplace
@@ -572,7 +611,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Seller Administration
     { label: 'Administration', icon: Settings, roles: ['seller', 'shg'], children: [
       { label: 'Team & Roles', path: '/org/team', icon: UserPlus, roles: ['seller', 'shg'], permission: 'team.member.view' },
-      { label: 'Settings', path: '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
+      { label: 'Settings', path: isShgAccount ? '/shg/settings' : '/seller/settings', icon: Settings, roles: ['seller', 'shg'], permission: 'organization.view' }
     ] },
     // Seller Disputes
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
@@ -580,7 +619,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Common items
     { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
     { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
-    { label: 'Disputes', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'], permission: 'dispute.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -589,6 +627,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
     const hasRole = item.roles.includes(user.role)
+      || (user.role === 'master_admin' && item.roles.includes('admin'))
       || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {
@@ -672,6 +711,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {/* Mobile Overlay */}
       {isOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
@@ -680,8 +720,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       <aside
         ref={sidebarRef}
         aria-label="Main Navigation"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         className={cn(
           "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
           effectivelyCollapsed ? "w-64 lg:w-20" : "w-64",
@@ -779,7 +819,7 @@ interface HeaderProps {
 }
 
 export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: HeaderProps) {
-  const { user, token: authToken, logout, login } = useAuth();
+  const { user, token: authToken, loading: authLoading, logout, login } = useAuth();
   const { count: cartCount } = useMarketplaceCart();
   const { orgStatus } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
@@ -894,7 +934,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   useEffect(() => {
     const fetchNotifications = async () => {
-      if (!authToken) return;
+      if (authLoading || !user || !authToken) return;
       try {
         const res = await api.fetch('/api/notifications', {
           headers: { Authorization: `Bearer ${authToken}` }
@@ -904,22 +944,37 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           const body = unwrapApiData<any>(data);
           const items = Array.isArray(body) ? body : body?.notifications || body?.records || body?.items || [];
           setNotifications(Array.isArray(items) ? items : []);
+        } else if (res.status === 401) {
+          setNotifications([]);
         }
       } catch {
         setNotifications([]);
       }
     };
-    fetchNotifications();
+    if (!authLoading && user && authToken) {
+      fetchNotifications();
+    }
     const handleUpdate = () => { void fetchNotifications(); };
     window.addEventListener('notifications:updated', handleUpdate);
-    return () => window.removeEventListener('notifications:updated', handleUpdate);
-  }, [authToken]);
+    const pollTimer = setInterval(() => {
+      if (!authLoading && user && authToken) {
+        void fetchNotifications();
+      }
+    }, 30000);
+    return () => {
+      clearInterval(pollTimer);
+      window.removeEventListener('notifications:updated', handleUpdate);
+    };
+  }, [authToken, user, authLoading]);
 
   useEffect(() => {
-    if (!authToken) return;
+    if (authLoading || !user || !authToken) return;
 
     const baseUrl = BASE_URL;
-    const streamUrl = `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`;
+    const isRealToken = authToken && authToken !== COOKIE_SESSION_TOKEN && authToken !== 'cookie-session';
+    const streamUrl = isRealToken
+      ? `${baseUrl}/api/notifications/stream?token=${encodeURIComponent(authToken)}`
+      : `${baseUrl}/api/notifications/stream`;
 
     let eventSource: EventSource | null = null;
     let retryTimeout: NodeJS.Timeout | null = null;
@@ -928,6 +983,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
     const scheduleReconnect = () => {
       if (disposed || retryTimeout) return;
+      if (!isRealToken || retryCount >= 2) return;
       const delay = Math.min(30000, 1000 * (2 ** retryCount));
       retryCount += 1;
       retryTimeout = setTimeout(() => {
@@ -937,7 +993,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     };
 
     const connectStream = () => {
-      if (disposed || retryCount > 5) return;
+      if (disposed || retryCount >= 2) return;
       try {
         eventSource?.close();
         eventSource = new EventSource(streamUrl, { withCredentials: true });
@@ -969,14 +1025,19 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
         eventSource.addEventListener('error', (err) => {
           if (disposed) return;
-          console.warn('[SSE] EventSource connection error. Reconnecting with backoff...', err);
           eventSource?.close();
           eventSource = null;
+          if (!isRealToken || retryCount >= 1) {
+            console.info('[SSE] Notification stream unavailable; notifications synchronized via polling.');
+            return;
+          }
           scheduleReconnect();
         });
       } catch (err) {
-        console.error('[SSE] Failed to initialize EventSource:', err);
-        scheduleReconnect();
+        if (isRealToken) {
+          console.error('[SSE] Failed to initialize EventSource:', err);
+          scheduleReconnect();
+        }
       }
     };
 
@@ -1079,7 +1140,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
   const openNotification = async (item: PortalNotification) => {
     if (!item.isRead) await markNotificationAsRead(item.id);
-    router.push(routeForNotification(item, user?.role));
+    router.push(routeForNotification(item, user?.role, user));
     setIsNotificationsOpen(false);
   };
 
@@ -1299,11 +1360,6 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 </span>
                 <span className="text-[9px] font-black text-[#12335f] uppercase tracking-widest opacity-80 flex items-center gap-1 leading-tight">
                   {displayRole}
-                  {orgName && (
-                    <span className="text-slate-400 font-semibold truncate max-w-[100px] normal-case" title={orgName}>
-                      • {orgName}
-                    </span>
-                  )}
                   <ChevronDown className="h-2.5 w-2.5 shrink-0 transition-transform duration-200" style={{ transform: isProfileDropdownOpen ? 'rotate(180deg)' : 'none' }} />
                 </span>
               </div>
@@ -1311,27 +1367,31 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
             {isProfileDropdownOpen && (
               <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
-                {/* Organization & User identity card */}
-                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/80">
-                  {orgName ? (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-500">
-                        <Building2 className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
-                        <span className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">Organization</span>
+                {/* User & Organization identity card */}
+                <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/60">
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-black text-slate-900 leading-snug">
+                      {user?.name || 'User'}
+                    </p>
+                    {user?.email && (
+                      <p className="text-xs font-semibold text-slate-500 break-all leading-normal" title={user.email}>
+                        {user.email}
+                      </p>
+                    )}
+                  </div>
+
+                  {orgName && (
+                    <div className="mt-2.5 rounded-xl border border-slate-200/80 bg-white p-2.5 shadow-3xs">
+                      <div className="flex items-center gap-1.5 text-slate-500 mb-0.5">
+                        <Building2 className="h-3 w-3 text-[#12335f] shrink-0" />
+                        <span className="text-[9px] font-black uppercase tracking-wider text-[#12335f]">Organization</span>
                       </div>
-                      <p className="text-xs font-black text-slate-900 leading-snug break-words" title={orgName}>
+                      <p className="text-xs font-bold text-slate-800 break-words leading-tight" title={orgName}>
                         {orgName}
                       </p>
-                      <p className="text-[11px] text-slate-600 font-medium truncate pt-0.5">
-                        {user?.name} {user?.email ? <span className="text-slate-400">({user.email})</span> : null}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-0.5">
-                      <p className="text-xs font-black text-slate-900 truncate">{user?.name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
                     </div>
                   )}
+
                   <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-[#12335f] text-white shadow-2xs">
                       {displayRole}
@@ -1364,61 +1424,52 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                 <button
                   onClick={() => {
                     setIsProfileDropdownOpen(false);
-                    router.push('/profile');
+                    if (user?.role === 'buyer') {
+                      router.push('/buyer/profile');
+                    } else if (user?.role === 'seller') {
+                      if (isShgUser(user)) {
+                        router.push('/shg/settings');
+                      } else {
+                        router.push('/seller/settings');
+                      }
+                    } else if (user?.role === 'shg') {
+                      router.push('/shg/settings');
+                    } else if (user?.role === 'master_admin') {
+                      router.push('/master-admin/settings');
+                    } else {
+                      router.push('/profile');
+                    }
                   }}
                   className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-[#12335f] transition-colors flex items-center gap-2 cursor-pointer"
                 >
                   <UserIcon className="h-4 w-4 text-slate-400" />
-                  My Profile & Organization Details
+                  My Profile
                 </button>
 
-                {/* DUAL ROLE SWITCHER / ACTIVATION */}
-                {(user?.role === 'buyer' || user?.role === 'seller') && (
+                {/* DUAL ROLE SWITCHER (Only shown if other profile already exists; activation hidden for now) */}
+                {(user?.role === 'buyer' || user?.role === 'seller') && (user?.role === 'seller' ? !!user?.buyerProfile : !!user?.sellerProfile) && (
                   <>
                     <div className="h-px bg-slate-100 my-1" />
-                    {(user?.role === 'seller' ? !!user?.buyerProfile : !!user?.sellerProfile) ? (
-                      <button
-                        onClick={() => {
-                          setIsProfileDropdownOpen(false);
-                          handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
-                        }}
-                        disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        {user.role === 'seller' ? (
-                          <>
-                            <Building2 className="h-4 w-4 text-indigo-500" />
-                            {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
-                          </>
-                        ) : (
-                          <>
-                            <Store className="h-4 w-4 text-indigo-500" />
-                            {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
-                          </>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setIsProfileDropdownOpen(false);
-                          setPendingActivateRole(user?.role === 'seller' ? 'buyer' : 'seller');
-                        }}
-                        disabled={Boolean(roleAction)}
-                        className="w-full text-left px-4 py-2.5 text-xs font-black text-amber-700 hover:bg-amber-50 hover:text-amber-800 transition-colors flex items-center gap-2 cursor-pointer"
-                      >
-                        {user?.role === 'seller' ? (
-                          <>
-                            <Building2 className="h-4 w-4 text-amber-600" />
-                            {roleAction === 'buyer' ? 'Activating Buyer...' : 'Activate Buyer Profile'}
-                          </>
-                        ) : (
-                          <>
-                            <Store className="h-4 w-4 text-amber-600" />
-                            {roleAction === 'seller' ? 'Activating Seller...' : 'Activate Seller Profile'}
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => {
+                        setIsProfileDropdownOpen(false);
+                        handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
+                      }}
+                      disabled={Boolean(roleAction)}
+                      className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
+                    >
+                      {user.role === 'seller' ? (
+                        <>
+                          <Building2 className="h-4 w-4 text-indigo-500" />
+                          {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
+                        </>
+                      ) : (
+                        <>
+                          <Store className="h-4 w-4 text-indigo-500" />
+                          {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
+                        </>
+                      )}
+                    </button>
                   </>
                 )}
 

@@ -79,8 +79,9 @@ router.get(['/kyc/aadhaar/callback', '/kyc/aadhar/callback'], rateLimit(30, 10 *
   try {
     const url = await aadhaarKycService.callback(req.query as Record<string, unknown>, requestMeta(req));
     return res.redirect(url);
-  } catch {
-    return res.redirect(aadhaarKycService.redirectUrl('failed'));
+  } catch (err: any) {
+    console.error('[Aadhaar KYC Callback Route Error]:', err);
+    return res.redirect(aadhaarKycService.redirectUrl('failed', err?.message));
   }
 }));
 
@@ -132,8 +133,9 @@ router.get(['/kyc/aadhaar/pre-register/callback', '/kyc/aadhar/pre-register/call
   try {
     const url = await aadhaarKycService.preRegisterCallback(req.query as Record<string, unknown>, requestMeta(req));
     return res.redirect(url);
-  } catch {
-    return res.redirect(aadhaarKycService.redirectUrl('failed'));
+  } catch (err: any) {
+    console.error('[Aadhaar KYC PreRegister Route Error]:', err);
+    return res.redirect(aadhaarKycService.redirectUrl('failed', err?.message));
   }
 }));
 

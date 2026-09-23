@@ -223,9 +223,8 @@ export const evaluateCartProcurementMode = async (params: {
     recommendedMethod = 'PAC_PROCUREMENT';
   }
 
-  // Always allow Single Source and Repeat Order as selectable methods
+  // Always allow Single Source as selectable method
   allowedMethods.push('SINGLE_SOURCE');
-  allowedMethods.push('REPEAT_ORDER');
 
   if (settings.internalApprovalRequired) {
     requiredApprovals.push('INTERNAL_APPROVAL');

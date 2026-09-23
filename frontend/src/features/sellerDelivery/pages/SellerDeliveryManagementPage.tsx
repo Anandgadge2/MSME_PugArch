@@ -13,16 +13,17 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
-    AlertCircle, ArrowLeft, ArrowRight, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
+    AlertCircle, ArrowLeft, ArrowRight, Boxes, Building2, Calendar, Check, CheckCircle2, ChevronDown, ChevronUp,
     Clock, Copy, Download, ExternalLink, Eye, FileText, Grid3x3, History, Info,
-    List, MapPin, MoreVertical, Package, Paperclip, Printer, RefreshCw, Search,
-    Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle
+    List, MapPin, MoreVertical, Package, Paperclip, Receipt, RefreshCw, Search,
+    Send, ShieldCheck, Sparkles, Stamp, Truck, Upload, UploadCloud, X, XCircle, ClipboardCheck
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
+import { openFileAsset } from '../../../lib/files';
 import { compressImage } from '../../../lib/compress';
 import { PdfEngine, type DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { TaxInvoiceCard } from '../../invoices/components/TaxInvoiceCard';
@@ -47,6 +48,9 @@ import {
     useSellerReject, useUpdateDispatchDetails
 } from '../hooks';
 import type { DeliveryDto } from '../api';
+import { PackedOrderDialog } from '../../delivery/components/PackedOrderDialog';
+import { DispatchDetailsModal } from '../../delivery/components/DispatchDetailsModal';
+import { GrnCreateModal } from '../../grn/components/GrnCreateModal';
 
 const STATUS_TONE: Record<string, string> = {
     CREATED: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -96,6 +100,30 @@ const nextManualStatusFor = (status: string) => {
 
 const readableStatus = (status: string) => status.replace(/_/g, ' ');
 
+export function isDeliveryOrderAccepted(delivery: DeliveryDto | any): boolean {
+    const status = String(delivery?.status || '');
+    if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return true;
+    if (delivery?.sellerAcceptedAt) return true;
+    const poStatusLower = String(delivery?.purchaseOrder?.status || '').toLowerCase();
+    const poStatusUpper = String(delivery?.purchaseOrder?.poStatus || '').toUpperCase();
+    return ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'completed', 'grn_approved', 'invoiced', 'paid'].includes(poStatusLower) ||
+           ['ACCEPTED', 'IN_FULFILLMENT', 'DISPATCHED', 'DELIVERED', 'COMPLETED', 'GRN_APPROVED', 'INVOICED', 'PAID'].includes(poStatusUpper);
+}
+
+export function isDeliveryAwaitingAcceptance(delivery: DeliveryDto | any): boolean {
+    const status = String(delivery?.status || '');
+    if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
+    return !isDeliveryOrderAccepted(delivery);
+}
+
+export function getEffectiveDeliveryStatus(delivery: DeliveryDto | any): string {
+    const status = String(delivery?.status || '');
+    if ((status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && isDeliveryOrderAccepted(delivery)) {
+        return 'SELLER_ACCEPTED';
+    }
+    return status;
+}
+
 function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
     const router = useRouter();
     const [open, setOpen] = useState(false);
@@ -103,6 +131,8 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     const menuRef = useRef<HTMLDivElement>(null);
     const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
     const status = String(delivery.status);
+    const isAwaitingAcceptance = isDeliveryAwaitingAcceptance(delivery);
+    const effectiveStatus = getEffectiveDeliveryStatus(delivery);
 
     const updatePosition = useCallback(() => {
         if (!buttonRef.current) return;
@@ -220,7 +250,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         <span>View Details</span>
                     </button>
 
-                    {(status === 'CREATED' || status === 'PENDING_ACCEPTANCE') && (
+                    {isAwaitingAcceptance && (
                         <>
                             <button
                                 type="button"
@@ -253,7 +283,7 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </>
                     )}
 
-                    {status === 'SELLER_ACCEPTED' && (
+                    {(effectiveStatus === 'SELLER_ACCEPTED' || status === 'SELLER_ACCEPTED') && (
                         <button
                             type="button"
                             role="menuitem"
@@ -323,24 +353,89 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                         </button>
                     )}
 
+                    {poId && (
+                        <>
+                            {(() => {
+                                const hasInvoice = Boolean((delivery as any).invoices?.length > 0 || (delivery as any).invoice || (delivery.purchaseOrder as any)?.invoices?.length > 0);
+                                const invNo = (delivery as any).invoices?.[0]?.invoiceNumber || (delivery as any).invoice?.invoiceNumber || (delivery.purchaseOrder as any)?.invoices?.[0]?.invoiceNumber || '';
+                                if (hasInvoice) {
+                                    return (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpen(false);
+                                                router.push(`/seller/invoices${invNo ? `?viewInvoiceNo=${encodeURIComponent(invNo)}` : ''}`);
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                                        >
+                                            <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                                            <span>View Invoice {invNo ? `(#${invNo})` : ''}</span>
+                                        </button>
+                                    );
+                                }
+                                return (
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setOpen(false);
+                                            router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
+                                        }}
+                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                                    >
+                                        <FileText className="h-3.5 w-3.5 text-emerald-600" />
+                                        <span>Generate Invoice (PO to Invoice)</span>
+                                    </button>
+                                );
+                            })()}
+
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setOpen(false);
+                                    const poSearch = delivery.purchaseOrder?.poNumber || (delivery as any).poNumber || poId || '';
+                                    router.push(`/seller/orders?search=${encodeURIComponent(poSearch)}`);
+                                }}
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+                            >
+                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                <span>View Purchase Order</span>
+                            </button>
+
+                            {(() => {
+                                const bidId = (delivery as any).bidId || (delivery.purchaseOrder as any)?.bidId || (delivery as any).requirementId;
+                                if (bidId) {
+                                    return (
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpen(false);
+                                                router.push(`/bids/${bidId}`);
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+                                        >
+                                            <Paperclip className="h-3.5 w-3.5 text-blue-600" />
+                                            <span>View Quotation</span>
+                                        </button>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </>
+                    )}
                     {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status) && (
                         <>
-                            {poId && (
-                                <button
-                                    type="button"
-                                    role="menuitem"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpen(false);
-                                        router.push(`/seller/invoices?convertPoId=${poId}${amount !== undefined ? `&amount=${amount}` : ''}`);
-                                    }}
-                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
-                                >
-                                    <FileText className="h-3.5 w-3.5 text-slate-500" />
-                                    <span>Create Invoice</span>
-                                </button>
-                            )}
                             <button
                                 type="button"
                                 role="menuitem"
@@ -371,6 +466,60 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
                             </button>
                         </>
                     )}
+
+                    {/* GRN Action: View GRN if already created, otherwise Generate GRN */}
+                    {(() => {
+                        const po = delivery.purchaseOrder as any;
+                        const grnId = (delivery as any).grnId || po?.grnId || po?.grns?.[0]?.id || (delivery as any).grn?.id;
+                        if (grnId) {
+                            return (
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpen(false);
+                                        router.push(`/grn/${grnId}`);
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-teal-800 hover:bg-teal-50 transition-colors text-left cursor-pointer"
+                                >
+                                    <ClipboardCheck className="h-3.5 w-3.5 text-teal-600" />
+                                    <span>View GRN</span>
+                                </button>
+                            );
+                        }
+                        if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(status)) {
+                            return (
+                                <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpen(false);
+                                        onAction('generate-grn');
+                                    }}
+                                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-800 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+                                >
+                                    <FileText className="h-3.5 w-3.5 text-amber-600" />
+                                    <span>Generate GRN</span>
+                                </button>
+                            );
+                        }
+                        return (
+                            <button
+                                type="button"
+                                role="menuitem"
+                                disabled
+                                title="GRN can only be generated once delivery is completed/delivered"
+                                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-400 bg-slate-50/50 cursor-not-allowed text-left opacity-60"
+                            >
+                                <FileText className="h-3.5 w-3.5 text-slate-400" />
+                                <span>Generate GRN (Deliver First)</span>
+                            </button>
+                        );
+                    })()}
                 </div>,
                 document.body
             )}
@@ -381,8 +530,11 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
 export default function SellerDeliveryManagementPage() {
     const { data, isLoading, error, refetch, isFetching } = useDeliveries({ role: 'seller' });
     const [actionTarget, setActionTarget] = useState<{ kind: string; delivery: DeliveryDto } | null>(null);
+    const autoOpenedRef = useRef(false);
+    const userDismissedRef = useRef(false);
 
     const openAction = useCallback((kind: string, delivery: DeliveryDto) => {
+        userDismissedRef.current = false;
         setActionTarget({ kind, delivery });
         if (typeof window !== 'undefined' && kind === 'dispatch-details') {
             const url = new URL(window.location.href);
@@ -392,11 +544,20 @@ export default function SellerDeliveryManagementPage() {
     }, []);
 
     const closeAction = useCallback(() => {
+        userDismissedRef.current = true;
         setActionTarget(null);
         if (typeof window !== 'undefined') {
             const url = new URL(window.location.href);
+            let urlChanged = false;
             if (url.searchParams.has('dispatch')) {
                 url.searchParams.delete('dispatch');
+                urlChanged = true;
+            }
+            if (url.searchParams.has('deliveryId')) {
+                url.searchParams.delete('deliveryId');
+                urlChanged = true;
+            }
+            if (urlChanged) {
                 window.history.replaceState({}, '', url.toString());
             }
         }
@@ -406,7 +567,7 @@ export default function SellerDeliveryManagementPage() {
     const [searchQuery, setSearchQuery] = useState(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            return params.get('search') || params.get('q') || params.get('po') || '';
+            return params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || params.get('poId') || '';
         }
         return '';
     });
@@ -414,7 +575,7 @@ export default function SellerDeliveryManagementPage() {
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            const q = params.get('search') || params.get('q') || params.get('po') || '';
+            const q = params.get('search') || params.get('q') || params.get('po') || params.get('poNumber') || params.get('poId') || '';
             if (q) setSearchQuery(q);
         }
     }, []);
@@ -425,13 +586,37 @@ export default function SellerDeliveryManagementPage() {
 
     // Deep-link & browser back restoration for dispatch order fulfillment
     useEffect(() => {
-        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget) {
+        if (typeof window !== 'undefined' && items.length > 0 && !actionTarget && !autoOpenedRef.current && !userDismissedRef.current) {
             const params = new URLSearchParams(window.location.search);
             const dispatchId = params.get('dispatch') || params.get('deliveryId');
+            const poId = params.get('poId');
+            const poSearch = params.get('poNumber') || params.get('search') || params.get('q');
             if (dispatchId) {
                 const found = items.find(d => String(d.id) === dispatchId);
                 if (found) {
+                    autoOpenedRef.current = true;
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
+                }
+            }
+            if (poId) {
+                const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
+                if (found) {
+                    autoOpenedRef.current = true;
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
+                }
+            }
+            if (poSearch) {
+                const cleanSearch = poSearch.replace(/[\s-]/g, '').toLowerCase();
+                const found = items.find(d => {
+                    const cleanPo = String(d.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+                    return cleanPo && (cleanPo === cleanSearch || cleanPo.includes(cleanSearch) || cleanSearch.includes(cleanPo));
+                });
+                if (found) {
+                    autoOpenedRef.current = true;
+                    setActionTarget({ kind: 'dispatch-details', delivery: found });
+                    return;
                 }
             }
         }
@@ -442,14 +627,27 @@ export default function SellerDeliveryManagementPage() {
             if (typeof window !== 'undefined') {
                 const params = new URLSearchParams(window.location.search);
                 const dispatchId = params.get('dispatch') || params.get('deliveryId');
-                if (dispatchId && items.length > 0) {
-                    const found = items.find(d => String(d.id) === dispatchId);
-                    if (found) {
-                        setActionTarget({ kind: 'dispatch-details', delivery: found });
-                        return;
+                const poId = params.get('poId');
+                if (items.length > 0) {
+                    if (dispatchId) {
+                        const found = items.find(d => String(d.id) === dispatchId);
+                        if (found) {
+                            userDismissedRef.current = false;
+                            setActionTarget({ kind: 'dispatch-details', delivery: found });
+                            return;
+                        }
+                    }
+                    if (poId) {
+                        const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
+                        if (found) {
+                            userDismissedRef.current = false;
+                            setActionTarget({ kind: 'dispatch-details', delivery: found });
+                            return;
+                        }
                     }
                 }
-                if (!dispatchId && actionTarget) {
+                if (!dispatchId && !poId && actionTarget) {
+                    userDismissedRef.current = true;
                     setActionTarget(null);
                 }
             }
@@ -458,7 +656,7 @@ export default function SellerDeliveryManagementPage() {
         return () => window.removeEventListener('popstate', handlePopState);
     }, [items, actionTarget]);
 
-    const pendingCount = items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length;
+    const pendingCount = items.filter(isDeliveryAwaitingAcceptance).length;
     const inTransitCount = items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length;
     const completedCount = items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length;
 
@@ -468,7 +666,7 @@ export default function SellerDeliveryManagementPage() {
         if (statusFilter !== 'ALL') {
             const status = String(item.status);
             if (statusFilter === 'AWAITING_ACCEPTANCE') {
-                if (status !== 'CREATED' && status !== 'PENDING_ACCEPTANCE') return false;
+                if (!isDeliveryAwaitingAcceptance(item)) return false;
             } else if (statusFilter === 'IN_TRANSIT') {
                 if (!['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(status)) return false;
             } else if (statusFilter === 'COMPLETED') {
@@ -479,26 +677,19 @@ export default function SellerDeliveryManagementPage() {
         }
 
         // Search query filter
-        if (searchQuery.trim()) {
+        if (searchQuery.trim() !== '') {
             const q = searchQuery.toLowerCase().trim();
-            const dlvId = `dlv-${item.id}`.toLowerCase();
-            const poNumber = (item.purchaseOrder?.poNumber || '').toLowerCase();
-            const buyerName = (item.purchaseOrder?.buyer?.name || '').toLowerCase();
-            const title = (item.purchaseOrder?.title || '').toLowerCase();
-            const trackingNum = (item.trackingNumber || '').toLowerCase();
-            const carrier = (item.carrierName || '').toLowerCase();
-            const partner = (item.logisticsPartnerName || '').toLowerCase();
-            const amount = String(item.purchaseOrder?.amount || '').toLowerCase();
-
-            const match = dlvId.includes(q) ||
-                          poNumber.includes(q) ||
-                          buyerName.includes(q) ||
-                          title.includes(q) ||
-                          trackingNum.includes(q) ||
-                          carrier.includes(q) ||
-                          partner.includes(q) ||
-                          amount.includes(q);
-            if (!match) return false;
+            const cleanQ = q.replace(/[\s-]/g, '');
+            const idMatch = String(item.id).toLowerCase().includes(q) || `dlv-${item.id}`.toLowerCase().includes(q);
+            const poIdMatch = String(item.purchaseOrderId || '') === q || String(item.purchaseOrder?.id || '') === q;
+            const itemPoClean = String(item.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
+            const poMatch = String(item.purchaseOrder?.poNumber || '').toLowerCase().includes(q) ||
+                            (cleanQ.length >= 3 && itemPoClean.includes(cleanQ));
+            const titleMatch = String(item.purchaseOrder?.title || '').toLowerCase().includes(q);
+            const buyerMatch = String(item.purchaseOrder?.buyer?.name || '').toLowerCase().includes(q);
+            const carrierMatch = String(item.carrierName || '').toLowerCase().includes(q);
+            const trackingMatch = String(item.trackingNumber || '').toLowerCase().includes(q);
+            if (!idMatch && !poIdMatch && !poMatch && !titleMatch && !buyerMatch && !carrierMatch && !trackingMatch) return false;
         }
 
         return true;
@@ -514,37 +705,27 @@ export default function SellerDeliveryManagementPage() {
         setPage(1);
     };
 
-    // Apply sorting
     const sortedItems = [...filteredItems].sort((a, b) => {
-        let valA: any = '';
-        let valB: any = '';
-        if (sortKey === 'id') {
-            valA = a.id;
-            valB = b.id;
-        } else if (sortKey === 'poNumber') {
+        let valA: any = a[sortKey as keyof DeliveryDto];
+        let valB: any = b[sortKey as keyof DeliveryDto];
+
+        if (sortKey === 'poNumber') {
             valA = a.purchaseOrder?.poNumber || '';
             valB = b.purchaseOrder?.poNumber || '';
         } else if (sortKey === 'buyer') {
             valA = a.purchaseOrder?.buyer?.name || '';
             valB = b.purchaseOrder?.buyer?.name || '';
         } else if (sortKey === 'amount') {
-            valA = Number(a.purchaseOrder?.amount || 0);
-            valB = Number(b.purchaseOrder?.amount || 0);
-        } else if (sortKey === 'status') {
-            valA = String(a.status || '');
-            valB = String(b.status || '');
-        } else if (sortKey === 'carrier') {
-            valA = a.carrierName || '';
-            valB = b.carrierName || '';
+            valA = a.purchaseOrder?.amount || 0;
+            valB = b.purchaseOrder?.amount || 0;
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         } else if (sortKey === 'eta') {
             valA = a.expectedDelivery ? new Date(a.expectedDelivery).getTime() : 0;
             valB = b.expectedDelivery ? new Date(b.expectedDelivery).getTime() : 0;
+            return sortDirection === 'asc' ? valA - valB : valB - valA;
         } else if (sortKey === 'createdAt') {
             valA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
             valB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        }
-
-        if (typeof valA === 'number' && typeof valB === 'number') {
             return sortDirection === 'asc' ? valA - valB : valB - valA;
         }
         const strA = String(valA || '').toLowerCase();
@@ -557,7 +738,7 @@ export default function SellerDeliveryManagementPage() {
     
     const kpis = {
         total: items.length,
-        awaitingAcceptance: items.filter(item => item.status === 'CREATED' || item.status === 'PENDING_ACCEPTANCE').length,
+        awaitingAcceptance: items.filter(isDeliveryAwaitingAcceptance).length,
         inTransit: items.filter(item => ['PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(String(item.status))).length,
         completed: items.filter(item => ['DELIVERED', 'COMPLETED', 'CLOSED'].includes(String(item.status))).length
     };
@@ -618,7 +799,7 @@ export default function SellerDeliveryManagementPage() {
             width: 'w-[14%]',
             sortable: true,
             cell: (delivery) => {
-                const status = String(delivery.status);
+                const effectiveStatus = getEffectiveDeliveryStatus(delivery);
                 const stage = (s: string) => {
                     if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
                     if (s === 'SELLER_ACCEPTED') return { label: 'Awaiting Packing', icon: Package };
@@ -629,11 +810,11 @@ export default function SellerDeliveryManagementPage() {
                     if (['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(s)) return { label: 'Delivered', icon: CheckCircle2 };
                     return { label: s.replace(/_/g, ' '), icon: AlertCircle };
                 };
-                const { label: stageLabel } = stage(status);
+                const { label: stageLabel } = stage(effectiveStatus);
                 return (
                     <div className="flex flex-col gap-0.5 items-start">
-                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                            {status.replace(/_/g, ' ')}
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[effectiveStatus] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {effectiveStatus.replace(/_/g, ' ')}
                         </span>
                         <span className="text-[9px] font-semibold text-slate-400">{stageLabel}</span>
                     </div>
@@ -894,7 +1075,7 @@ function SummaryTile({ label, value, icon: Icon, onClick, active, color = 'slate
 }
 
 function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction: (kind: string) => void }) {
-    const status = String(delivery.status);
+    const effectiveStatus = getEffectiveDeliveryStatus(delivery);
 
     const stage = (s: string) => {
         if (s === 'CREATED' || s === 'PENDING_ACCEPTANCE') return { label: 'Awaiting Acceptance', icon: Clock };
@@ -907,7 +1088,7 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
         return { label: s.replace(/_/g, ' '), icon: AlertCircle };
     };
 
-    const { label, icon: Icon } = stage(status);
+    const { label, icon: Icon } = stage(effectiveStatus);
 
     return (
         <div className="group rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-[#12335f]/40 hover:shadow-md flex flex-col justify-between">
@@ -923,8 +1104,8 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
                         <p className="mt-1.5 text-sm font-black text-slate-900 leading-snug">{delivery.purchaseOrder?.title || 'Delivery'}</p>
                     </div>
                     <div className="text-right shrink-0">
-                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[status] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                            {status.replace(/_/g, ' ')}
+                        <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase ${STATUS_TONE[effectiveStatus] || 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                            {effectiveStatus.replace(/_/g, ' ')}
                         </span>
                         <p className="mt-1 text-[9px] font-black uppercase text-slate-400">{label}</p>
                     </div>
@@ -948,45 +1129,38 @@ function DeliveryCard({ delivery, onAction }: { delivery: DeliveryDto; onAction:
 // ─── Action Dialog (multi-purpose modal) ─────────────────────────────────────
 
 function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: DeliveryDto; onClose: () => void }) {
+    if (kind === 'packed') {
+        return (
+            <PackedOrderDialog
+                isOpen={true}
+                delivery={delivery}
+                onClose={onClose}
+                onSuccess={onClose}
+            />
+        );
+    }
+
     if (kind === 'dispatch-details') {
         return (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
-                <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
-                        <div className="flex items-center gap-3">
-                            <button
-                                type="button"
-                                onClick={onClose}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
-                                aria-label="Back to Deliveries"
-                                title="Back to Deliveries"
-                            >
-                                <ArrowLeft className="h-4 w-4" />
-                                <span>Back to Deliveries</span>
-                            </button>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <span className="rounded bg-white/15 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-white">
-                                        DISPATCH ORDER FULFILLMENT
-                                    </span>
-                                    <span className="rounded bg-blue-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-200">
-                                        DLV-{delivery.id}
-                                    </span>
-                                </div>
-                                <h2 className="mt-1 text-lg font-black tracking-tight text-white">
-                                    {delivery.purchaseOrder?.title || 'Order Dispatch Fulfillment'}
-                                </h2>
-                            </div>
-                        </div>
-                        <button type="button" onClick={onClose} className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40" aria-label="Close dialog" title="Close dialog">
-                            <X className="h-5 w-5" />
-                        </button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto bg-slate-50/50 p-6">
-                        <DispatchDetailsForm delivery={delivery} onDone={onClose} />
-                    </div>
-                </div>
-            </div>
+            <DispatchDetailsModal
+                isOpen={true}
+                delivery={delivery}
+                onClose={onClose}
+                onSuccess={onClose}
+            />
+        );
+    }
+
+    if (kind === 'generate-grn') {
+        return (
+            <GrnCreateModal
+                initialPoId={delivery.purchaseOrder?.id || delivery.purchaseOrderId}
+                onClose={onClose}
+                onCreated={() => {
+                    toast.success('Goods Receipt Note (GRN) created successfully!');
+                    onClose();
+                }}
+            />
         );
     }
 
@@ -1031,7 +1205,12 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
+        <div 
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label={kindToLabel(kind)}
+        >
             <div className="w-full max-w-md max-h-[90vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col">
                 <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
                     <div>
@@ -1063,7 +1242,8 @@ function kindToLabel(kind: string): string {
         ready: 'Ready for Pickup',
         'dispatch-details': 'Dispatch Order',
         'track-info': 'Tracking Details',
-        'upload-pod': 'UPLOAD PROOF OF DELIVERY (POD)'
+        'upload-pod': 'UPLOAD PROOF OF DELIVERY (POD)',
+        'generate-grn': 'Generate Goods Receipt Note (GRN)'
     };
     return map[kind] || 'Action';
 }
@@ -1346,23 +1526,35 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
     const invNumber = `INV-${po?.poNumber || `PO-${delivery.purchaseOrderId}`}`;
     const dateStr = formatDate(new Date());
 
+    const sellerOrg = (po?.seller as any)?.organization;
+    const sellerReg = (po?.seller as any)?.registrationDetails || {};
+    const sellerProfile = sellerOrg?.profile || (po?.seller as any)?.organizationProfile || (po?.seller as any)?.sellerProfile;
+    const sellerLogo = sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : undefined);
+    const sellerSignature = sellerReg?.signatureUrl || undefined;
+    const sellerStamp = sellerReg?.stampUrl || undefined;
+    const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (po?.seller as any)?.organizationName || po?.seller?.name || 'N/A';
+    const buyerOrg = (po?.buyer as any)?.organization;
+    const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (po?.buyer as any)?.organizationName || po?.buyer?.name || 'N/A';
+
     const config: DocumentConfig = {
         documentTitle: 'Official Tax Invoice',
         documentNumber: invNumber,
         dateStr,
         status: 'OFFICIAL INVOICE',
+        issuerName: sellerName,
+        issuerLogo: sellerLogo,
         parties: [
             {
                 title: 'Seller / Supplier Organization',
-                name: po?.seller?.name || 'Seller Organization',
+                name: sellerName,
                 email: po?.seller?.email,
                 details: [`Delivery Tracking: DLV-${delivery.id}`]
             },
             {
                 title: 'Buyer / Billed To',
-                name: po?.buyer?.name || 'Buyer Organization',
+                name: buyerName,
                 email: po?.buyer?.email,
-                details: [`Purchase Order: ${po?.poNumber || ''}`]
+                details: [`Purchase Order: ${po?.poNumber || 'N/A'}`]
             }
         ],
         infoGrid: {
@@ -1383,22 +1575,46 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
         notes: [
             '1. Computer-generated Tax Invoice produced for MSME Procurement Dispatch.',
             '2. Payment release is governed by portal escrow settlement upon buyer acceptance & GRN verification.'
-        ]
+        ],
+        signatures: {
+            sellerTitle: 'Seller Signature & Stamp',
+            sellerName: po?.seller?.name || 'Authorized Signatory',
+            sellerSignatureUrl: sellerSignature,
+            sellerStampUrl: sellerStamp,
+        }
     };
 
     const engine = new PdfEngine('p');
-    const doc = engine.generate(config);
+    const doc = await engine.generate(config);
     return { doc, filename: `${invNumber}-TaxInvoice.pdf`, invNumber, grandTotal };
 };
+
+const POPULAR_CARRIERS = ['Blue Dart', 'Delhivery', 'DTDC', 'FedEx', 'India Post', 'Safexpress', 'TCI Express', 'Shadowfax'];
 
 function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () => void }) {
     const router = useRouter();
     const qc = useQueryClient();
+    const { data: freshDelivery } = useDelivery(delivery?.id);
+    const activeDelivery = freshDelivery || delivery;
+    const po = activeDelivery.purchaseOrder || delivery.purchaseOrder;
+
     const [trackingNumber, setTrackingNumber] = useState(delivery.trackingNumber || '');
     const [carrierName, setCarrierName] = useState(delivery.carrierName || '');
     const [eta, setEta] = useState((delivery.expectedDelivery || '').slice(0, 10));
     const [ewayBillNumber, setEwayBillNumber] = useState(delivery.ewayBillNumber || '');
     const [remarks, setRemarks] = useState(delivery.remarks || '');
+    const [itemsExpanded, setItemsExpanded] = useState(false);
+
+    // Synchronize state if fresh authoritative delivery record loads
+    useEffect(() => {
+        if (freshDelivery) {
+            if (!trackingNumber && freshDelivery.trackingNumber) setTrackingNumber(freshDelivery.trackingNumber);
+            if (!carrierName && freshDelivery.carrierName) setCarrierName(freshDelivery.carrierName);
+            if (!eta && freshDelivery.expectedDelivery) setEta(freshDelivery.expectedDelivery.slice(0, 10));
+            if (!ewayBillNumber && freshDelivery.ewayBillNumber) setEwayBillNumber(freshDelivery.ewayBillNumber);
+            if (!remarks && freshDelivery.remarks) setRemarks(freshDelivery.remarks);
+        }
+    }, [freshDelivery]);
 
     // Invoice Copy Type & View Modal State
     const [copyType, setCopyType] = useState('Original Copy');
@@ -1465,12 +1681,12 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     const addDocMut = useAddDeliveryDocument();
 
     const existingChallanDoc = useMemo(() => {
-        return (delivery.documents || []).find(d => d.documentType === 'DELIVERY_CHALLAN');
-    }, [delivery.documents]);
+        return (activeDelivery.documents || delivery.documents || []).find(d => d.documentType === 'DELIVERY_CHALLAN');
+    }, [activeDelivery.documents, delivery.documents]);
 
     const existingInvoiceDoc = useMemo(() => {
-        return (delivery.documents || []).find(d => d.documentType === 'TAX_INVOICE');
-    }, [delivery.documents]);
+        return (activeDelivery.documents || delivery.documents || []).find(d => d.documentType === 'TAX_INVOICE');
+    }, [activeDelivery.documents, delivery.documents]);
 
     // Fetch created invoice from API or purchaseOrder.invoices array
     useEffect(() => {
@@ -1510,7 +1726,7 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
     // Construct invoice data for TaxInvoiceCard & PDF engine from fetched invoice
     const invData = useMemo<TaxInvoiceData>(() => {
-        const po = delivery.purchaseOrder;
+        const po = activeDelivery.purchaseOrder || delivery.purchaseOrder;
 
         // Invoice Number from fetched invoice or fallback
         const invNo = fetchedInvoice?.invoiceNumber || po?.invoices?.[0]?.invoiceNumber || existingInvoiceDoc?.description || `INV-${po?.poNumber || delivery.id}`;
@@ -1521,9 +1737,35 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
         const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || po?.amount || 0);
 
-        const sellerName = fetchedInvoice?.seller?.name || po?.seller?.name || 'DNYANESHWAR DHOMAN PATIL';
-        const sellerEmail = fetchedInvoice?.seller?.email || po?.seller?.email || 'kolhesnehal35@gmail.com';
-        const buyerName = fetchedInvoice?.buyer?.name || po?.buyer?.name || 'PROAID';
+        const sellerUser = fetchedInvoice?.seller || po?.seller;
+        const sellerOrg = (sellerUser as any)?.organization || (sellerUser as any)?.sellerProfile?.organization;
+        const sellerProfile = sellerOrg?.profile || (sellerUser as any)?.organizationProfile || (sellerUser as any)?.sellerProfile;
+        const sellerReg = (sellerUser as any)?.registrationDetails || {};
+
+        const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (sellerUser as any)?.organizationName || sellerUser?.name || 'N/A';
+        const sellerEmail = sellerUser?.email || sellerReg?.email || undefined;
+        const sellerPhone = sellerUser?.mobile || sellerReg?.phone || sellerReg?.mobile || undefined;
+        const sellerAddress = sellerOrg?.address || sellerProfile?.address || sellerReg?.address || (sellerUser as any)?.address || 'N/A';
+        const sellerGstin = sellerOrg?.gstin || sellerProfile?.gstin || sellerReg?.gstin || undefined;
+        const sellerCin = sellerOrg?.cin || sellerProfile?.cin || sellerReg?.cin || undefined;
+
+        const resolvedSellerLogo = logoUrl || sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : null);
+        const resolvedSellerStamp = stampUrl || sellerReg?.stampUrl || null;
+        const resolvedSellerSig = signatureUrl || sellerReg?.signatureUrl || null;
+
+        const buyerUser = fetchedInvoice?.buyer || po?.buyer;
+        const buyerOrg = (buyerUser as any)?.organization || (buyerUser as any)?.buyerProfile?.organization;
+        const buyerProfile = buyerOrg?.profile || (buyerUser as any)?.organizationProfile || (buyerUser as any)?.buyerProfile;
+        const buyerReg = (buyerUser as any)?.registrationDetails || {};
+
+        const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (buyerUser as any)?.organizationName || buyerUser?.name || 'N/A';
+        const buyerAddress = po?.deliveryAddress || buyerOrg?.address || buyerProfile?.address || buyerReg?.address || (buyerUser as any)?.address || 'N/A';
+        const buyerPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerReg?.pan || undefined;
+        const buyerGstin = buyerOrg?.gstin || buyerProfile?.gstin || buyerReg?.gstin || undefined;
+
+        const bankName = sellerReg?.bankName || sellerProfile?.bankName || 'N/A';
+        const accountNo = sellerReg?.accountNumber || sellerProfile?.accountNumber || sellerReg?.accountNo || 'N/A';
+        const ifscCode = sellerReg?.ifscCode || sellerProfile?.ifscCode || 'N/A';
 
         const rawItems: any[] = po?.items || [];
         const items: TaxInvoiceItem[] = rawItems.length > 0
@@ -1561,27 +1803,27 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             copyType,
             invoiceNumber: invNo,
             dateStr,
-            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : (sellerOrg?.state || 'State Registered'),
             seller: {
                 name: sellerName,
-                address: 'block no 78, Snehal Kolhe, at girls hostel SSBT COET Jalgaon, area complex',
-                gstin: '27BMOPP7706E2Z1',
-                phone: '9326546128',
+                address: sellerAddress,
+                gstin: sellerGstin,
+                phone: sellerPhone,
                 email: sellerEmail,
-                cin: 'U62013MH2023PTC416118',
-                logoUrl,
-                stampUrl,
-                signatureUrl
+                cin: sellerCin,
+                logoUrl: resolvedSellerLogo,
+                stampUrl: resolvedSellerStamp,
+                signatureUrl: resolvedSellerSig
             },
             billTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'V247+H95, Marwari Para, Jharsuguda, Odisha - 768201. India',
-                pan: 'PFGPK6340B',
-                gstin: '27AALCS2063D1ZG'
+                address: buyerAddress,
+                pan: buyerPan,
+                gstin: buyerGstin
             },
             shipTo: {
                 name: buyerName,
-                address: po?.deliveryAddress || 'ganesh complex jharsuguda, odisa, Jharsuguda, Odisha. 345678. INDIA'
+                address: buyerAddress
             },
             items,
             subtotal,
@@ -1593,13 +1835,13 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             igstAmount,
             totalAmount: grandTotal,
             bankDetails: {
-                bankName: 'State Bank of India',
-                accountNo: '39820194812',
-                ifscCode: 'SBIN0001892',
+                bankName,
+                accountNo,
+                ifscCode,
                 accountName: sellerName
             }
         };
-    }, [delivery, copyType, logoUrl, stampUrl, signatureUrl, existingInvoiceDoc, fetchedInvoice]);
+    }, [delivery, activeDelivery, copyType, logoUrl, stampUrl, signatureUrl, existingInvoiceDoc, fetchedInvoice]);
 
     // PDF generation & automatic delivery attachment
     const handleGenerateAndAttachPdf = async (targetCopyType: string = copyType, mode: 'download' | 'print' = 'download') => {
@@ -1796,58 +2038,312 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
         onDone();
     };
 
+    const rawItems: any[] = (po as any)?.items || [];
+    const totalUnits = rawItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+    const orderTotal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || (po as any)?.amount || invData.totalAmount || 0);
+    const consigneeOrgName = (po as any)?.buyer?.organization?.organizationName || (po as any)?.buyer?.name || 'Registered Consignee';
+    const consigneeContact = (po as any)?.buyer?.name;
+    const consigneeAddress = (po as any)?.deliveryAddress || (po as any)?.buyer?.organization?.address || activeDelivery.currentLocation || 'Direct Buyer Delivery Address';
+    const promisedEta = (po as any)?.deliveryDate ? formatDate((po as any).deliveryDate) : (activeDelivery.expectedDelivery ? formatDate(activeDelivery.expectedDelivery) : 'Standard Transit Schedule');
+
     const isSubmitting = updateDispatchMut.isPending || markDispatchedMut.isPending || addDocMut.isPending || isGeneratingInvoice || isUploadingChallan;
 
     return (
         <div className="space-y-6 text-left">
+            {/* A. Top Commercial, Consignee & Package Profile Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                {/* 1. PO Commercials */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Receipt className="h-3.5 w-3.5 text-blue-600" />
+                            PO Commercials
+                        </span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-mono font-bold text-blue-800 border border-blue-100">
+                            {po?.poNumber || `PO-${activeDelivery.purchaseOrderId}`}
+                        </span>
+                    </div>
+                    <div>
+                        <h5 className="text-xs font-bold text-slate-900 line-clamp-1" title={po?.title || 'Purchase Order'}>
+                            {po?.title || 'Purchase Order Fulfillment'}
+                        </h5>
+                        <div className="mt-1 flex items-baseline gap-1.5">
+                            <span className="text-base font-black text-slate-900">
+                                {formatCurrency(orderTotal)}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-semibold">Total Order Value</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+                        <span>Current Stage:</span>
+                        <span className={cn("px-2 py-0.5 rounded font-bold uppercase tracking-wider text-[9px] border", STATUS_TONE[String(activeDelivery.status)] || 'bg-slate-100 text-slate-700 border-slate-200')}>
+                            {readableStatus(String(activeDelivery.status))}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 2. Consignee & Delivery Destination */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Building2 className="h-3.5 w-3.5 text-indigo-600" />
+                            Consignee Destination
+                        </span>
+                        <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                            Buyer
+                        </span>
+                    </div>
+                    <div>
+                        <p className="text-xs font-bold text-slate-900 line-clamp-1" title={consigneeOrgName}>
+                            {consigneeOrgName}
+                        </p>
+                        {consigneeContact && (
+                            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Contact: {consigneeContact}</p>
+                        )}
+                    </div>
+                    <div className="flex items-start gap-1 pt-1 border-t border-slate-100 text-[10px] text-slate-600">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2" title={consigneeAddress}>
+                            {consigneeAddress}
+                        </span>
+                    </div>
+                </div>
+
+                {/* 3. Consignment Units & SLA Target */}
+                <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-white to-slate-50/70 p-3.5 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <Boxes className="h-3.5 w-3.5 text-emerald-600" />
+                            Consignment Profile
+                        </span>
+                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                            {rawItems.length > 0 ? `${rawItems.length} Item${rawItems.length > 1 ? 's' : ''}` : '1 Package'}
+                        </span>
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                        <div>
+                            <span className="text-base font-black text-slate-900">{totalUnits}</span>
+                            <span className="text-[10px] text-slate-500 font-semibold ml-1">Total Unit{totalUnits !== 1 ? 's' : ''}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            ✓ Inspected & Staged
+                        </span>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[10px] text-slate-500">
+                        <span className="flex items-center gap-1">
+                            <Calendar className="h-3 w-3 text-slate-400" />
+                            Promised SLA:
+                        </span>
+                        <span className="font-bold text-slate-800">
+                            {promisedEta}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* B. Consignment Items Checklist (Manifest) */}
+            <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+                <button
+                    type="button"
+                    onClick={() => setItemsExpanded(!itemsExpanded)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/70 hover:bg-slate-100/70 text-left transition cursor-pointer"
+                    aria-expanded={itemsExpanded}
+                >
+                    <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-[#12335f]" />
+                        <div>
+                            <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+                                Consignment Manifest & Line Items Checklist
+                            </span>
+                            <span className="ml-2 text-[10px] font-bold text-slate-500">
+                                ({rawItems.length || 1} line item{rawItems.length > 1 ? 's' : ''} staged for handover)
+                            </span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs font-bold text-[#12335f]">
+                        <span>{itemsExpanded ? 'Hide items' : 'Review items'}</span>
+                        {itemsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </div>
+                </button>
+
+                {itemsExpanded && (
+                    <div className="p-4 border-t border-slate-200 animate-in fade-in duration-150">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                                <thead>
+                                    <tr className="border-b border-slate-200 bg-slate-50/50 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                                        <th className="py-2 px-3 w-10">#</th>
+                                        <th className="py-2 px-3">Item Description</th>
+                                        <th className="py-2 px-3 text-right">Quantity</th>
+                                        <th className="py-2 px-3 text-right">Unit Rate</th>
+                                        <th className="py-2 px-3 text-right">Total</th>
+                                        <th className="py-2 px-3 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 font-semibold text-slate-800">
+                                    {rawItems.length > 0 ? (
+                                        rawItems.map((item: any, idx: number) => {
+                                            const qty = Number(item.quantity) || 1;
+                                            const rate = Number(item.unitPrice) || 0;
+                                            const amt = Number(item.totalAmount) || (qty * rate);
+                                            return (
+                                                <tr key={item.id || idx} className="hover:bg-slate-50/60">
+                                                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="font-bold text-slate-900">{item.itemName || 'Consignment Item'}</div>
+                                                        {item.description && (
+                                                            <div className="text-[10px] text-slate-500 font-normal line-clamp-1">{item.description}</div>
+                                                        )}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono">
+                                                        {qty} {item.uom || 'units'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                                                        {rate > 0 ? formatCurrency(rate) : '—'}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                                                        {formatCurrency(amt)}
+                                                    </td>
+                                                    <td className="py-2.5 px-3 text-center">
+                                                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                            <Check className="h-2.5 w-2.5" /> Packed
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    ) : (
+                                        <tr>
+                                            <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">1</td>
+                                            <td className="py-2.5 px-3">
+                                                <div className="font-bold text-slate-900">{po?.title || `Order #${delivery.purchaseOrderId}`}</div>
+                                                <div className="text-[10px] text-slate-500 font-normal">Primary Order Package</div>
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono">1 pkg</td>
+                                            <td className="py-2.5 px-3 text-right font-mono text-slate-600">{formatCurrency(orderTotal)}</td>
+                                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">{formatCurrency(orderTotal)}</td>
+                                            <td className="py-2.5 px-3 text-center">
+                                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                                                    <Check className="h-2.5 w-2.5" /> Packed
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* C. Statutory Logistics & E-Way Bill Advisory Alert */}
+            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
+                    <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div className="space-y-1 text-xs">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-amber-950">Statutory Transit Compliance & Logistics Advisory</span>
+                        {orderTotal >= 50000 ? (
+                            <span className="bg-amber-200/80 text-amber-950 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border border-amber-300">
+                                E-Way Bill Mandatory (≥ ₹50,000)
+                            </span>
+                        ) : (
+                            <span className="bg-emerald-100 text-emerald-900 text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-emerald-200">
+                                Under ₹50,000 Threshold
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-amber-800 text-[11px] leading-relaxed">
+                        {orderTotal >= 50000 ? (
+                            <>Under Rule 138 of CGST Rules, consignments exceeding <strong>₹50,000</strong> require an active 12-digit E-Way Bill prior to carrier handover. Ensure the carrier is provided a physical or digital copy of the E-Way bill.</>
+                        ) : (
+                            <>Consignment value is under the standard ₹50,000 statutory inter-state E-Way Bill threshold. Carrier transport can proceed with Delivery Challan / Tax Invoice unless specific state tax rules mandate otherwise.</>
+                        )}
+                        {' '}Saving dispatch details will automatically advance order status and broadcast live tracking coordinates to the buyer's dashboard.
+                    </p>
+                </div>
+            </div>
+
             {/* 1. Shipment Details & Delivery Challan Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Logistics Info Card */}
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                    <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
-                        <Truck className="h-4 w-4 text-[#12335f]" />
-                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Shipment & Logistics Details</h4>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <div className="flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-[#12335f]" />
+                            <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Shipment & Logistics Details</h4>
+                        </div>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                            Transit Waybill
+                        </span>
                     </div>
 
-                    <Field label="Tracking Number">
-                        <input
-                            type="text"
-                            value={trackingNumber}
-                            onChange={e => setTrackingNumber(e.target.value)}
-                            placeholder="e.g. AWB-98765432"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
-                        />
-                    </Field>
+                    <div>
+                        <Field label="Tracking / AWB / LR Number *">
+                            <input
+                                type="text"
+                                value={trackingNumber}
+                                onChange={e => setTrackingNumber(e.target.value)}
+                                placeholder="e.g. AWB-98765432 or LR-88219"
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            />
+                        </Field>
+                        <p className="text-[10px] text-slate-400 mt-1">Air Waybill (AWB) or Lorry Receipt (LR) tracking reference provided by your carrier.</p>
+                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
                         <Field label="Carrier Name">
                             <input
                                 type="text"
                                 value={carrierName}
                                 onChange={e => setCarrierName(e.target.value)}
-                                placeholder="e.g. BlueDart / Delhivery"
+                                placeholder="e.g. Blue Dart / Delhivery"
                                 className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
                             />
                         </Field>
-                        <Field label="Expected Delivery Date">
-                            <input
-                                type="date"
-                                value={eta}
-                                onChange={e => setEta(e.target.value)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
-                            />
-                        </Field>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mr-1">Quick Select:</span>
+                            {POPULAR_CARRIERS.map(c => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => setCarrierName(c)}
+                                    className={cn(
+                                        "rounded-md px-2 py-0.5 text-[10px] font-bold border transition cursor-pointer",
+                                        carrierName.toLowerCase() === c.toLowerCase()
+                                            ? "bg-[#12335f] text-white border-[#12335f] shadow-2xs"
+                                            : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                                    )}
+                                >
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <Field label="E-Way Bill Number (Optional)">
+                    <Field label="Expected Delivery Date (ETA)">
                         <input
-                            type="text"
-                            value={ewayBillNumber}
-                            onChange={e => setEwayBillNumber(e.target.value)}
-                            placeholder="e.g. 121009876543"
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            type="date"
+                            value={eta}
+                            onChange={e => setEta(e.target.value)}
+                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
                         />
                     </Field>
+
+                    <div>
+                        <Field label="E-Way Bill Number (Optional)">
+                            <input
+                                type="text"
+                                value={ewayBillNumber}
+                                onChange={e => setEwayBillNumber(e.target.value)}
+                                placeholder="e.g. 121009876543 (12 digits)"
+                                maxLength={16}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            />
+                        </Field>
+                        <p className="text-[10px] text-slate-400 mt-1">12-digit statutory number from ewaybillgst.gov.in (mandated if value &ge; ₹50,000).</p>
+                    </div>
                 </div>
 
                 {/* Delivery Challan Card */}
@@ -1858,9 +2354,12 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">Delivery Challan (DC)</h4>
                         </div>
                         <span className="text-[9px] font-bold uppercase tracking-wider text-purple-700 bg-purple-100 px-2.5 py-0.5 rounded-full">
-                            Dispatch Doc
+                            Rule 55 Transit Doc
                         </span>
                     </div>
+                    <p className="text-[10px] text-slate-500 font-medium -mt-1">
+                        Mandatory accompaniment under Rule 55 of CGST Rules for transportation of goods.
+                    </p>
 
                     {existingChallanDoc ? (
                         <div className="flex items-center justify-between rounded-lg border border-purple-200 bg-purple-50/80 p-2.5">
@@ -1875,15 +2374,20 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                     </p>
                                 </div>
                             </div>
-                            {existingChallanDoc.fileAsset?.id && (
-                                <a
-                                    href={`/api/files/${existingChallanDoc.fileAsset.id}/view`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs"
+                            {(existingChallanDoc.fileAsset?.id || existingChallanDoc.fileAssetId) && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const fileTarget = existingChallanDoc.fileAsset || existingChallanDoc.fileAssetId;
+                                        openFileAsset(fileTarget, 'Delivery Challan').catch(err => {
+                                            toast.error(err?.message || 'Failed to open Delivery Challan');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200 hover:bg-purple-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-purple-400"
+                                    aria-label="View Delivery Challan"
                                 >
                                     View Challan
-                                </a>
+                                </button>
                             )}
                         </div>
                     ) : null}
@@ -1917,15 +2421,31 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                         </p>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
-                                    className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100"
-                                    title="Remove attached challan file"
-                                    aria-label="Remove delivery challan file"
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    {challanFileAssetId && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                openFileAsset(challanFileAssetId, 'Delivery Challan').catch(err => {
+                                                    toast.error(err?.message || 'Failed to open Delivery Challan');
+                                                });
+                                            }}
+                                            className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                            aria-label="View uploaded Delivery Challan"
+                                        >
+                                            View
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setChallanUploadedFile(null); setChallanFileAssetId(null); }}
+                                        className="shrink-0 rounded p-1 text-emerald-700 hover:bg-emerald-100 cursor-pointer"
+                                        title="Remove attached challan file"
+                                        aria-label="Remove delivery challan file"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div
@@ -2029,16 +2549,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             {isGeneratingInvoice ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
                             Download PDF
                         </Button>
-
-                        <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => void handleGenerateAndAttachPdf(copyType, 'print')}
-                            disabled={isGeneratingInvoice}
-                            className="h-9 px-3.5 bg-white border-blue-300 text-blue-900 hover:bg-blue-100 text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer"
-                        >
-                            <Printer className="h-3.5 w-3.5" /> Print
-                        </Button>
                     </div>
                 </div>
             </div>
@@ -2047,6 +2557,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             {isViewInvoiceModalOpen && (
                 <div 
                     className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-3 sm:p-5"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Tax Invoice Registry"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
                             closeInvoiceModal();
@@ -2132,17 +2645,6 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                     >
                                         <Stamp className="h-3.5 w-3.5 text-indigo-600" />
                                         STAMP & SIGNATURE
-                                    </Button>
-
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => void handleGenerateAndAttachPdf(copyType, 'print')}
-                                        disabled={isGeneratingInvoice}
-                                        className="h-9 rounded-xl border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
-                                    >
-                                        <Printer className="h-3.5 w-3.5 text-slate-600" />
-                                        PRINT
                                     </Button>
 
                                     <div className="relative inline-flex rounded-xl shadow-xs">
@@ -2233,40 +2735,50 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
 
             {/* Dispatch Remarks */}
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-                <Field label="Dispatch Remarks (Optional)">
+                <Field label="Dispatch & Handling Remarks (Optional)">
                     <textarea
                         value={remarks}
                         onChange={e => setRemarks(e.target.value)}
                         rows={2}
-                        placeholder="Add dispatch notes or carrier instruction…"
+                        placeholder="e.g. 2 cartons packed, fragile electronic goods — handle with care. Staged at Bay 3 for carrier pickup…"
                         className="w-full rounded-lg border border-slate-200 bg-slate-50/50 p-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15 resize-none"
                     />
                 </Field>
             </div>
 
             {/* Bottom Action Footer */}
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200 bg-white">
-                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="h-10 px-5 text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200 bg-white">
+                <Button variant="outline" onClick={onDone} disabled={isSubmitting} className="w-full sm:w-auto h-10 px-5 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer">
                     <ArrowLeft className="h-4 w-4" />
                     Back to Deliveries
                 </Button>
-                <Button
-                    onClick={handleSave}
-                    disabled={isSubmitting}
-                    className="h-10 bg-[#12335f] hover:bg-[#0b1f3a] text-white px-7 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md"
-                >
-                    {isSubmitting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                        <Truck className="mr-2 h-4 w-4" />
-                    )}
-                    Save Dispatch Details & Confirm Order
-                </Button>
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+                    <span className="text-[11px] text-slate-500 font-medium text-center sm:text-right">
+                        Tracking status will advance to <strong>DISPATCHED</strong> & update buyer
+                    </span>
+                    <Button
+                        onClick={handleSave}
+                        disabled={isSubmitting}
+                        className="w-full sm:w-auto h-10 bg-[#12335f] hover:bg-[#0b1f3a] text-white px-7 font-bold text-xs uppercase tracking-wider rounded-xl shadow-md cursor-pointer transition-all hover:shadow-lg"
+                    >
+                        {isSubmitting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Truck className="mr-2 h-4 w-4" />
+                        )}
+                        Confirm Dispatch & Save Tracking
+                    </Button>
+                </div>
             </div>
 
             {/* Stamp & Signature Branding Modal */}
             {isBrandingModalOpen && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+                <div 
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Stamp & Signature Setup"
+                >
                     <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                             <div>
@@ -2385,7 +2897,7 @@ function getStatusExplanation(status: string): string {
         case 'DISPUTED':
             return 'Delivery milestone is under dispute review.';
         default:
-            return `Order is currently in ${readableStatus(status)} stage.`;
+            return `Order is currently in ${(status || '').replace(/_/g, ' ')} stage.`;
     }
 }
 
@@ -3063,6 +3575,41 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                 Attach Proof of Delivery (POD) or recipient receipt for DLV-{delivery.id}.
             </p>
 
+            {delivery.documents && delivery.documents.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">Previously Uploaded Documents</p>
+                    <div className="space-y-1.5">
+                        {delivery.documents.map((d: any) => {
+                            const fileTarget = d.fileAsset || d.fileAssetId || d.id;
+                            const docLabel = d.documentType?.replace(/_/g, ' ') || 'Document';
+                            return (
+                                <div key={d.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200/80 px-2.5 py-1.5 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <FileText className="h-3.5 w-3.5 shrink-0 text-[#12335f]" />
+                                        <div className="min-w-0">
+                                            <p className="font-bold text-slate-900 truncate text-[11px]">{docLabel}</p>
+                                            <p className="text-[10px] text-slate-500 truncate">{d.description || d.fileAsset?.originalName || `Asset #${d.fileAssetId}`}</p>
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            openFileAsset(fileTarget, docLabel).catch(err => {
+                                                toast.error(err?.message || 'Failed to open document');
+                                            });
+                                        }}
+                                        className="shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-[#12335f] hover:bg-slate-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                                        aria-label={`View ${docLabel}`}
+                                    >
+                                        <ExternalLink className="h-2.5 w-2.5" /> View
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <Field label="Document Type">
                 <select
                     value={docType}
@@ -3104,14 +3651,31 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
                                 </p>
                             </div>
                         </div>
-                        <button
-                            type="button"
-                            onClick={handleRemoveFile}
-                            className="ml-2 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition"
-                            title="Remove attached file"
-                        >
-                            <X className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {fileAssetId && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        openFileAsset(Number(fileAssetId), 'Proof of Delivery').catch(err => {
+                                            toast.error(err?.message || 'Failed to open POD document');
+                                        });
+                                    }}
+                                    className="shrink-0 rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition shadow-2xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                                    aria-label="View uploaded Proof of Delivery"
+                                >
+                                    View
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleRemoveFile}
+                                className="ml-1 shrink-0 rounded-lg p-1.5 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-900 transition cursor-pointer"
+                                title="Remove attached file"
+                                aria-label="Remove attached POD file"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div

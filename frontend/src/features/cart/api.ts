@@ -53,7 +53,7 @@ export interface CartDto {
     rejectedBy?: { id: number; name: string; email: string };
 }
 
-export const fetchActiveCart = () => getApi<CartDto>('/api/cart');
+export const fetchActiveCart = () => getApi<CartDto>('/api/cart', true);
 export const fetchCartHistory = () => getApi<CartDto[]>('/api/cart/history');
 export const fetchCartById = (id: number) => getApi<CartDto>(`/api/cart/${id}`);
 export const fetchPendingApprovals = () => getApi<CartDto[]>('/api/cart/pending-approval');

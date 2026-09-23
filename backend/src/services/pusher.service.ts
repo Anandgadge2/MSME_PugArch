@@ -56,6 +56,19 @@ export const publishConversationEvent = async (conversationId: number, event: an
   }
 };
 
+export const publishProcurementEvent = async (procurementId: number | string, event: any): Promise<boolean> => {
+  if (!pusherInstance) return false;
+  try {
+    const channel = `procurement-${procurementId}`;
+    await pusherInstance.trigger(channel, event.type, event);
+    logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
+    return true;
+  } catch (err) {
+    logger.error({ err, procurementId, eventType: event.type }, '[Pusher] Failed to trigger procurement event');
+    return false;
+  }
+};
+
 export const authorizePusherChannel = (socketId: string, channelName: string, data?: any) => {
   if (!pusherInstance) {
     throw new Error('Pusher server is not configured');

@@ -1,4 +1,4 @@
-import { api, unwrapApiData, BASE_URL } from './api';
+import { api, unwrapApiData, BASE_URL, resolveMediaUrl } from './api';
 import { getCookieValue } from './auth';
 
 export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
@@ -11,10 +11,11 @@ export type DocumentPreview = {
 
 const getAbsoluteApiUrl = (endpoint: string) => {
   if (!endpoint) return '';
-  if (endpoint.startsWith('http://') || endpoint.startsWith('https://') || endpoint.startsWith('data:')) {
-    return endpoint;
+  const resolved = resolveMediaUrl(endpoint) || endpoint;
+  if (resolved.startsWith('http://') || resolved.startsWith('https://') || resolved.startsWith('data:') || resolved.startsWith('blob:')) {
+    return resolved;
   }
-  return `${BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  return `${BASE_URL}${resolved.startsWith('/') ? '' : '/'}${resolved}`;
 };
 
 export const getDocumentPreviewMode = (url: string, contentType = '', extension = ''): DocumentPreviewMode => {
@@ -33,6 +34,17 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
 };
 
 export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): Promise<DocumentPreview> => {
+  // 1. If local File object is available, create instant local blob
+  if (fileAsset?.file instanceof File) {
+    const blobUrl = URL.createObjectURL(fileAsset.file);
+    const fileName = fileAsset.fileName || fileAsset.file.name || label;
+    return {
+      label: fileName,
+      url: blobUrl,
+      mode: getDocumentPreviewMode(blobUrl, fileAsset.file.type || '', fileName.split('.').pop() || '')
+    };
+  }
+
   let fileId: number | null = null;
   if (typeof fileAsset === 'number') {
     fileId = fileAsset;
@@ -45,6 +57,8 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       fileId = Number(fileAsset.fileId);
     } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
+    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+      fileId = Number(fileAsset.id);
     }
   }
 
@@ -63,61 +77,92 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     }
   }
 
-  if (!fileId) {
-    if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
-    return {
-      label,
-      url: absoluteFallbackUrl,
-      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
-    };
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const hasSession = Boolean(token || getCookieValue('csrfToken'));
+  const authHeaders: Record<string, string> = {};
+  if (token) {
+    authHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  const hasSession = Boolean((typeof window !== 'undefined' && localStorage.getItem('token')) || getCookieValue('csrfToken'));
-  const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
-  const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+  // 2. If we have a file ID, fetch directly from viewEndpoint for authenticated blob streaming
+  if (fileId) {
+    const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+    try {
+      const res = await api.fetch(viewEndpoint, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
 
-  try {
-    const res = await api.fetch(signedUrlEndpoint, {
-      method: 'GET',
-      skipCache: true
-    });
-
-    if (res.ok) {
-      const body = await res.json().catch(() => null);
-      const data = unwrapApiData<any>(body);
-      if (data?.signedUrl) {
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
         return {
           label,
-          url: data.signedUrl,
-          mode: getDocumentPreviewMode(data.signedUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          url: blobUrl,
+          mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
         };
       }
+    } catch {
+      // Fallback below
     }
-  } catch {
-    // Fallback below
+
+    // Try signed URL endpoint if view endpoint failed
+    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
+    try {
+      const res = await api.fetch(signedUrlEndpoint, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
+
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        const data = unwrapApiData<any>(body);
+        if (data?.signedUrl) {
+          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
+          return {
+            label,
+            url: previewUrl,
+            mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+          };
+        }
+      }
+    } catch {
+      // Fallback below
+    }
   }
 
-  try {
-    const res = await api.fetch(viewEndpoint, {
-      method: 'GET',
-      skipCache: true
-    });
-
-    if (res.ok) {
-      const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      return {
-        label,
-        url: blobUrl,
-        mode: getDocumentPreviewMode(blobUrl, contentType)
-      };
-    }
-  } catch {
-    // Fallback below
-  }
-
+  // 3. If fallback URL is present, try fetching its blob or resolving it
   if (absoluteFallbackUrl) {
+    const isImageOrPdf = /\.(png|jpe?g|webp|gif|svg|pdf)($|\?)/i.test(absoluteFallbackUrl) ||
+      fileAsset?.mimeType?.startsWith('image/') ||
+      fileAsset?.mimeType === 'application/pdf';
+
+    if (isImageOrPdf) {
+      try {
+        const res = await api.fetch(absoluteFallbackUrl, {
+          method: 'GET',
+          headers: authHeaders,
+          skipCache: true
+        });
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          return {
+            label,
+            url: blobUrl,
+            mode: getDocumentPreviewMode(blobUrl, contentType)
+          };
+        }
+      } catch {
+        // Fallback to absolute url directly
+      }
+    }
+
     return {
       label,
       url: absoluteFallbackUrl,
@@ -141,13 +186,19 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       fileId = Number(fileAsset.fileId);
     } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
       fileId = fileAsset.id;
+    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+      fileId = Number(fileAsset.id);
     }
   }
 
   const fallbackUrl = typeof fileAsset === 'object'
     ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
     : null;
-  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+  const rawAbsoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const absoluteFallbackUrl = (token && rawAbsoluteFallbackUrl && (rawAbsoluteFallbackUrl.includes('/api/files/') || rawAbsoluteFallbackUrl.includes('/api/public/files/')) && !rawAbsoluteFallbackUrl.includes('token='))
+    ? `${rawAbsoluteFallbackUrl}${rawAbsoluteFallbackUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+    : rawAbsoluteFallbackUrl;
 
   if (!fileId && fallbackUrl) {
     const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
@@ -159,19 +210,31 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     }
   }
 
-  const previewWindow = window.open('about:blank', '_blank');
+  let previewWindow: Window | null = null;
+  try {
+    previewWindow = window.open('about:blank', '_blank');
+  } catch {
+    previewWindow = null;
+  }
 
   if (previewWindow) {
-    previewWindow.opener = null;
-    previewWindow.document.title = label;
-    previewWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 24px;">Opening document...</p>';
+    try {
+      previewWindow.document.title = label;
+      previewWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 24px; color: #334155;">Opening document preview...</p>';
+    } catch {
+      // Ignore initial DOM access restrictions
+    }
   }
 
   try {
     if (!fileId) {
       if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
-      if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
-      else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+      if (previewWindow && !previewWindow.closed) {
+        try { previewWindow.opener = null; } catch {}
+        previewWindow.location.href = absoluteFallbackUrl;
+      } else {
+        window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+      }
       return;
     }
 
@@ -190,12 +253,16 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         const body = await res.json().catch(() => null);
         const data = unwrapApiData<any>(body);
         if (data?.signedUrl) {
-          if (previewWindow) {
-            previewWindow.location.href = data.signedUrl;
-          } else {
-            window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+          if (isRealSignedUrl) {
+            if (previewWindow && !previewWindow.closed) {
+              try { previewWindow.opener = null; } catch {}
+              previewWindow.location.href = data.signedUrl;
+            } else {
+              window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+            }
+            return;
           }
-          return;
         }
       }
     } catch {
@@ -215,8 +282,12 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 
     if (!res || !res.ok) {
       if (absoluteFallbackUrl) {
-        if (previewWindow) previewWindow.location.href = absoluteFallbackUrl;
-        else window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+        if (previewWindow && !previewWindow.closed) {
+          try { previewWindow.opener = null; } catch {}
+          previewWindow.location.href = absoluteFallbackUrl;
+        } else {
+          window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+        }
         return;
       }
       throw new Error('Document file is not uploaded on server.');
@@ -225,46 +296,50 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    if (previewWindow) {
-      previewWindow.document.body.innerHTML = '';
-      if (contentType.startsWith('image/')) {
-        previewWindow.document.body.style.margin = '0';
-        previewWindow.document.body.style.background = '#f1f5f9';
-        previewWindow.document.body.style.display = 'flex';
-        previewWindow.document.body.style.justifyContent = 'center';
-        previewWindow.document.body.style.alignItems = 'center';
-        previewWindow.document.body.style.minHeight = '100vh';
-        const img = previewWindow.document.createElement('img');
-        img.src = url;
-        img.style.maxWidth = '100%';
-        img.style.maxHeight = '100vh';
-        img.style.objectFit = 'contain';
-        img.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
-        img.style.borderRadius = '8px';
-        previewWindow.document.body.appendChild(img);
-      } else if (contentType === 'application/pdf') {
-        previewWindow.document.body.style.margin = '0';
-        const iframe = previewWindow.document.createElement('iframe');
-        iframe.src = url;
-        iframe.style.width = '100%';
-        iframe.style.height = '100vh';
-        iframe.style.border = 'none';
-        previewWindow.document.body.appendChild(iframe);
-      } else {
-        const link = previewWindow.document.createElement('a');
-        link.href = url;
-        link.download = fileAsset?.originalName || 'document';
-        link.style.fontFamily = 'sans-serif';
-        link.style.display = 'block';
-        link.style.padding = '24px';
-        link.style.textAlign = 'center';
-        link.style.fontSize = '16px';
-        link.style.fontWeight = 'bold';
-        link.style.color = '#2563eb';
-        link.style.textDecoration = 'none';
-        link.innerText = 'Click here to download ' + (fileAsset?.originalName || 'document');
-        previewWindow.document.body.appendChild(link);
-        link.click();
+    if (previewWindow && !previewWindow.closed) {
+      try {
+        previewWindow.document.body.innerHTML = '';
+        if (contentType.startsWith('image/')) {
+          previewWindow.document.body.style.margin = '0';
+          previewWindow.document.body.style.background = '#f1f5f9';
+          previewWindow.document.body.style.display = 'flex';
+          previewWindow.document.body.style.justifyContent = 'center';
+          previewWindow.document.body.style.alignItems = 'center';
+          previewWindow.document.body.style.minHeight = '100vh';
+          const img = previewWindow.document.createElement('img');
+          img.src = url;
+          img.style.maxWidth = '100%';
+          img.style.maxHeight = '100vh';
+          img.style.objectFit = 'contain';
+          img.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1)';
+          img.style.borderRadius = '8px';
+          previewWindow.document.body.appendChild(img);
+        } else if (contentType === 'application/pdf') {
+          previewWindow.document.body.style.margin = '0';
+          const iframe = previewWindow.document.createElement('iframe');
+          iframe.src = url;
+          iframe.style.width = '100%';
+          iframe.style.height = '100vh';
+          iframe.style.border = 'none';
+          previewWindow.document.body.appendChild(iframe);
+        } else {
+          const link = previewWindow.document.createElement('a');
+          link.href = url;
+          link.download = fileAsset?.originalName || 'document';
+          link.style.fontFamily = 'sans-serif';
+          link.style.display = 'block';
+          link.style.padding = '24px';
+          link.style.textAlign = 'center';
+          link.style.fontSize = '16px';
+          link.style.fontWeight = 'bold';
+          link.style.color = '#2563eb';
+          link.style.textDecoration = 'none';
+          link.innerText = 'Click here to download ' + (fileAsset?.originalName || 'document');
+          previewWindow.document.body.appendChild(link);
+          link.click();
+        }
+      } catch {
+        previewWindow.location.href = url;
       }
     } else {
       window.open(url, '_blank', 'noopener,noreferrer');

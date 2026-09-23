@@ -18,13 +18,14 @@ import { resolveMarketplaceImage } from '../features/marketplace/utils/marketpla
 import { AIInsightBox } from '../features/dashboard/components/AIInsightBox';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 import { LiveOpportunityRadar } from '../features/dashboard/components/LiveOpportunityRadar';
-import { BiddingPerformanceChart } from '../features/dashboard/components/BiddingPerformanceChart';
+import { SellerCreativeAnalytics } from '../features/dashboard/components/SellerCreativeAnalytics';
 import { UrgentActionsInbox } from '../features/dashboard/components/UrgentActionsInbox';
-import { RecentOrdersSnapshot } from '../features/dashboard/components/RecentOrdersSnapshot';
 import { BuyerProcurementMonitor } from '../features/dashboard/components/BuyerProcurementMonitor';
 import { BuyerUrgentActionsInbox } from '../features/dashboard/components/BuyerUrgentActionsInbox';
 import { formatDate } from '../features/shared/format';
 import { BuyerSpendAndCompliance } from '../features/dashboard/components/BuyerSpendAndCompliance';
+import { BuyerProcurementSpendChart } from '../features/dashboard/components/BuyerProcurementSpendChart';
+import { SellerRevenueTrendChart } from '../features/dashboard/components/SellerRevenueTrendChart';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -283,15 +284,11 @@ export default function Dashboard() {
     queryFn: async () => {
       const res = await api.fetch('/api/auth/me', { headers: authHeaders });
       if (!res.ok) {
-        if (res.status === 401) {
-          logout('/');
-          router.replace('/');
-        }
         throw new Error('Failed to fetch profile');
       }
       return res.json();
     },
-    enabled: !!token,
+    enabled: !!token && !isLoggingOut,
     staleTime: 10 * 60_000,
     initialData: user ? { user, profile: user.sellerProfile || user.buyerProfile } : undefined,
   });
@@ -299,14 +296,14 @@ export default function Dashboard() {
 
   // 2. Notifications Query
   const { data: notificationsData, isLoading: isNotifLoading } = useQuery({
-    queryKey: ['notifications'],
+    queryKey: ['notifications', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/notifications', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch notifications');
       const json = await res.json();
       return unwrapApiData<any[]>(json) || [];
     },
-    enabled: !!token,
+    enabled: !!token && !!user?.id,
     staleTime: 60_000,
     refetchInterval: 15000,
   });
@@ -314,14 +311,14 @@ export default function Dashboard() {
 
   // 3. Admin Stats Query (KPI Cards)
   const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
-    queryKey: ['adminStats'],
+    queryKey: ['adminStats', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/admin/reports/summary?kpiOnly=true', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch stats');
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token && user?.role === 'admin',
+    enabled: !!token && !!user?.id && (user?.role === 'admin' || user?.role === 'master_admin'),
     staleTime: 5 * 60_000,
     refetchInterval: 15000,
   });
@@ -329,7 +326,7 @@ export default function Dashboard() {
   const canCheckBannerEligibility = Boolean(
     token &&
     user?.organizationId &&
-    ['buyer', 'seller', 'admin'].includes(String(user?.role || ''))
+    ['buyer', 'seller', 'admin', 'master_admin'].includes(String(user?.role || ''))
   );
 
   const { data: bannerEligibility, isLoading: isBannerEligibilityLoading } = useQuery({
@@ -351,16 +348,29 @@ export default function Dashboard() {
   });
 
   const { data: summaryData, isLoading: isSummaryLoading } = useQuery({
-    queryKey: ['dashboard', 'summary'],
+    queryKey: ['dashboard', 'summary', user?.id, user?.organizationId],
     queryFn: async () => {
       const res = await api.fetch('/api/dashboard/summary', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch summary');
       const json = await res.json();
       return unwrapApiData<any>(json);
     },
-    enabled: !!token && user?.role !== 'admin',
+    enabled: !!token && !!user?.id && user?.role !== 'admin',
     staleTime: 5 * 60_000,
     refetchInterval: 15000,
+  });
+
+  const { data: analyticsData, isLoading: isAnalyticsLoading } = useQuery({
+    queryKey: ['dashboard', 'analytics', user?.id, user?.organizationId, user?.role],
+    queryFn: async () => {
+      const res = await api.fetch('/api/dashboard/analytics', { headers: authHeaders });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return unwrapApiData<any>(json);
+    },
+    enabled: !!token && !!user?.id && (user?.role === 'buyer' || user?.role === 'seller' || user?.role === 'shg'),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false
   });
 
   const dashboardData = useMemo(() => {
@@ -487,7 +497,7 @@ export default function Dashboard() {
       helper: 'Applications waiting for review',
       icon: FileSearch,
       path: '/admin/onboarding',
-      tone: 'bg-amber-50 text-amber-700'
+      tone: 'amber'
     },
     {
       label: 'Active Sellers',
@@ -495,7 +505,7 @@ export default function Dashboard() {
       helper: 'Approved suppliers in the network',
       icon: Users,
       path: '/admin/onboarding?tab=sellers',
-      tone: 'bg-emerald-50 text-emerald-700'
+      tone: 'emerald'
     },
     {
       label: 'Active Buyers',
@@ -503,7 +513,7 @@ export default function Dashboard() {
       helper: 'Buyer departments enabled',
       icon: ClipboardCheck,
       path: '/admin/onboarding?tab=buyers',
-      tone: 'bg-slate-50 text-[#12335f]'
+      tone: 'blue'
     },
     {
       label: 'Active SHG',
@@ -511,7 +521,7 @@ export default function Dashboard() {
       helper: 'Approved SHG groups',
       icon: BarChart3,
       path: '/admin/reports',
-      tone: 'bg-indigo-50 text-indigo-700'
+      tone: 'indigo'
     },
     // {
     //   label: 'Tender Queue',
@@ -519,15 +529,23 @@ export default function Dashboard() {
     //   helper: 'Procurement tenders and bids',
     //   icon: Gavel,
     //   path: '/admin/bids',
-    //   tone: 'bg-purple-50 text-purple-700'
+    //   tone: 'purple'
     // },
     {
+      label: 'Disputes & Grievances',
+      value: adminStats?.disputes ?? 0,
+      helper: 'Active cases & grievances',
+      icon: AlertTriangle,
+      path: '/admin/disputes',
+      tone: 'rose'
+    },
+    {
       label: 'Top Buyers',
-      value: adminStats?.topBuyers ?? 'N/A',
+      value: adminStats?.topBuyers && adminStats.topBuyers !== 'N/A' ? adminStats.topBuyers : 'None',
       helper: 'Top Buyer Name',
       icon: FileText,
-      // path: '/admin/reports',
-      tone: 'bg-cyan-50 text-cyan-700'
+      path: '/admin/onboarding?tab=buyers',
+      tone: 'cyan'
     }
   ], [adminStats]);
 
@@ -537,6 +555,12 @@ export default function Dashboard() {
       detail: 'Review seller and buyer onboarding, compliance exceptions, review queues, and approved stakeholder capacity.',
       path: '/admin/onboarding',
       icon: ClipboardCheck
+    },
+    {
+      title: 'Disputes & Grievances',
+      detail: 'Adjudicate commercial disputes, review citizen grievances, request clarifications, and resolve escalation tickets.',
+      path: '/admin/disputes',
+      icon: AlertTriangle
     },
     // {
     //   title: 'Onboarding Console',
@@ -587,7 +611,7 @@ export default function Dashboard() {
     return reason && ['rejected', 'resubmission_required'].includes(status || '');
   }), [user?.sectionRejectionReasons, user?.sectionStatus]);
 
-  if (user?.role === 'admin') {
+  if (user?.role === 'admin' || user?.role === 'master_admin') {
     return (
       <div className="space-y-4 animate-in fade-in duration-500">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between rounded-2xl bg-gradient-to-r from-[#12335f] to-indigo-900 p-5 sm:p-6 text-white shadow-lg overflow-hidden relative">
@@ -608,7 +632,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           {adminTiles.map(stat => <AdminKpiLink key={stat.label} stat={stat} isLoading={isAdminStatsLoading} />)}
         </div>
 
@@ -619,16 +643,16 @@ export default function Dashboard() {
             actions={[
               ['Stakeholder approvals', '/admin/onboarding', ShieldCheck],
               // ['Tender approvals', '/admin/bids', Gavel],
-              ['Final award approvals', '/admin/procurement-orders', Trophy],
+              ['Final award approvals', '/admin/bids', Trophy],
             ]}
           />
           <AdminActionPanel
             title="Operations Monitoring"
             description="Track marketplace, orders, delivery, payments, and compliance signals from one row."
             actions={[
-              // ['Catalogue moderation', '/admin/catalogue-moderation', Store],
-              // ['Orders & delivery', '/admin/delivery', Truck],
+              ['Orders & delivery', '/admin/delivery', Truck],
               ['Payments & escrow', '/payments/transactions', CreditCard],
+              ['Disputes & Grievances', '/admin/disputes', AlertTriangle],
             ]}
           />
           <AdminActionPanel
@@ -703,9 +727,9 @@ export default function Dashboard() {
                   <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                 </Button>
               </Link>
-              <Link href="/buyer/procurement/responses">
+              <Link href="/buyer/my-procurements">
                 <Button variant="ghost" className="h-8 rounded px-3 text-[10px] font-bold uppercase tracking-wide text-[#12335f] bg-slate-50 hover:bg-slate-100 transition ring-1 ring-slate-200/70">
-                  Manage Bids
+                  Manage Procurements
                 </Button>
               </Link>
               <Link href="/orders">
@@ -812,9 +836,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
             {/* Left Column (65% on large screens) */}
             <div className="lg:col-span-8 space-y-3.5">
+              <BuyerProcurementSpendChart 
+                spendTrend={analyticsData?.spendTrend}
+                methodDistribution={analyticsData?.methodDistribution}
+                procurementFunnel={analyticsData?.procurementFunnel}
+                isLoading={isAnalyticsLoading}
+              />
               <BuyerProcurementMonitor />
-              <RecentOrdersSnapshot />
-             
             </div>
 
             {/* Right Column (35% on large screens) */}
@@ -822,7 +850,7 @@ export default function Dashboard() {
               <BuyerUrgentActionsInbox />
               
               <BuyerSpendAndCompliance 
-                stats={{
+                stats={analyticsData?.compliance ?? {
                   totalSpend: Number(summaryData?.buyerProcurementTotalSpentValue || 0)
                 }}
               />
@@ -860,6 +888,17 @@ export default function Dashboard() {
                         {user?.onboardingStatus === 'approved_for_procurement' ? 'View Profile' : 'Complete'}
                       </Button>
                     </div>
+                    {(user?.adminFeedback || profileData?.user?.adminFeedback) && (
+                      <div className="mt-2.5 rounded-lg border border-amber-200/80 bg-amber-50/80 p-2.5 text-xs animate-in fade-in duration-200">
+                        <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-amber-900 text-[10px]">
+                          <MessageSquare className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                          Admin Scrutiny Remark / Query
+                        </div>
+                        <p className="mt-1 text-slate-800 font-semibold text-[11px] leading-relaxed break-words">
+                          {user?.adminFeedback || profileData?.user?.adminFeedback}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -873,22 +912,30 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
             {/* Left Column (65% on large screens) */}
             <div className="lg:col-span-8 space-y-3.5">
+              <SellerRevenueTrendChart 
+                revenueTrend={analyticsData?.revenueTrend}
+                cashflowLifecycle={analyticsData?.cashflowLifecycle}
+                totalRevenue={analyticsData?.conversion?.totalRevenue}
+                totalOrders={analyticsData?.conversion?.totalOrders}
+                isLoading={isAnalyticsLoading}
+              />
               <LiveOpportunityRadar />
-              <RecentOrdersSnapshot />
             </div>
 
             {/* Right Column (35% on large screens) */}
             <div className="lg:col-span-4 space-y-3.5">
               <UrgentActionsInbox />
               
-              <BiddingPerformanceChart 
-                stats={{
-                  submitted: Number(summaryData?.sellerSubmittedBidsCount || summaryData?.sellerQuotationsCount || 0),
-                  won: Number(summaryData?.sellerActivePOsCount || 0),
-                  underEval: Number(summaryData?.sellerOpportunitiesCount || 0),
-                  pipelineValue: 0,
-                  onTimeDeliveryRate: 100
+              <SellerCreativeAnalytics 
+                cashflowLifecycle={analyticsData?.cashflowLifecycle}
+                conversion={analyticsData?.conversion}
+                opportunityCounts={{
+                  total: Number(summaryData?.sellerOpportunitiesCount || 0),
+                  tenders: Number(summaryData?.sellerOpenTendersCount || 0),
+                  rfqs: Number(summaryData?.sellerRfqsCount ?? summaryData?.sellerReceivedRfqsCount ?? 0),
+                  auctions: Number(summaryData?.reverseAuctionsLive || summaryData?.reverseAuctionInvites || 0),
                 }}
+                isLoading={isAnalyticsLoading}
               />
 
               {/* Compact Verification & Support Cards */}
@@ -924,6 +971,17 @@ export default function Dashboard() {
                         {user?.onboardingStatus === 'approved_for_procurement' ? 'View Profile' : 'Complete'}
                       </Button>
                     </div>
+                    {(user?.adminFeedback || profileData?.user?.adminFeedback) && (
+                      <div className="mt-2.5 rounded-lg border border-amber-200/80 bg-amber-50/80 p-2.5 text-xs animate-in fade-in duration-200">
+                        <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-amber-900 text-[10px]">
+                          <MessageSquare className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                          Admin Scrutiny Remark / Query
+                        </div>
+                        <p className="mt-1 text-slate-800 font-semibold text-[11px] leading-relaxed break-words">
+                          {user?.adminFeedback || profileData?.user?.adminFeedback}
+                        </p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

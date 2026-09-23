@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Loader2 } from '@/components/ui/loader';
 import { PageTableSkeleton } from '../../../components/ui/skeleton';
+import { FocusTrap } from '../../../components/ui/FocusTrap';
 import {
     fetchDeliveryAddresses,
     createDeliveryAddress,
@@ -405,94 +406,112 @@ export default function AddressBookPage() {
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                            <div className="space-y-3">
                                 {pagedAddresses.map(addr => (
                                     <div
                                         key={addr.id}
-                                        className={`rounded-2xl border bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md flex flex-col justify-between ${
-                                            addr.isDefault ? 'border-[#12335f] ring-2 ring-[#12335f]/15' : 'border-slate-200/80 hover:border-slate-350'
+                                        className={`rounded-2xl border bg-white p-4 sm:p-5 shadow-xs transition-all duration-200 hover:border-slate-350 hover:shadow-sm ${
+                                            addr.isDefault
+                                                ? 'border-[#12335f]/50 ring-1 ring-[#12335f]/15 bg-slate-50/25'
+                                                : 'border-slate-200/90'
                                         }`}
                                     >
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between">
-                                                <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black text-slate-700 uppercase tracking-widest">
-                                                    {addr.addressType}
-                                                </span>
-                                                {addr.isDefault && (
-                                                    <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                                                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                                                        Default Address
+                                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                                            {/* Column 1: Label, Type & Organization */}
+                                            <div className="lg:w-1/4 min-w-[200px] space-y-1.5">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-black text-slate-700 uppercase tracking-widest">
+                                                        {addr.addressType}
                                                     </span>
-                                                )}
+                                                    {addr.isDefault && (
+                                                        <span className="flex items-center gap-1 text-[10px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                                            <CheckCircle2 className="h-3 w-3 text-emerald-600" aria-hidden="true" />
+                                                            Default Address
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-sm font-black text-[#12335f] leading-snug">
+                                                        {addr.addressLabel}
+                                                    </h3>
+                                                    {addr.organizationName && (
+                                                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mt-0.5">
+                                                            <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                                                            <span>{addr.organizationName}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
 
-                                            <div>
-                                                <h3 className="text-sm font-black text-[#12335f] leading-snug">
-                                                    {addr.addressLabel}
-                                                </h3>
-                                                {addr.organizationName && (
-                                                    <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mt-1">
-                                                        <Building className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                        <span>{addr.organizationName}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            <div className="text-xs text-slate-700 font-semibold space-y-0.5 leading-relaxed bg-slate-50/50 p-3 rounded-xl border border-slate-100">
-                                                <p>{addr.addressLine1}</p>
-                                                {addr.addressLine2 && <p>{addr.addressLine2}</p>}
-                                                <p className="font-extrabold text-slate-950 mt-1">
+                                            {/* Column 2: Address details */}
+                                            <div className="lg:flex-1 text-xs text-slate-700 font-semibold space-y-0.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                                                <p className="text-slate-800 leading-relaxed">
+                                                    {addr.addressLine1}
+                                                    {addr.addressLine2 ? `, ${addr.addressLine2}` : ''}
+                                                </p>
+                                                <p className="font-extrabold text-slate-950">
                                                     {addr.city}, {addr.district}, {addr.state} - {addr.pincode}
                                                 </p>
                                                 {addr.landmark && (
-                                                    <p className="text-[11px] text-slate-400 italic">
+                                                    <p className="text-[11px] text-slate-500 italic">
                                                         Landmark: {addr.landmark}
                                                     </p>
                                                 )}
                                             </div>
 
-                                            <div className="space-y-1.5 text-[11px] font-semibold text-slate-600">
+                                            {/* Column 3: Contact info */}
+                                            <div className="lg:w-1/4 min-w-[200px] space-y-1.5 text-[11px] font-semibold text-slate-600">
                                                 <div className="flex items-center gap-1.5">
-                                                    <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                    <span>{addr.contactPersonName} — {addr.mobileNumber}</span>
+                                                    <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                                                    <span className="text-slate-900 font-bold">{addr.contactPersonName}</span>
+                                                    <span className="text-slate-400">—</span>
+                                                    <span>{addr.mobileNumber}</span>
                                                 </div>
                                                 {addr.email && (
                                                     <div className="flex items-center gap-1.5">
-                                                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                        <span className="truncate">{addr.email}</span>
+                                                        <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                                                        <span className="truncate text-slate-600">{addr.email}</span>
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
 
-                                        <div className="flex items-center justify-between border-t border-slate-100 pt-3.5 mt-4">
-                                            {!addr.isDefault ? (
-                                                <button
-                                                    onClick={() => handleSetDefault(addr.id)}
-                                                    className="text-xs font-bold text-slate-600 hover:text-[#12335f] transition-colors cursor-pointer"
-                                                >
-                                                    Set as default
-                                                </button>
-                                            ) : (
-                                                <span className="text-xs font-black text-emerald-700">
-                                                    Primary Delivery Location
-                                                </span>
-                                            )}
-                                            <div className="flex items-center gap-1.5">
-                                                <button
-                                                    onClick={() => handleOpenEditAddress(addr)}
-                                                    className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#12335f] transition-colors cursor-pointer shadow-2xs"
-                                                    title="Edit Address"
-                                                >
-                                                    <Edit3 className="h-3.5 w-3.5" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteAddress(addr.id)}
-                                                    className="rounded-lg p-1.5 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shadow-2xs"
-                                                    title="Delete Address"
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </button>
+                                            {/* Column 4: Status & Actions */}
+                                            <div className="flex items-center justify-between lg:justify-end gap-3 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100 shrink-0">
+                                                <div>
+                                                    {!addr.isDefault ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSetDefault(addr.id)}
+                                                            className="text-xs font-bold text-slate-600 hover:text-[#12335f] transition-colors cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#12335f] rounded px-1.5 py-0.5"
+                                                        >
+                                                            Set as default
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-xs font-black text-emerald-700 whitespace-nowrap">
+                                                            Primary Delivery Location
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleOpenEditAddress(addr)}
+                                                        className="rounded-lg p-2 border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-[#12335f] transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                                                        title="Edit Address"
+                                                        aria-label={`Edit ${addr.addressLabel}`}
+                                                    >
+                                                        <Edit3 className="h-4 w-4" aria-hidden="true" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteAddress(addr.id)}
+                                                        className="rounded-lg p-2 border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors cursor-pointer shadow-2xs focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                                        title="Delete Address"
+                                                        aria-label={`Delete ${addr.addressLabel}`}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -515,19 +534,27 @@ export default function AddressBookPage() {
 
             {/* Address Form Modal */}
             {isAddressModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                            <h2 className="text-lg font-bold text-[#12335f]">
-                                {editingAddress ? 'Edit Delivery Address' : 'Add New Delivery Address'}
-                            </h2>
-                            <button
-                                onClick={() => setIsAddressModalOpen(false)}
-                                className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                            >
-                                <Plus className="h-5 w-5 rotate-45" />
-                            </button>
-                        </div>
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="address-modal-title"
+                >
+                    <FocusTrap onEscape={() => setIsAddressModalOpen(false)} className="w-full max-w-2xl">
+                        <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                <h2 id="address-modal-title" className="text-lg font-bold text-[#12335f]">
+                                    {editingAddress ? 'Edit Delivery Address' : 'Add New Delivery Address'}
+                                </h2>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAddressModalOpen(false)}
+                                    aria-label="Close address modal"
+                                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                                >
+                                    <Plus className="h-5 w-5 rotate-45" />
+                                </button>
+                            </div>
 
                         <form onSubmit={handleSaveAddress} className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -812,82 +839,78 @@ export default function AddressBookPage() {
                             </div>
                         </form>
                     </div>
+                    </FocusTrap>
                 </div>
             )}
 
             {/* Address Group Modal */}
             {isGroupModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="relative w-full max-w-md rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                            <h2 className="text-lg font-bold text-[#12335f]">
-                                Create Address Group
-                            </h2>
-                            <button
-                                onClick={() => setIsGroupModalOpen(false)}
-                                className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                            >
-                                <Plus className="h-5 w-5 rotate-45" />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleCreateGroup} className="space-y-4">
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-750">
-                                    Group Name *
-                                </label>
-                                <Input
-                                    required
-                                    placeholder="e.g. Western Zone, Site Offices"
-                                    value={groupName}
-                                    onChange={e => setGroupName(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="space-y-1.5">
-                                <label className="text-xs font-black uppercase tracking-wider text-slate-750">
-                                    Description
-                                </label>
-                                <textarea
-                                    className="flex w-full rounded-lg border border-slate-250 bg-white px-3 py-2 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:opacity-50"
-                                    rows={3}
-                                    placeholder="Add detail about address group..."
-                                    value={groupDescription}
-                                    onChange={e => setGroupDescription(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="isDefaultGroup"
-                                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/15"
-                                    checked={isDefaultGroup}
-                                    onChange={e => setIsDefaultGroup(e.target.checked)}
-                                />
-                                <label htmlFor="isDefaultGroup" className="text-xs font-bold text-slate-700 cursor-pointer select-none">
-                                    Set as default group
-                                </label>
-                            </div>
-
-                            <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-6">
-                                <Button
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="group-modal-title"
+                >
+                    <FocusTrap onEscape={() => setIsGroupModalOpen(false)} className="w-full max-w-md">
+                        <div className="relative w-full max-w-md rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                                <h2 id="group-modal-title" className="text-lg font-bold text-[#12335f]">
+                                    Create Address Group
+                                </h2>
+                                <button
                                     type="button"
-                                    variant="outline"
                                     onClick={() => setIsGroupModalOpen(false)}
-                                    className="h-10 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-755"
+                                    aria-label="Close address group modal"
+                                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
                                 >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    type="submit"
-                                    className="h-10 text-xs font-bold bg-[#12335f] hover:bg-[#12335f]/90 text-white"
-                                >
-                                    Create Group
-                                </Button>
+                                    <Plus className="h-5 w-5 rotate-45" />
+                                </button>
                             </div>
-                        </form>
-                    </div>
+
+                            <form onSubmit={handleCreateGroup} className="space-y-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-750">
+                                        Group Name *
+                                    </label>
+                                    <Input
+                                        required
+                                        placeholder="e.g. Western Zone, Site Offices"
+                                        value={groupName}
+                                        onChange={e => setGroupName(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black uppercase tracking-wider text-slate-750">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        className="h-20 w-full rounded-lg border border-slate-250 bg-white p-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none"
+                                        placeholder="Optional description of this address cluster..."
+                                        value={groupDescription}
+                                        onChange={e => setGroupDescription(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 mt-6">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setIsGroupModalOpen(false)}
+                                        className="h-10 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-755"
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        type="submit"
+                                        className="h-10 text-xs font-bold bg-[#12335f] hover:bg-[#12335f]/90 text-white"
+                                    >
+                                        Create Group
+                                    </Button>
+                                </div>
+                            </form>
+                        </div>
+                    </FocusTrap>
                 </div>
             )}
         </div>

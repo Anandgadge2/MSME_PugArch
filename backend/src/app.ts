@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { corsOptions, preflightCors } from './config/cors.js';
 import { applySecurityMiddleware } from './config/security.js';
@@ -17,6 +18,15 @@ export const createApp = () => {
   app.use('/org-logos', express.static(path.resolve(process.cwd(), 'uploads/org-logos')));
   app.use('/banners', express.static(path.resolve(process.cwd(), 'uploads/banners')));
   app.use('/products', express.static(path.resolve(process.cwd(), 'uploads/products')));
+
+  // Serve category photos from frontend/public or uploads directory
+  const frontendCategoryPhotos = path.resolve(process.cwd(), '../frontend/public/category-photos');
+  const localCategoryPhotos = path.resolve(process.cwd(), 'uploads/category-photos');
+  if (fs.existsSync(frontendCategoryPhotos)) {
+    app.use('/category-photos', express.static(frontendCategoryPhotos));
+  } else if (fs.existsSync(localCategoryPhotos)) {
+    app.use('/category-photos', express.static(localCategoryPhotos));
+  }
 
   // Serve inline transparent favicon to avoid browser 404s
   const faviconBuffer = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');

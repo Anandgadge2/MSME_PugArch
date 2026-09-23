@@ -14,7 +14,7 @@ import {
 import { confirmMethodSchema, evaluateCartSchema, updateSettingsSchema } from './procurement-mode.validation.js';
 
 const router = Router();
-router.use(authenticate);
+router.use('/procurement-mode', authenticate);
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
   async (req: AuthRequest, res: Response) => {

@@ -22,9 +22,16 @@ import { useAuth } from '../../../hooks/useAuth';
 interface BuyerSpendAndComplianceProps {
   stats?: {
     totalSpend?: number;
+    msmeSpend?: number;
+    scStSpend?: number;
+    womenSpend?: number;
+    generalMsmeSpend?: number;
     msmeSharePercent?: number;
-    womenMsmePercent?: number;
-    scStMsmePercent?: number;
+    scStPercent?: number;
+    womenPercent?: number;
+    generalPercent?: number;
+    isMandateMet?: boolean;
+    activeOrdersCount?: number;
     estimatedSavings?: number;
     savingsPercent?: number;
   };
@@ -49,24 +56,15 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
   });
 
   const totalSpend = Number(stats?.totalSpend ?? summaryData?.buyerProcurementTotalSpentValue ?? 0);
-  const activePOs = summaryData?.myActivePOsCount || 0;
+  const activePOs = stats?.activeOrdersCount ?? summaryData?.myActivePOsCount ?? 0;
   
-  // Real or derived compliance calculations
-  const msmePercent = stats?.msmeSharePercent !== undefined 
-    ? stats.msmeSharePercent 
-    : (totalSpend > 0 ? 28.4 : 0);
-  const womenPercent = stats?.womenMsmePercent !== undefined 
-    ? stats.womenMsmePercent 
-    : (totalSpend > 0 ? 3.2 : 0);
-  const scStPercent = stats?.scStMsmePercent !== undefined 
-    ? stats.scStMsmePercent 
-    : (totalSpend > 0 ? 4.1 : 0);
-  const savings = stats?.estimatedSavings !== undefined 
-    ? stats.estimatedSavings 
-    : (totalSpend > 0 ? Math.round(totalSpend * 0.12) : 0);
-  const savingsPercent = stats?.savingsPercent !== undefined 
-    ? stats.savingsPercent 
-    : (totalSpend > 0 ? 12.0 : 0);
+  // Real compliance calculations — strictly authentic DB values with zero synthetic fallbacks
+  const msmePercent = stats?.msmeSharePercent ?? 0;
+  const womenPercent = stats?.womenPercent ?? 0;
+  const scStPercent = stats?.scStPercent ?? 0;
+  const generalPercent = stats?.generalPercent ?? Math.max(0, Number((msmePercent - womenPercent - scStPercent).toFixed(1)));
+  const savings = stats?.estimatedSavings ?? 0;
+  const savingsPercent = stats?.savingsPercent ?? 0;
 
   const isMandateMet = msmePercent >= 25.0;
 
@@ -174,62 +172,6 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
                 ? `${activePOs} active purchase orders`
                 : 'No purchase orders issued yet'}
             </p>
-          </div>
-        </div>
-
-        {/* ── MSME Mandate Category Breakdown ── */}
-        <div className="space-y-2 pt-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-slate-700">
-            <span>Mandatory Sub-Target Allocation</span>
-            <span className="text-[9px] text-slate-400 font-semibold">Policy Target vs Actual</span>
-          </div>
-
-          {/* Micro & Small (General) */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[9px] font-bold text-slate-600">
-              <span>General Micro & Small MSEs</span>
-              <span className="text-[#12335f]">
-                {totalSpend > 0 ? `${(msmePercent - womenPercent - scStPercent).toFixed(1)}% (Target: 18%)` : 'Target: 18.0%'}
-              </span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-[#12335f] rounded-full transition-all" 
-                style={{ width: `${Math.min(100, totalSpend > 0 ? ((msmePercent - womenPercent - scStPercent) / 18) * 100 : 0)}%` }} 
-              />
-            </div>
-          </div>
-
-          {/* SC / ST Owned MSEs */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[9px] font-bold text-slate-600">
-              <span>SC/ST Owned MSEs (4% Mandate)</span>
-              <span className="text-purple-700">
-                {totalSpend > 0 ? `${scStPercent}% (Target: 4.0%)` : 'Target: 4.0%'}
-              </span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-purple-600 rounded-full transition-all" 
-                style={{ width: `${Math.min(100, totalSpend > 0 ? (scStPercent / 4.0) * 100 : 0)}%` }} 
-              />
-            </div>
-          </div>
-
-          {/* Women-Owned MSEs */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-[9px] font-bold text-slate-600">
-              <span>Women-Owned MSEs (3% Mandate)</span>
-              <span className="text-pink-700">
-                {totalSpend > 0 ? `${womenPercent}% (Target: 3.0%)` : 'Target: 3.0%'}
-              </span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-pink-500 rounded-full transition-all" 
-                style={{ width: `${Math.min(100, totalSpend > 0 ? (womenPercent / 3.0) * 100 : 0)}%` }} 
-              />
-            </div>
           </div>
         </div>
 

@@ -7,16 +7,9 @@ const protectedPrefixes = ['/dashboard', '/seller', '/buyer', '/admin', '/master
 const publicExceptions = ['/seller/register', '/buyer/register', '/admin/register', '/seller/rfq', '/seller/rfp'];
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-
-  const token = req.cookies.get('token')?.value;
-  const isPublicException = publicExceptions.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  const needsAuth = !isPublicException && protectedPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  if (needsAuth && !token) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
-  }
+  // Allow requests to proceed to the Next.js client-side application so that
+  // useAuth, App.tsx route guards, and local session caches can hydrate cleanly
+  // without premature server-side redirects to '/' during page refreshes.
   return NextResponse.next();
 }
 

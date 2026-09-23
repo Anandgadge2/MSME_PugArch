@@ -82,7 +82,7 @@ export function MarketplaceSectionCarousel({
                                 key={index}
                                 className="w-[180px] sm:w-[200px] h-[300px] shrink-0 rounded-xl bg-white p-3 shadow-sm border border-slate-200 flex flex-col"
                             >
-                                <div className="h-[150px] w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
+                                <div className="h-32 sm:h-36 w-full rounded-lg bg-slate-100 animate-pulse shrink-0" />
                                 <div className="mt-3 h-3 w-16 rounded bg-slate-100 animate-pulse" />
                                 <div className="mt-2 h-8 w-full rounded bg-slate-100 animate-pulse" />
                                 <div className="mt-auto h-3 w-12 rounded bg-slate-100 animate-pulse mb-1.5" />
@@ -93,7 +93,7 @@ export function MarketplaceSectionCarousel({
                     </div>
                 ) : items.length > 0 ? (
                     <div ref={scrollRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-6 pt-2 px-2 sm:px-3 -mx-2 sm:-mx-3 no-scrollbar scroll-smooth xl:gap-5">
-                        {items.map((item) => (
+                        {items.map((item, idx) => (
                             <MarketplaceItemCard
                                 key={`${sectionKey}-${item.id}-${(item as any).itemType || ''}`}
                                 item={item}
@@ -101,6 +101,7 @@ export function MarketplaceSectionCarousel({
                                 showCompare={showCompare}
                                 showAddToCart={showAddToCart}
                                 showRequestQuote={showRequestQuote}
+                                priority={idx < 4}
                             />
                         ))}
                         {viewAllUrl && (

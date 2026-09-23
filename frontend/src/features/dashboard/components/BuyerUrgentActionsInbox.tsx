@@ -14,7 +14,8 @@ import {
   Inbox,
   CheckCircle2,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  MessageSquare
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
@@ -53,6 +54,20 @@ export function BuyerUrgentActionsInbox() {
   const actionItems: ActionItem[] = React.useMemo(() => {
     const items: ActionItem[] = [];
 
+    if (user?.adminFeedback && user?.onboardingStatus !== 'approved_for_procurement') {
+      items.push({
+        id: 'act-admin-feedback',
+        type: 'approval',
+        title: 'Admin Desk Scrutiny Clarification',
+        subtitle: user.adminFeedback,
+        badge: 'Desk Remark',
+        badgeTone: 'bg-amber-50 text-amber-700 border-amber-200',
+        actionHref: '/buyer/onboarding',
+        actionLabel: 'Review Profile',
+        icon: MessageSquare
+      });
+    }
+
     // 1. Pending Bid Evaluations
     const bidsCount = summaryData?.supplierResponsesCount || summaryData?.buyerProcurementActiveBidsCount || 0;
     if (bidsCount > 0) {
@@ -63,7 +78,7 @@ export function BuyerUrgentActionsInbox() {
         subtitle: 'Technical evaluation and L1 compliance review required before opening commercials.',
         badge: 'Evaluation Due',
         badgeTone: 'bg-amber-50 text-amber-700 border-amber-200',
-        actionHref: '/buyer/procurement/responses',
+        actionHref: '/buyer/my-procurements',
         actionLabel: 'Evaluate Bids',
         icon: Gavel
       });
@@ -118,7 +133,7 @@ export function BuyerUrgentActionsInbox() {
     }
 
     return items;
-  }, [summaryData]);
+  }, [summaryData, user]);
 
   return (
     <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden flex flex-col transition-all">

@@ -98,7 +98,6 @@ const BidParticipationPage = lazy(() => import('./features/procurementBid/pages/
 const BidResultsPage = lazy(() => import('./features/procurementBid/pages/BidResultsPage'));
 const BidComparisonPage = lazy(() => import('./features/procurementBid/pages/BidComparisonPage'));
 const AdminBidManagementPage = lazy(() => import('./features/procurementBid/pages/AdminBidManagementPage'));
-const ProcurementOrdersPage = lazy(() => import('./features/procurementBid/pages/ProcurementOrdersPage'));
 const ReverseAuctionCreatePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionCreatePage'));
 const ReverseAuctionDetailPage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionDetailPage'));
 const ReverseAuctionLivePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionLivePage'));
@@ -117,7 +116,6 @@ const ProcurementDraftsPage = lazy(() => import('./features/procurementWizard/pa
 // The old bidCreationWizardV2 files are preserved but no longer routed.
 const BuyerProcurementHub = lazy(() => import('./features/procurement/pages/BuyerProcurementHub'));
 const MyProcurementsPage = lazy(() => import('./features/procurement/pages/MyProcurementsPage'));
-const SupplierResponsesPage = lazy(() => import('./features/procurement/pages/SupplierResponsesPage'));
 const ProcurementCheckoutPage = lazy(() => import('./features/procurementCheckoutV2/pages/ProcurementCheckoutPage'));
 const SellerOpportunitiesPage = lazy(() => import('./features/sellerOpportunities/pages/SellerOpportunitiesPage'));
 const SellerBidsPage = lazy(() => import('./features/procurementBid/pages/SellerBidsPage'));
@@ -130,9 +128,9 @@ const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContr
 const OpenTenderDetailPage = lazy(() => import('./features/rfq/pages/OpenTenderDetailPage'));
 const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedTenderDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
-const RfqComparisonPage = lazy(() => import('./features/rfq/pages/RfqComparisonPage'));
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
+const SellerAwardPoAlertPopup = lazy(() => import('./features/notifications/SellerAwardPoAlertPopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -140,7 +138,7 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
-import { PageTableSkeleton, ProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton } from './components/ui/skeleton';
+import { PageTableSkeleton, ProfileSkeleton, BuyerProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton, GrnDetailSkeleton } from './components/ui/skeleton';
 
 function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKey: string }) {
   React.useEffect(() => {
@@ -187,6 +185,14 @@ function PageMountReporter({ onMount, routeKey }: { onMount: () => void; routeKe
  */
 function RouteFallback() {
   const pathname = usePathname() || '';
+
+  if (pathname.match(/^\/grn\/\d+$/)) {
+    return <GrnDetailSkeleton />;
+  }
+
+  if (pathname === '/buyer/profile') {
+    return <BuyerProfileSkeleton />;
+  }
 
   if (pathname.includes('/profile')) {
     return <ProfileSkeleton />;
@@ -235,7 +241,6 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/buyer/procurement/create': () => import('./features/procurementWizard/pages/CreateProcurementPage'),
   '/buyer/procurement/drafts': () => import('./features/procurementWizard/pages/ProcurementDraftsPage'),
   '/buyer/procurement/hub': () => import('./features/procurement/pages/BuyerProcurementHub'),
-  '/buyer/procurement/responses': () => import('./features/procurement/pages/SupplierResponsesPage'),
   '/seller/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/buyer/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
   '/invoices': () => import('./features/invoices/pages/InvoiceRegisterPage'),
@@ -355,6 +360,7 @@ const roleOk = (role?: string, allowed?: string[]) => {
 const publicInfoRoutes = [
   '/contact-us',
   '/feedback',
+  '/grievance',
   '/sitemap',
   '/faqs',
   '/faq',
@@ -362,6 +368,16 @@ const publicInfoRoutes = [
   '/terms-and-conditions',
   '/website-policies',
   '/privacy-policy',
+  '/vendor-verification-policy',
+  '/verification-policy',
+  '/order-placement-policy',
+  '/procurement-policy',
+  '/refund-cancellation-policy',
+  '/cancellation-policy',
+  '/supplier-agreement',
+  '/registration-agreement',
+  '/data-sharing-consent',
+  '/consent-policy',
   '/copyright',
   '/copyrights',
   '/copyright-policy',
@@ -424,7 +440,11 @@ function Redirect({ to }: { to: string }) {
     router.replace(to);
   }, [router, to, currentPath]);
 
-  return null;
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#0b2447] border-t-transparent" />
+    </div>
+  );
 }
 
 import { usePermissions } from './hooks/useOrgRole';
@@ -499,9 +519,16 @@ function LegacyNoticePage({ title, target = '/buyer/procurement/create' }: { tit
 }
 
 let globalInitialLoadComplete = false;
+let globalSidebarCollapsed: boolean | null = null;
 
-export default function App({ serverInitialLoadComplete = false }: { serverInitialLoadComplete?: boolean }) {
-  const { user, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+export default function App({
+  serverInitialLoadComplete = false,
+  initialSidebarCollapsed = false
+}: {
+  serverInitialLoadComplete?: boolean;
+  initialSidebarCollapsed?: boolean;
+}) {
+  const { user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
@@ -518,7 +545,29 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   };
   const [isPageMounted, setIsPageMounted] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (globalSidebarCollapsed !== null) {
+      return globalSidebarCollapsed;
+    }
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('isSidebarCollapsed');
+        if (saved !== null) {
+          const parsed = JSON.parse(saved);
+          globalSidebarCollapsed = Boolean(parsed);
+          return Boolean(parsed);
+        }
+        const cookieMatch = document.cookie.match(/(?:^|; )isSidebarCollapsed=([^;]*)/);
+        if (cookieMatch) {
+          const val = cookieMatch[1] === 'true';
+          globalSidebarCollapsed = val;
+          return val;
+        }
+      } catch {}
+    }
+    globalSidebarCollapsed = initialSidebarCollapsed;
+    return initialSidebarCollapsed;
+  });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const isEffectivelyCollapsed = isSidebarCollapsed && !isSidebarHovered;
 
@@ -549,23 +598,34 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
   const isAuthTransitionReady = isPageMounted && (!loading || safetyTimeoutPassed);
   const isLogoutReady = isPageMounted || safetyTimeoutPassed;
 
-  const [hasCookie, setHasCookie] = useState(false);
+  const [hasCookie, setHasCookie] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    return Boolean(getCookieValue('csrfToken'));
+  });
 
   React.useEffect(() => {
     setHasCookie(Boolean(getCookieValue('csrfToken')));
-  }, []);
+  }, [loading, user]);
 
   React.useEffect(() => {
     const saved = localStorage.getItem('isSidebarCollapsed');
     if (saved !== null) {
-      setIsSidebarCollapsed(JSON.parse(saved));
+      try {
+        const parsed = JSON.parse(saved);
+        globalSidebarCollapsed = Boolean(parsed);
+        setIsSidebarCollapsed(Boolean(parsed));
+      } catch {}
     }
   }, []);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
       const newValue = !prev;
-      localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+      globalSidebarCollapsed = newValue;
+      try {
+        localStorage.setItem('isSidebarCollapsed', JSON.stringify(newValue));
+        document.cookie = `isSidebarCollapsed=${newValue}; path=/; max-age=31536000; SameSite=Lax`;
+      } catch {}
       return newValue;
     });
   };
@@ -657,10 +717,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <RouteFallback />;
       }
     }
-    if (pathname === '/') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
-    if (pathname === '/login') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <Login />;
+    const isAuthedUser = Boolean(user && (hasCookie || token || (typeof window !== 'undefined' && localStorage.getItem('token'))));
+    if (pathname === '/') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
+    if (pathname === '/login') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <Login />;
     if (pathname === '/shg/login') return <Redirect to="/login" />;
-    if (pathname === '/forgot-password') return user && hasCookie ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
+    if (pathname === '/forgot-password') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <ForgotPassword />;
     if (pathname === '/register') return <RegisterSelection />;
     if (pathname === '/seller/register') return <SellerRegistrationFlow />;
     if (pathname === '/buyer/register') return <BuyerRegistrationFlow />;
@@ -727,7 +788,13 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     }
     if (/^\/marketplace\/products\/-?\d+$/.test(pathname)) return <MarketplaceProductDetail />;
     if (/^\/marketplace\/services\/-?\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
-    if (/^\/marketplace\/requirements\/-?\d+$/.test(pathname)) return <BuyerRequirementDetailsPage />;
+    {
+      const reqDetailMatch = pathname.match(/^\/marketplace\/requirements\/([^/]+)$/);
+      if (reqDetailMatch) {
+        const rawReqId = reqDetailMatch[1];
+        return <Redirect to={`/bids/${rawReqId}`} />;
+      }
+    }
 
     // Public seller/vendor store — accessible to everyone
     if (/^\/vendors\/-?\d+$/.test(pathname) || /^\/sellers\/-?\d+$/.test(pathname) || /^\/seller\/-?\d+$/.test(pathname) || /^\/marketplace\/sellers\/-?\d+$/.test(pathname) || /^\/marketplace\/vendors\/-?\d+$/.test(pathname)) return <MarketplaceSellerStore />;
@@ -739,34 +806,42 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
       }
     }
 
+    // ── URL Normalization: redirect reverse auction URLs with spaces or %20 to canonical hyphenated slug ──
+    {
+      const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results?))?\/?$/i);
+      if (spaceAuctionMatch) {
+        const [, role, rawId, subPath] = spaceAuctionMatch;
+        return <Redirect to={`/${role.toLowerCase()}/procurement/reverse-auction/${rawId}${subPath || ''}`} />;
+      }
+    }
+
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)$/);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
         const [, , typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
-        switch (typeSlug) {
+        switch (typeSlug.toLowerCase()) {
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
           case 'open-tender':      return <OpenTenderDetailPage />;
           case 'limited-tender':   return <LimitedTenderDetailPage />;
           case 'rate-contract':    return <RateContractDetailPage />;
           case 'reverse-auction': {
-            const numId = Number(id);
-            if (Number.isFinite(numId) && numId > 0) return <ReverseAuctionDetailPage id={numId} />;
+            if (id) return <ReverseAuctionDetailPage id={id} />;
             break;
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/live$/);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/live\/?$/i);
       if (procAuctionLiveMatch) {
-        const id = Number(decodeURIComponent(procAuctionLiveMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const id = decodeURIComponent(procAuctionLiveMatch[2]);
+        if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer)\/procurement\/reverse-auction\/([^/]+)\/results$/);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/results?\/?$/i);
       if (procAuctionResultMatch) {
-        const id = Number(decodeURIComponent(procAuctionResultMatch[2]));
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const id = decodeURIComponent(procAuctionResultMatch[2]);
+        if (id) return <AuctionResultPage id={id} />;
       }
     }
 
@@ -775,10 +850,10 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
     if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
     {
-      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/(\d+)$/);
+      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
       if (reverseAuctionDetailMatch) {
-        const id = Number(reverseAuctionDetailMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionDetailPage id={id} />;
+        const id = decodeURIComponent(reverseAuctionDetailMatch[1]);
+        if (id && id !== 'create') return <ReverseAuctionDetailPage id={id} />;
       }
     }
 
@@ -870,8 +945,11 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/seller/bids/draft' || pathname === '/shg/bids/draft') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="draft" /></PermissionRouteGuard>;
     if ((pathname === '/seller/bids/awarded' || pathname === '/shg/bids/awarded') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SellerBidsPage key={pathname} subRouteType="awarded" /></PermissionRouteGuard>;
     
-    // Seller & Buyer repeat orders
-    if (pathname === '/orders/repeat' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
+    // Repeat orders route redirect
+    if (pathname === '/orders/repeat') {
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/repeat-orders" />;
+      return <Redirect to="/orders" />;
+    }
     
     if (pathname === '/buyer/onboarding' && roleOk(user.role, ['buyer'])) return <BuyerOnboarding />;
     if (pathname === '/buyer/profile' && roleOk(user.role, ['buyer'])) return <BuyerProfile />;
@@ -880,15 +958,20 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     }
     if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><CreateProcurementPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><ProcurementDraftsPage /></PermissionRouteGuard>;
-    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><SupplierResponsesPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/procurement/responses' && roleOk(user.role, ['buyer'])) {
+      return <Redirect to="/buyer/my-procurements" />;
+    }
     {
       const rfqCompareMatch = pathname.match(/^\/buyer\/(?:quote-requests|rfq|quotations)\/(\d+)(?:\/compare|\/review)?$/);
       if (rfqCompareMatch && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
         const id = Number(rfqCompareMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage id={id} /></PermissionRouteGuard>;
+        if (Number.isFinite(id) && id > 0) {
+          return <Redirect to={`/buyer/rfq/detail?requirementId=${id}&tab=clarifications`} />;
+        }
+        return <Redirect to="/buyer/my-procurements" />;
       }
       if ((pathname === '/buyer/rfq/compare' || pathname === '/buyer/quote-requests/compare' || pathname === '/buyer/quotations/review') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
-        return <PermissionRouteGuard permission="requirement.view"><RfqComparisonPage /></PermissionRouteGuard>;
+        return <Redirect to="/buyer/my-procurements" />;
       }
     }
     
@@ -910,7 +993,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if ((pathname === '/buyer/vendors' || pathname === '/buyer/sellers') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><Vendors /></PermissionRouteGuard>;
     if (pathname === '/buyer/saved-suppliers' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="vendor.view"><SavedSuppliersPage /></PermissionRouteGuard>;
     
-    if (pathname === '/buyer/orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
+    if ((pathname === '/buyer/orders' || pathname === '/buyer/purchase-orders') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
     if (pathname === '/buyer/repeat-orders' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="purchase_order.view"><RepeatOrders /></PermissionRouteGuard>;
     if (pathname === '/buyer/inspection' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="inspection.approve"><GenericFeaturePage title="Inspection" description="Inspection reports connected to purchase orders." endpoint="/api/purchase-orders" /></PermissionRouteGuard>;
     if (pathname === '/buyer/invoices' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="invoice.view"><InvoiceRegisterPage role="buyer" /></PermissionRouteGuard>;
@@ -927,8 +1010,21 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     if (pathname === '/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
     if (pathname === '/payments/escrow' && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <PermissionRouteGuard permission="escrow.view"><EscrowPage /></PermissionRouteGuard>;
     
-    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
-    if (pathname === '/orders' && roleOk(user.role, ['admin'])) return <ProcurementOrdersPage />;
+    if (pathname === '/orders' && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) return <PermissionRouteGuard permission="purchase_order.view"><PurchaseOrders /></PermissionRouteGuard>;
+    if ((pathname === '/purchase-orders' || pathname === '/seller/purchase-orders') && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+      if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+      return <Redirect to="/orders" />;
+    }
+    {
+      const directPoMatch = pathname.match(/^\/(?:seller\/|buyer\/|shg\/)?(?:orders|purchase-orders)\/(\d+)$/);
+      if (directPoMatch && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+        const id = directPoMatch[1];
+        if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders?orderId=${id}`} />;
+        if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders?orderId=${id}`} />;
+        return <Redirect to={`/orders?orderId=${id}`} />;
+      }
+    }
     if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
     if ((pathname === '/orders/tracking' || pathname === '/tracking' || pathname === '/delivery' || pathname === '/orders/delivery' || pathname === '/delivery-management') && roleOk(user.role, ['buyer', 'seller', 'admin'])) {
       if (user.role === 'seller') return <PermissionRouteGuard permission="delivery.view"><SellerDeliveryManagementPage /></PermissionRouteGuard>;
@@ -975,7 +1071,7 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
     
     if (pathname === '/grn' || pathname === '/buyer/grn') return <PermissionRouteGuard permission="grn.view"><GrnListPage /></PermissionRouteGuard>;
     {
-      const grnDetailMatch = pathname.match(/^\/grn\/(\d+)$/);
+      const grnDetailMatch = pathname.match(/^\/(?:buyer\/|seller\/)?grn\/(\d+)$/);
       if (grnDetailMatch) {
         const id = Number(grnDetailMatch[1]);
         if (Number.isFinite(id) && id > 0) return <PermissionRouteGuard permission="grn.view"><GrnDetailPage id={id} /></PermissionRouteGuard>;
@@ -1004,19 +1100,43 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
         return <Redirect to="/buyer/procurement/create?method=REVERSE_AUCTION" />;
       }
 
-      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/live$/);
+      const reverseAuctionLiveMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/live\/?$/i);
       if (reverseAuctionLiveMatch) {
-        const id = Number(reverseAuctionLiveMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <ReverseAuctionLivePage id={id} />;
+        const id = decodeURIComponent(reverseAuctionLiveMatch[1]);
+        if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/(\d+)\/results$/);
+      const reverseAuctionResultMatch = pathname.match(/^\/reverse-auctions\/([^/]+)\/results?\/?$/i);
       if (reverseAuctionResultMatch) {
-        const id = Number(reverseAuctionResultMatch[1]);
-        if (Number.isFinite(id) && id > 0) return <AuctionResultPage id={id} />;
+        const id = decodeURIComponent(reverseAuctionResultMatch[1]);
+        if (id) return <AuctionResultPage id={id} />;
       }
     }
-    if (['/seller/awards', '/buyer/procurement-orders', '/admin/procurement-orders'].includes(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
-    if (/^\/procurement-orders\/\d+$/.test(pathname) && roleOk(user.role, ['buyer', 'seller', 'admin'])) return <ProcurementOrdersPage />;
+    {
+      const procOrderMatch = pathname.match(/^\/(?:procurement-orders|orders\/procurement)(?:\/(\d+))?$/);
+      if (procOrderMatch && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
+        const id = procOrderMatch[1];
+        const qs = id ? `?orderId=${id}` : '';
+        if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders${qs}`} />;
+        if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders${qs}`} />;
+        return <Redirect to={`/orders${qs}`} />;
+      }
+    }
+    if (pathname === '/seller/awards' && roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+    if (pathname === '/buyer/procurement-orders' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+    if (pathname === '/admin/procurement-orders' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/bids" />;
+    if (pathname === '/orders/procurement') {
+      if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
+      if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
+      return <Redirect to="/orders" />;
+    }
+    {
+      const buyerProcEventMatch = pathname.match(/^\/buyer\/procurement\/events\/([^/?#]+)$/i);
+      if (buyerProcEventMatch) return <Redirect to={`/bids/${buyerProcEventMatch[1]}`} />;
+    }
+    {
+      const adminBidDetailMatch = pathname.match(/^\/admin\/bids\/([^/?#]+)$/i);
+      if (adminBidDetailMatch) return <Redirect to={`/bids/${adminBidDetailMatch[1]}`} />;
+    }
     if (pathname === '/settings/security') return <SecuritySettingsPage />;
     if (pathname === '/settings/notifications') return <NotificationPrefsPage />;
     if (pathname === '/onboarding/kyc') return <AadhaarKycPage />;
@@ -1126,6 +1246,9 @@ export default function App({ serverInitialLoadComplete = false }: { serverIniti
             <InviteLoginPopup />
             {user && (user.role === 'admin' || user.role === 'master_admin') && (
               <AdminCategoryAlertPopup />
+            )}
+            {user && (user.role === 'seller' || user.role === 'shg') && (
+              <SellerAwardPoAlertPopup />
             )}
           </Suspense>
         )}

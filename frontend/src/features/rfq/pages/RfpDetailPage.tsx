@@ -87,9 +87,15 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const isLoading = !initialData && !bidData && !reqData && (isBidLoading || isReqLoading);
-  const bid: any = bidData || {};
-  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
+  const isAnyLoading = isBidLoading || isReqLoading;
+  const hasValidInitialData = Boolean(
+    initialData &&
+    typeof initialData === 'object' &&
+    (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title)
+  );
+  const isLoading = (!bidData && !reqData && !hasValidInitialData && isAnyLoading);
+  const bid: any = bidData || (hasValidInitialData && (initialData.bidNumber || initialData.sourceModel === 'BID') ? initialData : {});
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || (hasValidInitialData && (initialData.requirementNumber || initialData.sourceModel === 'REQUIREMENT') ? (initialData.requirement || initialData) : {});
   const payload =
     bid.technicalPacket ||
     bid.payload ||
@@ -104,12 +110,11 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const evaluation = payload.evaluation || {};
   const serviceDetails = payload.serviceDetails || {};
 
-  if (isLoading) {
+  if (isLoading || (isAnyLoading && !bidData && !reqObj.id && !hasValidInitialData)) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Request for Proposal" />;
   }
 
-
-  const hasFatalError = !bidData && !reqData;
+  const hasFatalError = !isAnyLoading && !bidData && !reqData && !hasValidInitialData;
   if (hasFatalError) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
@@ -219,7 +224,11 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       p?.organizationId === currentUser?.organizationId
   );
   const ownResponse = ownParticipation?.response || ownParticipation?.quotation || ownParticipation?.proposal;
-  const hasSubmittedProposal = Boolean(ownParticipation || ownResponse);
+  const isOwnSubmitted = Boolean(
+    (ownParticipation && String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED') ||
+    (ownResponse && String(ownResponse.submissionStatus || ownResponse.status || '').toUpperCase() === 'SUBMITTED')
+  );
+  const hasSubmittedProposal = Boolean(bid.hasSubmittedProposal || isOwnSubmitted);
 
   const handleSubmitProposal = () => {
     if (!currentUser) {
@@ -242,7 +251,58 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
 
   const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin';
   const rawStatus = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(rawStatus);
+  const statusUpper = rawStatus;
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const rawBuyerProfile =
+    bid.buyer?.buyerProfile ||
+    reqObj.buyer?.buyerProfile ||
+    null;
+
+  const resolvedOrgName =
+    bid.buyer?.buyerProfile?.organizationName ||
+    bid.buyerOrganizationName ||
+    reqObj.buyerOrganization?.organizationName ||
+    reqObj.organization?.organizationName ||
+    (bid.buyer?.name && bid.buyer.name !== bid.buyer?.buyerProfile?.representativeName ? bid.buyer.name : '') ||
+    'Buyer Organization';
+
+  const resolvedContactPerson =
+    bid.buyer?.buyerProfile?.contactPerson ||
+    bid.buyer?.buyerProfile?.representativeName ||
+    (bid.buyer?.name && bid.buyer.name !== resolvedOrgName && bid.buyer.name !== 'Buyer' ? bid.buyer.name : '') ||
+    (bid.buyerName && bid.buyerName !== resolvedOrgName && bid.buyerName !== 'Buyer' ? bid.buyerName : '') ||
+    reqObj.contactPerson ||
+    (reqObj.buyer?.name && reqObj.buyer.name !== resolvedOrgName && reqObj.buyer.name !== 'Buyer' ? reqObj.buyer.name : '') ||
+    'Authorized Procurement Officer';
+
+  const resolvedBuyerEmail =
+    bid.buyer?.buyerProfile?.email ||
+    bid.buyer?.email ||
+    bid.buyerEmail ||
+    reqObj.buyerEmail ||
+    reqObj.buyer?.email ||
+    '';
+
+  const resolvedBuyerMobile =
+    bid.buyer?.buyerProfile?.phone ||
+    bid.buyer?.buyerProfile?.mobile ||
+    bid.buyer?.mobile ||
+    bid.buyerMobile ||
+    reqObj.buyerMobile ||
+    reqObj.buyer?.mobile ||
+    '';
+
+  const resolvedBuyerAddress =
+    bid.buyerAddress ||
+    bid.buyer?.buyerProfile?.registeredAddress ||
+    bid.buyer?.buyerProfile?.address ||
+    reqObj.buyerAddress ||
+    reqObj.buyer?.buyerProfile?.registeredAddress ||
+    rawBuyerProfile?.registeredAddress ||
+    rawBuyerProfile?.address ||
+    '';
+
+  const resolvedBuyerProfile = rawBuyerProfile || bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization || {};
 
   return (
     <>
@@ -253,13 +313,28 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         displayId={rfpNumber}
         subject={title}
         status={bid.status || reqObj.status || 'OPEN'}
-        buyerName={bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name}
-        orgName={bid.buyerOrganizationName || reqObj.buyerOrganization?.organizationName || reqObj.organization?.organizationName}
+        buyerName={resolvedContactPerson}
+        contactPerson={resolvedContactPerson}
+        orgName={resolvedOrgName}
+        buyerEmail={resolvedBuyerEmail}
+        buyerMobile={resolvedBuyerMobile}
+        buyerAddress={resolvedBuyerAddress}
         buyer={{
-          name: bid.buyerName || reqObj.contactPerson || reqObj.buyer?.name || 'Buyer',
-          email: bid.buyerEmail || reqObj.buyerEmail || reqObj.buyer?.email || '',
-          mobile: bid.buyerMobile || reqObj.buyerMobile || reqObj.buyer?.mobile || '',
-          buyerProfile: bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization,
+          name: resolvedContactPerson,
+          email: resolvedBuyerEmail,
+          mobile: resolvedBuyerMobile,
+          buyerProfile: {
+            ...resolvedBuyerProfile,
+            organizationName: resolvedOrgName,
+            representativeName: resolvedContactPerson,
+            contactPerson: resolvedContactPerson,
+            email: resolvedBuyerEmail,
+            mobile: resolvedBuyerMobile,
+            phone: resolvedBuyerMobile,
+            registeredAddress: resolvedBuyerAddress || resolvedBuyerProfile?.registeredAddress,
+            address: resolvedBuyerAddress || resolvedBuyerProfile?.address,
+            department: bid.buyer?.buyerProfile?.department || resolvedBuyerProfile?.department,
+          },
         }}
         estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
         discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
@@ -277,24 +352,21 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           }
           return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
         })()}
+        submissionStartDate={schedule.submissionStartDate || schedule.startDate || tender.bidStartDate || reqObj.startDate ? formatDateString(schedule.submissionStartDate || schedule.startDate || tender.bidStartDate || reqObj.startDate, true) : undefined}
         closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
-        clarificationDate={schedule.clarificationDeadline || schedule.clarificationDate ? formatDateString(schedule.clarificationDeadline || schedule.clarificationDate, true) : undefined}
-        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate, true)}
-        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate, true)}
+        clarificationDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
+        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate || tender.technicalEvaluationDate, true)}
+        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate || tender.financialEvaluationDate, true)}
+        packetType={schedule.packetType || bid.packetType || payload.packetType || ((bid.financialOpeningDate || schedule.financialOpeningDate || tender.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
         awardDate={formatDateString(tender.awardDate || schedule.awardDate || schedule.awardingDate, true)}
         category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
-        subCategory={basics.subCategory || reqObj.subCategory}
         projectDuration={terms.projectDuration || terms.contractPeriod}
         department={payload.internal?.departmentName || bid.departmentName}
-        contactPerson={bid.buyerName || reqObj.contactPerson}
-        buyerEmail={bid.buyerEmail || reqObj.buyerEmail}
-        buyerMobile={bid.buyerMobile || reqObj.buyerMobile}
-        buyerAddress={reqObj.buyerAddress || reqObj.location}
         procurementMethod="Request for Proposal"
         buyingType={basics.buyingType || 'Services / Solutions'}
         deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
-        paymentTerms={bid.paymentTerms || terms.paymentTerms || 'Milestone Based Payment'}
-        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || 'SLA Dependent'}
+        paymentTerms={bid.paymentTerms || terms.paymentTerms || undefined}
+        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || undefined}
         description={bid.description || reqObj.description || basics.description || serviceDetails.scopeOfWork}
         payload={payload}
         approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}
@@ -331,7 +403,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
         backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'}
         backRouteLabel={isBuyerOrAdmin ? 'My Procurements' : 'Opportunities'}
-        submitButtonLabel={isBuyerOrAdmin ? undefined : (hasSubmittedProposal ? 'View Proposal' : 'Submit Proposal')}
+        submitButtonLabel={isBuyerOrAdmin ? undefined : (hasSubmittedProposal ? 'Proposal Submitted' : 'Submit Proposal')}
         onSubmitClick={isBuyerOrAdmin ? undefined : handleSubmitProposal}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={rawStatus === 'DRAFT' || rawStatus === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFP'}

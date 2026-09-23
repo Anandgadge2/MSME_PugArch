@@ -163,15 +163,46 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       displayId={bid.id}
       subject={bid.title}
       status={bid.status || 'OPEN'}
-      buyerName={bid.buyer?.name}
-      orgName={bid.buyerOrganization?.organizationName || bid.buyer?.name}
+      buyerName={bid.buyerPersonName || bid.buyer?.buyerProfile?.representativeName || bid.buyerName || bid.buyer?.name}
+      contactPerson={bid.buyerPersonName || bid.buyer?.buyerProfile?.representativeName || bid.buyerName || bid.buyer?.name}
+      orgName={bid.buyerOrgName || bid.buyerOrganization?.organizationName || bid.buyer?.name}
+      buyerEmail={bid.buyerEmail || bid.buyer?.buyerProfile?.email || bid.buyer?.email}
+      buyerMobile={bid.buyerMobile || bid.buyer?.buyerProfile?.phone || bid.buyer?.buyerProfile?.mobile || bid.buyer?.mobile}
+      buyerAddress={bid.buyerAddress || bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.address}
       buyer={bid.buyer}
       estimatedValue={bid.estimatedValue}
       discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? (bid.technicalPacket as any)?.discloseEstimatedCost ?? false)}
       deadlineDate={bid.endDate}
       createdAt={(bid as any).createdAt || bid.startDate}
       publishedDate={(bid as any).publishedAt || (bid as any).createdAt ? String((bid as any).publishedAt || (bid as any).createdAt) : (bid.startDate ? String(bid.startDate) : undefined)}
+      submissionStartDate={
+        (bid.technicalPacket as any)?.schedule?.submissionStartDate ||
+        (bid as any).submissionStartDate ||
+        (bid.technicalPacket as any)?.tender?.bidStartDate
+          ? String((bid.technicalPacket as any)?.schedule?.submissionStartDate || (bid as any).submissionStartDate || (bid.technicalPacket as any)?.tender?.bidStartDate)
+          : undefined
+      }
       closingDate={bid.endDate ? String(bid.endDate) : undefined}
+      technicalDate={
+        (bid as any).technicalOpeningDate ||
+        (bid.technicalPacket as any)?.schedule?.technicalOpeningDate ||
+        (bid.technicalPacket as any)?.tender?.technicalEvaluationDate
+          ? String((bid as any).technicalOpeningDate || (bid.technicalPacket as any)?.schedule?.technicalOpeningDate || (bid.technicalPacket as any)?.tender?.technicalEvaluationDate)
+          : undefined
+      }
+      financialDate={
+        (bid as any).financialOpeningDate ||
+        (bid.technicalPacket as any)?.schedule?.financialOpeningDate ||
+        (bid.technicalPacket as any)?.tender?.financialEvaluationDate
+          ? String((bid as any).financialOpeningDate || (bid.technicalPacket as any)?.schedule?.financialOpeningDate || (bid.technicalPacket as any)?.tender?.financialEvaluationDate)
+          : undefined
+      }
+      packetType={
+        bid.packetType ||
+        (bid.technicalPacket as any)?.schedule?.packetType ||
+        (bid.technicalPacket as any)?.rules?.packetType ||
+        (((bid as any).financialOpeningDate || (bid.technicalPacket as any)?.schedule?.financialOpeningDate || (bid.technicalPacket as any)?.tender?.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')
+      }
       category={bid.category}
       procurementMethod={bid.procurementType}
       deliveryLocation={bid.deliveryLocation}
@@ -204,9 +235,9 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       emdAmount={bid.emdAmount}
       isEmdRequired={bid.isEmdRequired}
       backRoute="/seller/procurement/events"
-      backRouteLabel="Bids & Tenders"
-      submitButtonLabel={isSubmitted ? 'View Proposal' : 'Submit Proposal'}
+      submitButtonLabel={isSubmitted ? 'Proposal Submitted' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
+      onViewQuotationClick={isSubmitted ? () => router.push(`/bids/${bid.id}/participate`) : undefined}
     />
   );
 }

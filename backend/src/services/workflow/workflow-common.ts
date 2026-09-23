@@ -14,8 +14,7 @@ export type WorkflowActor = {
 };
 
 export const numberSeries = (prefix: string, id?: number | string, year?: number | string) => {
-  let p = (prefix || 'REQ').toUpperCase();
-  if (p === 'PRQ' || p === 'PR') p = 'DP';
+  const p = (prefix || 'RFQ').toUpperCase();
   const y = year || 2026;
   if (id != null && !isNaN(Number(id))) {
     return `${p}-${y}-${String(Math.abs(Number(id))).padStart(5, '0')}`;
@@ -44,12 +43,24 @@ export const auditWorkflowSoon = (actor: WorkflowActor, action: string, entityTy
   });
 };
 
+const defaultRedirectForType = (type: string, fallback = '/dashboard'): string => {
+  const lower = String(type || '').toLowerCase();
+  if (lower.includes('award')) return '/seller/awards';
+  if (lower.includes('po') || lower.includes('order')) return '/orders';
+  if (lower.includes('invoice')) return '/invoices';
+  if (lower.includes('delivery') || lower.includes('grn')) return '/orders/tracking';
+  if (lower.includes('payment') || lower.includes('settlement')) return '/payments';
+  if (lower.includes('tender') || lower.includes('bid')) return '/seller/procurement/events';
+  if (lower.includes('dispute')) return '/disputes';
+  return fallback;
+};
+
 export const notifyWorkflow = async (
   userId: number,
   title: string,
   message: string,
   type: string,
-  redirectUrl = '/dashboard',
+  redirectUrl?: string,
   attachments?: Array<{
     filename: string;
     content?: Buffer | string;
@@ -61,12 +72,16 @@ export const notifyWorkflow = async (
     emailHtml?: string;
   }
 ) => {
+  const effectiveUrl = (!redirectUrl || redirectUrl === '/dashboard')
+    ? defaultRedirectForType(type, '/dashboard')
+    : redirectUrl;
+
   await notificationService.notifyWithEmail(userId, {
     title,
     message,
     type,
     priority: 'medium',
-    redirectUrl,
+    redirectUrl: effectiveUrl,
     attachments,
     emailSubject: extra?.emailSubject,
     emailHtml: extra?.emailHtml
@@ -78,7 +93,7 @@ export const notifyWorkflowSoon = (
   title: string,
   message: string,
   type: string,
-  redirectUrl = '/dashboard',
+  redirectUrl?: string,
   attachments?: Array<{
     filename: string;
     content?: Buffer | string;
@@ -90,7 +105,11 @@ export const notifyWorkflowSoon = (
     emailHtml?: string;
   }
 ) => {
-  void notifyWorkflow(userId, title, message, type, redirectUrl, attachments, extra).catch(error => {
+  const effectiveUrl = (!redirectUrl || redirectUrl === '/dashboard')
+    ? defaultRedirectForType(type, '/dashboard')
+    : redirectUrl;
+
+  void notifyWorkflow(userId, title, message, type, effectiveUrl, attachments, extra).catch(error => {
     console.warn('[WorkflowNotify] Background notification failed', error instanceof Error ? error.message : error);
   });
 };

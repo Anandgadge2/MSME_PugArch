@@ -5,14 +5,30 @@ export const requestLogger = pinoHttp({
   logger,
   genReqId: req => req.id,
   autoLogging: {
-    ignore: req => req.url?.startsWith('/api/notifications/stream') ?? false
+    ignore: req => {
+      const url = String(req.originalUrl || req.url || '');
+      return url.startsWith('/api/notifications/stream');
+    }
   },
   customLogLevel: (req: any, res: any) => {
-    const url = String(req.url || '');
-    if (res.statusCode === 401 && (url.includes('/auth/me') || url.includes('/auth/refresh') || url.includes('/auth/logout'))) {
+    const url = String(req.originalUrl || req.url || '');
+    const path = String(req.path || req.baseUrl || '');
+    const target = `${url} ${path}`;
+    if (
+      (res.statusCode === 401 &&
+        (target.includes('/auth/me') ||
+          target.includes('/me') ||
+          target.includes('/auth/refresh') ||
+          target.includes('/refresh') ||
+          target.includes('/auth/logout') ||
+          target.includes('/logout') ||
+          target.includes('/navigation/summary') ||
+          target.includes('/notifications'))) ||
+      (res.statusCode === 426 && (target.includes('/ws') || target.startsWith('/api/ws')))
+    ) {
       return 'silent';
     }
-    if (res.statusCode === 404 && (url.includes('favicon.ico') || url.includes('favicon.png'))) {
+    if (res.statusCode === 404 && (target.includes('favicon.ico') || target.includes('favicon.png'))) {
       return 'silent';
     }
     if (res.statusCode >= 500) return 'error';

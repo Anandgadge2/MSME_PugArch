@@ -3,16 +3,30 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getPusherClient, isPusherAvailable } from '../../../lib/realtime';
 import type { ConversationDto, MessageDto } from '../api';
 
-export const useConversationRealtime = (conversationId: number | undefined) => {
+export const useConversationRealtime = (conversationId: number | undefined, enabled: boolean = true) => {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!conversationId || !isPusherAvailable()) return;
+    if (!conversationId || !enabled) return;
+
+    let isMounted = true;
+
+    if (!isPusherAvailable()) {
+      // Robust polling fallback when Pusher keys are absent or disconnected
+      const interval = setInterval(() => {
+        if (isMounted) {
+          void queryClient.invalidateQueries({ queryKey: ['conversations', 'detail', conversationId] });
+        }
+      }, 5000);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
 
     const pusher = getPusherClient();
     if (!pusher) return;
 
-    let isMounted = true;
     const channelName = `private-conversation-${conversationId}`;
     console.log(`[Pusher] Subscribing to conversation channel ${channelName}`);
     const channel = pusher.subscribe(channelName);
@@ -33,8 +47,21 @@ export const useConversationRealtime = (conversationId: number | undefined) => {
         };
       });
 
+      // Always invalidate detail query so quoteRequest, quoteResponses and subject are freshly synchronized
+      void queryClient.invalidateQueries({ queryKey: ['conversations', 'detail', conversationId] });
       void queryClient.invalidateQueries({ queryKey: ['conversations', 'list'] });
       void queryClient.invalidateQueries({ queryKey: ['conversations', 'unread-count'] });
+      void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['quote-request-compare'] });
+    });
+
+    channel.bind('QUOTATION_SUBMITTED', (data: { type: string; conversationId: number; quoteRequestId?: number; quoteResponseId?: number; totalAmount?: number }) => {
+      if (!isMounted) return;
+      console.log(`[Pusher] Received QUOTATION_SUBMITTED for conversation ${conversationId}:`, data);
+      void queryClient.invalidateQueries({ queryKey: ['conversations', 'detail', conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations', 'list'] });
+      void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['quote-request-compare'] });
     });
 
     channel.bind('MESSAGES_READ', (data: { type: string; conversationId: number; readByUserId: number; readAt: string }) => {

@@ -109,7 +109,7 @@ export const acceptBidAndGeneratePurchaseOrder = async (bidId: number, actor: Ac
   return result;
 };
 
-const PO_ACCEPT_STATUSES = new Set(['generated']);
+const PO_ACCEPT_STATUSES = new Set(['generated', 'issued', 'order_placed', 'pending_approval', 'GENERATED', 'ISSUED', 'ORDER_PLACED', 'PENDING_APPROVAL']);
 
 export const acceptPurchaseOrderAndCreateDelivery = async (purchaseOrderId: number, actor: Actor) => {
   const result = await prisma.$transaction(async (tx) => {
@@ -130,6 +130,26 @@ export const acceptPurchaseOrderAndCreateDelivery = async (purchaseOrderId: numb
       update: { status: 'created', version: { increment: 1 } },
       create: { purchaseOrderId: po.id, status: 'created' }
     });
+
+    const existingDelivery = await tx.deliveryTracking.findFirst({ where: { purchaseOrderId: po.id } });
+    if (!existingDelivery) {
+      await tx.deliveryTracking.create({
+        data: {
+          purchaseOrderId: po.id,
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date(),
+          expectedDelivery: po.expectedDelivery || null
+        }
+      });
+    } else if (existingDelivery.status === 'CREATED' || (existingDelivery.status as any) === 'PENDING_ACCEPTANCE') {
+      await tx.deliveryTracking.update({
+        where: { id: existingDelivery.id },
+        data: {
+          status: 'SELLER_ACCEPTED',
+          sellerAcceptedAt: new Date()
+        }
+      });
+    }
 
     return { purchaseOrder: updatedPo, deliveryWorkflow };
   });
@@ -260,17 +280,26 @@ export const approveInvoiceAndCreatePayment = async (invoiceId: number, actor: A
   const result = await prisma.$transaction(async (tx) => {
     const invoice = await tx.invoice.findUnique({ where: { id: invoiceId }, include: { purchaseOrder: true } });
     if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    if (actor.role !== 'admin' && invoice.buyerId !== actor.id) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    if (!INVOICE_APPROVE_STATUSES.has(invoice.status)) {
+    if (actor.role !== 'admin' && invoice.buyerId !== actor.id && invoice.purchaseOrder?.buyerId !== actor.id) {
+      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+    }
+    const invStatus = String(invoice.status || invoice.invoiceStatus || '').toLowerCase();
+    if (!INVOICE_APPROVE_STATUSES.has(invStatus) && invoice.invoiceStatus !== 'SUBMITTED') {
       throw new ApiError(409, 'Invoice must be submitted before approval', 'INVOICE_INVALID_STATUS');
     }
 
     const existingPayment = await tx.paymentTransaction.findFirst({ where: { invoiceId: invoice.id } });
-    if (existingPayment) return { invoice, payment: existingPayment, reused: true };
+    if (existingPayment) {
+      const updatedInvoice = await tx.invoice.update({
+        where: { id: invoice.id, version: invoice.version },
+        data: { status: 'approved', invoiceStatus: 'APPROVED', approvedAt: new Date(), version: { increment: 1 } }
+      });
+      return { invoice: updatedInvoice, payment: existingPayment, reused: true };
+    }
 
     const updatedInvoice = await tx.invoice.update({
       where: { id: invoice.id, version: invoice.version },
-      data: { status: 'approved', approvedAt: new Date(), version: { increment: 1 } }
+      data: { status: 'approved', invoiceStatus: 'APPROVED', approvedAt: new Date(), version: { increment: 1 } }
     });
 
     const payment = await tx.paymentTransaction.create({

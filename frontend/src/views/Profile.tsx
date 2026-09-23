@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -12,6 +13,25 @@ import { ProfileSkeleton } from '../components/ui/skeleton';
 
 export default function Profile() {
   const { user, loading, logout, refreshUser } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && user) {
+      if (user.role === 'buyer') {
+        router.replace('/buyer/profile');
+      } else if (user.role === 'seller') {
+        if (isShgUser(user)) {
+          router.replace('/shg/settings');
+        } else {
+          router.replace('/seller/settings');
+        }
+      } else if (user.role === 'shg') {
+        router.replace('/shg/settings');
+      } else if (user.role === 'master_admin') {
+        router.replace('/master-admin/settings');
+      }
+    }
+  }, [user, loading, router]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [twoFactorOtp, setTwoFactorOtp] = useState('');
   const [twoFactorPassword, setTwoFactorPassword] = useState('');
@@ -124,7 +144,9 @@ export default function Profile() {
     }
   };
 
-  if (loading) return <ProfileSkeleton />;
+  if (loading || (user && (user.role === 'buyer' || user.role === 'seller' || user.role === 'shg'))) {
+    return <ProfileSkeleton />;
+  }
   if (!user) return null;
 
   return (
@@ -192,10 +214,16 @@ export default function Profile() {
                 </Link>
               )}
               {user.role === 'admin' && (
-                <Link href="/admin/onboarding" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
-                  Admin console
-                  <ExternalLink className="h-4 w-4" />
-                </Link>
+                <>
+                  <Link href="/admin/onboarding" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
+                    Admin console
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                  <Link href="/admin/disputes" className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:border-[#12335f]/40 hover:text-[#12335f]">
+                    Disputes & Grievances
+                    <ExternalLink className="h-4 w-4" />
+                  </Link>
+                </>
               )}
             </div>
           </div>

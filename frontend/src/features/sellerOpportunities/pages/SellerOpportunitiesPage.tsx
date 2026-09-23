@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { sellerRoutes } from '@/lib/routes';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -155,7 +155,19 @@ export const getClosingTimestamp = (closingDate?: string | Date | null): number 
  */
 const isClosedStatus = (status?: string) => {
   const s = String(status || '').toLowerCase();
-  return s.includes('closed') || s.includes('awarded') || s.includes('cancelled') || s.includes('expired') || s.includes('completed') || s.includes('rejected');
+  return (
+    s.includes('closed') ||
+    s.includes('awarded') ||
+    s.includes('cancelled') ||
+    s.includes('expired') ||
+    s.includes('completed') ||
+    s.includes('rejected') ||
+    s.includes('po_generated') ||
+    s.includes('ordered') ||
+    s.includes('fulfilled') ||
+    s.includes('terminated') ||
+    s.includes('disqualified')
+  );
 };
 
 /**
@@ -211,6 +223,32 @@ const isUnderEvaluationOpportunity = (item: SellerOpportunity, now: number) => {
     }
   }
   return false;
+};
+
+/**
+ * Helper to test if opportunity or seller's participation is disqualified or not selected
+ */
+const isDisqualifiedOrNotSelected = (item: SellerOpportunity) => {
+  const statusUpper = String(item.status || '').toUpperCase();
+  const eligUpper = String(item.eligibility || '').toUpperCase();
+  const actionUpper = String(item.actionLabel || '').toUpperCase();
+  const nextUpper = String(item.nextAction || '').toUpperCase();
+
+  return (
+    statusUpper === 'DISQUALIFIED' ||
+    statusUpper.includes('DISQUALIF') ||
+    statusUpper === 'NOT_SELECTED' ||
+    statusUpper === 'NOT SELECTED' ||
+    statusUpper === 'REJECTED' ||
+    eligUpper.includes('DISQUALIF') ||
+    eligUpper.includes('NOT SELECTED') ||
+    eligUpper.includes('NOT_SELECTED') ||
+    eligUpper.includes('REJECTED') ||
+    actionUpper.includes('DISQUALIF') ||
+    actionUpper.includes('NOT SELECTED') ||
+    nextUpper.includes('DISQUALIF') ||
+    nextUpper.includes('NOT SELECTED')
+  );
 };
 
 /**
@@ -396,6 +434,7 @@ function CountdownTimer({ endDate }: { endDate?: string }) {
 }
 
 export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRouteType?: OpportunityType | '' }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -411,10 +450,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setPrevSubRouteType(subRouteType);
     setType(subRouteType);
   }
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('ALL');
   const [location, setLocation] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -423,35 +460,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const [kpiFilter, setKpiFilter] = useState<'all' | 'live' | 'dueSoon' | 'highValue' | 'participated' | 'evaluation'>('all');
   const [category, setCategory] = useState('');
   const [valueRange, setValueRange] = useState('');
-  const [buyerFilter, setBuyerFilter] = useState('');
   const [sortOption, setSortOption] = useState<'newest' | 'closing_soon' | 'value_high' | 'value_low' | 'title_asc'>('newest');
   const [sortField, setSortField] = useState<'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue' | ''>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [nowMs] = useState(() => Date.now());
-
-  const todayStr = useMemo(() => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }, []);
-
-  const handleStartDateChange = (val: string) => {
-    setStartDate(val);
-    if (endDate && val && val > endDate) {
-      setEndDate(val);
-    }
-    setPage(1);
-  };
-
-  const handleEndDateChange = (val: string) => {
-    setEndDate(val);
-    if (startDate && val && val < startDate) {
-      setStartDate(val);
-    }
-    setPage(1);
-  };
 
   const handleSort = (field: 'type' | 'title' | 'buyer' | 'publishedAt' | 'closingDate' | 'estimatedValue') => {
     if (sortField === field) {
@@ -590,7 +602,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const closeA = existing.closingDate || '';
           const closeB = opportunity.closingDate || '';
-          const bestClosingDate = hasExplicitTime(closeB) ? closeB : (hasExplicitTime(closeA) ? closeA : (closeB || closeA));
+          const isBetterClosing = (cand: string, other: string) => {
+            if (!cand) return false;
+            if (!other) return true;
+            const candHasZ = cand.includes('Z');
+            const otherHasZ = other.includes('Z');
+            if (!candHasZ && otherHasZ) return true;
+            if (candHasZ && !otherHasZ) return false;
+            return hasExplicitTime(cand);
+          };
+          const bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
 
           deduped[existingIndex] = {
             ...existing,
@@ -687,12 +708,47 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         } else if (method === 'RFP' || opportunityType === 'RFP') {
           href = sellerRoutes.detail('RFP', bid.id);
           detailsHref = sellerRoutes.detail('RFP', bid.id);
-          actionLabel = 'Submit Proposal';
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Proposal';
+        } else if (opportunityType === 'Open Tender') {
+          href = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          detailsHref = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Limited Tender') {
+          href = sellerRoutes.detail('LIMITED_TENDER', bid.id);
+          detailsHref = sellerRoutes.detail('LIMITED_TENDER', bid.id);
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Reverse Auction') {
+          href = sellerRoutes.auctionLive(bid.id);
+          detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
+          actionLabel = 'Join Auction';
         } else {
-          href = sellerRoutes.detail('RFQ', bid.id);
+          href = bid.participated ? sellerRoutes.respond('RFQ', bid.id) : sellerRoutes.detail('RFQ', bid.id);
           detailsHref = sellerRoutes.detail('RFQ', bid.id);
-          actionLabel = 'Submit Quote';
+          actionLabel = bid.participated ? 'View Quotation' : 'Submit Quote';
         }
+
+        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
+        const effectiveClosingDate = bidSchedule.submissionDate
+          || bidSchedule.submissionDeadline
+          || bidSchedule.submissionEndDate
+          || bidSchedule.bidClosingDate
+          || bid.rawEndDate
+          || bid.endDate;
+        const myParticipation = bid.myParticipation || (Array.isArray(bid.participations) && user?.id
+          ? bid.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+          : null);
+        const myTechStatus = String(myParticipation?.technicalStatus || '').toUpperCase();
+        const myFinalStatus = String(myParticipation?.finalStatus || '').toUpperCase();
+        const isBidDisqualified = myTechStatus === 'DISQUALIFIED' || myFinalStatus === 'DISQUALIFIED';
+        const isBidNotSelected = myFinalStatus === 'NOT_SELECTED' || myFinalStatus === 'REJECTED';
+
+        const bidEligibility = isBidDisqualified
+          ? 'Disqualified'
+          : isBidNotSelected
+          ? 'Not Selected'
+          : bid.participated
+          ? 'Already participated'
+          : 'Check documents';
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -701,10 +757,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: bid.buyerName,
           category: bid.category,
           location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: bid.rawEndDate || bid.endDate,
+          closingDate: effectiveClosingDate,
           estimatedValue: toNumber(bid.estimatedValue),
           discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: bid.participated ? 'Already participated' : 'Check documents',
+          eligibility: bidEligibility,
           status: bid.status || 'Open',
           actionLabel,
           href,
@@ -749,6 +805,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
         if (reqMethod && !allowedMethods.includes(reqMethod)) return;
 
+        // Sellers must only see approved/sourcing/active requirements, never buyer drafts
+        const reqStat = String(req.status || '').toUpperCase();
+        if (reqStat === 'DRAFT' || reqStat === 'PENDING_APPROVAL' || reqStat === 'REJECTED') return;
+
         const reqInvites = Array.isArray(req.payload?.vendors?.invitedSellers) 
           ? req.payload.vendors.invitedSellers 
           : (Array.isArray(req.invitedSellers) ? req.invitedSellers : []);
@@ -788,7 +848,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(req.requiredDocuments);
         const linkedBidId = req.payload?.linkedProcurementBidId;
-        const canonicalReqId = req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
+        const canonicalReqId = req.referenceNumber || req.bidNumber || req.requirementNumber || req.sourceId || (typeof req.id === 'number' && req.id < 0 ? Math.abs(req.id) : req.id);
         const buildDetailHref = () => {
           if (opportunityType === 'Rate Contract') return sellerRoutes.detail('RATE_CONTRACT', canonicalReqId);
           if (opportunityType === 'RFQ') return sellerRoutes.detail('RFQ', canonicalReqId);
@@ -803,10 +863,21 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
           : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
 
+        const myReqParticipation = req.myParticipation || (Array.isArray(req.participations) && user?.id
+          ? req.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+          : null);
+        const myReqResponse = req.ownResponse || (Array.isArray(req.responses) && user?.id
+          ? req.responses.find((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id))
+          : null);
+        const reqTechStatus = String(myReqParticipation?.technicalStatus || myReqResponse?.technicalStatus || '').toUpperCase();
+        const reqFinalStatus = String(myReqParticipation?.finalStatus || myReqResponse?.status || myReqResponse?.finalStatus || '').toUpperCase();
+        const isReqDisqualified = reqTechStatus === 'DISQUALIFIED' || reqFinalStatus === 'DISQUALIFIED' || reqFinalStatus === 'REJECTED';
+        const isReqNotSelected = reqFinalStatus === 'NOT_SELECTED';
+
         const isReqParticipated = Boolean(
           req.hasParticipated ||
-          req.myParticipation ||
-          req.ownResponse ||
+          myReqParticipation ||
+          myReqResponse ||
           (user?.id && (
             (Array.isArray(req.participations) && req.participations.some((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))) ||
             (Array.isArray(req.responses) && req.responses.some((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id)))
@@ -821,6 +892,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? 'Participate'
           : 'Submit Quotation';
 
+        const reqSchedule = req.payload?.schedule || req.schedule || {};
+        const effectiveReqClosingDate = reqSchedule.submissionDate
+          || reqSchedule.submissionDeadline
+          || reqSchedule.submissionEndDate
+          || reqSchedule.bidClosingDate
+          || req.lastDate
+          || req.requiredBy;
+
+        const reqEligibility = isReqDisqualified
+          ? 'Disqualified'
+          : isReqNotSelected
+          ? 'Not Selected'
+          : isReqParticipated
+          ? 'Already participated'
+          : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers');
+
         const opportunity: SellerOpportunity = {
           id: `req-${req.id}`,
           type: opportunityType,
@@ -828,15 +915,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: req.buyerOrganization?.organizationName || req.organization?.organizationName || req.buyerName || 'Verified Buyer',
           category: req.category?.name || req.category || 'General Sourcing',
           location: req.location || req.deliveryLocation || [req.district, req.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: req.lastDate || req.requiredBy,
+          closingDate: effectiveReqClosingDate,
           estimatedValue: toNumber(req.budgetMax || req.estimatedValue),
           discloseEstimatedCost: Boolean(req.discloseEstimatedCost ?? req.payload?.discloseEstimatedCost ?? req.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: isReqParticipated ? 'Already participated' : (req.verifiedSellersOnly ? 'Verified sellers only' : 'All eligible sellers'),
+          eligibility: reqEligibility,
           status: req.status || 'OPEN',
           actionLabel: isReqParticipated ? 'Track Status' : defaultReqAction,
           href: responseHref,
           detailsHref: detailHref,
-          sourceRef: formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'REQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
+          sourceRef: req.referenceNumber || req.bidNumber || formatRefId(opportunityType === 'Rate Contract' ? 'RC' : 'RFQ', req.sourceId || req.id, req.requirementNumber, req.procurementMethod || req.canonicalMethod || opportunityType),
           publishedAt: req.approvedAt || req.publishedAt || req.createdAt,
           createdAt: req.createdAt,
           quantity: formatQuantity(req.quantity, req.unit),
@@ -890,6 +977,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         else if (isQrPrivate) opportunityType = 'Limited Tender';
 
         const documents = asTextList(qr.requiredDocuments);
+        const qrSchedule = qr.payload?.schedule || qr.schedule || {};
         const opportunity: SellerOpportunity = {
           id: `qr-${qr.id}`,
           type: opportunityType,
@@ -897,7 +985,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           buyer: qr.buyerOrganizationName || qr.buyer?.name || 'Verified Buyer',
           category: qr.category || 'Direct RFQ',
           location: qr.deliveryLocation || qr.location || [qr.district, qr.state].filter(Boolean).join(', ') || 'Location not specified',
-          closingDate: qr.deadlineDate || qr.endDate,
+          closingDate: qrSchedule.submissionDate || qrSchedule.submissionDeadline || qr.deadlineDate || qr.endDate,
           estimatedValue: toNumber(qr.estimatedValue),
           discloseEstimatedCost: Boolean(qr.discloseEstimatedCost ?? qr.payload?.discloseEstimatedCost ?? qr.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
@@ -1079,7 +1167,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const locationOptions = useMemo(() => Array.from(new Set(items.map(item => item.location).filter((value): value is string => Boolean(value)))).sort(), [items]);
   const categoryOptions = useMemo(() => Array.from(new Set(items.map(item => item.category).filter((value): value is string => Boolean(value)))).sort(), [items]);
-  const buyerOptions = useMemo(() => Array.from(new Set(items.map(item => item.buyer).filter((value): value is string => Boolean(value)))).sort(), [items]);
 
   const baseFiltered = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -1106,7 +1193,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         }
       }
 
-      if (status) {
+      // By default show all opportunities until seller is disqualified or not selected
+      if (isDisqualifiedOrNotSelected(item)) {
+        if (status !== 'DISQUALIFIED' && status !== 'NOT_SELECTED' && status !== 'REJECTED') {
+          return false;
+        }
+      }
+
+      if (status && status !== 'ALL') {
         if (status === 'LIVE') {
           if (!isOpenOpportunity(item, nowMs)) return false;
         } else if (status === 'CLOSING_SOON') {
@@ -1124,7 +1218,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
       if (location && item.location !== location) return false;
       if (category && item.category !== category) return false;
-      if (buyerFilter && item.buyer !== buyerFilter) return false;
 
       if (valueRange) {
         const isConfidential = item.discloseEstimatedCost === false && item.type !== 'Reverse Auction';
@@ -1140,32 +1233,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         }
       }
 
-      if (startDate || endDate) {
-        const pubTs = getPublishedTimestamp(item);
-        const closeTs = getClosingTimestamp(item.closingDate);
-
-        if (startDate) {
-          const [sy, sm, sd] = startDate.split('-').map(Number);
-          const startBoundary = new Date(sy, sm - 1, sd, 0, 0, 0, 0).getTime();
-          const isPublishedAfter = pubTs > 0 && pubTs >= startBoundary;
-          const isClosingAfter = closeTs !== null && closeTs >= startBoundary;
-          if (!isPublishedAfter && !isClosingAfter) return false;
-        }
-
-        if (endDate) {
-          const [ey, em, ed] = endDate.split('-').map(Number);
-          const endBoundary = new Date(ey, em - 1, ed, 23, 59, 59, 999).getTime();
-          if (closeTs !== null) {
-            if (closeTs > endBoundary) return false;
-          } else if (pubTs > 0 && pubTs > endBoundary) {
-            return false;
-          }
-        }
-      }
-
       return true;
     });
-  }, [startDate, endDate, items, location, query, status, type, category, buyerFilter, valueRange, nowMs]);
+  }, [items, location, query, status, type, category, valueRange, nowMs]);
+
+  const kpiItems = useMemo(() => {
+    if (!type) return items;
+    if (type === 'Limited Tender') return items.filter(i => i.isInvitation || i.type === 'Limited Tender');
+    return items.filter(i => i.type === type);
+  }, [items, type]);
 
   const kpis = useMemo(() => {
     let live = 0;
@@ -1179,7 +1255,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     let participated = 0;
     let evaluation = 0;
 
-    items.forEach(item => {
+    kpiItems.forEach(item => {
       const isLive = isOpenOpportunity(item, nowMs);
       const isConfidential = item.discloseEstimatedCost === false && item.type !== 'Reverse Auction';
       const val = isConfidential ? 0 : (Number(item.estimatedValue) || 0);
@@ -1222,7 +1298,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       participated,
       evaluation
     };
-  }, [items, nowMs]);
+  }, [kpiItems, nowMs]);
 
   const filtered = useMemo(() => {
     const list = baseFiltered.filter(item => {
@@ -1306,7 +1382,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   }, [baseFiltered, kpiFilter, sortField, sortDirection, sortOption, nowMs]);
 
   // Reset KPI filter and pagination when filters change (render-pass adjustment, no cascading renders)
-  const filterKey = `${query}|${type}|${status}|${location}|${startDate}|${endDate}|${category}|${buyerFilter}|${valueRange}|${sortOption}`;
+  const filterKey = `${query}|${type}|${status}|${location}|${category}|${valueRange}|${sortOption}`;
   const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
   const pageFilterKey = `${filterKey}|${viewMode}|${kpiFilter}`;
   const [prevPageFilterKey, setPrevPageFilterKey] = useState(pageFilterKey);
@@ -1332,16 +1408,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       sortKey: 'type',
       width: 'w-[10.5%]',
       cell: (item) => (
-        <span className={cn(
-          "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
-          item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-          item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-          item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-          item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-          "border-amber-200 bg-amber-50 text-amber-600"
-        )}>
-          {item.type}
-        </span>
+        <div className="flex flex-col gap-1 items-start">
+          <span className={cn(
+            "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
+            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
+            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
+            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
+            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
+            "border-amber-200 bg-amber-50 text-amber-600"
+          )}>
+            {item.type}
+          </span>
+          {isParticipatedOpportunity(item) ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0">
+              <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Submitted
+            </span>
+          ) : (isClosedStatus(item.status) || !isOpenOpportunity(item, nowMs)) ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-slate-500 shrink-0">
+              <Lock className="h-2.5 w-2.5 text-slate-400" /> Closed
+            </span>
+          ) : null}
+        </div>
       )
     },
     {
@@ -1489,9 +1576,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <span>Confidential</span>
                 <Lock className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
               </span>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                Competitive Bidding
-              </span>
+
             </div>
           );
         }
@@ -1515,28 +1600,58 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       width: 'w-[12%]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
-      cell: (item) => (
-        <div className="flex items-center justify-end whitespace-nowrap">
-          <Link
-            href={item.detailsHref}
-            className="inline-flex h-8 items-center justify-center rounded-lg bg-[#12335f] px-3 text-center text-xs font-bold text-white shadow-xs hover:bg-[#0b2445] active:scale-95 transition-all duration-200 shrink-0"
-          >
-            View Details
-          </Link>
-        </div>
-      )
+      cell: (item) => {
+        const closed = isClosedStatus(item.status) || (!isOpenOpportunity(item, nowMs));
+        const participated = isParticipatedOpportunity(item);
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+            {!closed && (
+              <Link
+                href={item.href}
+                className={cn(
+                  "inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold shadow-2xs active:scale-95 transition-all duration-200 shrink-0",
+                  participated
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                    : item.type === 'Reverse Auction'
+                    ? "bg-red-600 text-white hover:bg-red-700"
+                    : "bg-[#12335f] text-white hover:bg-[#0b2445]"
+                )}
+                title={item.actionLabel}
+              >
+                {participated && <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />}
+                <span>{item.actionLabel}</span>
+              </Link>
+            )}
+            {closed && participated && (
+              <Link
+                href={item.href}
+                className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-2xs shrink-0"
+                title="Track submitted response"
+              >
+                <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
+                <span>Track Status</span>
+              </Link>
+            )}
+            <Link
+              href={item.detailsHref}
+              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-center text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 transition-all duration-200 shrink-0"
+              title="View complete specifications and terms"
+            >
+              Details
+            </Link>
+          </div>
+        );
+      }
     }
   ], []);
 
   const reset = () => {
     setQuery('');
-    setType('');
-    setStatus('');
+    setType(subRouteType || '');
+    setStatus('ALL');
     setLocation('');
-    setStartDate('');
-    setEndDate('');
     setCategory('');
-    setBuyerFilter('');
     setValueRange('');
     setKpiFilter('all');
     setSortOption('newest');
@@ -1588,6 +1703,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: 0,
+      participated: 0,
       RFQ: 0,
       'Open Tender': 0,
       RFP: 0,
@@ -1597,18 +1713,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     };
 
     items.forEach(item => {
-      if (isOpenOpportunity(item, nowMs)) {
-        counts.all++;
-        if (item.type && counts[item.type] !== undefined) {
-          counts[item.type]++;
-        } else if (item.isInvitation) {
-          counts['Limited Tender']++;
-        }
+      if (isDisqualifiedOrNotSelected(item)) return;
+      if (isParticipatedOpportunity(item)) {
+        counts.participated++;
+      }
+      counts.all++;
+      if (item.type && counts[item.type] !== undefined) {
+        counts[item.type]++;
+      } else if (item.isInvitation) {
+        counts['Limited Tender']++;
       }
     });
 
     return counts;
-  }, [items, nowMs]);
+  }, [items]);
 
   const opportunityCategories: Array<{ label: string; typeVal: OpportunityType | ''; countKey: string; icon: any }> = useMemo(() => [
     { label: 'All Opportunities', typeVal: '', countKey: 'all', icon: Globe },
@@ -1626,58 +1744,50 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-black text-slate-950 tracking-tight">{headerContent.title}</h1>
-          <p className="text-xs font-semibold text-slate-500 mt-0.5">{headerContent.desc}</p>
+          <p className="text-xs text-slate-500 mt-1">{headerContent.desc}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Button
-            type="button"
             variant="outline"
+            size="sm"
             onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="h-10 rounded-xl border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 transition-all flex items-center shrink-0 cursor-pointer"
-            aria-label="Refresh opportunities"
+            disabled={loading}
+            className="rounded-xl border-slate-200 hover:bg-slate-50 h-9 font-bold text-xs"
           >
-            <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", (refreshing || loading) && "animate-spin")} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
+            <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", loading && "animate-spin")} />
+            Refresh
           </Button>
+          <ViewModeToggle value={viewMode} onChange={setViewMode} />
         </div>
       </div>
 
-      {/* KPI Cards Grid */}
+      {/* ── KPI Stat Cards ── */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          label="Live Opportunity Pool"
+          label={type ? `Live ${type}s` : "Live Opportunities"}
           value={kpis.live}
-          subtext={
-            kpis.liveValue > 0
-              ? (kpis.confidentialLive > 0 ? `${formatCurrency(kpis.liveValue)} disclosed (${kpis.confidentialLive} sealed)` : `${formatCurrency(kpis.liveValue)} total value`)
-              : (kpis.confidentialLive > 0 ? `${kpis.confidentialLive} sealed competitive bids` : '₹0 total value')
-          }
-          icon={IndianRupee}
+          subtext="Available for quotation"
+          icon={Globe}
           tone="blue"
           active={kpiFilter === 'live'}
           onClick={() => setKpiFilter(kpiFilter === 'live' ? 'all' : 'live')}
         />
         <KpiCard
-          label="Closing in ≤7 Days"
+          label="Closing Soon (≤7d)"
           value={kpis.closingSoon}
-          subtext={
-            kpis.closingSoonValue > 0
-              ? (kpis.confidentialClosingSoon > 0 ? `${formatCurrency(kpis.closingSoonValue)} expiring soon (${kpis.confidentialClosingSoon} sealed)` : `${formatCurrency(kpis.closingSoonValue)} expiring soon`)
-              : (kpis.confidentialClosingSoon > 0 ? `${kpis.confidentialClosingSoon} sealed bids closing` : 'Expiring within 7 days')
-          }
+          subtext="Urgent response needed"
           icon={Clock}
           tone="red"
           active={kpiFilter === 'dueSoon'}
           onClick={() => setKpiFilter(kpiFilter === 'dueSoon' ? 'all' : 'dueSoon')}
         />
         <KpiCard
-          label="High-Value Tenders (≥₹25L)"
+          label={type === 'Reverse Auction' ? "High-Value Auctions" : "High-Value Tenders"}
           value={kpis.highValueCount}
           subtext={
             kpis.highValueCount > 0
               ? `${formatCurrency(kpis.highValueTotal)} strategic volume`
-              : (kpis.confidentialLive > 0 ? 'Disclosed bids ≥₹25L (sealed excluded)' : 'No high-value tenders')
+              : (kpis.confidentialLive > 0 ? 'Disclosed bids ≥₹25L (sealed excluded)' : 'No high-value opportunities')
           }
           icon={TrendingUp}
           tone="purple"
@@ -1685,18 +1795,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           onClick={() => setKpiFilter(kpiFilter === 'highValue' ? 'all' : 'highValue')}
         />
         <KpiCard
-          label="My Active Submissions"
+          label="My Submissions (Bids)"
           value={kpis.participated}
-          subtext={`${kpis.evaluation} awaiting award decision`}
+          subtext="View tracking in My Bids →"
           icon={CheckCircle2}
           tone="indigo"
-          active={kpiFilter === 'participated'}
-          onClick={() => setKpiFilter(kpiFilter === 'participated' ? 'all' : 'participated')}
+          active={false}
+          onClick={() => router.push('/seller/bids/submitted')}
         />
       </div>
 
-      {/* ── Opportunity Type Segmented Filter Pills ── */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mt-1 scrollbar-none" role="tablist" aria-label="Opportunity Types">
+      {/* ── Opportunity Type Segmented Filter Pills (Wrapping, No Horizontal Scroll) ── */}
+      <div className="flex flex-wrap items-center gap-2 -mt-1" role="tablist" aria-label="Opportunity Types">
         {opportunityCategories.map(tab => {
           const isActive = (type === tab.typeVal) || (!type && !tab.typeVal);
           const count = typeCounts[tab.countKey] || 0;
@@ -1709,11 +1819,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               role="tab"
               aria-selected={isActive}
               onClick={() => {
-                setType(tab.typeVal);
+                setType(tab.typeVal as any);
                 setPage(1);
               }}
               className={cn(
-                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap border cursor-pointer",
+                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer",
                 isActive
                   ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
                   : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
@@ -1736,20 +1846,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         })}
       </div>
 
-      {/* ── Search + Filter + View Toggle Toolbar ── */}
+      {/* ── Search + Filter + View Toggle Toolbar (Single Row Desktop, No Horizontal Scroll) ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm">
         <ResponsiveFilterBar
           singleRowDesktop={true}
-          searchWrapperClassName="w-44 sm:w-48 md:w-52 lg:w-56 shrink-0"
-          filtersClassName="flex-nowrap shrink-0"
-          activeFilterCount={(query ? 1 : 0) + (status ? 1 : 0) + (category ? 1 : 0) + (buyerFilter ? 1 : 0) + (location ? 1 : 0) + (startDate ? 1 : 0) + (endDate ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
+          searchWrapperClassName="flex-1 min-w-[170px] max-w-sm xl:max-w-md"
+          filtersClassName="flex items-center gap-1.5 sm:gap-2 shrink-0"
+          activeFilterCount={(query ? 1 : 0) + (status !== 'ALL' ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
               <input
                 value={query}
                 onChange={event => { setQuery(event.target.value); setPage(1); }}
-                placeholder="Search opportunities..."
+                placeholder="Search opportunities by title, ref, buyer..."
                 className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-8.5 pr-8 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
               />
               {query && (
@@ -1765,30 +1875,30 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             </div>
           }
           filters={
-            <>
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Status Dropdown */}
-              <div className="w-full sm:w-auto sm:w-[110px] shrink-0">
+              <div className="w-auto min-w-[125px] max-w-[155px]">
                 <select
                   value={status}
                   onChange={e => { setStatus(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by status"
                 >
-                  <option value="">All Statuses</option>
-                  <option value="LIVE">Live / Open</option>
+                  <option value="ALL">All Opportunities (Default)</option>
+                  <option value="LIVE">Live & Open Only</option>
                   <option value="CLOSING_SOON">Closing Soon</option>
                   <option value="PARTICIPATED">Submissions</option>
                   <option value="UNDER_EVALUATION">Evaluation</option>
-                  <option value="CLOSED">Closed</option>
+                  <option value="CLOSED">Closed & Concluded</option>
                 </select>
               </div>
 
               {/* Category Dropdown */}
-              <div className="w-full sm:w-auto sm:w-[115px] shrink-0">
+              <div className="w-auto min-w-[125px] max-w-[150px]">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by category"
                 >
                   <option value="">All Categories</option>
@@ -1796,25 +1906,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </select>
               </div>
 
-              {/* Buyer Dropdown */}
-              <div className="w-full sm:w-auto sm:w-[105px] shrink-0">
-                <select
-                  value={buyerFilter}
-                  onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
-                  aria-label="Filter by buyer"
-                >
-                  <option value="">All Buyers</option>
-                  {buyerOptions.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-
               {/* Location Dropdown */}
-              <div className="w-full sm:w-auto sm:w-[105px] shrink-0">
+              <div className="w-auto min-w-[120px] max-w-[145px]">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Filter by location"
                 >
                   <option value="">All Locations</option>
@@ -1823,7 +1920,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Sort Filter Dropdown */}
-              <div className="w-full sm:w-auto sm:w-[115px] shrink-0">
+              <div className="w-auto min-w-[120px] max-w-[140px]">
                 <select
                   value={sortOption}
                   onChange={e => {
@@ -1831,7 +1928,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                     setSortField('');
                     setPage(1);
                   }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                   aria-label="Sort opportunities"
                   title="Sort opportunities"
                 >
@@ -1843,65 +1940,100 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 </select>
               </div>
 
-              {/* Unified Date Range Group (From - To) */}
-              <div className="flex items-center h-9 rounded-xl border border-slate-200 bg-white px-2 hover:border-slate-300 focus-within:border-[#12335f] focus-within:ring-2 focus-within:ring-[#12335f]/10 transition-colors shadow-xs w-full sm:w-auto shrink-0">
-                <Calendar className="h-3.5 w-3.5 text-slate-400 mr-1 shrink-0" />
-                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">From</span>
-                <input
-                  id="filter-start-date"
-                  type="date"
-                  value={startDate}
-                  max={todayStr}
-                  onClick={e => (e.target as any).showPicker?.()}
-                  onChange={e => handleStartDateChange(e.target.value)}
-                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[92px] sm:w-[95px]"
-                  aria-label="Start date (From)"
-                  title="Start Date (Published on or after)"
-                />
-                <span className="text-slate-300 mx-1 font-bold select-none">–</span>
-                <span className="text-[10px] font-bold text-slate-400 mr-1 uppercase select-none shrink-0">To</span>
-                <input
-                  id="filter-end-date"
-                  type="date"
-                  value={endDate}
-                  min={startDate || undefined}
-                  onClick={e => (e.target as any).showPicker?.()}
-                  onChange={e => handleEndDateChange(e.target.value)}
-                  className="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-[92px] sm:w-[95px]"
-                  aria-label="Procurement end date (To)"
-                  title="Procurement End Date (Closing deadline on or before)"
-                />
-                {(startDate || endDate) && (
-                  <button
-                    type="button"
-                    onClick={() => { setStartDate(''); setEndDate(''); setPage(1); }}
-                    className="ml-1 p-0.5 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
-                    title="Clear date filter"
-                    aria-label="Clear date filter"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-
               {/* Reset Trigger */}
-              {(query || status || category || buyerFilter || location || startDate || endDate || sortOption !== 'newest' || kpiFilter !== 'all') && (
+              {(query || status !== 'ALL' || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
                 <Button
                   type="button"
                   variant="outline"
                   onClick={reset}
-                  className="h-9 px-2.5 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+                  className="h-9 px-3 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
                   aria-label="Reset all filters"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
                   <span>Reset</span>
                 </Button>
               )}
-            </>
+            </div>
           }
           endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />}
         />
       </div>
+
+      {/* ── Active Filter Badges Bar ── */}
+      {(kpiFilter !== 'all' || (status && status !== 'ALL') || type || category || location || query) && (
+        <div className="flex flex-wrap items-center gap-2 px-1 -mt-2">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Filters:</span>
+          {kpiFilter === 'participated' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-900 shadow-xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Participated ({kpis.participated})</span>
+              <button
+                type="button"
+                onClick={() => setKpiFilter('all')}
+                className="ml-1 rounded-full p-0.5 text-emerald-600 hover:bg-emerald-200/60 hover:text-emerald-950 transition-colors cursor-pointer"
+                aria-label="Remove Participated filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {kpiFilter === 'live' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-black text-blue-900 shadow-xs">
+              <span>Live ({kpis.live})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-blue-600 hover:bg-blue-200/60 transition-colors cursor-pointer" aria-label="Remove Live filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {kpiFilter === 'dueSoon' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-black text-rose-900 shadow-xs">
+              <span>Closing Soon ({kpis.closingSoon})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-rose-600 hover:bg-rose-200/60 transition-colors cursor-pointer" aria-label="Remove Closing Soon filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {kpiFilter === 'highValue' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 text-xs font-black text-purple-900 shadow-xs">
+              <span>High Value (≥₹25L) ({kpis.highValueCount})</span>
+              <button type="button" onClick={() => setKpiFilter('all')} className="ml-1 rounded-full p-0.5 text-purple-600 hover:bg-purple-200/60 transition-colors cursor-pointer" aria-label="Remove High Value filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {status && status !== 'ALL' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Status: {status === 'PARTICIPATED' ? 'My Submissions' : status === 'LIVE' ? 'Live Only' : status === 'CLOSED' ? 'Closed' : status === 'CLOSING_SOON' ? 'Closing Soon' : status === 'UNDER_EVALUATION' ? 'Evaluation' : status}</span>
+              <button type="button" onClick={() => setStatus('ALL')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Reset Status to All"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {type && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Type: {type}</span>
+              <button type="button" onClick={() => setType('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Type filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {category && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Category: {category}</span>
+              <button type="button" onClick={() => setCategory('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Category filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {location && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Location: {location}</span>
+              <button type="button" onClick={() => setLocation('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Location filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          {query && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-bold text-slate-800 shadow-xs">
+              <span>Search: &quot;{query}&quot;</span>
+              <button type="button" onClick={() => setQuery('')} className="ml-1 rounded-full p-0.5 text-slate-500 hover:bg-slate-200 transition-colors cursor-pointer" aria-label="Remove Query filter"><X className="h-3 w-3" /></button>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={reset}
+            className="text-xs font-extrabold text-rose-600 hover:text-rose-800 hover:underline transition-colors ml-1 cursor-pointer"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       {loading ? (
@@ -1929,6 +2061,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
                 const closingTime = item.closingDate ? getClosingTimestamp(item.closingDate) : null;
                 const isClosingSoon = closingTime !== null && (closingTime - nowMs) <= 2 * 86400000 && (closingTime - nowMs) >= 0;
+                const closed = isClosedStatus(item.status) || (!isOpenOpportunity(item, nowMs));
+                const participated = isParticipatedOpportunity(item);
                 return (
                   <div
                     key={item.id}
@@ -1941,16 +2075,28 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                     <div className="space-y-3">
                       {/* Top row: Badges */}
                       <div className="flex items-center justify-between">
-                        <span className={cn(
-                          "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
-                          item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-                          item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-                          item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-                          item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                          "border-amber-200 bg-amber-50 text-amber-600"
-                        )}>
-                          {item.type}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={cn(
+                            "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
+                            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
+                            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
+                            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
+                            "border-amber-200 bg-amber-50 text-amber-600"
+                          )}>
+                            {item.type}
+                          </span>
+                          {participated ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800 shadow-2xs">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              {closed ? "Submitted • Under Eval" : "Participated"}
+                            </span>
+                          ) : closed ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9px] font-black uppercase text-slate-500 shadow-2xs">
+                              <Lock className="h-3 w-3 text-slate-400" /> Missed Deadline
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
 
                       {/* Title */}
@@ -2019,14 +2165,42 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                         </div>
                       </div>
 
-                      {/* Action Button */}
-                      <div className="pt-1">
+                      {/* Action Buttons */}
+                      <div className="pt-1 flex items-center gap-2">
+                        {!closed ? (
+                          <Link
+                            href={item.href}
+                            className={cn(
+                              "flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-white shadow-2xs transition active:scale-[0.99]",
+                              participated
+                                ? "bg-emerald-600 hover:bg-emerald-700"
+                                : item.type === 'Reverse Auction'
+                                ? "bg-red-600 hover:bg-red-700"
+                                : "bg-[#12335f] hover:bg-[#0b2445]"
+                            )}
+                          >
+                            {participated && <CheckCircle2 className="h-3.5 w-3.5" />}
+                            <span>{item.actionLabel}</span>
+                            <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
+                          </Link>
+                        ) : participated ? (
+                          <Link
+                            href={item.href}
+                            className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Track Status</span>
+                          </Link>
+                        ) : null}
                         <Link
-                          href={item.href}
-                          className="flex h-9 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-[#12335f] to-[#1c4980] text-xs font-bold text-white shadow-sm transition hover:shadow-md hover:from-[#0d2647] hover:to-[#153863] active:scale-[0.99]"
+                          href={item.detailsHref}
+                          className={cn(
+                            "h-9 px-3 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-[0.99] transition shrink-0",
+                            closed && !participated ? "w-full flex-1" : ""
+                          )}
+                          title="View complete specifications and terms"
                         >
-                          {item.actionLabel}
-                          <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
+                          Details
                         </Link>
                       </div>
                     </div>
@@ -2124,7 +2298,11 @@ function OpportunityDetailPanel({ item }: { item: SellerOpportunity }) {
           <Link href={item.detailsHref} className="inline-flex h-9 items-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">
             <Eye className="mr-1.5 h-4 w-4" /> View Details
           </Link>
-          <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+          {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now())) ? (
+            <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+          ) : isParticipatedOpportunity(item) ? (
+            <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white">Track Status</Link>
+          ) : null}
         </div>
       </section>
 
@@ -2219,7 +2397,11 @@ function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; 
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+                  {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now())) ? (
+                    <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
+                  ) : isParticipatedOpportunity(item) ? (
+                    <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white">Track Status</Link>
+                  ) : null}
                   <Link href={item.detailsHref} className="inline-flex h-9 items-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">Open source page</Link>
                 </div>
               </section>

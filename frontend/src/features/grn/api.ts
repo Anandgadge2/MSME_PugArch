@@ -42,19 +42,23 @@ export interface GrnDto {
     rejectedById?: number | null;
     rejectedAt?: string | null;
     rejectionReason?: string | null;
+    requiresApprovalWorkflow?: boolean;
     createdAt: string;
     updatedAt: string;
     items: GrnItemDto[];
     documents: GrnDocumentDto[];
-    receivedBy: { id: number; name: string; email: string };
+    organization?: { id: number; organizationName?: string; name?: string; organizationType?: string };
+    receivedBy: { id: number; name: string; email: string; mobile?: string | null };
     purchaseOrder?: {
         id: number;
         poNumber: string;
         title: string;
         amount: string | number;
         status: string;
-        seller: { id: number; name: string; email: string };
-        buyer: { id: number; name: string; email: string };
+        deliveryAddress?: string | null;
+        createdAt?: string;
+        seller: { id: number; name: string; email: string; mobile?: string | null; organization?: { id: number; name: string; code?: string } };
+        buyer: { id: number; name: string; email: string; mobile?: string | null; organization?: { id: number; name: string; code?: string } };
         items: Array<{ id: number; productId?: number | null; quantity: string | number; unitPrice: string | number }>;
     };
 }

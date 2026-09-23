@@ -14,6 +14,7 @@ import { logger } from '../config/logger.js';
 import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
+import { numberSeries } from '../services/workflow/workflow-common.js';
 
 const router = Router();
 const db = prisma as any;
@@ -27,7 +28,7 @@ const toNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-const nextAuctionCode = () => `RA-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+const nextAuctionCode = () => numberSeries('RA');
 
 const actor = (req: AuthRequest) => ({
   actorUserId: req.user?.id,
@@ -63,7 +64,6 @@ const auctionFieldsSchema = z.object({
   description: z.string().trim().max(3000).optional(),
   procurementMethod: z.enum(['REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION']).default('REVERSE_AUCTION'),
   category: z.string().trim().max(160).optional(),
-  subCategory: z.string().trim().max(160).optional(),
   currency: z.string().trim().length(3).default('INR'),
   buyerOrganization: z.string().trim().max(180).optional(),
   department: z.string().trim().max(160).optional(),
@@ -158,12 +158,53 @@ const assertAuctionManager = (req: AuthRequest, auction: any) => {
  * try the auction primary key first, then fall back to the linked requirement id so a
  * stale/aliased link self-heals instead of 404-ing.
  */
-const resolveAuctionId = async (rawId: number): Promise<number | null> => {
-  if (!Number.isFinite(rawId)) return null;
-  const direct = await db.auction.findUnique({ where: { id: rawId }, select: { id: true } });
-  if (direct) return direct.id;
-  const linked = await db.auction.findFirst({ where: { linkedRequirementId: rawId }, select: { id: true }, orderBy: { createdAt: 'desc' } });
-  return linked?.id ?? null;
+const resolveAuctionId = async (rawId: number | string): Promise<number | null> => {
+  const str = String(rawId ?? '').trim();
+  if (!str) return null;
+
+  // 1. Direct match by auctionCode or referenceNo (case-insensitive)
+  const byCode = await db.auction.findFirst({
+    where: {
+      OR: [
+        { auctionCode: { equals: str, mode: 'insensitive' } },
+        { referenceNo: { equals: str, mode: 'insensitive' } },
+        { auctionCode: str },
+        { referenceNo: str }
+      ]
+    },
+    select: { id: true }
+  });
+  if (byCode) return byCode.id;
+
+  // 2. If it has a prefix like "RA-" followed by an integer, try direct ID fallback
+  if (str.toUpperCase().startsWith('RA-')) {
+    const stripped = str.replace(/^RA-/i, '');
+    const numStripped = Number(stripped);
+    if (Number.isFinite(numStripped) && numStripped > 0) {
+      const byStrippedId = await db.auction.findUnique({ where: { id: numStripped }, select: { id: true } });
+      if (byStrippedId) return byStrippedId.id;
+    }
+  }
+
+  // 3. Try numeric lookup if valid number
+  const num = Number(str);
+  if (Number.isFinite(num) && num > 0) {
+    const direct = await db.auction.findUnique({ where: { id: num }, select: { id: true } });
+    if (direct) return direct.id;
+    const linked = await db.auction.findFirst({
+      where: { linkedRequirementId: num },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (linked) return linked.id;
+    const linkedBid = await db.auction.findFirst({
+      where: { linkedBidId: num },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    if (linkedBid) return linkedBid.id;
+  }
+  return null;
 };
 
 /**
@@ -199,16 +240,59 @@ const withEffectiveStatus = async (auction: any) => {
   const start = auction.startTime ? new Date(auction.startTime).getTime() : NaN;
   const end = auction.endTime ? new Date(auction.endTime).getTime() : NaN;
   let effective = current;
+  let evaluationPending = false;
+
+  // Check if qualification is required and pending
+  const hasPreBidStage = Boolean(
+    auction.preBidStage ||
+    auction.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+    auction.visibilityMode === 'TECHNICALLY_QUALIFIED_ONLY' ||
+    auction.linkedBidId ||
+    auction.linkedRequirementId
+  );
+
+  if (hasPreBidStage && ['SCHEDULED', 'LIVE', 'ACTIVE'].includes(current)) {
+    const [qualifiedCount, pendingSubmissions] = await Promise.all([
+      db.auctionParticipant.count({
+        where: {
+          auctionId: auction.id,
+          status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+        }
+      }).catch(() => 0),
+      db.auctionParticipant.count({
+        where: {
+          auctionId: auction.id,
+          qualificationStatus: 'SUBMITTED'
+        }
+      }).catch(() => 0)
+    ]);
+
+    const minimumRequired = Math.max(1, Number(auction.minimumQualifiedBidders) || 1);
+    // If submissions are waiting for buyer review, or qualified count is below threshold
+    if (pendingSubmissions > 0 || qualifiedCount < minimumRequired) {
+      evaluationPending = true;
+    }
+  }
+
   if (Number.isFinite(end) && end <= now) {
     effective = 'CLOSED';
   } else if (['SCHEDULED', 'LIVE', 'ACTIVE'].includes(current) && Number.isFinite(start) && start <= now) {
-    effective = 'LIVE';
+    if (evaluationPending) {
+      // Evaluation is delayed: keep auction on hold in SCHEDULED
+      effective = 'SCHEDULED';
+    } else {
+      effective = 'LIVE';
+    }
   }
-  if (effective === current) return auction;
-  const data: any = { status: effective, statusEnum: effective };
-  if (effective === 'CLOSED' && !auction.actualClosedAt) data.actualClosedAt = new Date();
-  await db.auction.update({ where: { id: auction.id }, data }).catch(() => undefined);
-  return { ...auction, ...data };
+
+  const data: any = {};
+  if (effective !== current) {
+    data.status = effective;
+    data.statusEnum = effective;
+    if (effective === 'CLOSED' && !auction.actualClosedAt) data.actualClosedAt = new Date();
+    await db.auction.update({ where: { id: auction.id }, data }).catch(() => undefined);
+  }
+  return { ...auction, ...data, evaluationPending };
 };
 
 /**
@@ -221,13 +305,34 @@ const linkedRequirementSummary = async (auction: any) => {
   if (!auction?.linkedRequirementId) return null;
   const requirement = await db.requirement.findUnique({
     where: { id: auction.linkedRequirementId },
-    include: { items: true, category: true }
+    include: {
+      items: true,
+      category: true,
+      organization: {
+        select: {
+          id: true,
+          organizationName: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          district: true,
+          state: true,
+          pincode: true,
+          country: true
+        }
+      }
+    }
   });
   if (!requirement) return null;
   const payload = (requirement.payload || {}) as any;
   const basics = payload.basics || {};
   const tender = payload.tender || {};
   const documents = Array.isArray(payload.documents) ? payload.documents : [];
+  const org = requirement.organization;
+  const registeredAddress = org
+    ? [org.addressLine1, org.addressLine2, org.city, org.district, org.state, org.pincode].filter(Boolean).join(', ')
+    : null;
+
   return {
     id: requirement.id,
     requirementNumber: requirement.requirementNumber,
@@ -247,11 +352,27 @@ const linkedRequirementSummary = async (auction: any) => {
       unitOfMeasure: item.unitOfMeasure,
       estimatedUnitPrice: item.estimatedUnitPrice
     })),
-    documents: documents.map((doc: any) => ({ name: doc.name, fileName: doc.fileName || null, required: doc.required !== false })),
+    documents: documents.map((doc: any, idx: number) => ({
+      id: doc.id || doc.fileAssetId || `req-doc-${idx + 1}`,
+      name: doc.name || doc.fileName || `Tender Document ${idx + 1}`,
+      fileName: doc.fileName || null,
+      fileAssetId: doc.fileAssetId || null,
+      url: doc.url || null,
+      required: doc.required !== false
+    })),
     consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
     paymentTerms: payload.terms?.paymentTerms || basics.paymentTerms || null,
     bidStartDate: tender.bidStartDate || null,
-    bidClosingDate: tender.bidClosingDate || null
+    bidClosingDate: tender.bidClosingDate || null,
+    buyerOrganization: org ? {
+      id: org.id,
+      organizationName: org.organizationName,
+      registeredAddress: registeredAddress || null,
+      city: org.city || null,
+      district: org.district || null,
+      state: org.state || null,
+      pincode: org.pincode || null
+    } : null
   };
 };
 
@@ -354,7 +475,9 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
           { referenceNo: rawId },
           { referenceNo: `RFQ-${rawId}` },
           { referenceNo: `REQ-${rawId}` },
+          { referenceNo: `RA-${rawId}` },
           { auctionCode: rawId },
+          { auctionCode: `RA-${rawId}` },
         ]
       },
       include: {
@@ -470,10 +593,15 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
 
 router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let auction = await db.auction.findUnique({ where: { id }, include: auctionIncludeFor(req) });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    if (!auction.auctionCode) {
+      const generatedCode = nextAuctionCode();
+      await db.auction.update({ where: { id: auction.id }, data: { auctionCode: generatedCode } }).catch(() => {});
+      auction.auctionCode = generatedCode;
+    }
     auction = await withEffectiveStatus(auction);
 
     const isPublic = await isAuctionPublic(auction);
@@ -484,16 +612,25 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       authorized = true;
     }
 
+    let myParticipant = null;
     if (req.user) {
       if (isAdmin(req) || auction.createdByUserId === req.user.id || (auction.buyerOrgId && auction.buyerOrgId === req.user.organizationId)) {
         authorized = true;
       }
-      const participant = await db.auctionParticipant.findFirst({
-        where: { auctionId: id, sellerOrgId: req.user.organizationId || -1 }
-      });
-      if (participant) {
-        hasJoined = true;
-        authorized = true;
+      if (req.user.role === 'seller') {
+        myParticipant = await db.auctionParticipant.findFirst({
+          where: {
+            auctionId: id,
+            OR: [
+              ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+              ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+            ]
+          }
+        });
+        if (myParticipant) {
+          hasJoined = true;
+          authorized = true;
+        }
       }
     }
 
@@ -501,28 +638,77 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       return apiResponse.error(res, 404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
-    // Filter competitor bids if needed
-    if (req.user?.role === 'seller' && !auction.allowCompetitorNames) {
-      auction.bids = (auction.bids || []).filter((bid: any) => bid.sellerId === req.user?.id || bid.sellerOrgId === req.user?.organizationId);
-    } else if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'master_admin' && auction.createdByUserId !== req.user.id && auction.buyerOrgId !== req.user.organizationId)) {
-      if (!auction.allowCompetitorNames) {
-        auction.bids = [];
-      }
+    // Anonymize competitor bids if competitor names are hidden
+    const isManagerUser = canManageAuction(req, auction);
+    if ((req.user?.role === 'seller' || !isManagerUser) && !auction.allowCompetitorNames) {
+      auction.bids = (auction.bids || []).map((bid: any, idx: number) => {
+        const isMe = (req.user?.organizationId && bid.sellerOrgId === req.user.organizationId) ||
+                     (req.user?.id && bid.sellerId === req.user.id);
+        if (isMe) return { ...bid, isMyBid: true };
+        return {
+          ...bid,
+          sellerOrgName: `Bidder ${bid.rankAtSubmission || idx + 1}`,
+          sellerOrgId: null,
+          sellerId: null,
+          ipAddress: null,
+          deviceHash: null,
+          userAgent: null,
+          userAgentHash: null,
+          isMyBid: false
+        };
+      });
     }
 
     let buyerOrganizationName = 'Verified Buyer';
+    let buyerOrganization: any = null;
     if (auction.buyerOrgId) {
       const buyerOrg = await db.organization.findUnique({
         where: { id: auction.buyerOrgId },
-        select: { organizationName: true }
+        select: {
+          id: true,
+          organizationName: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          district: true,
+          state: true,
+          pincode: true,
+          country: true
+        }
       });
       if (buyerOrg) {
         buyerOrganizationName = buyerOrg.organizationName;
+        const regAddr = [buyerOrg.addressLine1, buyerOrg.addressLine2, buyerOrg.city, buyerOrg.district, buyerOrg.state, buyerOrg.pincode].filter(Boolean).join(', ');
+        buyerOrganization = {
+          id: buyerOrg.id,
+          organizationName: buyerOrg.organizationName,
+          registeredAddress: regAddr || null,
+          city: buyerOrg.city || null,
+          district: buyerOrg.district || null,
+          state: buyerOrg.state || null,
+          pincode: buyerOrg.pincode || null
+        };
       }
     }
 
     const linkedRequirement = await linkedRequirementSummary(auction);
-    return apiResponse.success(res, maskSensitive({ ...auction, isPublic, hasJoined, linkedRequirement, buyerOrganizationName }));
+    if (!buyerOrganization && linkedRequirement?.buyerOrganization) {
+      buyerOrganization = linkedRequirement.buyerOrganization;
+      if (linkedRequirement.buyerOrganization.organizationName) {
+        buyerOrganizationName = linkedRequirement.buyerOrganization.organizationName;
+      }
+    }
+
+    return apiResponse.success(res, maskSensitive({
+      ...auction,
+      isPublic,
+      hasJoined,
+      evaluationPending: Boolean(auction.evaluationPending),
+      linkedRequirement,
+      buyerOrganizationName,
+      buyerOrganization,
+      myParticipant
+    }));
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load auction', error.code || 'REVERSE_AUCTION_DETAIL_ERROR');
   }
@@ -530,7 +716,7 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
 
 router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     let [auction, participant] = await Promise.all([
       db.auction.findUnique({ where: { id } }),
@@ -569,10 +755,59 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       return apiResponse.error(res, 404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
+    const [activeParticipantsCount, totalParticipantsCount, totalBidsCount, myBestBidRecord] = await Promise.all([
+      db.auctionParticipant.count({
+        where: {
+          auctionId: id,
+          status: { in: ['ACCEPTED', 'TECHNICALLY_QUALIFIED', 'BID_SUBMITTED'] }
+        }
+      }),
+      db.auctionParticipant.count({
+        where: { auctionId: id }
+      }),
+      db.auctionBid.count({
+        where: { auctionId: id, isValid: true }
+      }),
+      req.user?.role === 'seller' && (req.user.organizationId || req.user.id)
+        ? db.auctionBid.findFirst({
+            where: {
+              auctionId: id,
+              isValid: true,
+              OR: [
+                ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+                ...(req.user.id ? [{ sellerId: req.user.id }] : [])
+              ]
+            },
+            orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }]
+          })
+        : Promise.resolve(null)
+    ]);
+
+    const canBid = Boolean(
+      participant &&
+      ['TECHNICALLY_QUALIFIED', 'ACCEPTED'].includes(participant.status) &&
+      !auction.evaluationPending
+    );
+    const disqualificationReason = participant?.disqualificationReason || participant?.rejectionReason || participant?.qualificationRemarks || null;
+
     return apiResponse.success(res, {
       serverTime: new Date(),
-      auction: maskSensitive({ ...auction, isPublic, hasJoined: !!participant }),
-      participant: maskSensitive(participant),
+      auction: maskSensitive({
+        ...auction,
+        isPublic,
+        hasJoined: !!participant,
+        evaluationPending: Boolean(auction.evaluationPending)
+      }),
+      participant: maskSensitive(participant ? {
+        ...participant,
+        canBid,
+        disqualificationReason
+      } : null),
+      activeParticipantsCount,
+      totalParticipantsCount,
+      totalBidsCount,
+      myBestBid: myBestBidRecord ? toNumber(myBestBidRecord.amount ?? myBestBidRecord.bidAmount) : null,
+      myRank: participant?.currentRank || null,
       minimumNextBid: toNumber(auction.currentLowestAmount ?? auction.currentLowestBid ?? auction.currentBid ?? auction.startPrice) - toNumber(auction.minDecrementAmount ?? auction.minDecrement, 0)
     });
   } catch (error: any) {
@@ -596,7 +831,6 @@ router.post('/reverse-auctions', requirePermission('reverse_auction.create', org
         description: payload.description || null,
         procurementMethod: payload.procurementMethod,
         category: payload.category || null,
-        subCategory: payload.subCategory || null,
         auctionType: payload.auctionType,
         auctionMode: payload.auctionMode,
         auctionDurationMinutes: payload.durationMinutes || Math.max(1, Math.round((payload.endAt.getTime() - payload.startAt.getTime()) / 60000)),
@@ -702,7 +936,7 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
     if (!linkedBid && !linkedReq && typeof rawId === 'string') {
       linkedBid = await db.procurementBid.findFirst({ where: { bidNumber: rawId } }).catch(() => null);
       if (!linkedReq) {
-        linkedReq = await db.buyerRequirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
+        linkedReq = await db.requirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
       }
     }
 
@@ -877,7 +1111,8 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
 
 router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = Number(req.params.id);
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const current = await db.auction.findUnique({ where: { id } });
     if (!current) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     assertAuctionManager(req, current);
@@ -892,7 +1127,6 @@ router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update'
         description: payload.description,
         procurementMethod: payload.procurementMethod,
         category: payload.category,
-        subCategory: payload.subCategory,
         auctionType: payload.auctionType,
         auctionMode: payload.auctionMode,
         auctionDurationMinutes: payload.durationMinutes,
@@ -952,10 +1186,11 @@ const assertEnoughQualifiedBidders = async (auction: any) => {
   }
 };
 
-const transition = (target: string, enumStatus: string, extra?: (req: AuthRequest) => Record<string, unknown>, guard?: (auction: any) => Promise<void>) =>
+const transition = (target: string, enumStatus: string, extra?: (req: AuthRequest, auction?: any) => Record<string, unknown>, guard?: (auction: any) => Promise<void>) =>
   async (req: AuthRequest, res: Response) => {
     try {
-      const id = Number(req.params.id);
+      const id = await resolveAuctionId(req.params.id);
+      if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
       const auction = await db.auction.findUnique({ where: { id } });
       if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
       assertAuctionManager(req, auction);
@@ -964,7 +1199,7 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
         throw new ApiError(400, 'Cannot transition an auction that is closed or cancelled', 'AUCTION_ALREADY_FINALIZED');
       }
       if (guard) await guard(auction);
-      const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req) : {}) };
+      const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req, auction) : {}) };
       const updated = await db.auction.update({ where: { id }, data });
       await writeAuctionEvent(req, id, target.toLowerCase(), `Auction moved to ${target}`, data);
       return apiResponse.success(res, maskSensitive(updated));
@@ -974,7 +1209,17 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
   };
 
 router.post('/reverse-auctions/:id/schedule', requirePermission('reverse_auction.publish', orgScope), transition('SCHEDULED', 'SCHEDULED'));
-router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', () => ({ actualStartedAt: new Date() }), assertEnoughQualifiedBidders));
+router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', (req, auction) => {
+  const now = new Date();
+  let endTime = auction?.endTime;
+  const currentEnd = auction?.endTime ? new Date(auction.endTime).getTime() : 0;
+  // If the auction was delayed past scheduled end time or less than 10 mins remain, preserve full duration
+  if (!currentEnd || currentEnd <= now.getTime() + (10 * 60_000)) {
+    const durationMinutes = Number(auction?.durationMinutes) || (auction?.startTime && auction?.endTime ? Math.round((new Date(auction.endTime).getTime() - new Date(auction.startTime).getTime()) / 60000) : 60);
+    endTime = new Date(now.getTime() + Math.max(15, durationMinutes) * 60_000);
+  }
+  return { actualStartedAt: now, startTime: now, endTime };
+}, assertEnoughQualifiedBidders));
 router.post('/reverse-auctions/:id/pause', requirePermission('reverse_auction.update', orgScope), transition('PAUSED', 'PAUSED'));
 router.post('/reverse-auctions/:id/resume', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE'));
 router.post('/reverse-auctions/:id/close', requirePermission('reverse_auction.close', orgScope), transition('CLOSED', 'CLOSED', () => ({ actualClosedAt: new Date() })));
@@ -985,7 +1230,8 @@ router.post('/reverse-auctions/:id/cancel', requirePermission('reverse_auction.c
 
 router.post('/reverse-auctions/:id/invite-sellers', requirePermission('reverse_auction.invite_seller', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = Number(req.params.id);
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     assertAuctionManager(req, auction);
@@ -1036,24 +1282,54 @@ ${endsAt ? `<p><strong>Bidding closes:</strong> ${endsAt}</p>` : ''}
 
 router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    const where: any = { auctionId: id };
-    if (req.user?.role === 'seller') where.sellerOrgId = req.user.organizationId || -1;
-    else assertAuctionManager(req, auction);
-    const participants = await db.auctionParticipant.findMany({ where, orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }] });
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+    const isPublic = await isAuctionPublic(auction);
+    if (!isManager && !myParticipant && !isPublic && !isAdmin(req)) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const participants = await db.auctionParticipant.findMany({
+      where: { auctionId: id },
+      orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }]
+    });
     const orgIds = Array.from(new Set(participants.map((p: any) => p.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({
-      where: { id: { in: orgIds } },
+      where: { id: { in: orgIds as number[] } },
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const mappedParticipants = participants.map((p: any) => ({
-      ...p,
-      sellerOrgName: orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`
-    }));
+
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const mappedParticipants = participants.map((p: any, index: number) => {
+      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
+                   (req.user?.id && p.sellerUserId === req.user.id);
+      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+
+      return {
+        ...p,
+        sellerOrgName: displayName,
+        sellerOrgId: (showAllNames || isMe) ? p.sellerOrgId : null,
+        sellerUserId: (showAllNames || isMe) ? p.sellerUserId : null,
+        isCurrentViewer: Boolean(isMe)
+      };
+    });
     return apiResponse.success(res, { participants: maskSensitive(mappedParticipants) });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load participants', error.code || 'REVERSE_AUCTION_PARTICIPANTS_ERROR');
@@ -1078,7 +1354,7 @@ const isAuctionManagerUser = (req: AuthRequest, auction: any) =>
 
 router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1127,7 +1403,7 @@ router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_a
 
 router.post('/reverse-auctions/:id/clarifications/:clarId/reply', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1170,9 +1446,9 @@ router.post('/reverse-auctions/:id/clarifications/:clarId/reply', requirePermiss
   }
 });
 
-router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/clarifications', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1182,10 +1458,19 @@ router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_au
       orderBy: { askedAt: 'asc' }
     });
 
-    // Buyer/manager sees all; sellers see PUBLIC threads + their own PRIVATE ones.
-    const filtered = isAuctionManagerUser(req, auction)
+    const currentUserId = req.user?.id ? Number(req.user.id) : null;
+    const isManager = Boolean(req.user && isAuctionManagerUser(req, auction));
+
+    // Private clarifications must NOT be shown to the public or other sellers/bidders.
+    // They must be visible to the asking seller and the buyer/manager only.
+    const filtered = isManager
       ? clarifications
-      : clarifications.filter((c: any) => c.visibility === 'PUBLIC' || c.askedById === req.user?.id);
+      : clarifications.filter((c: any) => {
+          const vis = String(c.visibility || 'PUBLIC').toUpperCase();
+          if (vis === 'PUBLIC') return true;
+          if (!currentUserId) return false;
+          return Number(c.askedById) === currentUserId;
+        });
 
     return apiResponse.success(res, maskSensitive(filtered));
   } catch (error: any) {
@@ -1202,7 +1487,7 @@ router.get('/reverse-auctions/:id/clarifications', requirePermission('reverse_au
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can join an auction', 'AUCTION_JOIN_FORBIDDEN');
     const sellerOrgId = req.user.organizationId;
     if (!sellerOrgId) throw new ApiError(400, 'Seller organization is required to join', 'AUCTION_JOIN_NO_ORG');
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1255,7 +1540,7 @@ const assertQualificationEditable = (participant: any) => {
 router.post('/reverse-auctions/:id/qualification/documents', requirePermission('reverse_auction.bid.submit', orgScope), upload.single('file'), async (req: AuthRequest & { file?: Express.Multer.File }, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can upload qualification documents', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1306,7 +1591,7 @@ router.post('/reverse-auctions/:id/qualification/documents', requirePermission('
 router.post('/reverse-auctions/:id/qualification/initial-quote', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can submit an initial quote', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1337,7 +1622,7 @@ router.post('/reverse-auctions/:id/qualification/initial-quote', requirePermissi
 router.post('/reverse-auctions/:id/qualification/submit', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'seller') throw new ApiError(403, 'Only sellers can submit qualification', 'AUCTION_QUALIFICATION_FORBIDDEN');
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1381,7 +1666,7 @@ router.post('/reverse-auctions/:id/qualification/submit', requirePermission('rev
 // Qualification overview. Sellers see their own packet; buyers/managers see every participant.
 router.get('/reverse-auctions/:id/qualification', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1420,7 +1705,7 @@ router.get('/reverse-auctions/:id/qualification', requirePermission('reverse_auc
 // Buyer reviews a submitted seller: qualify (unlock bidding) or disqualify.
 router.post('/reverse-auctions/:id/qualification/:participantId/review', requirePermission('reverse_auction.invite_seller', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id: auctionId } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1475,7 +1760,7 @@ router.post('/reverse-auctions/:id/qualification/:participantId/review', require
 
 router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid.submit', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const auctionId = await resolveAuctionId(Number(req.params.id));
+    const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const payload = bidSchema.parse(req.body);
     const result = await withDistributedLock(redisKeys.lockAuction(auctionId), async () =>
@@ -1561,26 +1846,82 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
 
 router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    const where: any = { auctionId: id };
-    if (req.user?.role === 'seller') where.OR = [{ sellerId: req.user.id }, { sellerOrgId: req.user.organizationId || -1 }];
-    else assertAuctionManager(req, auction);
-    const bids = await db.auctionBid.findMany({ where, orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }] });
-    
+
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+    const isPublic = await isAuctionPublic(auction);
+    if (!isManager && !myParticipant && !isPublic && !isAdmin(req)) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const [bids, participants] = await Promise.all([
+      db.auctionBid.findMany({
+        where: { auctionId: id, isValid: true },
+        orderBy: [{ submittedAt: 'desc' }]
+      }),
+      db.auctionParticipant.findMany({
+        where: { auctionId: id }
+      })
+    ]);
+
+    const participantByOrg = new Map<number, any>(participants.map((p: any) => [Number(p.sellerOrgId), p]));
     const orgIds = Array.from(new Set(bids.map((b: any) => b.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({
       where: { id: { in: orgIds as number[] } },
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const mappedBids = bids.map((b: any) => ({
-      ...b,
-      sellerOrgName: orgMap.get(b.sellerOrgId) || `Organization #${b.sellerOrgId}`
-    }));
-    
+
+    // Anonymized competitor label mapping
+    const competitorLabelMap = new Map<number, string>();
+    let competitorIndex = 1;
+    for (const p of participants) {
+      const pOrgId = Number(p.sellerOrgId);
+      if (pOrgId && !competitorLabelMap.has(pOrgId)) {
+        competitorLabelMap.set(pOrgId, `Bidder ${p.currentRank || competitorIndex++}`);
+      }
+    }
+
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const mappedBids = bids.map((b: any) => {
+      const bOrgId = Number(b.sellerOrgId || 0);
+      const isMe = (req.user?.organizationId && bOrgId === Number(req.user.organizationId)) ||
+                   (req.user?.id && b.sellerId === Number(req.user.id));
+      const realOrgName = orgMap.get(bOrgId) || `Organization #${bOrgId}`;
+      const fallbackLabel = competitorLabelMap.get(bOrgId) || `Bidder #${bOrgId || '?'}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : fallbackLabel;
+      const part = bOrgId ? participantByOrg.get(bOrgId) : null;
+      const bidderRank = part?.currentRank || b.rankAtSubmission || null;
+
+      return {
+        ...b,
+        sellerOrgName: displayName,
+        sellerOrgId: (showAllNames || isMe) ? b.sellerOrgId : null,
+        sellerId: (showAllNames || isMe) ? b.sellerId : null,
+        ipAddress: (showAllNames || isMe) ? b.ipAddress : null,
+        deviceHash: null,
+        userAgent: null,
+        userAgentHash: null,
+        isMyBid: Boolean(isMe),
+        bidderRank
+      };
+    });
+
     return apiResponse.success(res, { bids: maskSensitive(mappedBids) });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load bids', error.code || 'REVERSE_AUCTION_BIDS_ERROR');
@@ -1591,12 +1932,36 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
 
 router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = await resolveAuctionId(Number(req.params.id));
+    const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
-    assertAuctionManager(req, auction);
-    const participants = await db.auctionParticipant.findMany({ where: { auctionId: id }, orderBy: [{ currentRank: 'asc' }, { lastBidAmount: 'asc' }] });
+
+    const isManager = canManageAuction(req, auction);
+    let myParticipant = null;
+    if (req.user) {
+      myParticipant = await db.auctionParticipant.findFirst({
+        where: {
+          auctionId: id,
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        }
+      });
+    }
+
+    const isPublic = await isAuctionPublic(auction);
+    const isConcluded = ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED', 'ENDED'].includes(auction.status || auction.statusEnum);
+
+    if (!isManager && !myParticipant && !isPublic && !isConcluded) {
+      throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    }
+
+    const participants = await db.auctionParticipant.findMany({
+      where: { auctionId: id },
+      orderBy: [{ currentRank: 'asc' }, { lastBidAmount: 'asc' }]
+    });
     
     // Resolve organization names for the ranking table
     const orgIds = participants.map((p: any) => p.sellerOrgId).filter(Boolean);
@@ -1605,12 +1970,54 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
       select: { id: true, organizationName: true }
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
-    const ranking = participants.map((p: any) => ({
-      ...p,
-      sellerOrgName: orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`
-    }));
 
-    return apiResponse.success(res, { auction: maskSensitive(auction), ranking: maskSensitive(ranking) });
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const ranking = participants.map((p: any, index: number) => {
+      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
+                   (req.user?.id && p.sellerUserId === req.user.id);
+      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+
+      const isAwarded = Boolean(
+        (auction.winnerSellerId && (p.sellerUserId === auction.winnerSellerId || p.sellerOrgId === auction.winnerSellerId)) ||
+        p.status === 'ACCEPTED' ||
+        p.status === 'AWARDED'
+      );
+
+      return {
+        ...p,
+        sellerOrgName: displayName,
+        isCurrentViewer: Boolean(isMe),
+        isAwarded
+      };
+    });
+
+    // Also fetch associated Purchase Order if generated
+    const purchaseOrder = await db.purchaseOrder.findFirst({
+      where: {
+        sourceType: 'auction',
+        sourceId: id
+      },
+      select: {
+        id: true,
+        poNumber: true,
+        status: true,
+        totalValue: true,
+        currency: true,
+        createdAt: true,
+        metadata: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return apiResponse.success(res, {
+      auction: maskSensitive(auction),
+      ranking: maskSensitive(ranking),
+      purchaseOrder: purchaseOrder ? maskSensitive(purchaseOrder) : null,
+      canRecommendAward: isManager,
+      isManager,
+      myParticipant: maskSensitive(myParticipant)
+    });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load auction result', error.code || 'REVERSE_AUCTION_RESULT_ERROR');
   }
@@ -1618,7 +2025,8 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
 
 router.post('/reverse-auctions/:id/award-recommendation', requirePermission('reverse_auction.award', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = Number(req.params.id);
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const payload = awardSchema.parse(req.body);
     const auction = await db.auction.findUnique({ where: { id } });
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
@@ -1626,16 +2034,48 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
     const winner = payload.participantId
       ? await db.auctionParticipant.findFirst({ where: { id: payload.participantId, auctionId: id } })
       : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
+    
+    if (!winner) {
+      throw new ApiError(400, 'No qualifying participant found for award recommendation', 'NO_WINNER_FOUND');
+    }
+
+    let sellerUserId = winner.sellerUserId;
+    if (!sellerUserId && winner.sellerOrgId) {
+      const sellerUser = await db.user.findFirst({
+        where: { organizationId: winner.sellerOrgId }
+      });
+      if (sellerUser) sellerUserId = sellerUser.id;
+    }
+    if (!sellerUserId) {
+      sellerUserId = winner.sellerOrgId || 1;
+    }
+
+    const isNonL1 = (winner.currentRank || 1) !== 1;
     const updated = await db.auction.update({
       where: { id },
       data: {
         status: 'AWARD_RECOMMENDED',
         statusEnum: 'AWARD_RECOMMENDED',
-        winnerSellerId: winner?.sellerUserId || null,
+        winnerSellerId: sellerUserId,
+        overrideReason: isNonL1 ? (payload.remarks || 'Discretionary award recommendation') : null,
         remarks: payload.remarks || auction.remarks
       }
     });
-    await writeAuctionEvent(req, id, 'award_recommended', 'Award recommendation generated', { participantId: winner?.id, sellerOrgId: winner?.sellerOrgId });
+
+    await db.auctionParticipant.update({
+      where: { id: winner.id },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
+    }).catch(() => null);
+
+    await writeAuctionEvent(req, id, 'award_recommended', `Award recommendation generated for participant #${winner.id} (Rank L${winner.currentRank || 1})`, {
+      participantId: winner.id,
+      sellerOrgId: winner.sellerOrgId,
+      isNonL1,
+      overrideReason: isNonL1 ? payload.remarks : null
+    });
     return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award recommendation generated');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to recommend award', error.code || 'REVERSE_AUCTION_AWARD_ERROR');
@@ -1644,7 +2084,8 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
 
 router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('reverse_auction.award', orgScope), async (req: AuthRequest, res: Response) => {
   try {
-    const id = Number(req.params.id);
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const schema = z.object({
       participantId: z.coerce.number().int().positive().optional(),
       remarks: z.string().trim().max(1000).optional()
@@ -1661,7 +2102,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
 
     if (!winner) {
-      throw new ApiError(400, 'No qualifying L1 winner found for this auction', 'NO_WINNER_FOUND');
+      throw new ApiError(400, 'No qualifying participant found for this auction', 'NO_WINNER_FOUND');
     }
 
     const winningAmount = winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice;
@@ -1682,6 +2123,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     if (!buyerId) throw new ApiError(400, 'Buyer identity not found', 'BUYER_NOT_FOUND');
 
     const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const isNonL1 = (winner.currentRank || 1) !== 1;
 
     // Create PurchaseOrder record
     const po = await db.purchaseOrder.create({
@@ -1702,7 +2144,10 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
           winningBid: Number(winningAmount),
           winnerParticipantId: winner.id,
           winnerSellerOrgId: winner.sellerOrgId,
-          remarks: payload.remarks || 'Accepted L1 quote from Reverse Auction and generated Purchase Order.'
+          isNonL1Award: isNonL1,
+          rankAtAward: winner.currentRank || 1,
+          overrideReason: isNonL1 ? payload.remarks : null,
+          remarks: payload.remarks || (isNonL1 ? 'Accepted discretionary quote from Reverse Auction and generated Purchase Order.' : 'Accepted L1 quote from Reverse Auction and generated Purchase Order.')
         },
         items: {
           create: [
@@ -1732,13 +2177,23 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       where: { id },
       data: {
         status: 'COMPLETED',
-        statusEnum: 'AWARD_RECOMMENDED',
+        statusEnum: 'AWARDED',
         finalizedAt: new Date(),
         actualClosedAt: auction.actualClosedAt || new Date(),
         winnerSellerId: sellerUserId,
+        overrideReason: isNonL1 ? (payload.remarks || 'Discretionary award per procurement policy') : null,
         remarks: payload.remarks || `Purchase Order ${po.poNumber} generated.`
       }
     });
+
+    // Mark winning participant as ACCEPTED
+    await db.auctionParticipant.update({
+      where: { id: winner.id },
+      data: {
+        status: 'ACCEPTED',
+        acceptedAt: new Date()
+      }
+    }).catch(() => null);
 
     // If linked to a procurementBid, mark it as awarded
     if (auction.linkedBidId) {
@@ -1752,11 +2207,13 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     }
 
     // Write audit event
-    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller`, {
+    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller (Rank L${winner.currentRank || 1})`, {
       poNumber: po.poNumber,
       poId: po.id,
       winningAmount: Number(winningAmount),
-      winnerSellerId: sellerUserId
+      winnerSellerId: sellerUserId,
+      isNonL1,
+      overrideReason: isNonL1 ? payload.remarks : null
     });
 
     return apiResponse.created(res, {

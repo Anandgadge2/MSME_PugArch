@@ -45,18 +45,25 @@ import {
   Tag,
   HelpCircle,
   CheckCircle2,
-  ArrowUpRight,
   Truck,
+  Lock,
+  Scale,
+  TrendingDown,
+  Activity,
+  Repeat,
+  Clock,
+  RefreshCw,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { OrderPlacementPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
+import { getFileAssetPreview, openFileAsset, type DocumentPreview } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
-import { getResolvedOrgName } from '../../../utils/organizationUtils';
+import { getResolvedOrgName, getResolvedBuyerAddress, getResolvedBuyerAddressInfo, type ResolvedAddressInfo } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
 import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
@@ -71,6 +78,7 @@ import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
 import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
+import { cleanDeliveryAddress } from '../../shared/format';
 import { useActiveCart } from '../../cart/hooks';
 import type { CartItemDto } from '../../cart/api';
 import { SearchableSelect } from '../../../components/ui/SearchableSelect';
@@ -245,7 +253,6 @@ type Draft = {
     title: string;
     whatAreYouBuying: string;
     category: string;
-    subCategory: string;
     department: string;
     priority: 'Normal' | 'Urgent' | 'Emergency';
     estimatedValue: number;
@@ -309,10 +316,9 @@ type Draft = {
     packetType: 'Single' | 'Two';
     publishDate: string;
     submissionDate: string;
-    validityDays: number;
+    validityDays: number | string;
     submissionStartDate: string;
     clarificationAllowed: boolean;
-    clarificationDeadline: string;
     preBidMeeting: boolean;
     preBidDate: string;
     technicalOpeningDate: string;
@@ -323,7 +329,7 @@ type Draft = {
     showSellerRank: boolean;
     showLowestPrice: boolean;
     autoClose: boolean;
-    minimumBidders: number;
+    minimumBidders: number | string;
     rebidsAllowed: boolean;
   };
   terms: {
@@ -707,7 +713,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     schedule: {
       ...draft.schedule,
       packetType: draft.schedule.packetType,
-      minimumBidders: Math.max(draft.schedule.minimumBidders || 0, base.minimumQualifiedBidders || 2),
+      minimumBidders: Math.max(Number(draft.schedule.minimumBidders || 0), base.minimumQualifiedBidders || 2),
     },
     auctionConfig: {
       ...base,
@@ -715,7 +721,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       auctionTitle: base.auctionTitle || draft.basics.title,
       auctionDescription: base.auctionDescription || draft.basics.justification,
       auctionCategory: base.auctionCategory || draft.basics.category,
-      auctionSubCategory: base.auctionSubCategory || draft.basics.subCategory,
+      auctionSubCategory: base.auctionSubCategory || '',
       buyerOrganization: base.buyerOrganization || draft.internal.orgName,
       department: base.department || draft.internal.department || draft.basics.department,
       startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
@@ -728,7 +734,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
 };
 
 const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: `RC-${Math.floor(10000 + Math.random() * 90000)}`,
+  rateContractNumber: `RC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',
@@ -798,6 +804,34 @@ const getTotalProcurementQty = (draft: Draft): number => {
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 };
 
+export const computeProcurementTotals = (items: ItemRow[]) => {
+  let baseValue = 0;
+  let gstAmount = 0;
+  let totalQty = 0;
+
+  for (const item of items) {
+    const qty = Math.max(0, Number(item.quantity || 0));
+    const rate = Math.max(0, Number(item.unitPrice || 0));
+    const gstPct = Math.max(0, Number(item.gst ?? 18));
+    const itemBase = qty * rate;
+    const itemGst = (itemBase * gstPct) / 100;
+
+    baseValue += itemBase;
+    gstAmount += itemGst;
+    totalQty += qty;
+  }
+
+  const grossValue = baseValue + gstAmount;
+
+  return {
+    baseValue,
+    gstAmount,
+    grossValue,
+    totalQty,
+    itemCount: items.length,
+  };
+};
+
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
@@ -844,21 +878,21 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       contractTitle: base.contractTitle || draft.basics.title,
       contractDescription: base.contractDescription || draft.basics.justification,
       contractCategory: base.contractCategory || draft.basics.category,
-      contractSubCategory: base.contractSubCategory || draft.basics.subCategory,
+      contractSubCategory: base.contractSubCategory || '',
       selectedSuppliers,
       itemRateSchedule,
       deliverySla: base.deliverySla || draft.terms.deliveryTerms,
       penaltyClause: base.penaltyClause || draft.terms.penaltyClause,
-      securityDepositRequired: base.securityDepositRequired || draft.terms.emdRequired,
-      securityDepositAmount: base.securityDepositAmount || draft.terms.securityDeposit || draft.terms.emdAmount || 0,
-      pbgRequired: base.pbgRequired || draft.terms.pbgRequired,
-      pbgAmount: base.pbgAmount || draft.terms.securityDeposit || 0,
-      approvalWorkflow: base.approvalWorkflow || draft.approval.workflow,
+      securityDepositRequired: false,
+      securityDepositAmount: 0,
+      pbgRequired: false,
+      pbgAmount: 0,
+      approvalWorkflow: base.approvalWorkflow || draft.approval.workflow || 'Finance + Procurement',
     },
   };
 };
 
-const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: string; label: string }>> = {
+const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ value: string; label: string }>>> = {
   RFQ: [
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
@@ -888,10 +922,6 @@ const BUYING_OPTIONS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: strin
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
     { value: 'Service', label: 'Service Contract' }
-  ],
-  REPEAT_ORDER: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
   ]
 };
 
@@ -931,7 +961,7 @@ const stepLibrary = {
   items: { id: 'items', label: 'Item / Service / BOQ', description: 'Quantities, specs and BOQ items', icon: Package },
   vendors: { id: 'vendors', label: 'Suppliers', description: 'MSME reach, invite selection pool', icon: Users },
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
-  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery and EM/PBG fees', icon: BadgeCheck },
+  terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
   evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
@@ -969,7 +999,6 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     title: '',
     whatAreYouBuying: 'Product',
     category: 'Office Supplies & Stationery',
-    subCategory: '',
     department: '',
     priority: 'Normal',
     estimatedValue: 0,
@@ -1007,20 +1036,15 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     deliverables: '',
     inclusions: '',
     exclusions: '',
-    slaResponseTime: '4 hours',
-    duration: '1 Year',
+    slaResponseTime: '',
+    duration: '',
     manpowerRequired: '0',
     experienceRequired: '0',
-    milestones: [
-      { id: makeId(), label: 'Mobilization advance', percentage: '10', trigger: 'Signing of contract' },
-      { id: makeId(), label: 'Monthly running bill', percentage: '90', trigger: 'Completion of monthly service' },
-    ],
-    penaltyClause: '0.5% per week delay up to max 10%',
+    milestones: [],
+    penaltyClause: '',
     location: '',
   },
-  boqTable: [
-    { srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, total: 0, remarks: '' }
-  ],
+  boqTable: [],
   boqFileAssetId: null,
   boqFileName: '',
   vendors: {
@@ -1041,7 +1065,6 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     validityDays: 90,
     submissionStartDate: todayDateTime,
     clarificationAllowed: true,
-    clarificationDeadline: nextWeekDateTime,
     preBidMeeting: false,
     preBidDate: '',
     technicalOpeningDate: '',
@@ -1060,8 +1083,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     deliveryTerms: 'Door delivery to site',
     freightIncluded: true,
     gstIncluded: false,
-    warrantyTerms: '12 Months standard warranty',
-    penaltyClause: '0.5% per week delay up to max 10%',
+    warrantyTerms: '',
+    penaltyClause: '',
     advanceAllowed: false,
     retentionAmount: 0,
     securityDeposit: 0,
@@ -1098,6 +1121,8 @@ export default function CreateProcurementPage() {
   const { user, token } = useAuth();
   const { orgStatus } = useOrgRole();
   const resolvedOrgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
+  const resolvedAddress = useMemo(() => getResolvedBuyerAddress(user, orgStatus), [user, orgStatus]);
+  const resolvedAddressInfo = useMemo(() => getResolvedBuyerAddressInfo(user, orgStatus), [user, orgStatus]);
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
@@ -1120,11 +1145,14 @@ export default function CreateProcurementPage() {
 
   const [draft, setDraft] = useState<Draft>(() => {
     let cachedOrg = '';
+    let cachedAddress = '';
     if (typeof window !== 'undefined') {
       try {
         const rawUser = localStorage.getItem('msme_user_cache');
         if (rawUser) {
-          cachedOrg = getResolvedOrgName(JSON.parse(rawUser));
+          const parsedUser = JSON.parse(rawUser);
+          cachedOrg = getResolvedOrgName(parsedUser);
+          cachedAddress = getResolvedBuyerAddress(parsedUser);
         }
       } catch {
         // ignore
@@ -1140,6 +1168,26 @@ export default function CreateProcurementPage() {
             if (saved.internal && !saved.internal.orgName && cachedOrg) {
               saved.internal.orgName = cachedOrg;
             }
+            if (saved.basics && !saved.basics.deliveryLocation && cachedAddress) {
+              saved.basics.deliveryLocation = cachedAddress;
+            }
+            if (saved.schedule) {
+              saved.schedule = {
+                ...saved.schedule,
+                submissionStartDate: saved.schedule.submissionStartDate || '',
+                submissionDate: saved.schedule.submissionDate || '',
+                technicalOpeningDate: saved.schedule.technicalOpeningDate || '',
+                financialOpeningDate: saved.schedule.financialOpeningDate || '',
+                preBidDate: saved.schedule.preBidDate || '',
+              };
+            }
+            if (saved.auctionConfig) {
+              saved.auctionConfig = {
+                ...saved.auctionConfig,
+                startDateTime: saved.auctionConfig.startDateTime || '',
+                endDateTime: saved.auctionConfig.endDateTime || '',
+              };
+            }
             return saved;
           }
         }
@@ -1150,6 +1198,9 @@ export default function CreateProcurementPage() {
     const def = defaultDraft(initialMethod, initialBuyerType);
     if (cachedOrg) {
       def.internal.orgName = cachedOrg;
+    }
+    if (cachedAddress) {
+      def.basics.deliveryLocation = cachedAddress;
     }
     return def;
   });
@@ -1228,10 +1279,7 @@ export default function CreateProcurementPage() {
     if (!fromCart || draftIdParam || !activeCart?.items?.length) return;
 
     const importedItems = activeCart.items.map(cartItemToProcurementItem);
-    const estimatedValue = importedItems.reduce(
-      (sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0),
-      0
-    );
+    const totals = computeProcurementTotals(importedItems);
 
     setDraft(current => {
       const next = {
@@ -1240,7 +1288,7 @@ export default function CreateProcurementPage() {
         basics: {
           ...current.basics,
           title: current.basics.title || 'Request for Quotation from Cart',
-          estimatedValue,
+          estimatedValue: Math.round(totals.grossValue),
         },
         items: importedItems,
       };
@@ -1264,7 +1312,7 @@ export default function CreateProcurementPage() {
     };
   }, [showItemDrawer]);
 
-  // Auto-fill and reactively keep buyer details & organization in sync from authenticated profile
+  // Auto-fill and reactively keep buyer details, organization, and delivery address in sync from authenticated profile
   useEffect(() => {
     if (!user && !orgStatus) return;
     const u = user as any;
@@ -1273,11 +1321,17 @@ export default function CreateProcurementPage() {
     const contactPerson = u?.buyerProfile?.representativeName || u?.name || '';
     const email = u?.buyerProfile?.email || u?.email || '';
     const mobile = u?.buyerProfile?.mobile || u?.mobile || '';
+    const addr = resolvedAddress;
 
     setDraft(current => {
       let changed = false;
       const nextInternal = { ...current.internal };
+      const nextBasics = { ...current.basics };
 
+      if (!nextBasics.deliveryLocation?.trim() && addr) {
+        nextBasics.deliveryLocation = addr;
+        changed = true;
+      }
       if (!nextInternal.orgName?.trim() && org) {
         nextInternal.orgName = org;
         changed = true;
@@ -1301,7 +1355,7 @@ export default function CreateProcurementPage() {
 
       if (!changed) return current;
 
-      const nextDraft = { ...current, internal: nextInternal };
+      const nextDraft = { ...current, basics: nextBasics, internal: nextInternal };
       if (!draftIdParam && typeof window !== 'undefined') {
         try {
           localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft));
@@ -1312,7 +1366,7 @@ export default function CreateProcurementPage() {
       return nextDraft;
     });
     setHasAutofilled(true);
-  }, [user, orgStatus, resolvedOrgName, draftIdParam]);
+  }, [user, orgStatus, resolvedOrgName, resolvedAddress, draftIdParam]);
 
   // Auto-fill buyer type on load
   useEffect(() => {
@@ -1373,7 +1427,7 @@ export default function CreateProcurementPage() {
             ...(payload.basics || {}),
             estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
             discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
-            deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || ''
+            deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || resolvedAddress || ''
           },
           internal: {
             ...base.internal,
@@ -1396,7 +1450,15 @@ export default function CreateProcurementPage() {
               ? Math.max(payload.vendors.invitedSellers.length, Number(payload.vendors?.inviteCount) || 0)
               : (Number(payload.vendors?.inviteCount) || 0)
           },
-          schedule: { ...base.schedule, ...(payload.schedule || {}) },
+          schedule: {
+            ...base.schedule,
+            ...(payload.schedule || {}),
+            submissionStartDate: payload.schedule?.submissionStartDate || base.schedule.submissionStartDate || '',
+            submissionDate: payload.schedule?.submissionDate || base.schedule.submissionDate || '',
+            technicalOpeningDate: payload.schedule?.technicalOpeningDate || '',
+            financialOpeningDate: payload.schedule?.financialOpeningDate || '',
+            preBidDate: payload.schedule?.preBidDate || '',
+          },
           terms: { ...base.terms, ...(payload.terms || {}) },
           evaluation: {
             ...base.evaluation,
@@ -1407,6 +1469,8 @@ export default function CreateProcurementPage() {
           auctionConfig: {
             ...base.auctionConfig,
             ...(payload.auctionConfig || payload.rules?.auctionConfig || {}),
+            startDateTime: (payload.auctionConfig?.startDateTime || payload.rules?.auctionConfig?.startDateTime || base.auctionConfig.startDateTime || ''),
+            endDateTime: (payload.auctionConfig?.endDateTime || payload.rules?.auctionConfig?.endDateTime || base.auctionConfig.endDateTime || ''),
             termsDocumentName: (payload.auctionConfig?.termsDocumentName === 'NOT REQUIRED' || payload.rules?.auctionConfig?.termsDocumentName === 'NOT REQUIRED')
               ? ''
               : (payload.auctionConfig?.termsDocumentName || payload.rules?.auctionConfig?.termsDocumentName || base.auctionConfig.termsDocumentName || '')
@@ -1516,6 +1580,14 @@ export default function CreateProcurementPage() {
 
     // Step 5 Event timeline - Errors
     list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
+    if (d.schedule.submissionDate) {
+      list.push({
+        label: 'Submission deadline must be set in the future',
+        ok: new Date(d.schedule.submissionDate).getTime() > Date.now(),
+        severity: 'error',
+        stepIdx: 5
+      });
+    }
     if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
       list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
     }
@@ -1541,7 +1613,7 @@ export default function CreateProcurementPage() {
 
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
-    list.push({ label: 'Delivery terms location is required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
+    list.push({ label: 'Delivery terms are required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
     // EMD check commented out as requested
     // if (d.terms.emdRequired) {
     //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 6 });
@@ -1580,13 +1652,7 @@ export default function CreateProcurementPage() {
         severity: 'warning'
       });
     }
-    if (!d.terms.penaltyClause || d.terms.penaltyClause.trim().length < 5) {
-      list.push({
-        label: 'Late Delivery Penalty Clause is recommended for contract compliance',
-        ok: false,
-        severity: 'warning'
-      });
-    }
+   
     if (d.basics.priority === 'Emergency') {
       const hasEmergencyDoc = d.requiredDocs.some(doc => doc.name.toLowerCase().includes('emergency') || doc.name.toLowerCase().includes('justification'));
       list.push({
@@ -1659,6 +1725,7 @@ export default function CreateProcurementPage() {
       if (!d.schedule.submissionDate) return false;
       const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       const endTime = new Date(d.schedule.submissionDate).getTime();
+      if (endTime <= Date.now()) return false;
       if (endTime <= nowTime) return false;
       if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
         if (!d.schedule.technicalOpeningDate) return false;
@@ -1672,19 +1739,26 @@ export default function CreateProcurementPage() {
         const auction = d.auctionConfig;
         const start = new Date(auction.startDateTime).getTime();
         const end = new Date(auction.endDateTime).getTime();
-        if (!auction.auctionTitle.trim()) return false;
-        if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') return false;
-        if (!auction.currency.trim() || auction.currency === 'Other') return false;
+        const title = (auction.auctionTitle || d.basics.title || '').trim();
+        const category = (auction.auctionCategory || d.basics.category || '').trim();
+        const currency = (auction.currency || 'INR').trim();
+        if (!title) return false;
+        if (!category || category === 'Other') return false;
+        if (!currency || currency === 'Other') return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
-        if (auction.startingBidPrice <= 0) return false;
-        if (auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) return false;
+        if (auction.startingBidPrice !== -1 && auction.startingBidPrice <= 0) return false;
+        if (auction.startingBidPrice !== -1 && auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) return false;
         if (auction.minimumBidDecrement <= 0) return false;
         if (auction.autoExtensionEnabled && (
           auction.extensionTriggerMinutes <= 0 ||
           auction.extensionDurationMinutes <= 0 ||
           auction.maximumExtensions <= 0
         )) return false;
+      }
+      if (d.basics.isReverseAuctionNeeded) {
+        if (d.auctionConfig.minimumBidDecrement <= 0) return false;
+        if (d.auctionConfig.startingBidPrice !== -1 && d.auctionConfig.reservePrice !== null && d.auctionConfig.reservePrice > d.auctionConfig.startingBidPrice) return false;
       }
       if (isRateContractMethod(d.type)) {
         const contract = d.rateContractConfig;
@@ -1699,8 +1773,6 @@ export default function CreateProcurementPage() {
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
         if (!contract.deliverySla.trim()) return false;
         if (!contract.penaltyClause.trim()) return false;
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) return false;
-        if (contract.pbgRequired && contract.pbgAmount <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -1905,8 +1977,12 @@ export default function CreateProcurementPage() {
         toast.error('Submission deadline date is required.');
         return false;
       }
-      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       const endTime = new Date(d.schedule.submissionDate).getTime();
+      if (endTime <= Date.now()) {
+        toast.error('Submission deadline must be set to a future date & time.');
+        return false;
+      }
+      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       if (endTime <= nowTime) {
         toast.error('Submission closing date must be after submission start date.');
         return false;
@@ -1935,15 +2011,18 @@ export default function CreateProcurementPage() {
         const auction = d.auctionConfig;
         const start = new Date(auction.startDateTime).getTime();
         const end = new Date(auction.endDateTime).getTime();
-        if (!auction.auctionTitle.trim()) {
-          toast.error('Auction title is required.');
+        const title = (auction.auctionTitle || d.basics.title || '').trim();
+        const category = (auction.auctionCategory || d.basics.category || '').trim();
+        const currency = (auction.currency || 'INR').trim();
+        if (!title) {
+          toast.error('Procurement title is required.');
           return false;
         }
-        if (!auction.auctionCategory.trim() || auction.auctionCategory === 'Other') {
-          toast.error('Auction category is required.');
+        if (!category || category === 'Other') {
+          toast.error('Procurement category is required.');
           return false;
         }
-        if (!auction.currency.trim() || auction.currency === 'Other') {
+        if (!currency || currency === 'Other') {
           toast.error('Currency is required.');
           return false;
         }
@@ -1955,11 +2034,11 @@ export default function CreateProcurementPage() {
           toast.error('Auction duration must be greater than 0 minutes.');
           return false;
         }
-        if (auction.startingBidPrice <= 0) {
+        if (auction.startingBidPrice !== -1 && auction.startingBidPrice <= 0) {
           toast.error('Starting bid price must be greater than 0.');
           return false;
         }
-        if (auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) {
+        if (auction.startingBidPrice !== -1 && auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) {
           toast.error('Reserve price cannot exceed starting bid price.');
           return false;
         }
@@ -1973,6 +2052,16 @@ export default function CreateProcurementPage() {
           auction.maximumExtensions <= 0
         )) {
           toast.error('Auto extension trigger, duration, and maximum extensions are required.');
+          return false;
+        }
+      }
+      if (d.basics.isReverseAuctionNeeded) {
+        if (d.auctionConfig.minimumBidDecrement <= 0) {
+          toast.error('Minimum bid decrement must be greater than 0.');
+          return false;
+        }
+        if (d.auctionConfig.startingBidPrice !== -1 && d.auctionConfig.reservePrice !== null && d.auctionConfig.reservePrice > d.auctionConfig.startingBidPrice) {
+          toast.error('Reserve price cannot exceed starting bid price.');
           return false;
         }
       }
@@ -2016,14 +2105,6 @@ export default function CreateProcurementPage() {
           toast.error('Penalty clause is required.');
           return false;
         }
-        if (contract.securityDepositRequired && contract.securityDepositAmount <= 0) {
-          toast.error('Security deposit amount is required.');
-          return false;
-        }
-        if (contract.pbgRequired && contract.pbgAmount <= 0) {
-          toast.error('PBG amount is required.');
-          return false;
-        }
       }
     } else if (stepIdx === 6) {
       // Step 6 Terms
@@ -2032,7 +2113,7 @@ export default function CreateProcurementPage() {
         return false;
       }
       if (!d.terms.deliveryTerms) {
-        toast.error('Delivery location terms are required.');
+        toast.error('Delivery terms are required.');
         return false;
       }
       // EMD check commented out as requested
@@ -2294,6 +2375,8 @@ export default function CreateProcurementPage() {
                 <BasicsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  resolvedAddress={resolvedAddress}
+                  resolvedAddressInfo={resolvedAddressInfo}
                 />
               </SectionCard>
             )}
@@ -2423,7 +2506,7 @@ function SelectionsStepForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
 }) {
   const availableMethods = useMemo(() => {
-    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REPEAT_ORDER'];
+    const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'RATE_CONTRACT'];
     return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id) && m.buyerTypes.includes(draft.basics.buyerType));
   }, [draft.basics.buyerType]);
 
@@ -2460,15 +2543,37 @@ function SelectionsStepForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function BasicsStepForm({
   draft,
-  updateDraft
+  updateDraft,
+  resolvedAddress,
+  resolvedAddressInfo
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  resolvedAddress?: string;
+  resolvedAddressInfo?: ResolvedAddressInfo;
 }) {
   // Delivery address dropdown and modal states
   const [deliveryAddressesList, setDeliveryAddressesList] = useState<DeliveryAddressDto[]>([]);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+
+  // Helper to format clean, non-redundant delivery address string
+  const formatDeliveryAddressString = (addr: DeliveryAddressDto): string => {
+    const street = [addr.addressLine1, addr.addressLine2].filter(Boolean).map(s => s?.trim()).filter(Boolean).join(', ');
+    const city = addr.city?.trim() || '';
+    const dist = addr.district?.trim() || '';
+    const isCitySameDist = city && dist && (
+      city.toLowerCase() === dist.toLowerCase() ||
+      (city.length >= 5 && dist.length >= 5 && (city.toLowerCase().startsWith(dist.toLowerCase().slice(0, 5)) || dist.toLowerCase().startsWith(city.toLowerCase().slice(0, 5))))
+    );
+    const locParts = [
+      isCitySameDist ? (dist.length >= city.length ? dist : city) : [city, dist].filter(Boolean).join(', '),
+      addr.state?.trim(),
+    ].filter(Boolean).join(', ');
+    const pin = addr.pincode ? ` - ${addr.pincode.trim()}` : '';
+    const raw = `${street}${street && locParts ? ', ' : ''}${locParts}${pin}`;
+    return cleanDeliveryAddress(raw) || raw;
+  };
 
   // Filter allowed buying options strictly by selected procurement method
   const allowedBuyingOptions = useMemo(() => {
@@ -2524,10 +2629,36 @@ function BasicsStepForm({
     });
     fetchDeliveryAddresses()
       .then(res => {
-        if (active) setDeliveryAddressesList(res || []);
+        if (active) {
+          const list = res || [];
+          setDeliveryAddressesList(list);
+
+          // If draft delivery location is still empty, auto-select default saved address or resolved profile/GST address
+          if (!draft.basics.deliveryLocation?.trim()) {
+            const def = list.find(a => a.isDefault) || list[0];
+            if (def) {
+              const fullAddr = formatDeliveryAddressString(def);
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, deliveryLocation: fullAddr }
+              }));
+            } else if (resolvedAddress) {
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, deliveryLocation: resolvedAddress }
+              }));
+            }
+          }
+        }
       })
       .catch(err => {
         console.warn('Failed to load saved addresses:', err);
+        if (active && !draft.basics.deliveryLocation?.trim() && resolvedAddress) {
+          updateDraft(c => ({
+            ...c,
+            basics: { ...c.basics, deliveryLocation: resolvedAddress }
+          }));
+        }
       })
       .finally(() => {
         if (active) setLoadingAddresses(false);
@@ -2595,7 +2726,7 @@ function BasicsStepForm({
       setDeliveryAddressesList(prev => [newAddr, ...prev]);
       
       // Autofetch and populate delivery location
-      const fullAddr = `${newAddr.addressLabel}: ${newAddr.addressLine1}${newAddr.addressLine2 ? ', ' + newAddr.addressLine2 : ''}, ${newAddr.city}, ${newAddr.district}, ${newAddr.state} - ${newAddr.pincode}. Contact: ${newAddr.contactPersonName} (${newAddr.mobileNumber})`;
+      const fullAddr = formatDeliveryAddressString(newAddr);
       updateDraft(c => ({
         ...c,
         basics: { ...c.basics, deliveryLocation: fullAddr }
@@ -2623,21 +2754,60 @@ function BasicsStepForm({
     }
   };
 
-  return (
-    <div className="space-y-4 sm:space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+  const openNewAddressModal = () => {
+    if (resolvedAddressInfo && resolvedAddressInfo.source !== 'none') {
+      setAddressLabel(prev => prev || 'Office Delivery Address');
+      setOrganizationName(prev => prev || draft.internal.orgName || '');
+      setContactPersonName(prev => prev || draft.internal.contactPerson || '');
+      setMobileNumber(prev => prev || draft.internal.mobile || '');
+      setEmail(prev => prev || draft.internal.email || '');
+      setAddressLine1(prev => prev || resolvedAddressInfo.street || '');
+      setCity(prev => prev || resolvedAddressInfo.city || '');
+      setDistrict(prev => prev || resolvedAddressInfo.district || '');
+      setState(prev => prev || resolvedAddressInfo.state || '');
+      setPincode(prev => prev || resolvedAddressInfo.pincode || '');
+    }
+    setIsAddressModalOpen(true);
+  };
 
-        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER'].includes(draft.type) && (
-          <Field label={`${draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`}>
+  const selectedAddressId = useMemo(() => {
+    if (!draft.basics.deliveryLocation?.trim()) return '';
+    const currentLoc = draft.basics.deliveryLocation.trim().toLowerCase();
+    const match = deliveryAddressesList.find(a => {
+      const formatted = formatDeliveryAddressString(a).toLowerCase();
+      return formatted === currentLoc ||
+        Boolean(a.addressLine1 && currentLoc.includes(a.addressLine1.trim().toLowerCase()));
+    });
+    return match ? String(match.id) : '';
+  }, [deliveryAddressesList, draft.basics.deliveryLocation]);
+
+  return (
+    <div className="space-y-4 sm:space-y-6 w-full min-w-0">
+      <div className="grid gap-4 sm:grid-cols-2 min-w-0">
+
+        {['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'RATE_CONTRACT', 'REVERSE_AUCTION'].includes(draft.type) && (
+          <Field
+            label={
+              draft.type === 'RATE_CONTRACT'
+                ? 'Rate Contract Number'
+                : draft.type === 'REVERSE_AUCTION'
+                ? 'Reverse Auction Reference'
+                : `${draft.type.includes('TENDER') ? 'Tender' : draft.type} Number`
+            }
+          >
             <input
               type="text"
               value={
-                (draft as any).requirementNumber
+                draft.type === 'RATE_CONTRACT'
+                  ? (draft.rateContractConfig?.rateContractNumber || (draft as any).requirementNumber || 'Auto-generated upon creation')
+                  : draft.type === 'REVERSE_AUCTION'
+                  ? ((draft.auctionConfig as any)?.auctionCode || (draft as any).requirementNumber || (draft.id ? formatRefId('REVERSE_AUCTION', draft.id, null, 'REVERSE_AUCTION') : 'Auto-generated upon creation'))
+                  : (draft as any).requirementNumber
                   ? formatRefId(draft.type, draft.id, (draft as any).requirementNumber, draft.type)
                   : (draft.id ? formatRefId(draft.type, draft.id, null, draft.type) : 'Auto-generated upon creation')
               }
               disabled
-              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none cursor-not-allowed"
+              className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-500 outline-none cursor-not-allowed font-mono"
             />
           </Field>
         )}
@@ -2751,7 +2921,18 @@ function BasicsStepForm({
         <Field label="What are you buying?" required>
           <select
             value={draft.basics.whatAreYouBuying}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, whatAreYouBuying: e.target.value } }))}
+            onChange={e => {
+              const val = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, whatAreYouBuying: val },
+                boqTable: val === 'BOQ' && c.boqTable.length === 0
+                  ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 0, total: 0, remarks: '' }]
+                  : val !== 'BOQ'
+                    ? []
+                    : c.boqTable
+              }));
+            }}
             className={inputClass}
           >
             {allowedBuyingOptions.map(opt => (
@@ -2775,6 +2956,27 @@ function BasicsStepForm({
             className={inputClass}
             placeholder="0"
           />
+          {draft.items.length > 0 && (() => {
+            const itemTotals = computeProcurementTotals(draft.items);
+            const grossRounded = Math.round(itemTotals.grossValue);
+            if (grossRounded > 0 && grossRounded !== draft.basics.estimatedValue) {
+              return (
+                <div className="mt-1.5 flex items-center justify-between gap-2 text-[10.5px] bg-blue-50 border border-blue-200/80 px-2.5 py-1.5 rounded-lg text-[#12335f]">
+                  <span>
+                    Schedule BOQ Total (Incl. GST): <strong>₹{grossRounded.toLocaleString('en-IN')}</strong> ({draft.items.length} line items)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: grossRounded } }))}
+                    className="font-bold underline hover:text-blue-900 cursor-pointer shrink-0"
+                  >
+                    Sync with Schedule Total
+                  </button>
+                </div>
+              );
+            }
+            return null;
+          })()}
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-md">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
             <span>Internal Benchmark — Used for financial validation, CFA approval tier, and EMD computation.</span>
@@ -2881,8 +3083,8 @@ function BasicsStepForm({
         </Field>
 
         <Field label="Required by Date & Time" required>
-          <input
-            type="datetime-local"
+          <DateTimePicker
+            id="basics-required-by-datetime"
             value={
               draft.basics.requiredByDate
                 ? draft.basics.requiredByDate.includes('T')
@@ -2890,32 +3092,43 @@ function BasicsStepForm({
                   : `${draft.basics.requiredByDate}T17:00`
                 : ''
             }
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: e.target.value } }))}
-            className={inputClass}
+            onChange={val => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: val } }))}
+            placeholder="Select required date & time (12-hr AM/PM)"
           />
         </Field>
 
-        <div className="sm:col-span-2 space-y-4">
-          <div>
+        <div className="sm:col-span-2 space-y-4 w-full min-w-0">
+          <div className="w-full min-w-0">
             {deliveryAddressesList.length > 0 ? (
-              <div className="mb-2">
+              <div className="mb-2 w-full min-w-0">
                 <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 block">
                   Select From Saved Addresses
                 </label>
-                <div className="flex gap-2 items-center">
-                  <div className="flex-1">
+                <div className="flex gap-2 items-center w-full min-w-0">
+                  <div className="flex-1 min-w-0">
                     <SearchableSelect
                       placeholder={loadingAddresses ? "Loading addresses..." : "Search and select a saved address..."}
-                      options={deliveryAddressesList.map(addr => ({
-                        value: String(addr.id),
-                        label: `${addr.addressLabel}: ${addr.addressLine1}, ${addr.city} (${addr.contactPersonName})`
-                      }))}
-                      value=""
+                      options={deliveryAddressesList.map(addr => {
+                        const labelParts = [addr.addressLabel || 'Address'];
+                        if (addr.city || addr.district) {
+                          labelParts.push(addr.city || addr.district);
+                        }
+                        const line = addr.addressLine1
+                          ? (addr.addressLine1.length > 45 ? `${addr.addressLine1.slice(0, 42)}...` : addr.addressLine1)
+                          : '';
+                        if (line) labelParts.push(line);
+                        const contact = addr.contactPersonName ? `(${addr.contactPersonName})` : '';
+                        return {
+                          value: String(addr.id),
+                          label: `${labelParts.join(' — ')}${contact ? ` ${contact}` : ''}`
+                        };
+                      })}
+                      value={selectedAddressId}
                       onChange={(val) => {
                         if (!val) return;
                         const selected = deliveryAddressesList.find(a => String(a.id) === String(val));
                         if (selected) {
-                          const fullAddr = `${selected.addressLabel}: ${selected.addressLine1}${selected.addressLine2 ? ', ' + selected.addressLine2 : ''}, ${selected.city}, ${selected.district}, ${selected.state} - ${selected.pincode}. Contact: ${selected.contactPersonName} (${selected.mobileNumber})`;
+                          const fullAddr = formatDeliveryAddressString(selected);
                           updateDraft(c => ({
                             ...c,
                             basics: { ...c.basics, deliveryLocation: fullAddr }
@@ -2927,8 +3140,8 @@ function BasicsStepForm({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsAddressModalOpen(true)}
-                    className="h-10 text-xs font-bold shrink-0 border-slate-300 hover:bg-slate-50 text-slate-700"
+                    onClick={openNewAddressModal}
+                    className="h-10 text-xs font-bold shrink-0 whitespace-nowrap border-slate-300 hover:bg-slate-50 text-slate-700"
                   >
                     + Add Address
                   </Button>
@@ -2936,11 +3149,13 @@ function BasicsStepForm({
               </div>
             ) : (
               <div className="mb-2 p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
-                <span className="text-xs text-slate-500 font-semibold">No saved addresses found.</span>
+                <span className="text-xs text-slate-500 font-semibold">
+                  {loadingAddresses ? "Checking saved addresses..." : "No saved addresses found."}
+                </span>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsAddressModalOpen(true)}
+                  onClick={openNewAddressModal}
                   className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-700"
                 >
                   + Add Address
@@ -2949,15 +3164,44 @@ function BasicsStepForm({
             )}
           </div>
 
-          <Field label="Delivery location" required>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label htmlFor="basics-delivery-location" className="text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider text-slate-500">
+                Delivery location <span className="text-rose-600">*</span>
+              </label>
+              {resolvedAddress && draft.basics.deliveryLocation?.trim().toLowerCase() !== resolvedAddress.trim().toLowerCase() && (
+                <button
+                  type="button"
+                  onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, deliveryLocation: resolvedAddress } }))}
+                  className="text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition inline-flex items-center gap-1"
+                  title="Auto-fill with authentic address from verified onboarding / GST"
+                >
+                  Auto-fill from profile / GST
+                </button>
+              )}
+            </div>
             <textarea
+              id="basics-delivery-location"
               value={draft.basics.deliveryLocation}
               onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, deliveryLocation: e.target.value } }))}
               rows={2}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
               placeholder="Warehouse yard, Central office..."
+              aria-required="true"
             />
-          </Field>
+            {Boolean(
+              draft.basics.deliveryLocation?.trim() &&
+              (
+                (resolvedAddress && draft.basics.deliveryLocation.trim().toLowerCase() === resolvedAddress.trim().toLowerCase()) ||
+                deliveryAddressesList.some(a => formatDeliveryAddressString(a).toLowerCase() === draft.basics.deliveryLocation.trim().toLowerCase())
+              )
+            ) && (
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                Auto-fetched from {resolvedAddressInfo?.source === 'gst' ? 'verified GST registration' : 'verified onboarding profile'}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -2967,9 +3211,31 @@ function BasicsStepForm({
         <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200" onWheel={e => e.stopPropagation()}>
           <div className="relative w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-              <h2 className="text-lg font-bold text-[#12335f]">
-                Add New Delivery Address
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold text-[#12335f]">
+                  Add New Delivery Address
+                </h2>
+                {resolvedAddressInfo && resolvedAddressInfo.source !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddressLabel('Registered Head Office');
+                      setOrganizationName(draft.internal.orgName || '');
+                      setContactPersonName(draft.internal.contactPerson || '');
+                      setMobileNumber(draft.internal.mobile || '');
+                      setEmail(draft.internal.email || '');
+                      setAddressLine1(resolvedAddressInfo.street || '');
+                      setCity(resolvedAddressInfo.city || '');
+                      setDistrict(resolvedAddressInfo.district || '');
+                      setState(resolvedAddressInfo.state || '');
+                      setPincode(resolvedAddressInfo.pincode || '');
+                    }}
+                    className="text-xs text-[#12335f] hover:underline font-bold mt-1 inline-flex items-center gap-1"
+                  >
+                    Auto-fill from verified onboarding / GST details
+                  </button>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
@@ -3479,6 +3745,7 @@ function EnterpriseDocumentDropzone({
   onRemoveAttachment,
   token,
   defaultCategory = 'Technical Specification',
+  onPreviewAttachment,
 }: {
   onUploadFile: (file: File, category: string) => Promise<void>;
   isUploading: boolean;
@@ -3486,6 +3753,7 @@ function EnterpriseDocumentDropzone({
   onRemoveAttachment: (attachmentId: string) => void;
   token: string | null;
   defaultCategory?: string;
+  onPreviewAttachment?: (attachment: ItemAttachment) => void;
 }) {
   const [selectedCategory, setSelectedCategory] = useState(defaultCategory);
   const [customDocName, setCustomDocName] = useState('');
@@ -3505,103 +3773,17 @@ function EnterpriseDocumentDropzone({
 
   return (
     <div className="space-y-3">
-      {/* Category selector & optional custom label */}
-      <div className="grid grid-cols-1 gap-2">
-        <div>
-          <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
-            Document Type
-          </label>
-          <select
-            value={selectedCategory}
-            onChange={e => setSelectedCategory(e.target.value)}
-            className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
-          >
-            {DOCUMENT_CATEGORIES.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <input
-            type="text"
-            value={customDocName}
-            onChange={e => setCustomDocName(e.target.value)}
-            placeholder="Custom label / note (Optional)"
-            className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
-            maxLength={100}
-          />
-        </div>
-      </div>
-
-      {/* Drag & Drop Dropzone */}
-      <div
-        onDragOver={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(true);
-        }}
-        onDragLeave={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-        }}
-        onDrop={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-          handleFileSelection(e.dataTransfer.files);
-        }}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          "group relative cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all duration-200 select-none",
-          isDragOver
-            ? "border-[#12335f] bg-blue-50/80 ring-2 ring-[#12335f]/20 scale-[0.99]"
-            : "border-slate-300 bg-slate-50/60 hover:border-[#12335f]/60 hover:bg-slate-100/50"
-        )}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
-          multiple
-          onChange={e => handleFileSelection(e.target.files)}
-          className="hidden"
-          disabled={isUploading}
-        />
-        <div className="flex flex-col items-center justify-center gap-1.5">
-          <div className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110",
-            isUploading ? "bg-blue-100 text-[#12335f]" : "bg-[#12335f]/10 text-[#12335f]"
-          )}>
-            {isUploading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <FolderUp className="h-4 w-4" />
-            )}
-          </div>
-          <div>
-            <p className="text-xs font-bold text-slate-800">
-              {isUploading ? 'Uploading file...' : (
-                <>
-                  <span className="text-[#12335f] underline underline-offset-2">Browse</span> or drag & drop file
-                </>
-              )}
-            </p>
-            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-              PDF, Word, Excel, Images (up to 10MB)
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Attached files list */}
+      {/* Attached files list - Displayed first for immediate viewing */}
       {attachments.length > 0 && (
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-            <span>Attached Files ({attachments.length})</span>
-            <span className="text-[10px] text-slate-400 font-medium">Encrypted Storage</span>
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+              <FileCheck className="h-4 w-4 text-emerald-600" />
+              Uploaded Documents ({attachments.length})
+            </span>
+            <span className="text-[10px] text-slate-500 font-semibold">Click View to preview any document</span>
           </div>
-          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 custom-scrollbar">
+          <div className="max-h-56 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
             {attachments.map(att => {
               const fileType = getFileTypeDetails(att.fileName);
               const viewUrl = `/api/files/${att.fileAssetId}/view?token=${encodeURIComponent(token || (typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''))}`;
@@ -3609,43 +3791,42 @@ function EnterpriseDocumentDropzone({
               return (
                 <div
                   key={att.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-200/90 bg-white p-2 shadow-2xs transition-all hover:border-slate-300 group"
+                  className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xs transition-all hover:border-slate-300 hover:shadow-xs group"
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded text-[9px] font-black border", fileType.bg)}>
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-black border", fileType.bg)}>
                       {fileType.ext}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-bold text-slate-900 truncate" title={att.fileName}>
+                        <span className="text-xs font-bold text-slate-900 truncate" title={att.fileName}>
                           {att.fileName}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-[9px] text-slate-400 font-semibold">
-                        {att.name && att.name !== att.fileName ? <span className="text-slate-600 font-bold">{att.name}</span> : null}
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-semibold mt-0.5">
+                        {att.name && att.name !== att.fileName ? <span className="text-slate-600 font-bold bg-slate-100 px-1.5 py-0.2 rounded text-[9px]">{att.name}</span> : null}
                         {att.fileSize ? <span>{formatFileSize(att.fileSize)}</span> : null}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0 ml-1.5">
-                    <a
-                      href={viewUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex h-6.5 items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-bold text-slate-700 hover:bg-slate-100 hover:text-[#12335f]"
-                      title="Preview Document"
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => onPreviewAttachment ? onPreviewAttachment(att) : window.open(viewUrl, '_blank')}
+                      className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 text-xs font-black text-[#12335f] hover:bg-blue-100 hover:border-blue-300 transition-all cursor-pointer shadow-3xs"
+                      title={`Preview ${att.fileName}`}
                     >
-                      <Eye className="h-3 w-3 text-slate-500" />
+                      <Eye className="h-3.5 w-3.5 text-blue-600" />
                       <span>View</span>
-                    </a>
+                    </button>
                     <button
                       type="button"
                       onClick={() => onRemoveAttachment(att.id)}
-                      className="inline-flex h-6.5 w-6.5 items-center justify-center rounded text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer"
                       title="Remove attachment"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -3654,6 +3835,102 @@ function EnterpriseDocumentDropzone({
           </div>
         </div>
       )}
+
+      {/* Upload New / Additional Document Section */}
+      <div className="space-y-3 pt-1">
+        <div className="text-[11px] font-bold text-slate-700">
+          {attachments.length > 0 ? '+ Upload Another Document' : 'Upload Specification / Document'}
+        </div>
+
+        {/* Category selector & optional custom label */}
+        <div className="grid grid-cols-1 gap-2">
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
+              Document Type
+            </label>
+            <select
+              value={selectedCategory}
+              onChange={e => setSelectedCategory(e.target.value)}
+              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
+            >
+              {DOCUMENT_CATEGORIES.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <input
+              type="text"
+              value={customDocName}
+              onChange={e => setCustomDocName(e.target.value)}
+              placeholder="Custom label / note (Optional)"
+              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-800 shadow-2xs placeholder:text-slate-400 focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
+              maxLength={100}
+            />
+          </div>
+        </div>
+
+        {/* Drag & Drop Dropzone */}
+        <div
+          onDragOver={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(true);
+          }}
+          onDragLeave={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+          }}
+          onDrop={e => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragOver(false);
+            handleFileSelection(e.dataTransfer.files);
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            "group relative cursor-pointer rounded-xl border-2 border-dashed p-4 text-center transition-all duration-200 select-none",
+            isDragOver
+              ? "border-[#12335f] bg-blue-50/80 ring-2 ring-[#12335f]/20 scale-[0.99]"
+              : "border-slate-300 bg-slate-50/60 hover:border-[#12335f]/60 hover:bg-slate-100/50"
+          )}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.webp"
+            multiple
+            onChange={e => handleFileSelection(e.target.files)}
+            className="hidden"
+            disabled={isUploading}
+          />
+          <div className="flex flex-col items-center justify-center gap-1.5">
+            <div className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110",
+              isUploading ? "bg-blue-100 text-[#12335f]" : "bg-[#12335f]/10 text-[#12335f]"
+            )}>
+              {isUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FolderUp className="h-4 w-4" />
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-800">
+                {isUploading ? 'Uploading file...' : (
+                  <>
+                    <span className="text-[#12335f] underline underline-offset-2">Browse</span> or drag & drop file
+                  </>
+                )}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                PDF, Word, Excel, Images (up to 10MB)
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3664,13 +3941,29 @@ function QuickDocumentModal({
   onClose,
   onSaveAttachments,
   token,
+  onPreviewAttachment,
 }: {
   item: ItemRow;
   onClose: () => void;
   onSaveAttachments: (updatedAttachments: ItemAttachment[]) => void;
   token: string | null;
+  onPreviewAttachment?: (attachment: ItemAttachment) => void;
 }) {
-  const [attachments, setAttachments] = useState<ItemAttachment[]>(() => item.attachments || []);
+  const [attachments, setAttachments] = useState<ItemAttachment[]>(() => {
+    if (item.attachments && item.attachments.length > 0) {
+      return item.attachments;
+    }
+    if (item.fileAssetId && item.specificationFileName) {
+      return [{
+        id: makeId(),
+        name: 'Technical Specification',
+        fileAssetId: item.fileAssetId,
+        fileName: item.specificationFileName,
+        uploadedAt: new Date().toISOString(),
+      }];
+    }
+    return [];
+  });
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = async (file: File, category: string) => {
@@ -3720,9 +4013,11 @@ function QuickDocumentModal({
     toast.info('Document removed');
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999999] p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999990] p-4 animate-in fade-in duration-150"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200">
@@ -3759,6 +4054,7 @@ function QuickDocumentModal({
             onRemoveAttachment={handleRemove}
             token={token}
             defaultCategory="Technical Specification"
+            onPreviewAttachment={onPreviewAttachment}
           />
         </div>
 
@@ -3776,9 +4072,15 @@ function QuickDocumentModal({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
+
+type ItemModalFormData = Omit<ItemRow, 'quantity' | 'unitPrice'> & {
+  quantity: number | string;
+  unitPrice: number | string;
+};
 
 /** Full Add / Edit Line Item Modal Dialog (Modern Centered Horizontal 2-Column Layout) */
 function ItemDrawerOrModal({
@@ -3788,6 +4090,7 @@ function ItemDrawerOrModal({
   onSave,
   onSaveAndAddAnother,
   token,
+  onPreviewDocument,
 }: {
   isOpen: boolean;
   item: ItemRow | null;
@@ -3795,13 +4098,29 @@ function ItemDrawerOrModal({
   onSave: (item: ItemRow) => void;
   onSaveAndAddAnother: (item: ItemRow) => void;
   token: string | null;
+  onPreviewDocument?: (doc: any, label?: string) => void;
 }) {
-  const [formData, setFormData] = useState<ItemRow | null>(item);
+  const [formData, setFormData] = useState<ItemModalFormData | null>(() => {
+    if (!item) return null;
+    return {
+      ...item,
+      quantity: item.quantity ?? 1,
+      unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
+    };
+  });
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
-    setFormData(item);
+    if (item) {
+      setFormData({
+        ...item,
+        quantity: item.quantity ?? 1,
+        unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
+      });
+    } else {
+      setFormData(null);
+    }
     setValidationErrors({});
   }, [item]);
 
@@ -3829,7 +4148,8 @@ function ItemDrawerOrModal({
       errs.specification = 'Description must be at most 500 characters';
     }
 
-    if (!formData.quantity || isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
+    const parsedQty = parseInt(String(formData.quantity), 10);
+    if (!formData.quantity || isNaN(parsedQty) || parsedQty <= 0) {
       errs.quantity = 'Must be a positive whole number';
     }
 
@@ -3905,14 +4225,22 @@ function ItemDrawerOrModal({
     toast.info('Document removed');
   };
 
+  const preparePayload = (): ItemRow => {
+    return {
+      ...formData,
+      quantity: Math.max(1, parseInt(String(formData.quantity), 10) || 1),
+      unitPrice: Math.max(0, parseFloat(String(formData.unitPrice)) || 0),
+    };
+  };
+
   const handleSaveClick = () => {
     if (!validate()) return;
-    onSave(formData);
+    onSave(preparePayload());
   };
 
   const handleSaveAndAddClick = () => {
     if (!validate()) return;
-    onSaveAndAddAnother(formData);
+    onSaveAndAddAnother(preparePayload());
   };
 
   return createPortal(
@@ -4119,32 +4447,52 @@ function ItemDrawerOrModal({
                   <div className="relative flex items-center">
                     <button
                       type="button"
+                      aria-label="Decrease quantity"
                       onClick={() => {
-                        const current = Number(formData.quantity || 1);
-                        if (current > 1) setFormData({ ...formData, quantity: current - 1 });
+                        const current = parseInt(String(formData.quantity), 10) || 1;
+                        if (current > 1) {
+                          setFormData({ ...formData, quantity: current - 1 });
+                          if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
+                        }
                       }}
-                      className="absolute left-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
+                      className="absolute left-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors select-none"
                     >
                       -
                     </button>
                     <input
-                      type="number"
-                      min={1}
-                      value={formData.quantity}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-label="Item quantity"
+                      value={formData.quantity ?? ''}
                       onChange={e => {
-                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                        let val = e.target.value.replace(/[^0-9]/g, '');
+                        if (val.length > 1 && val.startsWith('0')) {
+                          val = val.replace(/^0+/, '');
+                        }
                         setFormData({ ...formData, quantity: val });
                         if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
+                      onBlur={() => {
+                        const current = parseInt(String(formData.quantity), 10);
+                        if (!current || current < 1) {
+                          setFormData({ ...formData, quantity: 1 });
+                        } else {
+                          setFormData({ ...formData, quantity: current });
+                        }
+                      }}
                       className={cn(inputClass, "text-center px-7 font-bold", validationErrors.quantity && "border-rose-500")}
+                      placeholder="1"
                     />
                     <button
                       type="button"
+                      aria-label="Increase quantity"
                       onClick={() => {
-                        const current = Number(formData.quantity || 1);
+                        const current = parseInt(String(formData.quantity), 10) || 0;
                         setFormData({ ...formData, quantity: current + 1 });
+                        if (validationErrors.quantity) setValidationErrors(prev => ({ ...prev, quantity: '' }));
                       }}
-                      className="absolute right-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors"
+                      className="absolute right-1 h-7 w-6 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold flex items-center justify-center transition-colors select-none"
                     >
                       +
                     </button>
@@ -4174,13 +4522,35 @@ function ItemDrawerOrModal({
 
                 <Field label="Est. Unit Rate (₹)">
                   <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">₹</span>
                     <input
-                      type="number"
-                      min={0}
-                      value={formData.unitPrice}
-                      onChange={e => setFormData({ ...formData, unitPrice: Math.max(0, parseFloat(e.target.value) || 0) })}
-                      onWheel={e => (e.target as HTMLElement).blur()}
+                      type="text"
+                      inputMode="decimal"
+                      aria-label="Estimated Unit Rate in Rupees"
+                      value={formData.unitPrice ?? ''}
+                      onChange={e => {
+                        let val = e.target.value.replace(/[^0-9.]/g, '');
+                        const parts = val.split('.');
+                        if (parts.length > 2) {
+                          val = parts[0] + '.' + parts.slice(1).join('');
+                        }
+                        if (parts.length === 2 && parts[1].length > 2) {
+                          val = parts[0] + '.' + parts[1].slice(0, 2);
+                        }
+                        if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+                          val = val.replace(/^0+/, '') || '0';
+                        }
+                        setFormData({ ...formData, unitPrice: val });
+                      }}
+                      onBlur={() => {
+                        if (formData.unitPrice !== '') {
+                          let val = String(formData.unitPrice);
+                          if (val.endsWith('.')) {
+                            val = val.slice(0, -1);
+                            setFormData({ ...formData, unitPrice: val });
+                          }
+                        }
+                      }}
                       className={cn(inputClass, "pl-6 font-bold")}
                       placeholder="0"
                     />
@@ -4243,6 +4613,7 @@ function ItemDrawerOrModal({
               onRemoveAttachment={handleRemoveAttachment}
               token={token}
               defaultCategory="Technical Specification"
+              onPreviewAttachment={onPreviewDocument ? (att => onPreviewDocument(att, att.fileName)) : undefined}
             />
           </div>
         </div>
@@ -4309,6 +4680,61 @@ function ItemsDetailsForm({
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const [uploadingFile, setUploadingFile] = useState(false);
   const [quickDocItem, setQuickDocItem] = useState<ItemRow | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+
+  const handlePreviewDoc = async (doc: any, label = 'Document') => {
+    try {
+      const fileAssetId = doc?.fileAssetId || doc?.id || (typeof doc === 'number' ? doc : undefined);
+      const fileName = doc?.fileName || doc?.originalName || doc?.name || label;
+      const fileUrl = doc?.fileUrl || doc?.url || (fileAssetId ? `/api/files/${fileAssetId}/view` : undefined);
+
+      if (fileAssetId || fileUrl) {
+        try {
+          const prev = await getFileAssetPreview(
+            {
+              id: fileAssetId,
+              fileAssetId,
+              url: fileUrl,
+              fileName,
+              mimeType: doc?.mimeType,
+            },
+            fileName
+          );
+          if (prev) {
+            setPreviewDocument(prev);
+            return;
+          }
+        } catch (e) {
+          console.warn('Modal preview fallback to openFileAsset:', e);
+        }
+
+        await openFileAsset(
+          {
+            id: fileAssetId,
+            fileAssetId,
+            originalName: fileName,
+            url: fileUrl,
+          },
+          fileName
+        );
+      } else {
+        toast.error('Document file asset ID not found');
+      }
+    } catch (err: any) {
+      console.error('Preview error:', err);
+      toast.error(err?.message || 'Unable to preview document');
+    }
+  };
+
+  const handlePreviewItemDoc = (item: ItemRow) => {
+    const attachmentsList = item.attachments || [];
+    const primaryDoc = attachmentsList[0] || (item.fileAssetId ? { fileAssetId: item.fileAssetId, fileName: item.specificationFileName || `${item.name || 'Item'} Specification`, name: item.name } : null);
+    if (!primaryDoc) {
+      setQuickDocItem(item);
+      return;
+    }
+    handlePreviewDoc(primaryDoc, primaryDoc.fileName || item.name || 'Specification');
+  };
 
   // Line Item Handlers
   const handleAddNewItem = (itemType: 'Product' | 'Service' = 'Product') => {
@@ -4343,10 +4769,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(item);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4364,10 +4790,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(item);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4410,10 +4836,10 @@ function ItemsDetailsForm({
       } else {
         nextItems.push(duplicated);
       }
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4423,10 +4849,10 @@ function ItemsDetailsForm({
   const handleRemoveItem = (id: string) => {
     updateDraft(current => {
       const nextItems = current.items.filter(item => item.id !== id);
-      const estimatedValue = nextItems.reduce((sum, row) => sum + Number(row.quantity || 0) * Number(row.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue },
+        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
         items: nextItems
       };
     });
@@ -4539,12 +4965,12 @@ function ItemsDetailsForm({
 
       updateDraft(current => {
         const nextItems = [...current.items, ...importedItems];
-        const estimatedValue = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+        const totals = computeProcurementTotals(nextItems);
         return {
           ...current,
           basics: {
             ...current.basics,
-            estimatedValue,
+            estimatedValue: Math.round(totals.grossValue),
           },
           items: nextItems,
         };
@@ -4567,12 +4993,12 @@ function ItemsDetailsForm({
     updateDraft(current => {
       const manualItems = current.items.filter(item => !String(item.id).startsWith('cart:'));
       const nextItems = [...manualItems, ...importedItems];
-      const estimatedValue = nextItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.unitPrice || 0), 0);
+      const totals = computeProcurementTotals(nextItems);
       return {
         ...current,
         basics: {
           ...current.basics,
-          estimatedValue,
+          estimatedValue: Math.round(totals.grossValue),
         },
         items: nextItems,
       };
@@ -4640,7 +5066,7 @@ function ItemsDetailsForm({
                   description: desc,
                   category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : 'General',
                   quantity: qty,
-                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim() : 'Nos',
+                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'Nos',
                   estimatedRate: rate,
                   taxPercent: tax,
                   total: qty * rate,
@@ -4692,8 +5118,8 @@ function ItemsDetailsForm({
         total: 0,
         remarks: ''
       }];
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -4706,16 +5132,16 @@ function ItemsDetailsForm({
         srNo: nextTable.length + 1
       });
       const reindexed = nextTable.map((row, i) => ({ ...row, srNo: i + 1 }));
-      const sum = reindexed.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: reindexed, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = reindexed.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: reindexed, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
   const handleRemoveBOQRow = (idx: number) => {
     updateDraft(c => {
       const nextTable = c.boqTable.filter((_, i) => i !== idx).map((row, i) => ({ ...row, srNo: i + 1 }));
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -4726,12 +5152,12 @@ function ItemsDetailsForm({
       if (key === 'quantity' || key === 'estimatedRate' || key === 'taxPercent') {
         const qty = Number(key === 'quantity' ? val : row.quantity || 0);
         const rate = Number(key === 'estimatedRate' ? val : row.estimatedRate || 0);
-        const tax = Number(key === 'taxPercent' ? val : row.taxPercent || 0);
+        const tax = Number(key === 'taxPercent' ? val : row.taxPercent ?? 18);
         row.total = qty * rate * (1 + tax / 100);
       }
       nextTable[idx] = row;
-      const sum = nextTable.reduce((acc, r) => acc + (r.quantity * r.estimatedRate), 0);
-      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: sum } };
+      const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
+      return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
   };
 
@@ -4739,10 +5165,10 @@ function ItemsDetailsForm({
     {
       key: 'type',
       header: 'Type',
-      width: 'w-24',
+      width: 'w-[7%]',
       cell: (item: any) => (
         <span className={cn(
-          "inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
           item.itemType === 'Service'
             ? "border border-purple-200 bg-purple-50 text-purple-700"
             : "border border-blue-200 bg-blue-50 text-blue-700"
@@ -4754,9 +5180,9 @@ function ItemsDetailsForm({
     {
       key: 'name',
       header: 'Item / Service Name',
-      width: 'w-56',
+      width: 'w-[18%]',
       cell: (item: any) => (
-        <div className="font-black text-slate-900 text-xs">
+        <div className="font-black text-slate-900 text-xs  max-w-full" title={item.name}>
           {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
         </div>
       )
@@ -4764,11 +5190,12 @@ function ItemsDetailsForm({
     {
       key: 'specifications',
       header: 'Specifications / Scope',
-      cellClassName: 'text-slate-600 font-medium max-w-[240px]',
+      width: 'w-[18%]',
+      cellClassName: 'text-slate-600 font-medium',
       cell: (item: any) => {
         const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
         return (
-          <span className="line-clamp-2" title={descText || undefined}>
+          <span className="line-clamp-2 text-xs" title={descText || undefined}>
             {descText ? descText : <span className="text-slate-400 italic">No description</span>}
           </span>
         );
@@ -4777,10 +5204,10 @@ function ItemsDetailsForm({
     {
       key: 'quantity',
       header: 'Qty & UOM',
-      width: 'w-28',
+      width: 'w-[9%]',
       align: 'center',
       cell: (item: any) => (
-        <div>
+        <div className="truncate">
           <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
           <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
         </div>
@@ -4789,32 +5216,59 @@ function ItemsDetailsForm({
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-28',
+      width: 'w-[10%]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
-      cell: (item: any) => (
-        Number(item.unitPrice || 0) > 0 ? (
-          <span>₹{Number(item.unitPrice).toLocaleString('en-IN')}</span>
+      cell: (item: any) => {
+        const rate = Number(item.unitPrice || 0);
+        const gst = Number(item.gst ?? 18);
+        return rate > 0 ? (
+          <div className="text-right">
+            <div className="font-extrabold text-slate-900">₹{rate.toLocaleString('en-IN')}</div>
+            <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
+          </div>
         ) : (
           <span className="text-slate-400 font-normal">-</span>
-        )
-      )
+        );
+      }
+    },
+    {
+      key: 'total',
+      header: 'Line Total (Incl. GST)',
+      width: 'w-[11%]',
+      align: 'right',
+      cellClassName: 'font-extrabold text-slate-900',
+      cell: (item: any) => {
+        const qty = Number(item.quantity || 0);
+        const rate = Number(item.unitPrice || 0);
+        const gst = Number(item.gst ?? 18);
+        const base = qty * rate;
+        const total = base * (1 + gst / 100);
+        return total > 0 ? (
+          <div className="text-right">
+            <div className="font-black text-[#12335f]">₹{Math.round(total).toLocaleString('en-IN')}</div>
+            <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
+          </div>
+        ) : (
+          <span className="text-slate-400 font-normal">-</span>
+        );
+      }
     },
     {
       key: 'hsn',
       header: 'HSN / SAC',
-      width: 'w-24',
+      width: 'w-[7%]',
       align: 'center',
-      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate',
       cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
     },
     {
       key: 'brand',
       header: 'Brand & Policy',
-      width: 'w-32',
+      width: 'w-[11%]',
       cell: (item: any) => (
-        <div>
-          <div className="text-slate-800 text-[11px] font-bold truncate max-w-[120px]">
+        <div className="min-w-0">
+          <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
             {item.brand_preference || 'Any Brand'}
           </div>
           <div className="mt-0.5">
@@ -4834,7 +5288,7 @@ function ItemsDetailsForm({
     {
       key: 'documents',
       header: 'Documents & Specs',
-      width: 'w-40',
+      width: 'w-[11%]',
       cell: (item: any) => {
         const attachmentsList = item.attachments || [];
         const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
@@ -4845,18 +5299,18 @@ function ItemsDetailsForm({
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-2 py-1 text-[10px] font-extrabold text-emerald-800 hover:bg-emerald-100 transition-colors"
-              title="Click to view or manage attachments"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs"
+              title="Click to view all uploaded documents"
             >
               <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
-              <span className="truncate max-w-[90px]">
+              <span>
                 {docCount} file{docCount === 1 ? '' : 's'}
               </span>
             </button>
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
               title="Add more documents"
             >
               <Plus className="h-3 w-3" />
@@ -4866,7 +5320,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => setQuickDocItem(item)}
-            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all"
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer"
             title="Attach specification or drawing"
           >
             <FilePlus className="h-3 w-3 text-slate-400" />
@@ -4878,17 +5332,17 @@ function ItemsDetailsForm({
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-28',
+      width: 'w-[10%]',
       align: 'right',
       cell: (item: any) => (
-        <div className="flex items-center justify-end gap-1.5">
+        <div className="flex items-center justify-end gap-1">
           <button
             type="button"
             onClick={() => {
               setSelectedItemForEdit(item);
               setShowItemDrawer(true);
             }}
-            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors"
+            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
             title="Edit specifications"
           >
             Edit
@@ -4896,7 +5350,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleDuplicateItem(item)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Duplicate line item"
           >
             <Copy className="h-3.5 w-3.5" />
@@ -4904,7 +5358,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleRemoveItem(item.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
             title="Delete line item"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -5204,7 +5658,8 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth="min-w-[1100px]"
+        minWidth="w-full min-w-0"
+        scrollWrapperClassName="overflow-x-hidden"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
@@ -5236,38 +5691,95 @@ function ItemsDetailsForm({
         }
       />
 
-      {/* Summary Metrics Bar */}
+      {/* Summary Metrics Bar with Full Financial Breakdown */}
       {(() => {
+        const totals = computeProcurementTotals(draft.items);
         const totalQty = getTotalProcurementQty(draft);
         const qtyOk = totalQty > 0;
+        const isSynced = Math.round(totals.grossValue) === draft.basics.estimatedValue;
+
         return (
-          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3">
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Total Items</span>
-              <span className="text-sm font-black text-slate-900">{draft.items.length} Lines</span>
+          <div className="space-y-3">
+            <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-900">{draft.items.length} Lines</span>
+                  <span className="text-xs font-bold text-slate-500">{totalQty.toLocaleString('en-IN')} Units</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Base Value (Excl. GST)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-800">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.baseValue)}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-400">Pre-tax</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Applicable GST (Taxes)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-purple-700">
+                    +{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.gstAmount)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Taxes</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">Total Est. Value (Gross)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-base font-black text-[#12335f]">
+                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.grossValue)}
+                  </span>
+                  <span className="text-[9.5px] font-black text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded uppercase">Incl. GST</span>
+                </div>
+              </div>
             </div>
 
-            <div className={cn(
-              "flex items-center justify-between rounded-xl border p-3.5 text-xs font-bold shadow-3xs",
-              qtyOk
-                ? "bg-blue-50/80 border-blue-200 text-[#12335f]"
-                : "bg-rose-50 border-rose-300 text-rose-700"
-            )}>
-              <span className="text-[11px] font-black uppercase tracking-wider">
-                Total Qty &rarr; Consignee
-              </span>
-              <span className="text-sm font-black">{totalQty.toLocaleString('en-IN')} Units</span>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">Total Est. Value</span>
-              <span className="text-base font-black text-[#12335f]">
-                {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(draft.basics.estimatedValue)}
-              </span>
-            </div>
+            {/* Reconciliation Banner between Step 2 estimate & BOQ schedule */}
+            {draft.items.length > 0 && (
+              !isSynced ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>
+                      Step 2 initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but itemized schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      updateDraft(c => ({
+                        ...c,
+                        basics: { ...c.basics, estimatedValue: Math.round(totals.grossValue) }
+                      }));
+                      toast.success('Tender estimated budget synced with Schedule Total!');
+                    }}
+                    className="h-7.5 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap shadow-3xs"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync Tender Budget with BOQ
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Tender estimated budget is fully synchronized with schedule line items (Base + GST).</span>
+                  </div>
+                  <span className="text-[9.5px] font-black uppercase text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
+                    Synchronized
+                  </span>
+                </div>
+              )
+            )}
 
             {!qtyOk && (
-              <p className="sm:col-span-3 text-[11px] font-bold text-rose-600">
+              <p className="text-[11px] font-bold text-rose-600">
                 Add at least one line with a quantity greater than 0. Submission is blocked until total quantity is above 0.
               </p>
             )}
@@ -5286,6 +5798,7 @@ function ItemsDetailsForm({
         onSave={handleSaveItem}
         onSaveAndAddAnother={handleSaveAndAddAnother}
         token={token}
+        onPreviewDocument={handlePreviewDoc}
       />
 
       {/* Quick Document Manager Modal */}
@@ -5297,8 +5810,15 @@ function ItemsDetailsForm({
             handleSaveItemQuickAttachments(quickDocItem.id, updatedAtts);
           }}
           token={token}
+          onPreviewAttachment={att => handlePreviewDoc(att, att.fileName)}
         />
       )}
+
+      {/* In-App Direct Document Preview Modal */}
+      <DocumentPreviewModal
+        previewDocument={previewDocument}
+        onClose={() => setPreviewDocument(null)}
+      />
     </div>
   );
 }
@@ -5410,10 +5930,32 @@ function VendorsStepForm({
 
         <Field label="Minimum Sourcing bids required">
           <input
-            type="number"
-            value={draft.schedule.minimumBidders || 3}
-            onChange={e => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: Number(e.target.value || 3) } }))}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Minimum Sourcing bids required"
+            value={draft.schedule.minimumBidders ?? ''}
+            onChange={e => {
+              let val = e.target.value.replace(/[^0-9]/g, '');
+              if (val.length > 1 && val.startsWith('0')) {
+                val = val.replace(/^0+/, '');
+              }
+              updateDraft(c => ({
+                ...c,
+                schedule: {
+                  ...c.schedule,
+                  minimumBidders: val === '' ? '' : parseInt(val, 10),
+                }
+              }));
+            }}
+            onBlur={() => {
+              const current = parseInt(String(draft.schedule.minimumBidders), 10);
+              if (!current || current < 1) {
+                updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
+              }
+            }}
             className={inputClass}
+            placeholder="3"
           />
         </Field>
       </div>
@@ -5535,9 +6077,6 @@ function ScheduleStepForm({
   const updateSchedule = (key: keyof Draft['schedule'], val: any) => {
     updateDraft(c => {
       const nextSchedule = { ...c.schedule, [key]: val };
-      if (key === 'clarificationAllowed' && !val) {
-        nextSchedule.clarificationDeadline = '';
-      }
       let nextApproval = c.approval;
       if (key === 'packetType') {
         if (val === 'Single') {
@@ -5643,33 +6182,6 @@ function ScheduleStepForm({
   const updateRateContract = <K extends keyof RateContractConfig>(key: K, val: RateContractConfig[K]) => {
     updateDraft(c => ({ ...c, rateContractConfig: { ...c.rateContractConfig, [key]: val } }));
   };
-  const auctionCategoryOptions = [
-    'IT Hardware',
-    'Office Equipment',
-    'Electrical',
-    'Mechanical',
-    'Civil Works',
-    'Facility Management',
-    'Professional Services',
-    'Other'
-  ];
-  const auctionSubCategoryOptions = [
-    'Laptops',
-    'Desktops',
-    'Networking',
-    'Printers',
-    'Furniture',
-    'Spares',
-    'AMC',
-    'Other'
-  ];
-  const currencyOptions = ['INR', 'USD', 'EUR', 'GBP', 'JPY', 'AED', 'SGD', 'Other'];
-  const isOtherAuctionCategory = draft.auctionConfig.auctionCategory === 'Other' || Boolean(draft.auctionConfig.auctionCategory && !auctionCategoryOptions.includes(draft.auctionConfig.auctionCategory));
-  const isOtherAuctionSubCategory = draft.auctionConfig.auctionSubCategory === 'Other' || Boolean(draft.auctionConfig.auctionSubCategory && !auctionSubCategoryOptions.includes(draft.auctionConfig.auctionSubCategory));
-  const isOtherCurrency = draft.auctionConfig.currency === 'Other' || Boolean(draft.auctionConfig.currency && !currencyOptions.includes(draft.auctionConfig.currency));
-  const auctionCategoryMissing = !draft.auctionConfig.auctionCategory.trim() || draft.auctionConfig.auctionCategory === 'Other';
-  const auctionSubCategoryMissing = false;
-  const currencyMissing = !draft.auctionConfig.currency.trim() || draft.auctionConfig.currency === 'Other';
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
   const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20');
@@ -5772,6 +6284,55 @@ function ScheduleStepForm({
     toast.success('Auction terms document removed');
   };
 
+  const [uploadingRateContractDoc, setUploadingRateContractDoc] = useState(false);
+
+  const handleRateContractDocUpload = async (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size exceeds maximum limit of 10MB.');
+      return;
+    }
+    const allowedExtensions = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
+    const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
+    if (!allowedExtensions.includes(ext)) {
+      toast.error('Unsupported file format. Please upload PDF, DOC, DOCX, XLS, XLSX, JPG, or PNG.');
+      return;
+    }
+
+    setUploadingRateContractDoc(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'rate_contract_document');
+
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData.fileAsset || resData;
+      const fileId = Number(resData.fileId || asset.id || asset.fileAssetId || 0);
+
+      updateRateContract('contractDocument', {
+        fileAssetId: fileId || null,
+        fileName: asset.originalName || asset.fileName || file.name,
+      });
+      toast.success('Rate contract document uploaded successfully');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload document');
+    } finally {
+      setUploadingRateContractDoc(false);
+    }
+  };
+
+  const handleRemoveRateContractDoc = () => {
+    updateRateContract('contractDocument', {
+      fileAssetId: null,
+      fileName: '',
+    });
+    toast.success('Rate contract document removed');
+  };
+
   // Warnings collection
   const warnings: string[] = [];
   if (draft.schedule.submissionDate && draft.schedule.submissionStartDate) {
@@ -5808,468 +6369,490 @@ function ScheduleStepForm({
         </div>
       )}
 
-      {isAuction && (
-        <div className="border border-indigo-200 rounded-xl p-4 bg-indigo-50/40 space-y-4">
-          <div>
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Reverse Auction Configuration</h3>
-            <p className="text-[11px] text-slate-600 font-semibold mt-1">
-              Saved auction rules are shown to qualified sellers and used by live bidding.
-            </p>
+
+      {isRateContract && (
+        <div className="border border-slate-200/90 rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-xs space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs font-bold text-sm">
+                <Repeat className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Rate Contract Framework
+                  </h3>
+                  <span className="rounded-full bg-blue-50 border border-blue-200/70 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                    Period Sourcing
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Establish standardized pre-negotiated unit rates, delivery SLAs, and call-off order parameters.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100/70 px-3 py-1 text-xs font-mono font-bold text-slate-700">
+                <Lock className="h-3 w-3 text-slate-400" />
+                {draft.rateContractConfig.rateContractNumber}
+              </span>
+            </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Auction Number">
-              <input value={draft.auctionConfig.auctionNumber} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Procurement Method">
-              <input value={draft.auctionConfig.procurementMethod} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Auction Title" required error={fieldError(missing(draft.auctionConfig.auctionTitle), 'Auction title is required.')}>
-              <input value={draft.auctionConfig.auctionTitle} onChange={e => updateAuction('auctionTitle', e.target.value)} className={controlClass(fieldError(missing(draft.auctionConfig.auctionTitle), 'Auction title is required.'))} />
-            </Field>
-            <Field label="Auction Description">
-              <textarea value={draft.auctionConfig.auctionDescription} onChange={e => updateAuction('auctionDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
-            </Field>
-            <Field label="Auction Category" required error={fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.')}>
-              <select
-                value={isOtherAuctionCategory ? 'Other' : draft.auctionConfig.auctionCategory}
-                onChange={e => updateAuction('auctionCategory', e.target.value)}
-                className={controlClass(fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.'))}
-              >
-                <option value="">Select category</option>
-                {auctionCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              {isOtherAuctionCategory && (
+          {/* Subsection 1: Master Parameters & Validity */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+              <FileText className="h-3.5 w-3.5 text-[#0b2447]" />
+              <span>Contract Master &amp; Validity Parameters</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Contract Title" required>
                 <input
-                  value={draft.auctionConfig.auctionCategory === 'Other' ? '' : draft.auctionConfig.auctionCategory}
-                  onChange={e => updateAuction('auctionCategory', e.target.value)}
-                  className={controlClass(fieldError(showErrors && auctionCategoryMissing, 'Auction category is required.'))}
-                  placeholder="Enter auction category"
+                  value={draft.rateContractConfig.contractTitle}
+                  onChange={e => updateRateContract('contractTitle', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Annual Rate Contract for Industrial PPE & Safety Equipment"
                 />
-              )}
-            </Field>
-            <Field label="Auction Subcategory (Optional)">
-              <select
-                value={isOtherAuctionSubCategory ? 'Other' : draft.auctionConfig.auctionSubCategory}
-                onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                className={inputClass}
-              >
-                <option value="">Select subcategory (Optional)</option>
-                {auctionSubCategoryOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              {isOtherAuctionSubCategory && (
+              </Field>
+              <Field label="Contract Category">
                 <input
-                  value={draft.auctionConfig.auctionSubCategory === 'Other' ? '' : draft.auctionConfig.auctionSubCategory}
-                  onChange={e => updateAuction('auctionSubCategory', e.target.value)}
-                  className={cn(inputClass, 'mt-2')}
-                  placeholder="Enter auction subcategory (Optional)"
+                  value={draft.rateContractConfig.contractCategory}
+                  onChange={e => updateRateContract('contractCategory', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Safety Gear & Supplies"
                 />
-              )}
-            </Field>
-            <Field label="Currency" required error={fieldError(showErrors && currencyMissing, 'Currency is required.')}>
-              <select
-                value={isOtherCurrency ? 'Other' : draft.auctionConfig.currency}
-                onChange={e => updateAuction('currency', e.target.value)}
-                className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-              >
-                <option value="">Select currency</option>
-                {currencyOptions.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-              {isOtherCurrency && (
+              </Field>
+              <Field label="Contract Subcategory (Optional)">
                 <input
-                  value={draft.auctionConfig.currency === 'Other' ? '' : draft.auctionConfig.currency}
-                  onChange={e => updateAuction('currency', e.target.value.toUpperCase().slice(0, 3))}
-                  className={controlClass(fieldError(showErrors && currencyMissing, 'Currency is required.'))}
-                  placeholder="Enter 3-letter currency code"
+                  value={draft.rateContractConfig.contractSubCategory}
+                  onChange={e => updateRateContract('contractSubCategory', e.target.value)}
+                  className={inputClass}
+                  placeholder="Enter contract subcategory (Optional)"
                 />
-              )}
-            </Field>
-            <Field label="Estimated Value">
-              <input value={draft.basics.estimatedValue || 0} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Auction Status">
-              <input value={draft.auctionConfig.auctionStatus} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Buyer Organization">
-              <input value={draft.auctionConfig.buyerOrganization || draft.internal.orgName} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-              <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                Pulled from Internal Details. Purchase organization uses this buyer organization for this portal workflow.
-              </p>
-            </Field>
-            <Field label="Auction Type" required>
-              <select value={draft.auctionConfig.auctionType} onChange={e => updateAuction('auctionType', e.target.value as AuctionConfig['auctionType'])} className={inputClass}>
-                <option value="ENGLISH_REVERSE">English Reverse</option>
-                <option value="RANK_BASED_REVERSE">Rank Based Reverse</option>
-              </select>
-            </Field>
-            <Field label="Auction Mode" required>
-              <input value={draft.auctionConfig.auctionMode} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            {isReverseAuctionMethod(draft.type) ? (
-              <>
-                <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
-                  <input type="datetime-local" value={draft.auctionConfig.startDateTime} onChange={e => updateAuction('startDateTime', e.target.value)} className={controlClass(fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.'))} />
+              </Field>
+              <Field label="Contract Start Date" required>
+                <input
+                  type="date"
+                  value={draft.rateContractConfig.periodStartDate}
+                  onChange={e => updateRateContract('periodStartDate', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Contract End Date" required>
+                <input
+                  type="date"
+                  value={draft.rateContractConfig.periodEndDate}
+                  onChange={e => updateRateContract('periodEndDate', e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label="Rate Validity Period" required>
+                <input
+                  value={draft.rateContractConfig.rateValidityPeriod}
+                  onChange={e => updateRateContract('rateValidityPeriod', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Fixed for full contract period"
+                />
+              </Field>
+              <Field label="Supplier Selection Strategy" required>
+                <select
+                  value={draft.rateContractConfig.supplierSelectionStrategy}
+                  onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])}
+                  className={inputClass}
+                >
+                  <option value="SINGLE_SUPPLIER">Single Supplier (L1 Award)</option>
+                  <option value="MULTI_SUPPLIER">Multiple Suppliers (Parallel Contracts)</option>
+                  <option value="PANEL_RATE_CONTRACT">Panel Rate Contract (Pre-qualified Empaneled)</option>
+                </select>
+              </Field>
+              <Field label="Allocated Supplier(s)" required className="sm:col-span-2">
+                <div className="relative">
+                  <input
+                    value={`${draft.rateContractConfig.selectedSuppliers.length || draft.vendors.invitedSellers.length} supplier(s) allocated from Supplier step`}
+                    readOnly
+                    className={cn(inputClass, 'bg-slate-50 text-slate-600 font-semibold cursor-default')}
+                  />
+                  <Users className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                </div>
+              </Field>
+              <div className="sm:col-span-2 lg:col-span-3">
+                <Field label="Contract Scope & Purpose Description">
+                  <textarea
+                    value={draft.rateContractConfig.contractDescription}
+                    onChange={e => updateRateContract('contractDescription', e.target.value)}
+                    className={cn(inputClass, 'min-h-[72px] resize-y')}
+                    placeholder="Provide scope, authorized drawing/grade standards, and delivery terms overview..."
+                  />
                 </Field>
-                <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
-                  <input type="datetime-local" value={draft.auctionConfig.endDateTime} onChange={e => updateAuction('endDateTime', e.target.value)} className={controlClass(fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.'))} />
-                </Field>
-                <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
-                  <input type="number" min={1} value={draft.auctionConfig.durationMinutes || ''} onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))} />
-                </Field>
-              </>
-            ) : (
-              <div className="sm:col-span-2 flex items-center gap-2.5 p-3 rounded-xl bg-blue-50 border border-blue-200 text-[11px] text-blue-900 font-semibold">
-                <svg className="h-4 w-4 shrink-0 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                <span>
-                  <strong>Follow-on Auction (SAP Ariba Pattern):</strong> The live auction start time and duration will be configured when you launch Stage 2 from the &quot;Proposals&quot; tab — after evaluating sealed bids. The auction ceiling will automatically lock to the lowest qualified bid (L1).
-                </span>
               </div>
-            )}
-            <Field label="Starting Bid Price" required error={fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.')}>
-              <input type="number" min={0} value={draft.auctionConfig.startingBidPrice || ''} onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.startingBidPrice <= 0, 'Starting bid price must be greater than 0.'))} />
-            </Field>
-            <Field label="Reserve Price" error={fieldError(draft.auctionConfig.reservePrice !== null && draft.auctionConfig.reservePrice > draft.auctionConfig.startingBidPrice, 'Reserve price cannot exceed starting bid price.')}>
-              <input type="number" min={0} value={draft.auctionConfig.reservePrice ?? ''} onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)} className={controlClass(fieldError(draft.auctionConfig.reservePrice !== null && draft.auctionConfig.reservePrice > draft.auctionConfig.startingBidPrice, 'Reserve price cannot exceed starting bid price.'))} />
-              <p className="text-[10px] text-slate-500 font-semibold mt-1 leading-normal">
-                Reserve Price is the maximum price you (the buyer) are willing to pay. Sellers' bids must be equal to or lower than this price to win. It is hidden from sellers during the auction.
-              </p>
-            </Field>
-            <Field label="Minimum Bid Decrement" required error={fieldError(showErrors && draft.auctionConfig.minimumBidDecrement <= 0, 'Minimum bid decrement must be greater than 0.')}>
-              <input type="number" min={0} value={draft.auctionConfig.minimumBidDecrement || ''} onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.minimumBidDecrement <= 0, 'Minimum bid decrement must be greater than 0.'))} />
-            </Field>
-            <Field label="Rank Visibility" required>
-              <select value={draft.auctionConfig.rankVisibility} onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])} className={inputClass}>
-                <option value="SHOW_RANK_ONLY">Show Rank Only</option>
-                <option value="SHOW_LOWEST_PRICE">Show Lowest Price</option>
-                <option value="HIDDEN">Hidden</option>
-              </select>
-            </Field>
-            <Field label="Minimum Qualified Bidders" required>
-              <input
-                type="number"
-                min={2}
-                value={draft.auctionConfig.minimumQualifiedBidders || ''}
-                onChange={e => {
-                  const value = Number(e.target.value || 0);
-                  updateAuction('minimumQualifiedBidders', value);
-                  updateSchedule('minimumBidders', value);
-                }}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Auction Terms Document (Optional)" className="sm:col-span-2">
-              {draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? (
-                <div className="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
-                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-[#12335f] ring-1 ring-indigo-100">
-                      <FileText className="h-4.5 w-4.5" />
+            </div>
+          </div>
+
+          {/* Subsection 2: Item & Rate Schedule (BOQ) */}
+          <div className="rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-[#0b2447]" />
+                  <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
+                    Item &amp; Unit Rate Schedule (BOQ)
+                  </h4>
+                  <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                    {draft.rateContractConfig.itemRateSchedule.length} Item(s)
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                  Define item specifications, estimated annual quantities, ceiling unit base rates, and applicable GST/discount.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addRateItem}
+                className="h-8.5 px-3 rounded-lg border-blue-200 bg-blue-50 text-[#0b2447] hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 shadow-2xs shrink-0"
+              >
+                <Plus className="h-3.5 w-3.5 text-blue-600" />
+                <span>Add Contract Item</span>
+              </Button>
+            </div>
+
+            <div className="space-y-3.5">
+              {draft.rateContractConfig.itemRateSchedule.map((item, idx) => {
+                const base = Number(item.baseRate || 0);
+                const gst = Number(item.gst || 0);
+                const disc = Number(item.discount || 0);
+                const afterDisc = base * (1 - disc / 100);
+                const landedUnit = afterDisc * (1 + gst / 100);
+
+                return (
+                  <div key={item.id} className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 transition-all hover:border-slate-300 hover:shadow-xs space-y-3">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#0b2447] text-white text-[10px] font-bold">
+                          {idx + 1}
+                        </span>
+                        <span className="text-xs font-black text-slate-900 truncate">
+                          {item.itemName || 'Untitled Item'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {landedUnit > 0 && (
+                          <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            Est. Landed: ₹{landedUnit.toFixed(2)} / {item.uom || 'Unit'}
+                          </span>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeRateItem(item.id)}
+                          className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-slate-800 truncate">
-                        {draft.auctionConfig.termsDocumentName}
-                      </p>
-                      <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                        Uploaded &amp; Attached
-                      </p>
+
+                    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+                      <Field label="Item Name" required>
+                        <input
+                          value={item.itemName}
+                          onChange={e => updateRateItem(item.id, 'itemName', e.target.value)}
+                          className={inputClass}
+                          placeholder="e.g. Safety Helmets Type II"
+                        />
+                      </Field>
+                      <Field label="Specification / Grade">
+                        <input
+                          value={item.specification}
+                          onChange={e => updateRateItem(item.id, 'specification', e.target.value)}
+                          className={inputClass}
+                          placeholder="IS:2925 standard or custom specs"
+                        />
+                      </Field>
+                      <Field label="UOM" required>
+                        <input
+                          value={item.uom}
+                          onChange={e => updateRateItem(item.id, 'uom', e.target.value)}
+                          maxLength={20}
+                          placeholder="Nos, Sets, Meters..."
+                          className={inputClass}
+                        />
+                      </Field>
+                      <Field label="Est. Annual Quantity" required>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.estimatedAnnualQuantity || ''}
+                          onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="Annual projected volume"
+                        />
+                      </Field>
+                      <Field label="Base Rate (₹ / UOM)" required>
+                        <input
+                          type="number"
+                          min={0}
+                          value={item.baseRate || ''}
+                          onChange={e => updateRateItem(item.id, 'baseRate', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0.00"
+                        />
+                      </Field>
+                      <Field label="GST (%)">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.gst}
+                          onChange={e => updateRateItem(item.id, 'gst', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="18"
+                        />
+                      </Field>
+                      <Field label="Discount (%)">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.discount}
+                          onChange={e => updateRateItem(item.id, 'discount', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0"
+                        />
+                      </Field>
+                      <div className="flex items-end justify-between gap-2 pb-1">
+                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={item.slabPricingEnabled}
+                            onChange={e => updateRateItem(item.id, 'slabPricingEnabled', e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
+                          />
+                          <span>Slab Pricing Tier</span>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {draft.auctionConfig.termsDocumentFileId && (
-                      <>
+                );
+              })}
+              {draft.rateContractConfig.itemRateSchedule.length === 0 && (
+                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-2">
+                  <Package className="h-8 w-8 text-slate-300 mx-auto" />
+                  <p className="text-xs font-bold text-slate-700">No Rate Schedule Items Configured</p>
+                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                    Add at least one item with unit base rates to establish this rate contract.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addRateItem}
+                    className="h-8 px-3 rounded-lg border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs mt-1"
+                  >
+                    <Plus className="mr-1 h-3.5 w-3.5" /> Add First Item
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Subsection 3: Fulfillment SLA & Call-Off Controls */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+              <Truck className="h-3.5 w-3.5 text-[#0b2447]" />
+              <span>Fulfillment SLA &amp; Call-Off Order Controls</span>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Delivery SLA" required>
+                <input
+                  value={draft.rateContractConfig.deliverySla}
+                  onChange={e => updateRateContract('deliverySla', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. Door delivery within 7 working days from call-off issue"
+                />
+              </Field>
+              <Field label="Penalty Clause" required>
+                <input
+                  value={draft.rateContractConfig.penaltyClause}
+                  onChange={e => updateRateContract('penaltyClause', e.target.value)}
+                  className={inputClass}
+                  placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
+                />
+              </Field>
+
+              <div className="sm:col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={draft.rateContractConfig.callOffOrderAllowed}
+                    onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900">Enable Periodic Call-off Purchase Orders</span>
+                    <span className="block text-[11px] text-slate-500 font-medium">
+                      Allow buyer departments to trigger staggered release orders against locked contract rates over the validity duration.
+                    </span>
+                  </div>
+                </label>
+
+                {draft.rateContractConfig.callOffOrderAllowed && (
+                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+                    <Field label="Maximum Order Quantity Per Call-off">
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
+                        onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
+                        className={inputClass}
+                        placeholder="0 = No ceiling"
+                      />
+                    </Field>
+                    <Field label="Minimum Order Quantity Per Call-off">
+                      <input
+                        type="number"
+                        min={0}
+                        value={draft.rateContractConfig.minimumOrderQuantity || ''}
+                        onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
+                        className={inputClass}
+                        placeholder="0 = No minimum"
+                      />
+                    </Field>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Subsection 4: Rate Contract Master Document */}
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+              Contract Agreement &amp; Reference Document Upload
+            </label>
+            {draft.rateContractConfig.contractDocument?.fileName ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#0b2447] border border-blue-100">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
+                      {draft.rateContractConfig.contractDocument.fileName}
+                    </p>
+                    <p className="text-[10px] font-semibold text-slate-500">
+                      Rate Contract Reference Document
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {draft.rateContractConfig.contractDocument.fileAssetId && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`, '_blank')}
+                        className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                      >
+                        <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                        View
+                      </Button>
+                      <a
+                        href={`/api/files/${draft.rateContractConfig.contractDocument.fileAssetId}/view`}
+                        download={draft.rateContractConfig.contractDocument.fileName}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`, '_blank')}
                           className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
                         >
-                          View
+                          <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                          Download
                         </Button>
-                        <a
-                          href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
-                          download={draft.auctionConfig.termsDocumentName}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
-                          >
-                            Download
-                          </Button>
-                        </a>
-                      </>
-                    )}
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                        className="hidden"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) handleAuctionTermsFileUpload(file);
-                        }}
-                        disabled={uploadingAuctionDoc}
-                      />
-                      <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
-                        {uploadingAuctionDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                        Replace
-                      </span>
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRemoveAuctionTermsFile}
-                      className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="relative">
-                  <label
-                    onDragOver={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onDrop={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const file = e.dataTransfer.files?.[0];
-                      if (file) handleAuctionTermsFileUpload(file);
-                    }}
-                    className={cn(
-                      "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#12335f] hover:bg-indigo-50/20 group",
-                      uploadingAuctionDoc && "opacity-50 pointer-events-none"
-                    )}
-                  >
+                      </a>
+                    </>
+                  )}
+                  <label className="cursor-pointer">
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                       className="hidden"
                       onChange={e => {
                         const file = e.target.files?.[0];
-                        if (file) handleAuctionTermsFileUpload(file);
+                        if (file) handleRateContractDocUpload(file);
                       }}
-                      disabled={uploadingAuctionDoc}
+                      disabled={uploadingRateContractDoc}
                     />
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#12335f] group-hover:ring-[#12335f]/30 transition-all duration-200">
-                      {uploadingAuctionDoc ? (
-                        <Loader2 className="h-5 w-5 animate-spin text-[#12335f]" />
-                      ) : (
-                        <Upload className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">
-                        {uploadingAuctionDoc ? 'Uploading auction terms document...' : 'Click to browse or drag & drop auction terms document'}
-                      </p>
-                      <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
-                        Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
-                      </p>
-                    </div>
+                    <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
+                      {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                      Replace
+                    </span>
                   </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveRateContractDoc}
+                    className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Remove
+                  </Button>
                 </div>
-              )}
-            </Field>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 border-t border-indigo-100 pt-4">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.auctionConfig.autoExtensionEnabled} onChange={e => updateAuction('autoExtensionEnabled', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Auto Extension Enabled?</span>
-            </label>
-            {draft.auctionConfig.autoExtensionEnabled && (
-              <>
-                <Field label="Extension Trigger Minutes" required error={fieldError(showErrors && draft.auctionConfig.extensionTriggerMinutes <= 0, 'Extension trigger is required.')}>
-                  <input type="number" min={1} value={draft.auctionConfig.extensionTriggerMinutes || ''} onChange={e => updateAuction('extensionTriggerMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.extensionTriggerMinutes <= 0, 'Extension trigger is required.'))} />
-                </Field>
-                <Field label="Extension Duration Minutes" required error={fieldError(showErrors && draft.auctionConfig.extensionDurationMinutes <= 0, 'Extension duration is required.')}>
-                  <input type="number" min={1} value={draft.auctionConfig.extensionDurationMinutes || ''} onChange={e => updateAuction('extensionDurationMinutes', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.extensionDurationMinutes <= 0, 'Extension duration is required.'))} />
-                </Field>
-                <Field label="Maximum Extensions" required error={fieldError(showErrors && draft.auctionConfig.maximumExtensions <= 0, 'Maximum extensions is required.')}>
-                  <input type="number" min={1} value={draft.auctionConfig.maximumExtensions || ''} onChange={e => updateAuction('maximumExtensions', Number(e.target.value || 0))} className={controlClass(fieldError(showErrors && draft.auctionConfig.maximumExtensions <= 0, 'Maximum extensions is required.'))} />
-                </Field>
-              </>
-            )}
-          </div>
-
-          <div className="grid gap-2.5 sm:gap-3 sm:grid-cols-3 border-t border-indigo-100 pt-4">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.auctionConfig.buyerMonitorSettings.showLiveRank} onChange={e => updateMonitor('showLiveRank', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Show Live Rank</span>
-            </label>
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.auctionConfig.buyerMonitorSettings.alertOnReserveBreach} onChange={e => updateMonitor('alertOnReserveBreach', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Alert On Reserve Breach</span>
-            </label>
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.auctionConfig.buyerMonitorSettings.allowManualExtension} onChange={e => updateMonitor('allowManualExtension', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Allow Manual Extension</span>
-            </label>
-          </div>
-        </div>
-      )}
-
-      {isRateContract && (
-        <div className="border border-teal-200 rounded-xl p-4 bg-teal-50/40 space-y-4">
-          <div>
-            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">Rate Contract Configuration</h3>
-            <p className="text-[11px] text-slate-600 font-semibold mt-1">
-              Define recurring purchase rates, validity, selected suppliers, and call-off order controls.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Rate Contract Number">
-              <input value={draft.rateContractConfig.rateContractNumber} readOnly className={cn(inputClass, 'bg-slate-100 text-slate-500')} />
-            </Field>
-            <Field label="Contract Title" required>
-              <input value={draft.rateContractConfig.contractTitle} onChange={e => updateRateContract('contractTitle', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Description">
-              <textarea value={draft.rateContractConfig.contractDescription} onChange={e => updateRateContract('contractDescription', e.target.value)} className={cn(inputClass, 'min-h-[76px]')} />
-            </Field>
-            <Field label="Contract Category">
-              <input value={draft.rateContractConfig.contractCategory} onChange={e => updateRateContract('contractCategory', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Subcategory (Optional)">
-              <input value={draft.rateContractConfig.contractSubCategory} onChange={e => updateRateContract('contractSubCategory', e.target.value)} className={inputClass} placeholder="Enter contract subcategory (Optional)" />
-            </Field>
-            <Field label="Contract Start Date" required>
-              <input type="date" value={draft.rateContractConfig.periodStartDate} onChange={e => updateRateContract('periodStartDate', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract End Date" required>
-              <input type="date" value={draft.rateContractConfig.periodEndDate} onChange={e => updateRateContract('periodEndDate', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Rate Validity Period" required>
-              <input value={draft.rateContractConfig.rateValidityPeriod} onChange={e => updateRateContract('rateValidityPeriod', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Supplier Selection Strategy" required>
-              <select value={draft.rateContractConfig.supplierSelectionStrategy} onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])} className={inputClass}>
-                <option value="SINGLE_SUPPLIER">Single Supplier</option>
-                <option value="MULTI_SUPPLIER">Multiple Suppliers</option>
-                <option value="PANEL_RATE_CONTRACT">Panel Rate Contract</option>
-              </select>
-            </Field>
-            <Field label="Selected Supplier(s)" required>
-              <input
-                value={`${draft.rateContractConfig.selectedSuppliers.length || draft.vendors.invitedSellers.length} supplier(s) selected from Supplier step`}
-                readOnly
-                className={cn(inputClass, 'bg-slate-100 text-slate-500')}
-              />
-            </Field>
-          </div>
-
-          <div className="rounded-lg border border-teal-100 bg-white p-3 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Item / Rate Schedule</h4>
-              <Button type="button" variant="outline" size="sm" onClick={addRateItem} className="h-8 text-[10px] font-black">
-                <Plus className="mr-1 h-3.5 w-3.5" /> Add Item
-              </Button>
-            </div>
-            <div className="space-y-3">
-              {draft.rateContractConfig.itemRateSchedule.map(item => (
-                <div key={item.id} className="rounded-lg border border-slate-200 p-3">
-                  <div className="grid gap-2.5 sm:gap-3 md:grid-cols-4">
-                    <Field label="Item Name" required>
-                      <input value={item.itemName} onChange={e => updateRateItem(item.id, 'itemName', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Specification">
-                      <input value={item.specification} onChange={e => updateRateItem(item.id, 'specification', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="UOM" required>
-                      <input value={item.uom} onChange={e => updateRateItem(item.id, 'uom', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Estimated Annual Quantity" required>
-                      <input type="number" min={0} value={item.estimatedAnnualQuantity || ''} onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="Base Rate" required>
-                      <input type="number" min={0} value={item.baseRate || ''} onChange={e => updateRateItem(item.id, 'baseRate', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="GST %">
-                      <input type="number" min={0} max={100} value={item.gst} onChange={e => updateRateItem(item.id, 'gst', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <Field label="Discount %">
-                      <input type="number" min={0} max={100} value={item.discount} onChange={e => updateRateItem(item.id, 'discount', Number(e.target.value || 0))} className={inputClass} />
-                    </Field>
-                    <div className="flex items-end justify-between gap-2">
-                      <label className="flex items-center gap-2 pb-2 text-xs font-semibold cursor-pointer select-none">
-                        <input type="checkbox" checked={item.slabPricingEnabled} onChange={e => updateRateItem(item.id, 'slabPricingEnabled', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-                        <span>Slab pricing optional</span>
-                      </label>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => removeRateItem(item.id)} className="h-8 px-2 text-rose-700">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <label
+                  onDragOver={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) handleRateContractDocUpload(file);
+                  }}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#0b2447] hover:bg-blue-50/20 group",
+                    uploadingRateContractDoc && "opacity-50 pointer-events-none"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleRateContractDocUpload(file);
+                    }}
+                    disabled={uploadingRateContractDoc}
+                  />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30 transition-all duration-200">
+                    {uploadingRateContractDoc ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-[#0b2447]" />
+                    ) : (
+                      <Upload className="h-5 w-5" />
+                    )}
                   </div>
-                </div>
-              ))}
-              {draft.rateContractConfig.itemRateSchedule.length === 0 && (
-                <p className="rounded-lg border border-dashed border-slate-300 p-4 text-xs font-semibold text-slate-500">
-                  Add at least one item and rate for this contract.
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Price Variation Clause" required>
-              <select value={draft.rateContractConfig.priceVariationClause} onChange={e => updateRateContract('priceVariationClause', e.target.value as RateContractConfig['priceVariationClause'])} className={inputClass}>
-                <option value="FIXED_PRICE">Fixed Price</option>
-                <option value="INDEX_BASED_VARIATION">Index-based Variation</option>
-                <option value="MUTUALLY_AGREED_REVISION">Mutually Agreed Revision</option>
-              </select>
-            </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.callOffOrderAllowed} onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Call-off Order Allowed?</span>
-            </label>
-            {draft.rateContractConfig.callOffOrderAllowed && (
-              <>
-                <Field label="Maximum Order Quantity Per Call-off">
-                  <input type="number" min={0} value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''} onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))} className={inputClass} />
-                </Field>
-                <Field label="Minimum Order Quantity">
-                  <input type="number" min={0} value={draft.rateContractConfig.minimumOrderQuantity || ''} onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))} className={inputClass} />
-                </Field>
-              </>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">
+                      {uploadingRateContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
+                    </p>
+                    <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                      Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                    </p>
+                  </div>
+                </label>
+              </div>
             )}
-            <Field label="Delivery SLA" required>
-              <input value={draft.rateContractConfig.deliverySla} onChange={e => updateRateContract('deliverySla', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Penalty Clause" required>
-              <input value={draft.rateContractConfig.penaltyClause} onChange={e => updateRateContract('penaltyClause', e.target.value)} className={inputClass} />
-            </Field>
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.securityDepositRequired} onChange={e => updateRateContract('securityDepositRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Security Deposit Required?</span>
-            </label>
-            {draft.rateContractConfig.securityDepositRequired && (
-              <Field label="Security Deposit Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.securityDepositAmount || ''} onChange={e => updateRateContract('securityDepositAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
-            <label className="flex items-center gap-2 pt-6 text-xs font-semibold cursor-pointer select-none">
-              <input type="checkbox" checked={draft.rateContractConfig.pbgRequired} onChange={e => updateRateContract('pbgRequired', e.target.checked)} className="h-4 w-4 rounded accent-[#12335f]" />
-              <span>Performance Bank Guarantee Required?</span>
-            </label>
-            {draft.rateContractConfig.pbgRequired && (
-              <Field label="PBG Amount" required>
-                <input type="number" min={0} value={draft.rateContractConfig.pbgAmount || ''} onChange={e => updateRateContract('pbgAmount', Number(e.target.value || 0))} className={inputClass} />
-              </Field>
-            )}
-            <Field label="Approval Workflow" required>
-              <input value={draft.rateContractConfig.approvalWorkflow} onChange={e => updateRateContract('approvalWorkflow', e.target.value)} className={inputClass} />
-            </Field>
-            <Field label="Contract Document Upload">
-              <input value={draft.rateContractConfig.contractDocument.fileName} onChange={e => updateRateContract('contractDocument', { ...draft.rateContractConfig.contractDocument, fileName: e.target.value })} className={inputClass} placeholder="Document name or uploaded file reference" />
-            </Field>
           </div>
         </div>
       )}
@@ -6290,39 +6873,58 @@ function ScheduleStepForm({
         </Field>
 
         <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
-          <input
-            type="datetime-local"
-            value={draft.schedule.submissionStartDate}
-            onChange={e => updateSchedule('submissionStartDate', e.target.value)}
-            className={controlClass(fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.'))}
+          <DateTimePicker
+            id="submission-start-datetime"
+            value={draft.schedule.submissionStartDate || ''}
+            onChange={val => updateSchedule('submissionStartDate', val)}
+            error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}
+            placeholder="Select submission start date & time"
           />
         </Field>
 
-        <Field label="Submission End Date (Deadline)" required error={fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.')}>
-          <input
-            type="datetime-local"
-            value={draft.schedule.submissionDate}
-            onChange={e => updateSchedule('submissionDate', e.target.value)}
-            className={controlClass(fieldError(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)), 'Submission deadline must be after start date.'))}
+        <Field label="Submission End Date (Deadline)" required error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}>
+          <DateTimePicker
+            id="submission-end-datetime"
+            value={draft.schedule.submissionDate || ''}
+            onChange={val => updateSchedule('submissionDate', val)}
+            error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
+            placeholder="Select submission deadline date & time"
           />
         </Field>
 
         <Field label="Bid Validity Period (Days)">
           <input
-            type="number"
-            value={draft.schedule.validityDays || 90}
-            onChange={e => updateSchedule('validityDays', Number(e.target.value || 90))}
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            aria-label="Bid Validity Period in Days"
+            value={draft.schedule.validityDays ?? ''}
+            onChange={e => {
+              let val = e.target.value.replace(/[^0-9]/g, '');
+              if (val.length > 1 && val.startsWith('0')) {
+                val = val.replace(/^0+/, '');
+              }
+              updateSchedule('validityDays', val === '' ? '' : parseInt(val, 10));
+            }}
+            onBlur={() => {
+              const current = parseInt(String(draft.schedule.validityDays), 10);
+              if (!current || current < 1) {
+                updateSchedule('validityDays', 90);
+              }
+            }}
             className={inputClass}
+            placeholder="90"
           />
         </Field>
 
         {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (
           <Field label="Technical Opening Date" required error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}>
-            <input
-              type="datetime-local"
-              value={draft.schedule.technicalOpeningDate}
-              onChange={e => updateSchedule('technicalOpeningDate', e.target.value)}
-              className={controlClass(fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.'))}
+            <DateTimePicker
+              id="technical-opening-datetime"
+              value={draft.schedule.technicalOpeningDate || ''}
+              onChange={val => updateSchedule('technicalOpeningDate', val)}
+              error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}
+              placeholder="Select technical opening date & time"
             />
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               Technical envelope unlocking date. Must be after submission closing.
@@ -6332,11 +6934,12 @@ function ScheduleStepForm({
 
         {isTwoPacket && (
           <Field label="Financial Opening Date" required error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}>
-            <input
-              type="datetime-local"
-              value={draft.schedule.financialOpeningDate}
-              onChange={e => updateSchedule('financialOpeningDate', e.target.value)}
-              className={controlClass(fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.'))}
+            <DateTimePicker
+              id="financial-opening-datetime"
+              value={draft.schedule.financialOpeningDate || ''}
+              onChange={val => updateSchedule('financialOpeningDate', val)}
+              error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}
+              placeholder="Select financial opening date & time"
             />
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               Financial envelope unlocking date for technically qualified bidders. Must be after technical opening.
@@ -6345,29 +6948,530 @@ function ScheduleStepForm({
         )}
       </div>
 
+      {/* ── Live Reverse Auction (e-RA) Configuration ── */}
+      {!isRateContract && (
+        <div className="border border-slate-200/90 rounded-2xl p-5 sm:p-6 bg-gradient-to-b from-slate-50/70 via-white to-white shadow-xs space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0b2447] to-[#123668] text-white shadow-xs">
+                <TrendingDown className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wide">
+                    Live Reverse Auction (e-RA) Sourcing Engine
+                  </h3>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/70">
+                    Dynamic Price Discovery
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  {isReverseAuctionMethod(draft.type)
+                    ? 'Configure real-time downward bidding rules, decrement steps, anti-sniping clocks, and participant console parameters.'
+                    : 'Conduct an interactive downward bidding auction among technically qualified sellers after Stage 1 sealed bids are evaluated.'}
+                </p>
+              </div>
+            </div>
+            {!isReverseAuctionMethod(draft.type) && (
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none" htmlFor="enable-reverse-auction-stage">
+                <input
+                  type="checkbox"
+                  id="enable-reverse-auction-stage"
+                  checked={Boolean(draft.basics.isReverseAuctionNeeded)}
+                  onChange={e => {
+                    const enabled = e.target.checked;
+                    updateDraft(c => ({
+                      ...c,
+                      basics: { ...c.basics, isReverseAuctionNeeded: enabled },
+                      auctionConfig: {
+                        ...c.auctionConfig,
+                        procurementMethod: 'BID_WITH_REVERSE_AUCTION',
+                        auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
+                        auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
+                        auctionSubCategory: c.auctionConfig.auctionSubCategory || '',
+                        startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
+                        minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
+                        autoExtensionEnabled: true,
+                        extensionTriggerMinutes: 5,
+                        extensionDurationMinutes: 5,
+                        maximumExtensions: 3,
+                        rankVisibility: 'SHOW_RANK_ONLY',
+                      }
+                    }));
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#0b2447]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0b2447]" />
+                <span className="ml-2.5 text-xs font-bold text-slate-800">
+                  {draft.basics.isReverseAuctionNeeded ? 'Enabled' : 'Disabled'}
+                </span>
+              </label>
+            )}
+          </div>
+
+          {isAuction && (
+            <div className="space-y-6 pt-1">
+              {/* Standalone REVERSE_AUCTION: Timing & Window */}
+              {isReverseAuctionMethod(draft.type) && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                    <Clock className="h-3.5 w-3.5 text-[#0b2447]" />
+                    <span>Auction Window &amp; Countdown Clock</span>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
+                      <DateTimePicker
+                        id="auction-start-datetime"
+                        value={draft.auctionConfig.startDateTime}
+                        onChange={val => updateAuction('startDateTime', val)}
+                        error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}
+                        placeholder="Select auction start date & time"
+                      />
+                    </Field>
+                    <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
+                      <DateTimePicker
+                        id="auction-end-datetime"
+                        value={draft.auctionConfig.endDateTime}
+                        onChange={val => updateAuction('endDateTime', val)}
+                        error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}
+                        placeholder="Select auction end date & time"
+                      />
+                    </Field>
+                    <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
+                      <input
+                        type="number"
+                        min={1}
+                        value={draft.auctionConfig.durationMinutes || ''}
+                        onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))}
+                        className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))}
+                        placeholder="e.g. 60"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* Subsection: Qualification & Sourcing Rules */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Users className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Seller Qualification &amp; Room Entry Criteria</span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Auction Trigger Eligibility" required>
+                    <select
+                      id="auction-trigger-eligibility"
+                      value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
+                      onChange={e => {
+                        const isTopN = e.target.value === 'TOP_N_BIDDERS';
+                        updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
+                        updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
+                      <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
+                    </select>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                      Determines which shortlisted vendors qualify into the live reverse auction room.
+                    </p>
+                  </Field>
+
+                  {draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? (
+                    <Field label="Number of Top Bidders (N)" required>
+                      <input
+                        type="number"
+                        id="auction-top-n-bidders"
+                        min={2}
+                        max={10}
+                        value={draft.auctionConfig.triggerConfiguration.auctionAmongTopNBidders || 3}
+                        onChange={e => updateTrigger('auctionAmongTopNBidders', Math.max(2, Number(e.target.value || 3)))}
+                        className={inputClass}
+                      />
+                      <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                        Only the top N lowest sealed price bidders will enter the live auction console.
+                      </p>
+                    </Field>
+                  ) : (
+                    <Field label="Minimum Qualified Bidders" required>
+                      <input
+                        type="number"
+                        id="auction-min-qualified-bidders"
+                        min={2}
+                        value={draft.auctionConfig.minimumQualifiedBidders || ''}
+                        onChange={e => {
+                          const value = Number(e.target.value || 0);
+                          updateAuction('minimumQualifiedBidders', value);
+                          updateSchedule('minimumBidders', value);
+                        }}
+                        className={inputClass}
+                        placeholder="Minimum 2 qualified bidders"
+                      />
+                      <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                        Ensures dynamic market competition before live auction commencement.
+                      </p>
+                    </Field>
+                  )}
+                </div>
+              </div>
+
+              {/* Subsection: Pricing Ceiling, Floor & Decrement */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Scale className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Pricing Ceiling, Floor &amp; Decrement Steps</span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Starting Opening Price (₹ Ceiling)">
+                    <select
+                      id="auction-starting-price-mode"
+                      value={draft.auctionConfig.startingBidPrice === -1 ? 'L1_LOWEST' : 'MANUAL'}
+                      onChange={e => {
+                        if (e.target.value === 'L1_LOWEST') {
+                          updateAuction('startingBidPrice', -1);
+                        } else {
+                          updateAuction('startingBidPrice', draft.basics.estimatedValue || 0);
+                        }
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="MANUAL">Manual Entry (Custom Opening Amount)</option>
+                      <option value="L1_LOWEST">Lowest Initial Bid of Participants (L1)</option>
+                    </select>
+                    {draft.auctionConfig.startingBidPrice !== -1 && (
+                      <input
+                        type="number"
+                        id="auction-starting-bid-price"
+                        min={0}
+                        value={draft.auctionConfig.startingBidPrice || ''}
+                        onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
+                        className={cn(inputClass, 'mt-2')}
+                        placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
+                      />
+                    )}
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                      {draft.auctionConfig.startingBidPrice === -1
+                        ? 'The opening price will automatically lock to the lowest qualified sealed bid (L1) at auction launch.'
+                        : 'Opening ceiling price for the downward reverse auction.'}
+                    </p>
+                  </Field>
+
+                  <Field label="Internal Reserve Price (Optional ₹)">
+                    <input
+                      type="number"
+                      id="auction-reserve-price"
+                      min={0}
+                      value={draft.auctionConfig.reservePrice ?? ''}
+                      onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)}
+                      className={inputClass}
+                      placeholder="Leave blank if no confidential reserve threshold"
+                    />
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                      Confidential threshold. Bids must meet or beat this price for award recommendation. Strictly hidden from sellers.
+                    </p>
+                  </Field>
+
+                  <Field label="Minimum Bid Decrement (₹)" required className="sm:col-span-2">
+                    <input
+                      type="number"
+                      id="auction-min-bid-decrement"
+                      min={1}
+                      value={draft.auctionConfig.minimumBidDecrement || ''}
+                      onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
+                      className={inputClass}
+                      placeholder="e.g. 5000"
+                    />
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      <span className="text-[10px] font-bold text-slate-500">Quick Step:</span>
+                      {[
+                        { label: '0.5%', val: Math.max(500, Math.round((draft.basics.estimatedValue || 100000) * 0.005)) },
+                        { label: '1%', val: Math.max(1000, Math.round((draft.basics.estimatedValue || 100000) * 0.01)) },
+                        { label: '₹5,000', val: 5000 },
+                        { label: '₹10,000', val: 10000 },
+                        { label: '₹25,000', val: 25000 },
+                      ].map(preset => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => updateAuction('minimumBidDecrement', preset.val)}
+                          className={cn(
+                            "text-[10px] font-bold px-2.5 py-1 rounded-md border transition-all shadow-2xs",
+                            draft.auctionConfig.minimumBidDecrement === preset.val
+                              ? "border-[#0b2447] bg-[#0b2447] text-white"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100 hover:border-slate-300"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </Field>
+                </div>
+              </div>
+
+              {/* Subsection: Participant Console Display & Privacy */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                  <Eye className="h-3.5 w-3.5 text-[#0b2447]" />
+                  <span>Participant Console Display &amp; Privacy</span>
+                </div>
+                <Field label="Supplier Rank & Competitor Visibility" required>
+                  <select
+                    id="auction-rank-visibility"
+                    value={draft.auctionConfig.rankVisibility}
+                    onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])}
+                    className={inputClass}
+                  >
+                    <option value="SHOW_RANK_ONLY">Show Rank Only (Mask competitor names & prices — Recommended)</option>
+                    <option value="SHOW_LOWEST_PRICE">Show Lowest Bid (L1) & Rank</option>
+                    <option value="HIDDEN">Hidden (Blind Bidding)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
+                    Protects bidder privacy and prevents collusion or price-fixing cartels during live bidding.
+                  </p>
+                </Field>
+              </div>
+
+              {/* Subsection: Anti-sniping auto-extension */}
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none" htmlFor="auction-auto-extension">
+                  <input
+                    type="checkbox"
+                    id="auction-auto-extension"
+                    checked={Boolean(draft.auctionConfig.autoExtensionEnabled)}
+                    onChange={e => updateAuction('autoExtensionEnabled', e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900">Anti-Sniping Dynamic Auto-Extension</span>
+                    <span className="block text-[11px] text-slate-500 font-medium mt-0.5">
+                      Prevents unfair last-second bid sniping by automatically extending the auction countdown when a competitive decrement arrives near close.
+                    </span>
+                  </div>
+                </label>
+
+                {draft.auctionConfig.autoExtensionEnabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100">
+                    <div>
+                      <label htmlFor="auction-ext-trigger" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Trigger Window
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          id="auction-ext-trigger"
+                          min={1}
+                          max={30}
+                          value={draft.auctionConfig.extensionTriggerMinutes || 5}
+                          onChange={e => updateAuction('extensionTriggerMinutes', Number(e.target.value || 5))}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
+                        />
+                        <span className="text-xs text-slate-500 font-bold">min</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="auction-ext-duration" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Extension Duration
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          id="auction-ext-duration"
+                          min={1}
+                          max={60}
+                          value={draft.auctionConfig.extensionDurationMinutes || 5}
+                          onChange={e => updateAuction('extensionDurationMinutes', Number(e.target.value || 5))}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
+                        />
+                        <span className="text-xs text-slate-500 font-bold">min</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label htmlFor="auction-ext-max" className="text-[10px] font-bold text-slate-600 block mb-1">
+                        Max Extensions Allowed
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          id="auction-ext-max"
+                          min={1}
+                          max={20}
+                          value={draft.auctionConfig.maximumExtensions || 3}
+                          onChange={e => updateAuction('maximumExtensions', Number(e.target.value || 3))}
+                          className={cn(inputClass, 'h-9 text-xs text-center font-bold')}
+                        />
+                        <span className="text-xs text-slate-500 font-bold">times</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Auction Terms Document */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                  Auction Terms &amp; Rules Document (Optional)
+                </label>
+                {draft.auctionConfig.termsDocumentName && draft.auctionConfig.termsDocumentName !== 'NOT REQUIRED' ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#0b2447] border border-blue-100">
+                        <FileText className="h-4.5 w-4.5" aria-hidden="true" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 truncate">
+                          {draft.auctionConfig.termsDocumentName}
+                        </p>
+                        <p className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1 mt-0.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                          Attached Auction Document
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {draft.auctionConfig.termsDocumentFileId && (
+                        <a
+                          href={`/api/files/${draft.auctionConfig.termsDocumentFileId}/view`}
+                          download={draft.auctionConfig.termsDocumentName}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-[11px] font-bold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+                          >
+                            <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                            Download
+                          </Button>
+                        </a>
+                      )}
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                          className="hidden"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) handleAuctionTermsFileUpload(file);
+                          }}
+                          disabled={uploadingAuctionDoc}
+                        />
+                        <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
+                          {uploadingAuctionDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" aria-hidden="true" /> : null}
+                          Replace
+                        </span>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRemoveAuctionTermsFile}
+                        className="h-8 px-2.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 rounded-lg"
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <label
+                      onDragOver={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) handleAuctionTermsFileUpload(file);
+                      }}
+                      className={cn(
+                        "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#0b2447] hover:bg-blue-50/20 group",
+                        uploadingAuctionDoc && "opacity-50 pointer-events-none"
+                      )}
+                    >
+                      <input
+                        type="file"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                        className="hidden"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAuctionTermsFileUpload(file);
+                        }}
+                        disabled={uploadingAuctionDoc}
+                      />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30 transition-all duration-200">
+                        {uploadingAuctionDoc ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-[#0b2447]" aria-hidden="true" />
+                        ) : (
+                          <Upload className="h-5 w-5" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">
+                          {uploadingAuctionDoc ? 'Uploading auction terms document...' : 'Click to browse or drag & drop auction terms document'}
+                        </p>
+                        <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+                          Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              {/* Buyer Monitor Privileges */}
+              <div className="grid gap-3 sm:grid-cols-3 border-t border-slate-100 pt-4">
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-show-live-rank">
+                  <input type="checkbox" id="auction-show-live-rank" checked={draft.auctionConfig.buyerMonitorSettings.showLiveRank} onChange={e => updateMonitor('showLiveRank', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Show Live Bid Rank</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-alert-reserve-breach">
+                  <input type="checkbox" id="auction-alert-reserve-breach" checked={draft.auctionConfig.buyerMonitorSettings.alertOnReserveBreach} onChange={e => updateMonitor('alertOnReserveBreach', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Alert On Reserve Breach</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none" htmlFor="auction-allow-manual-ext">
+                  <input type="checkbox" id="auction-allow-manual-ext" checked={draft.auctionConfig.buyerMonitorSettings.allowManualExtension} onChange={e => updateMonitor('allowManualExtension', e.target.checked)} className="h-4 w-4 rounded accent-[#0b2447]" />
+                  <span className="text-slate-700 font-bold">Allow Manual Extension</span>
+                </label>
+              </div>
+
+              {/* How it works info banner */}
+              {!isReverseAuctionMethod(draft.type) && (
+                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-100 text-xs text-blue-950 font-medium">
+                  <Info className="h-4.5 w-4.5 shrink-0 text-blue-700" aria-hidden="true" />
+                  <span>
+                    <strong>Two-Stage Workflow:</strong> The reverse auction will be launched as Stage 2 after evaluating initial technical/commercial bids. The parameters configured here (decrement step, rank visibility, anti-sniping) serve as defaults and can be fine-tuned prior to room activation.
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
         <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Clarification & Visibility Rules</h3>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={draft.schedule.clarificationAllowed}
-              onChange={e => updateSchedule('clarificationAllowed', e.target.checked)}
-              className="h-4 w-4 rounded accent-[#12335f]"
-            />
-            <span>Allow bidder clarifications?</span>
-          </label>
-
-          {draft.schedule.clarificationAllowed && (
-            <Field label="Clarification Deadline Date">
+          <div className="flex flex-col gap-1">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
               <input
-                type="datetime-local"
-                value={draft.schedule.clarificationDeadline}
-                onChange={e => updateSchedule('clarificationDeadline', e.target.value)}
-                className={inputClass}
+                type="checkbox"
+                checked={draft.schedule.clarificationAllowed}
+                onChange={e => updateSchedule('clarificationAllowed', e.target.checked)}
+                className="h-4 w-4 rounded accent-[#12335f]"
               />
-            </Field>
-          )}
+              <span>Allow bidder clarifications?</span>
+            </label>
+            {draft.schedule.clarificationAllowed && (
+              <p className="text-[11px] text-slate-500 font-medium pl-6">
+                Clarifications window opens at quotation submission start date/time and remains open until submission deadline.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -6424,11 +7528,11 @@ function CommercialTermsForm({
             </select>
           </Field>
 
-          <Field label="Delivery terms location" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.')}>
+          <Field label="Delivery Terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.')}>
             <select
               value={draft.terms.deliveryTerms}
               onChange={e => updateTerms('deliveryTerms', e.target.value)}
-              className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms location is required.'))}
+              className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
             >
               {DELIVERY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
@@ -6501,20 +7605,9 @@ function CommercialTermsForm({
               <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Contract Penalty Clause</h3>
             </div>
 
-            {/* Document cost fee commented out completely as requested */}
-            {/*
-            <Field label="Document cost fee (INR)">
-              <input
-                type="number"
-                value={draft.terms.documentFee || ''}
-                onChange={e => updateTerms('documentFee', Number(e.target.value || 0))}
-                className={inputClass}
-                placeholder="0"
-              />
-            </Field>
-            */}
+          
 
-            <Field label="Late Delivery (LD) Penalty Clause" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
+            <Field label="Late Delivery (LD) Penalty Clause (min 5 char)" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
               <input
                 value={draft.terms.penaltyClause}
                 onChange={e => updateTerms('penaltyClause', e.target.value)}
@@ -6634,25 +7727,6 @@ function EvaluationBasisForm({
     updateDraft(c => ({ ...c, evaluation: { ...c.evaluation, [key]: val } }));
   };
 
-  const updateAuction = <K extends keyof AuctionConfig>(key: K, val: AuctionConfig[K]) => {
-    updateDraft(c => ({
-      ...c,
-      auctionConfig: { ...c.auctionConfig, [key]: val }
-    }));
-  };
-
-  const updateTrigger = <K extends keyof AuctionConfig['triggerConfiguration']>(
-    key: K,
-    val: AuctionConfig['triggerConfiguration'][K]
-  ) => {
-    updateDraft(c => ({
-      ...c,
-      auctionConfig: {
-        ...c.auctionConfig,
-        triggerConfiguration: { ...c.auctionConfig.triggerConfiguration, [key]: val }
-      }
-    }));
-  };
 
   const isQCBS = draft.evaluation.method === 'QCBS / weighted technical-commercial score';
 
@@ -6669,7 +7743,7 @@ function EvaluationBasisForm({
             <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Choose how vendor proposals are evaluated. Use the Live Reverse Auction card below if dynamic downward price bidding is required.
+            Choose how vendor proposals are evaluated. Enable Reverse Auction in Timeline & Rules if dynamic downward price bidding is required.
           </p>
         </Field>
 
@@ -6693,271 +7767,8 @@ function EvaluationBasisForm({
             </Field>
           </div>
         )}
-
-        {draft.type === 'RFP' && (
-          <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none border border-slate-200 p-3 rounded-lg bg-slate-50/50">
-              <input
-                type="checkbox"
-                checked={draft.requireDemo || false}
-                onChange={e => updateDraft(c => ({ ...c, requireDemo: e.target.checked }))}
-                className="h-4 w-4 rounded accent-[#12335f]"
-              />
-              <div>
-                <span className="font-bold text-slate-800">Proposal presentation / Demo required?</span>
-                <span className="block text-[10px] text-slate-500 font-medium mt-0.5">Require shortlisted bidders to present their solution/demo.</span>
-              </div>
-            </label>
-          </div>
-        )}
       </div>
 
-      {/* Live Reverse Auction (e-RA) Stage Card */}
-      <div className="border border-indigo-200/90 rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-indigo-50/70 via-slate-50 to-white shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100/80 pb-4">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#12335f] text-white shadow-sm ring-2 ring-indigo-100">
-              <Gavel className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
-                  Live Reverse Auction (e-RA) Stage
-                </h4>
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
-                  Dynamic Price Discovery
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-600 font-semibold mt-1">
-                Conduct an interactive downward bidding auction among technically qualified sellers after initial bids are evaluated.
-              </p>
-            </div>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer shrink-0 select-none">
-            <input
-              type="checkbox"
-              id="enable-reverse-auction-stage"
-              checked={Boolean(draft.basics.isReverseAuctionNeeded)}
-              onChange={e => {
-                const enabled = e.target.checked;
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, isReverseAuctionNeeded: enabled },
-                  auctionConfig: {
-                    ...c.auctionConfig,
-                    procurementMethod: 'BID_WITH_REVERSE_AUCTION',
-                    auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
-                    auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                    auctionSubCategory: c.auctionConfig.auctionSubCategory || c.basics.subCategory,
-                    startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
-                    minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
-                    autoExtensionEnabled: true,
-                    extensionTriggerMinutes: 5,
-                    extensionDurationMinutes: 5,
-                    maximumExtensions: 3,
-                    rankVisibility: 'SHOW_RANK_ONLY',
-                  }
-                }));
-              }}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#12335f]/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#12335f]" />
-            <span className="ml-2.5 text-xs font-bold text-slate-800">
-              {draft.basics.isReverseAuctionNeeded ? 'Enabled' : 'Disabled'}
-            </span>
-          </label>
-        </div>
-
-        {draft.basics.isReverseAuctionNeeded && (
-          <div className="space-y-4 pt-1">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Auction Trigger Eligibility" required>
-                <select
-                  value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
-                  onChange={e => {
-                    const isTopN = e.target.value === 'TOP_N_BIDDERS';
-                    updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
-                    updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
-                  }}
-                  className={inputClass}
-                >
-                  <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
-                  <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
-                </select>
-                <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                  Determines which shortlisted vendors qualify into the live reverse auction room.
-                </p>
-              </Field>
-
-              {draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders && (
-                <Field label="Number of Top Bidders (N)" required>
-                  <input
-                    type="number"
-                    min={2}
-                    max={10}
-                    value={draft.auctionConfig.triggerConfiguration.auctionAmongTopNBidders || 3}
-                    onChange={e => updateTrigger('auctionAmongTopNBidders', Math.max(2, Number(e.target.value || 3)))}
-                    className={inputClass}
-                  />
-                  <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                    Only the top N lowest sealed price bidders will enter the live auction console.
-                  </p>
-                </Field>
-              )}
-
-              <Field label="Minimum Bid Decrement (₹)" required>
-                <input
-                  type="number"
-                  min={1}
-                  value={draft.auctionConfig.minimumBidDecrement || ''}
-                  onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
-                  className={inputClass}
-                  placeholder="e.g. 5000"
-                />
-                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                  <span className="text-[10px] font-bold text-slate-500">Quick Step:</span>
-                  {[
-                    { label: '0.5%', val: Math.max(500, Math.round((draft.basics.estimatedValue || 100000) * 0.005)) },
-                    { label: '1%', val: Math.max(1000, Math.round((draft.basics.estimatedValue || 100000) * 0.01)) },
-                    { label: '₹5,000', val: 5000 },
-                    { label: '₹10,000', val: 10000 },
-                    { label: '₹25,000', val: 25000 },
-                  ].map(preset => (
-                    <button
-                      key={preset.label}
-                      type="button"
-                      onClick={() => updateAuction('minimumBidDecrement', preset.val)}
-                      className={cn(
-                        "text-[10px] font-bold px-2 py-0.5 rounded-md border transition",
-                        draft.auctionConfig.minimumBidDecrement === preset.val
-                          ? "border-[#12335f] bg-[#12335f] text-white"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                      )}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </Field>
-
-              <Field label="Starting Opening Price (₹ Ceiling)">
-                <input
-                  type="number"
-                  min={0}
-                  value={draft.auctionConfig.startingBidPrice || ''}
-                  onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
-                  className={inputClass}
-                  placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
-                />
-                <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                  Opening ceiling. In live execution, the starting price will automatically lock to the lowest qualified sealed bid (L1).
-                </p>
-              </Field>
-
-              <Field label="Internal Reserve Price (Optional ₹)">
-                <input
-                  type="number"
-                  min={0}
-                  value={draft.auctionConfig.reservePrice ?? ''}
-                  onChange={e => updateAuction('reservePrice', e.target.value ? Number(e.target.value) : null)}
-                  className={inputClass}
-                  placeholder="Leave blank if no reserve threshold"
-                />
-                <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                  Confidential threshold. Bids must meet or beat this price to win. Strictly hidden from sellers.
-                </p>
-              </Field>
-
-              <Field label="Supplier Rank & Competitor Visibility" required>
-                <select
-                  value={draft.auctionConfig.rankVisibility}
-                  onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])}
-                  className={inputClass}
-                >
-                  <option value="SHOW_RANK_ONLY">Show Rank Only (Mask competitor names & prices — Recommended)</option>
-                  <option value="SHOW_LOWEST_PRICE">Show Lowest Bid (L1) & Rank</option>
-                  <option value="HIDDEN">Hidden (Blind Bidding)</option>
-                </select>
-                <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                  Protects bidder privacy and prevents collusion or price-fixing cartels during live bidding.
-                </p>
-              </Field>
-            </div>
-
-            {/* Anti-sniping auto-extension settings */}
-            <div className="rounded-xl border border-indigo-100 bg-white p-3.5 space-y-3">
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={Boolean(draft.auctionConfig.autoExtensionEnabled)}
-                  onChange={e => updateAuction('autoExtensionEnabled', e.target.checked)}
-                  className="h-4 w-4 rounded accent-[#12335f]"
-                />
-                <div>
-                  <span className="text-xs font-bold text-slate-900">Anti-Sniping Auto-Extension</span>
-                  <span className="block text-[10px] text-slate-500 font-medium mt-0.5">
-                    Prevents last-second bids by extending the auction clock when a competitive bid arrives near closing time.
-                  </span>
-                </div>
-              </label>
-
-              {draft.auctionConfig.autoExtensionEnabled && (
-                <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Trigger Window</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={draft.auctionConfig.extensionTriggerMinutes || 5}
-                        onChange={e => updateAuction('extensionTriggerMinutes', Number(e.target.value || 5))}
-                        className={cn(inputClass, 'h-8 text-xs text-center')}
-                      />
-                      <span className="text-[10px] text-slate-500 font-bold">min</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Extension Duration</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        max={60}
-                        value={draft.auctionConfig.extensionDurationMinutes || 5}
-                        onChange={e => updateAuction('extensionDurationMinutes', Number(e.target.value || 5))}
-                        className={cn(inputClass, 'h-8 text-xs text-center')}
-                      />
-                      <span className="text-[10px] text-slate-500 font-bold">min</span>
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-600 block mb-1">Max Extensions</span>
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={draft.auctionConfig.maximumExtensions || 3}
-                        onChange={e => updateAuction('maximumExtensions', Number(e.target.value || 3))}
-                        className={cn(inputClass, 'h-8 text-xs text-center')}
-                      />
-                      <span className="text-[10px] text-slate-500 font-bold">times</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100 text-[11px] text-indigo-900 font-semibold">
-              <Info className="h-4 w-4 shrink-0 text-indigo-700" aria-hidden="true" />
-              <span>
-                <strong>How it works:</strong> The reverse auction will be launched as a follow-on event after you evaluate Stage 1 sealed proposals. The rules you configure here (decrement step, rank visibility, anti-sniping) will be used as defaults. You can adjust the start time, duration, and vendor selection when launching from the Proposals tab.
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -7064,14 +7875,7 @@ function PreviewPublishForm({
         )}
       </div>
 
-      {/* Approval Sourcing Flow Path commented out as requested */}
-      {/* <div className="space-y-3">
-        <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide pl-0.5">Approval Sourcing Flow Path</h4>
-        <ApprovalTimeline
-          stages={approvalHandoff}
-          currentIdx={0}
-        />
-      </div> */}
+   
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Approval Workflow">
@@ -7110,19 +7914,75 @@ function PreviewPublishForm({
       </Field>
 
       <div className="pt-2">
-        <ComplianceConsentCard
-          title="Order Placement & Procurement Facilitation Policy"
-          subtitle="Statutory compliance agreement governing RFQ publishing, bidding, delivery verification, and settlement."
-          pdfFile="Order_Placement_Procurement_Policy.pdf"
-          accepted={complianceAccepted}
-          onAcceptedChange={onComplianceAcceptedChange}
-          checkboxLabel="I certify compliance with procurement rules & accept the Order Placement & Procurement Facilitation Policy"
-          checkboxDescription="By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE."
-          readerHeightClassName="h-[120px] sm:h-[135px]"
-          showPolicyLibrary
+        <div
+          className={cn(
+            'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+            complianceAccepted
+              ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+              : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+          )}
         >
-          <OrderPlacementPolicyContent />
-        </ComplianceConsentCard>
+          <label
+            htmlFor="create-procurement-policy-consent"
+            className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+          >
+            <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+              <input
+                type="checkbox"
+                id="create-procurement-policy-consent"
+                checked={complianceAccepted}
+                onChange={(e) => onComplianceAcceptedChange(e.target.checked)}
+                aria-required="true"
+                className="peer sr-only"
+              />
+              <div
+                className={cn(
+                  'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                  complianceAccepted
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                    : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                )}
+                aria-hidden="true"
+              >
+                <Check
+                  className={cn(
+                    'h-3 w-3 stroke-[3] transition-transform duration-150',
+                    complianceAccepted ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+              <span className="font-bold">
+                I certify compliance with procurement rules &amp; accept the{' '}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const pdfUrl = '/docs/Order_Placement_Procurement_Policy.pdf';
+                    const link = document.createElement('a');
+                    link.href = pdfUrl;
+                    link.download = 'Order_Placement_Procurement_Policy.pdf';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                  title="Click to download Order Placement & Procurement Facilitation Policy (PDF)"
+                >
+                  <span>Order Placement &amp; Procurement Facilitation Policy (T&amp;C)</span>
+                  <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                </button>
+                <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+              </span>
+              <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                By checking this box, you formally confirm administrative and financial sanction, affirm that this requirement is not split to circumvent competitive bidding thresholds, and agree to be bound by the statutory procurement terms of JSG SMILE.
+              </p>
+            </div>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -7180,7 +8040,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
         itemName: item.description,
         description: item.remarks || item.description || '',
         quantity: item.quantity,
-        unitOfMeasure: item.uom,
+        unitOfMeasure: (item.uom || 'Nos').trim().slice(0, 20),
         estimatedUnitPrice: item.estimatedRate,
         specifications: {
           itemType: 'Product',
@@ -7188,7 +8048,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           specification: item.remarks || item.description || '',
           scopeOfWork: item.remarks || item.description || '',
           category: item.category || 'General',
-          taxPercent: item.taxPercent || 18,
+          taxPercent: item.taxPercent !== undefined && item.taxPercent !== null ? Number(item.taxPercent) : 0,
         }
       }))
     : draft.items.map(item => {
@@ -7198,7 +8058,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           itemName: item.name,
           description: descText,
           quantity: item.quantity,
-          unitOfMeasure: item.unit,
+          unitOfMeasure: (item.unit || 'Nos').trim().slice(0, 20),
           estimatedUnitPrice: Number(item.unitPrice || 0),
           specifications: {
             itemType: item.itemType || 'Product',
@@ -7282,8 +8142,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
     deliveryLocation,
     category: draft.basics.category,
-    subCategory: draft.basics.subCategory,
     requiredByDate: draft.basics.requiredByDate,
+    priority: draft.basics.priority,
+    urgency: draft.basics.priority,
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
@@ -7297,12 +8158,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     auctionTitle: draft.auctionConfig.auctionTitle || title,
     auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
     auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,
-    auctionSubCategory: draft.auctionConfig.auctionSubCategory || draft.basics.subCategory,
+    auctionSubCategory: draft.auctionConfig.auctionSubCategory || '',
     buyerOrganization: draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     department: draft.auctionConfig.department || draft.internal.department || draft.basics.department,
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     estimatedValue,
-    startingBidPrice: Number(draft.auctionConfig.startingBidPrice || estimatedValue || 0),
+    startingBidPrice: draft.auctionConfig.startingBidPrice === -1 ? 0 : Number(draft.auctionConfig.startingBidPrice || estimatedValue || 0),
     minimumBidDecrement: Number(draft.auctionConfig.minimumBidDecrement || Math.max(100, Math.round(estimatedValue * 0.01)) || 1000),
     termsDocumentName: cleanDocName(draft.auctionConfig.termsDocumentName, ''),
     termsDocumentFileId: draft.auctionConfig.termsDocumentFileId || null,
@@ -7332,7 +8193,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractTitle: draft.rateContractConfig.contractTitle || title,
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
-    contractSubCategory: draft.rateContractConfig.contractSubCategory || draft.basics.subCategory,
+    contractSubCategory: draft.rateContractConfig.contractSubCategory || '',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, '')
@@ -7342,6 +8203,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       : draft.vendors.invitedSellers.map(supplierId => ({ supplierId })),
     itemRateSchedule: draft.rateContractConfig.itemRateSchedule.map(item => ({
       ...item,
+      uom: (item.uom || 'Nos').trim().slice(0, 20),
       slabPricing: item.slabPricingEnabled ? item.slabPricing : []
     })),
   } : null;
@@ -7360,7 +8222,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
     auctionConfig: auctionConfigPayload,
     evaluationMethod: chosenEvaluationMethod,
-    allowReverseAuction: hasReverseAuction
+    allowReverseAuction: hasReverseAuction,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
   };
 
   // Run suggestion engine to capture recommendation result
@@ -7394,8 +8258,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const cleanSchedule = {
     ...draft.schedule,
+    validityDays: Number(draft.schedule.validityDays) || 90,
+    minimumBidders: Number(draft.schedule.minimumBidders) || 3,
     clarificationAllowed: isClarificationAllowed,
-    clarificationDeadline: isClarificationAllowed ? (draft.schedule.clarificationDeadline || null) : null,
     technicalOpeningDate: isTechnicalNeeded ? (draft.schedule.technicalOpeningDate || null) : null,
     financialOpeningDate: isTwoPacket ? (draft.schedule.financialOpeningDate || null) : null,
     bidValidityDate: cleanBidValidityDate,
@@ -7405,12 +8270,17 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    boqTable: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable : [],
+    boqFileName: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileName : '',
+    boqFileAssetId: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: {
-      ...draft.serviceDetails,
-      serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
-    },
+    serviceDetails: draft.basics.whatAreYouBuying === 'Services'
+      ? {
+          ...draft.serviceDetails,
+          serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
+        }
+      : null,
     evaluationMethod: chosenEvaluationMethod,
     evaluation: {
       ...draft.evaluation,
@@ -7432,8 +8302,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     documents: mappedDocuments,
     tender,
     rules,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
     basics: {
       ...basics,
+      priority: draft.basics.priority,
+      urgency: draft.basics.priority,
       isReverseAuctionNeeded: hasReverseAuction,
     },
     vendors: {
@@ -7463,6 +8337,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     workflowStatus: 'DRAFT',
     approvalStatus: draft.approval?.workflow || 'DRAFT',
     evaluationMethod: chosenEvaluationMethod,
+    urgency: draft.basics.priority,
+    priority: draft.basics.priority,
     payload: payloadJson,
     items: mappedItems
   };

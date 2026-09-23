@@ -63,13 +63,14 @@ import { DataTable, type ColumnDef, type SortDirection } from '../../../componen
 import { useQuery } from '@tanstack/react-query';
 import { sellerRoutes, buyerRoutes } from '@/lib/routes';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 
 const procurementSkeletonColumns: ColumnDef<any>[] = [
   { key: 'type', header: 'Type', width: 'w-[10.5%]', cell: () => null },
   { key: 'title', header: 'Title & Reference', width: 'w-[24.5%]', cell: () => null },
   { key: 'status', header: 'Status', width: 'w-[11%]', cell: () => null },
   { key: 'estimatedValue', header: 'Est. Value', width: 'w-[9.5%]', cell: () => null },
-  { key: 'category', header: 'Category & Location', width: 'w-[13%]', cell: () => null },
+  { key: 'category', header: 'Category & Responses', width: 'w-[13%]', cell: () => null },
   { key: 'updatedAt', header: 'Updated', width: 'w-[9%]', cell: () => null },
   { key: 'action', header: 'Action', align: 'right', width: 'w-[19%]', cell: () => null }
 ];
@@ -520,20 +521,22 @@ export default function MyProcurementsPage() {
       route = auctionId ? sellerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
     } else if (typeLower === 'bid_tender') {
       const consolidated = getConsolidatedType(p);
+      const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
-        route = `/tenders?tender=${p.id}`;
+        route = `/tenders?tender=${targetId}`;
       } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
-        route = `/bids/${p.id}?type=RFQ`;
+        route = `/bids/${targetId}?type=RFQ`;
       } else if (consolidated === 'RFP' || methodLower === 'rfp') {
-        route = `/bids/${p.id}?type=RFP`;
+        route = `/bids/${targetId}?type=RFP`;
       } else {
-        route = `/bids/${p.id}`;
+        route = `/bids/${targetId}`;
       }
     } else if (typeLower === 'requirement') {
+      const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (methodLower === 'rfp') {
-        route = `/buyer/rfp/detail?requirementId=${p.id}`;
+        route = `/buyer/rfp/detail?requirementId=${targetId}`;
       } else {
-        route = `/buyer/rfq/detail?requirementId=${p.id}`;
+        route = `/buyer/rfq/detail?requirementId=${targetId}`;
       }
     }
 
@@ -553,6 +556,9 @@ export default function MyProcurementsPage() {
   const manualRefreshRef = React.useRef(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
 
+  // Real-time synchronization across all procurements
+  useProcurementRealtime('all');
+
   const { data: queryData, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['buyerMyProcurements'],
     queryFn: async () => {
@@ -561,10 +567,11 @@ export default function MyProcurementsPage() {
       const result = await getApi<any>(url);
       return result || { kpis: null, procurements: [] };
     },
-    staleTime: 0,
+    staleTime: 5_000,
     gcTime: 5 * 60 * 1000,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   const loadData = useCallback(async () => {
@@ -827,26 +834,28 @@ export default function MyProcurementsPage() {
     },
     {
       key: 'category',
-      header: 'Category & Location',
+      header: 'Category & Responses',
       sortable: true,
       sortKey: 'category',
       width: 'w-[13%]',
       cell: (p: any) => {
-        const cleanLoc = formatCleanLocation(p.deliveryLocation);
+        const count = Number(p.participantsCount || 0);
         return (
-          <div className="space-y-0.5 min-w-0">
-            <span title={p.category || '—'} className="text-xs font-bold text-slate-700 line-clamp-1 block">
+          <div className="space-y-1 min-w-0">
+            <span title={p.category || '—'} className="text-xs font-bold text-slate-900 line-clamp-1 block">
               {p.category || '—'}
             </span>
-            {cleanLoc && (
-              <span
-                title={p.deliveryLocation || cleanLoc}
-                className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-slate-500 line-clamp-1 cursor-default hover:text-slate-800 transition-colors"
-              >
-                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
-                <span className="truncate">{cleanLoc}</span>
-              </span>
-            )}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[9.5px] font-bold border transition-colors shrink-0",
+                count > 0
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-slate-200 bg-slate-50 text-slate-500"
+              )}
+            >
+              <Users className="h-3 w-3 shrink-0" />
+              <span>{count} {count === 1 ? 'response' : 'responses'}</span>
+            </span>
           </div>
         );
       }
@@ -874,7 +883,7 @@ export default function MyProcurementsPage() {
       align: 'right',
       width: 'w-[19%]',
       cell: (p: any) => (
-        <div className="flex items-center justify-end gap-2 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
           {isProcurementCancellable(p) && (
             <Button
               type="button"
@@ -1109,8 +1118,7 @@ export default function MyProcurementsPage() {
               onPageSizeChange={setPageSize}
               pageSizeOptions={[10, 20, 50]}
               paginationLabel="procurements"
-              onRowClick={(p) => openDetail(p)}
-              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle cursor-pointer"
+              rowClassName="group hover:bg-slate-50/70 transition-colors align-middle"
             />
           )}
 

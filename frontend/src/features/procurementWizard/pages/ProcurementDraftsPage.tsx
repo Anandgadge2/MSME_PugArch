@@ -115,6 +115,16 @@ const cleanTitle = (rawTitle: string): string => {
   return rawTitle.replace(/\s+#\d+$/, '');
 };
 
+const cleanUnit = (unitStr?: string): string => {
+  if (!unitStr) return '';
+  const trimmed = unitStr.trim();
+  // Filter out accidental descriptions or sentence blobs mapped into unit
+  if (trimmed.length > 20 || trimmed.includes('.') || trimmed.includes('\n')) {
+    return '';
+  }
+  return trimmed;
+};
+
 const mapLocalDraftToDisplay = (local: any): DisplayDraft | null => {
   if (!local) return null;
   const item = local.items?.[0];
@@ -139,7 +149,7 @@ const mapLocalDraftToDisplay = (local: any): DisplayDraft | null => {
     productOrService: item?.name || '',
     categoryName: local.basics?.category || '',
     quantity: item?.quantity?.toString() || '',
-    unit: item?.unit || '',
+    unit: cleanUnit(item?.unit || ''),
     deliveryLocation: local.tender?.deliveryLocation || local.basics?.deliveryLocation || '',
     requiredDeliveryDate: local.schedule?.deliveryDate || '',
     specifications: item?.specification || local.basics?.justification || '',
@@ -154,6 +164,7 @@ const mapServerDraftToDisplay = (server: any): DisplayDraft => {
   const firstItem = server.items?.[0];
   const payloadItem = payload.items?.[0];
   const payloadDoc = payload.documents?.[0];
+  const rawUnit = firstItem?.unitOfMeasure || payloadItem?.unit || '';
   return {
     id: server.id,
     uniqueKey: server.payload?.isV2 ? `v2-${server.id}` : `v1-${server.id}`,
@@ -166,7 +177,7 @@ const mapServerDraftToDisplay = (server: any): DisplayDraft => {
     productOrService: firstItem?.itemName || payloadItem?.name || '',
     categoryName: server.category?.name || payload.basics?.category || '',
     quantity: firstItem?.quantity?.toString() || payloadItem?.quantity?.toString() || '',
-    unit: firstItem?.unitOfMeasure || payloadItem?.unit || '',
+    unit: cleanUnit(rawUnit),
     deliveryLocation: payload.tender?.deliveryLocation || payload.basics?.deliveryLocation || '',
     requiredDeliveryDate: server.requiredBy || payload.schedule?.deliveryDate || '',
     specifications: firstItem?.description || payloadItem?.specification || payload.basics?.justification || server.description || '',
@@ -546,10 +557,11 @@ export default function ProcurementDraftsPage() {
 
   /* ── Render Helpers ── */
   const methodBadge = (slug: string) => {
-    const m = METHOD_CONFIGS_MAP[slug] || { title: slug, accent: 'border-slate-200 bg-slate-50 text-slate-700', icon: FileText };
+    const key = (slug || 'rfq').toLowerCase().replace(/_/g, '-');
+    const m = METHOD_CONFIGS_MAP[key] || { title: slug?.toUpperCase() || 'RFQ', accent: 'border-slate-200/90 bg-slate-50 text-slate-700', icon: FileText };
     const Icon = m.icon;
     return (
-      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide shadow-2xs', m.accent)}>
+      <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-0.5 text-[10.5px] font-bold tracking-tight shadow-2xs', m.accent)}>
         <Icon className="h-3 w-3 shrink-0" />
         {m.title}
       </span>
@@ -559,21 +571,21 @@ export default function ProcurementDraftsPage() {
   const sourceBadge = (isLocal: boolean, isPublished?: boolean, draftId?: number) => {
     if (isPublished) {
       return (
-        <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shadow-2xs">
-          <Check className="h-3 w-3" /> Published
+        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50/90 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shadow-2xs">
+          <Check className="h-2.5 w-2.5" /> Published
         </span>
       );
     }
     if (isLocal) {
       return (
-        <span className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 shadow-2xs">
-          <Monitor className="h-3 w-3" /> Local Cache
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50/90 px-2 py-0.5 text-[10px] font-bold text-amber-800 shadow-2xs">
+          <Monitor className="h-2.5 w-2.5" /> Local Draft
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 shadow-2xs">
-        <Database className="h-3 w-3" /> {draftId ? `#D-${draftId}` : 'Server Draft'}
+      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50/90 px-2 py-0.5 text-[10px] font-bold text-sky-800 shadow-2xs font-mono">
+        <Database className="h-2.5 w-2.5" /> #{draftId || 'DRAFT'}
       </span>
     );
   };
@@ -581,13 +593,16 @@ export default function ProcurementDraftsPage() {
   const tableColumns = useMemo<ColumnDef<DisplayDraft>[]>(() => [
     {
       key: 'title',
-      header: 'Title',
+      header: 'Title & Source',
       sortable: true,
       sortKey: 'title',
+      width: 'w-[23%]',
       cell: (d) => (
-        <div className="w-[240px] min-w-[200px] whitespace-normal break-words font-bold text-slate-900">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="group-hover:text-blue-600 transition-colors">{d.title}</span>
+        <div className="flex flex-col gap-1 min-w-0 pr-2">
+          <span className="font-bold text-slate-900 text-xs sm:text-[13px] leading-snug line-clamp-2 group-hover:text-[#12335f] transition-colors">
+            {d.title || 'Untitled Draft'}
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
             {sourceBadge(d.isLocal, d.isPublished, d.id)}
           </div>
         </div>
@@ -598,6 +613,7 @@ export default function ProcurementDraftsPage() {
       header: 'Method',
       sortable: true,
       sortKey: 'methodSlug',
+      width: 'w-[13%]',
       cell: (d) => methodBadge(d.methodSlug)
     },
     {
@@ -605,50 +621,87 @@ export default function ProcurementDraftsPage() {
       header: 'Category',
       sortable: true,
       sortKey: 'categoryName',
-      cell: (d) => <span className="text-slate-600 text-xs font-medium">{d.categoryName || '—'}</span>
+      width: 'w-[14%]',
+      cell: (d) => (
+        <div className="flex items-center gap-1.5 min-w-0" title={d.categoryName}>
+          <Tag className="h-3 w-3 text-slate-400 shrink-0" />
+          <span className="truncate text-xs font-semibold text-slate-700">{d.categoryName || '—'}</span>
+        </div>
+      )
     },
     {
       key: 'productOrService',
       header: 'Item / Service',
-      cell: (d) => <span className="max-w-[140px] truncate block text-slate-600 text-xs font-medium">{d.productOrService || '—'}</span>
+      width: 'w-[14%]',
+      cell: (d) => (
+        <div className="flex items-center gap-1.5 min-w-0" title={d.productOrService}>
+          <Package className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <span className="truncate text-xs font-semibold text-slate-700">{d.productOrService || '—'}</span>
+        </div>
+      )
     },
     {
       key: 'estimatedValue',
       header: 'Est. Value',
       sortable: true,
       sortKey: 'estimatedValue',
-      cell: (d) => <span className="font-extrabold text-slate-900 tabular-nums text-xs">{formatCurrency(d.estimatedValue)}</span>
+      width: 'w-[11%]',
+      cell: (d) => (
+        <span className="font-black text-slate-900 tabular-nums text-xs sm:text-[13px]">
+          {formatCurrency(d.estimatedValue)}
+        </span>
+      )
     },
     {
       key: 'quantity',
       header: 'Qty',
-      cell: (d) => <span className="text-slate-600 tabular-nums text-xs font-medium">{[d.quantity, d.unit].filter(Boolean).join(' ') || '—'}</span>
+      width: 'w-[8%]',
+      cell: (d) => {
+        const qtyStr = [d.quantity, d.unit].filter(Boolean).join(' ');
+        return (
+          <span className="text-xs font-bold text-slate-700 tabular-nums whitespace-nowrap" title={qtyStr}>
+            {qtyStr || '—'}
+          </span>
+        );
+      }
     },
     {
       key: 'updatedAt',
       header: 'Last Updated',
       sortable: true,
       sortKey: 'updatedAt',
-      cell: (d) => <span className="whitespace-nowrap text-xs font-medium text-slate-500">{formatDateTime(d.updatedAt)}</span>
+      width: 'w-[12%]',
+      cell: (d) => {
+        if (!d.updatedAt) return <span className="text-xs text-slate-400">—</span>;
+        const dt = new Date(d.updatedAt);
+        const dateStr = dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        const timeStr = dt.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return (
+          <div className="flex flex-col text-slate-600 min-w-0">
+            <span className="text-xs font-semibold text-slate-800 whitespace-nowrap">{dateStr}</span>
+            <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{timeStr}</span>
+          </div>
+        );
+      }
     },
     {
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      width: 'w-[220px]',
+      width: 'w-[180px]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (d) => {
         const isDeleting = !d.isLocal && deletingIds.includes(d.id!);
         return (
-          <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-end gap-1.5">
             {/* View Details */}
             <Button
               type="button"
               size="sm"
               variant="outline"
               onClick={(e) => openDetail(d, e)}
-              className="h-8 rounded-lg border-slate-200 bg-slate-50/80 px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
+              className="h-8 rounded-lg border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs cursor-pointer"
               title="View Details"
             >
               <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
@@ -663,14 +716,14 @@ export default function ProcurementDraftsPage() {
                 e.stopPropagation();
                 d.isLocal ? discardLocal() : discardServer(d);
               }}
-              className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-rose-200/80 bg-rose-50/60 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+              className="inline-flex h-8 w-8 min-w-8 items-center justify-center rounded-lg border border-rose-200 bg-rose-50/70 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition-all shadow-2xs cursor-pointer shrink-0 disabled:opacity-50 disabled:pointer-events-none active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
               title={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
               aria-label={d.isLocal ? "Discard Local Draft" : "Delete Draft"}
             >
               {isDeleting ? (
-                <RefreshCw className="h-4 w-4 animate-spin text-rose-600 shrink-0" />
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-600 shrink-0" />
               ) : (
-                <Trash2 className="h-4 w-4 shrink-0" />
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
               )}
             </button>
 
@@ -683,10 +736,10 @@ export default function ProcurementDraftsPage() {
                   e.stopPropagation();
                   handleContinue(d);
                 }}
-                className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1"
+                className="h-8 rounded-lg bg-[#12335f] px-3 text-xs font-bold text-white hover:bg-[#0b2445] shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1 shrink-0"
               >
                 <span>Continue</span>
-                <ArrowRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             )}
           </div>
@@ -711,29 +764,43 @@ export default function ProcurementDraftsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Transparent Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
+    <div className="space-y-5">
+      {/* Executive Header */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
-          <h1 className="text-3xl font-black tracking-tight text-slate-900">Procurement Drafts</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Procurement Drafts</h1>
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
+              {allDrafts.length}
+            </span>
+          </div>
+          <p className="mt-1 text-xs sm:text-sm font-medium text-slate-500">
+            Manage, review, and resume your local workspace and saved procurement tenders &amp; RFQs.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => loadAllDrafts()} disabled={loading} className="h-10 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border-slate-200 shadow-2xs cursor-pointer">
-            <RefreshCw className={cn('mr-2 h-4 w-4 text-[#12335f]', loading && 'animate-spin')} /> Refresh
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => loadAllDrafts()}
+            disabled={loading}
+            className="h-9 sm:h-10 rounded-xl text-xs font-bold bg-white hover:bg-slate-50 border-slate-200 shadow-2xs cursor-pointer"
+          >
+            <RefreshCw className={cn('mr-2 h-3.5 w-3.5 text-[#12335f]', loading && 'animate-spin')} /> Refresh
           </Button>
           <Button
             type="button"
             onClick={() => router.push('/buyer/procurement/create')}
-            className="h-10 bg-[#12335f] hover:bg-[#0b2445] text-xs font-bold text-white rounded-xl shadow-sm cursor-pointer"
+            className="h-9 sm:h-10 bg-[#12335f] hover:bg-[#0b2445] text-xs font-bold text-white rounded-xl shadow-xs cursor-pointer"
           >
-            <Plus className="mr-2 h-4 w-4" /> Create Procurement
+            <Plus className="mr-1.5 h-4 w-4" /> Create Procurement
           </Button>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           label="Total Drafts"
           value={kpiData.total}
@@ -741,6 +808,7 @@ export default function ProcurementDraftsPage() {
           active={activeKpi === null}
           onClick={() => setActiveKpi(null)}
           color="blue"
+          subtext="All active drafts"
         />
         <KpiCard
           label="Cart Checkouts"
@@ -749,6 +817,7 @@ export default function ProcurementDraftsPage() {
           active={activeKpi === 'direct-purchase'}
           onClick={() => setActiveKpi('direct-purchase')}
           color="green"
+          subtext="Direct purchases"
         />
         <KpiCard
           label="RFQs"
@@ -757,28 +826,32 @@ export default function ProcurementDraftsPage() {
           active={activeKpi === 'l1-rfq'}
           onClick={() => setActiveKpi('l1-rfq')}
           color="indigo"
+          subtext="Quotations & L1"
         />
         <KpiCard
-          label="OpenTenders"
+          label="Open Tenders"
           value={kpiData.tenderBid}
           icon={Gavel}
           active={activeKpi === 'tender-bid'}
           onClick={() => setActiveKpi('tender-bid')}
           color="purple"
+          subtext="Bids & auctions"
         />
         <KpiCard
-          label="Est. Value"
+          label="Est. Pipeline"
           value={formatCurrency(kpiData.totalValue)}
           icon={IndianRupee}
           active={false}
           color="slate"
+          subtext="Total estimated value"
         />
       </div>
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm space-y-3">
         <ResponsiveFilterBar
           activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (valueFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
+          singleRowDesktop={false}
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -787,17 +860,27 @@ export default function ProcurementDraftsPage() {
                 placeholder="Search drafts by title, category, item..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-8 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-sm"
+                  aria-label="Clear search"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           }
           filters={
-            <>
+            <div className="flex flex-wrap items-center gap-2 w-full">
               <div className="w-full sm:w-auto sm:min-w-[130px]">
                 <select
                   value={methodFilter}
                   onChange={e => setMethodFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Types</option>
                   <option value="direct-purchase">Cart Checkout</option>
@@ -814,7 +897,7 @@ export default function ProcurementDraftsPage() {
                 <select
                   value={categoryFilter}
                   onChange={e => setCategoryFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Categories</option>
                   {availableCategories.map(c => (
@@ -827,7 +910,7 @@ export default function ProcurementDraftsPage() {
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -839,7 +922,7 @@ export default function ProcurementDraftsPage() {
                 <select
                   value={sourceFilter}
                   onChange={e => setSourceFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Sources</option>
                   <option value="local">Local Drafts</option>
@@ -851,7 +934,7 @@ export default function ProcurementDraftsPage() {
                 <select
                   value={valueFilter}
                   onChange={e => setValueFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Values</option>
                   <option value="under-1l">Under ₹1 Lakh</option>
@@ -865,7 +948,7 @@ export default function ProcurementDraftsPage() {
                 <select
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
                 >
                   <option value="">All Time</option>
                   <option value="today">Today</option>
@@ -888,68 +971,68 @@ export default function ProcurementDraftsPage() {
                     setValueFilter('');
                     setActiveKpi(null);
                   }}
-                  className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
+                  className="h-9 rounded-lg border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 min-w-[70px] cursor-pointer"
                 >
-                  Clear
+                  Reset
                 </Button>
               )}
-            </>
+            </div>
           }
           endContent={
-            <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />
           }
         />
 
         {/* Active chips */}
         {(searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi) && (
-          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
-            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Active:</span>
+          <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-2.5">
+            <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">Active Filters:</span>
             {activeKpi && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 KPI: {activeKpi.replace('-', ' ')}
-                <button onClick={() => setActiveKpi(null)} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setActiveKpi(null)} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {searchQuery && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Search: "{searchQuery}"
-                <button onClick={() => setSearchQuery('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setSearchQuery('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {methodFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Method: {methodFilter === 'l1-rfq' ? 'L1 / RFQ' : methodFilter === 'tender-bid' ? 'Tender / Bid' : methodFilter}
-                <button onClick={() => setMethodFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setMethodFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {categoryFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Category: {categoryFilter}
-                <button onClick={() => setCategoryFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setCategoryFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {statusFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Status: {statusFilter === 'published' ? 'Published' : 'Draft'}
-                <button onClick={() => setStatusFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setStatusFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {sourceFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Source: {sourceFilter === 'local' ? 'Local Drafts' : 'Server Drafts'}
-                <button onClick={() => setSourceFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setSourceFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {valueFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Value: {valueFilter === 'under-1l' ? 'Under ₹1L' : valueFilter === '1l-10l' ? '₹1L - ₹10L' : valueFilter === '10l-50l' ? '₹10L - ₹50L' : 'Above ₹50L'}
-                <button onClick={() => setValueFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setValueFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
             {dateFilter && (
               <span className="inline-flex items-center gap-1 rounded-full border border-[#12335f]/20 bg-[#12335f]/5 px-2.5 py-0.5 text-[10px] font-bold text-[#12335f]">
                 Date: {dateFilter === 'today' ? 'Today' : dateFilter === '7days' ? 'Last 7 Days' : 'Last 30 Days'}
-                <button onClick={() => setDateFilter('')} className="ml-0.5 hover:text-red-600 font-bold">×</button>
+                <button onClick={() => setDateFilter('')} className="ml-0.5 hover:text-red-600 font-bold cursor-pointer">✕</button>
               </span>
             )}
           </div>
@@ -977,7 +1060,6 @@ export default function ProcurementDraftsPage() {
               sortKey={sortKey}
               sortDirection={sortDir}
               onSort={(field) => handleSort(field as SortKey)}
-              onRowClick={(d) => openDetail(d)}
               paginationLabel="drafts"
               emptyTitle="No procurement drafts found"
               emptyDescription={searchQuery || methodFilter || sourceFilter || activeKpi
@@ -1496,12 +1578,13 @@ function DraftDetailView({
       deadlineDate={schedule.submissionDate || basics.requiredByDate || d.requiredDeliveryDate || null}
       createdAt={d.updatedAt}
       publishedDate={schedule.publishDate}
+      submissionStartDate={schedule.submissionStartDate || schedule.startDate}
       closingDate={schedule.submissionDate}
-      clarificationDate={schedule.clarificationDeadline}
+      clarificationDate={schedule.submissionDate}
       technicalDate={schedule.technicalOpeningDate}
       financialDate={schedule.financialOpeningDate}
+      packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}
       category={categoryName}
-      subCategory={basics.subCategory || ''}
       procurementMethod={procurementLabel}
       buyingType={basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'}
       deliveryLocation={d.deliveryLocation || basics.deliveryLocation || ''}

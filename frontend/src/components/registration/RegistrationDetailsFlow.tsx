@@ -276,18 +276,19 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
           const matchedState = data.state ? data.state.trim().toUpperCase() : '';
           let matchedDistrict = '';
-          if (matchedState && data.city) {
+          if (matchedState) {
             const districts = indiaStatesDistricts[matchedState] || [];
-            const searchCity = data.city.trim().toLowerCase();
-            const found = districts.find(d => d.toLowerCase() === searchCity);
-            if (found) {
-              matchedDistrict = found;
-            } else {
-              const foundPartial = districts.find(d => 
-                d.toLowerCase().includes(searchCity) || searchCity.includes(d.toLowerCase())
-              );
-              if (foundPartial) matchedDistrict = foundPartial;
-            }
+            const searchDistrict = (data.district || '').trim().toLowerCase();
+            const searchCity = (data.city || '').trim().toLowerCase();
+            const found = districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && dl === searchDistrict) || (searchCity && dl === searchCity);
+            }) || districts.find(d => {
+              const dl = d.toLowerCase();
+              return (searchDistrict && (dl.includes(searchDistrict) || searchDistrict.includes(dl))) ||
+                     (searchCity && (dl.includes(searchCity) || searchCity.includes(dl)));
+            });
+            if (found) matchedDistrict = found;
           }
 
           setFormData((prev: any) => ({
@@ -297,7 +298,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             orgPan: finalPan || prev.orgPan,
             state: matchedState || prev.state,
             district: matchedDistrict || prev.district,
-            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName
+            city: (data.city || matchedDistrict || '').trim() || prev.city,
+            pincode: (data.pincode ? String(data.pincode).replace(/\D/g, '').slice(0, 6) : '') || prev.pincode,
+            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName,
+            address: (data.address || data.businessAddress || '').trim() || prev.address
           }));
           
           setSelectedDocs((prev) => {
@@ -1099,6 +1103,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             isEmailVerified: true,
             state: formData.state,
             district: formData.district,
+            city: formData.city || verifiedGstDetails?.city || formData.district || '',
+            pincode: formData.pincode || verifiedGstDetails?.pincode || '',
+            address: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
+            registeredAddress: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
             officeZoneName: formData.officeZoneName,
             aadhaarVerificationId: token,
             aadhaarMasked: isAadhaarVerified ? formData.aadhaarNumber : undefined,
@@ -1253,10 +1261,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div> */}
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          State * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-buyer-state" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          State * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Select
+                          id="reg-flow-buyer-state"
                           value={formData.state}
                           onChange={(e) => setFormData({ ...formData, state: e.target.value, district: '', organisation: '' })}
                           className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
@@ -1269,10 +1278,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          District * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-buyer-district" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          District * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Select
+                          id="reg-flow-buyer-district"
                           value={formData.district}
                           disabled={!formData.state}
                           onChange={(e) => setFormData({ ...formData, district: e.target.value, organisation: '' })}
@@ -1286,11 +1296,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-buyer-gstin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <div className="flex gap-2">
                           <Input
+                            id="reg-flow-buyer-gstin"
                             placeholder="Enter GSTIN"
                             value={formData.gstin}
                             onChange={(e) => {
@@ -1316,10 +1327,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2 md:col-span-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          Organisation Name * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-buyer-org" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Organisation Name * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Input
+                          id="reg-flow-buyer-org"
                           placeholder="Enter organisation name"
                           value={formData.organisation}
                           onChange={(e) => setFormData({ ...formData, organisation: e.target.value, businessName: e.target.value })}
@@ -1328,10 +1340,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2 md:col-span-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          Office / Zone Name * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-buyer-zone" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Office / Zone Name * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Input
+                          id="reg-flow-buyer-zone"
                           placeholder="Enter unit/location name"
                           value={formData.officeZoneName}
                           onChange={(e) => setFormData({ ...formData, officeZoneName: e.target.value })}
@@ -1355,10 +1368,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       {showOptionalDetails && (
                         <>
                           <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            <label htmlFor="reg-flow-buyer-cin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                             </label>
                             <Input
+                              id="reg-flow-buyer-cin"
                               placeholder="e.g., U72900MH1996PLC104693"
                               value={formData.cin}
                               onChange={(e) => {
@@ -1381,10 +1395,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           </div>
 
                           <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            <label htmlFor="reg-flow-buyer-website" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                             </label>
                             <Input
+                              id="reg-flow-buyer-website"
                               placeholder="e.g., https://example.com"
                               value={formData.website}
                               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
@@ -1397,10 +1412,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          Business / Organisation Type * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-seller-biztype" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Business / Organisation Type * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Input
+                          id="reg-flow-seller-biztype"
                           value={businessType}
                           disabled
                           className="h-10 rounded border-slate-200 bg-slate-100 text-slate-500 text-[13px]"
@@ -1408,10 +1424,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          {isHerShg ? 'Self-Help Group Name *' : 'Business / Organisation Name *'} <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-seller-bizname" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          {isHerShg ? 'Self-Help Group Name *' : 'Business / Organisation Name *'} <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Input
+                          id="reg-flow-seller-bizname"
                           placeholder={isHerShg ? 'Please enter your Self-Help Group name' : 'Please enter your Business/Company Name'}
                           value={formData.businessName}
                           onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
@@ -1424,11 +1441,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-seller-gstin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <div className="flex gap-2">
                           <Input
+                            id="reg-flow-seller-gstin"
                             placeholder="Enter GSTIN"
                             value={formData.gstin}
                             onChange={(e) => {
@@ -1454,10 +1472,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                       </div>
 
                       <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          Udyam Number * <Info className="h-3.5 w-3.5 text-slate-400" />
+                        <label htmlFor="reg-flow-seller-udyam" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Udyam Number * <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
                         <Input
+                          id="reg-flow-seller-udyam"
                           placeholder="e.g., UDYAM-MH-12-0123456"
                           value={formData.udyamNumber}
                           onChange={(e) => {
@@ -1499,10 +1518,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <>
                           {!isHerShg && (
                             <div className="space-y-2">
-                              <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                                CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                              <label htmlFor="reg-flow-seller-cin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                                CIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                               </label>
                               <Input
+                                id="reg-flow-seller-cin"
                                 placeholder="e.g., U72900MH1996PLC104693"
                                 value={formData.cin}
                                 onChange={(e) => {
@@ -1527,10 +1547,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                           )}
 
                           <div className="space-y-2">
-                            <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" />
+                            <label htmlFor="reg-flow-seller-website" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                              Website (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                             </label>
                             <Input
+                              id="reg-flow-seller-website"
                               placeholder="e.g., https://example.com"
                               value={formData.website}
                               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
@@ -1733,7 +1754,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     isBuyerAadhaarReady ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-500"
                                   )}
                                 >
-                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
+                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker'}
                                 </Button>
                               </div>
                             </>
@@ -1789,11 +1810,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <div className="space-y-5">
                           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                             <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-slate-700">PAN Number* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <label htmlFor="reg-flow-pan-num" className="text-xs font-bold text-slate-700">PAN Number* <Info className="inline h-3.5 w-3.5 text-slate-500" aria-hidden="true" /></label>
                               <input
+                                id="reg-flow-pan-num"
                                 placeholder="ABCDE1234F"
                                 maxLength={10}
                                 value={formData.panNumber}
+                                aria-invalid={!!(submitErrors.pan || panErrors.panNumber)}
+                                aria-describedby={submitErrors.pan || panErrors.panNumber ? "reg-flow-pan-num-err" : undefined}
                                 onChange={(event) => {
                                   setSubmitErrors(prev => {
                                     const { pan, ...rest } = prev;
@@ -1807,13 +1831,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
                                 )}
                               />
-                              {(submitErrors.pan || panErrors.panNumber) && <p className="text-[11px] font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
+                              {(submitErrors.pan || panErrors.panNumber) && <p id="reg-flow-pan-num-err" role="alert" className="text-[11px] font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-slate-700">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <label htmlFor="reg-flow-pan-name" className="text-xs font-bold text-slate-700">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" aria-hidden="true" /></label>
                               <input
+                                id="reg-flow-pan-name"
                                 value={formData.panName || formData.personalName}
                                 placeholder="Enter name as on PAN"
+                                aria-invalid={!!panErrors.personalName}
+                                aria-describedby={panErrors.personalName ? "reg-flow-pan-name-err" : undefined}
                                 onChange={(event) => {
                                   const val = sanitizePersonNameInput(event.target.value);
                                   setIsPanVerified(false);
@@ -1824,13 +1851,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   panErrors.personalName ? "border-red-400 focus:ring-red-500" : "border-slate-200 focus:ring-indigo-500"
                                 )}
                               />
-                              {panErrors.personalName && <p className="text-[11px] font-medium text-red-600">{panErrors.personalName}</p>}
+                              {panErrors.personalName && <p id="reg-flow-pan-name-err" role="alert" className="text-[11px] font-medium text-red-600">{panErrors.personalName}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label className="text-xs font-bold text-slate-700">Date Of Birth*</label>
+                              <label htmlFor="reg-flow-pan-dob" className="text-xs font-bold text-slate-700">Date Of Birth*</label>
                               <Input
+                                id="reg-flow-pan-dob"
                                 type="date"
                                 value={formData.dob}
+                                aria-invalid={!!(submitErrors.dob || panErrors.dob)}
+                                aria-describedby={submitErrors.dob || panErrors.dob ? "reg-flow-pan-dob-err" : undefined}
                                 onChange={(event) => {
                                   setSubmitErrors(prev => {
                                     const { dob, ...rest } = prev;
@@ -1841,7 +1871,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 }}
                                 className={cn("h-11 rounded-lg border-slate-200 bg-white text-xs", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
                               />
-                              {(submitErrors.dob || panErrors.dob) && <p className="text-[11px] font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
+                              {(submitErrors.dob || panErrors.dob) && <p id="reg-flow-pan-dob-err" role="alert" className="text-[11px] font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
                             </div>
                           </div>
                           <div className="flex justify-end">
@@ -1864,18 +1894,22 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               </div>
                               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                                 <div className="space-y-1.5">
-                                  <label className="text-xs font-bold text-slate-700">First Name*</label>
+                                  <label htmlFor="reg-flow-pan-fname" className="text-xs font-bold text-slate-700">First Name*</label>
                                   <input
+                                    id="reg-flow-pan-fname"
                                     value={formData.personalName}
                                     onChange={(event) => setFormData({ ...formData, personalName: sanitizePersonNameInput(event.target.value) })}
                                     placeholder="Enter first name"
+                                    aria-invalid={!formData.personalName.trim()}
+                                    aria-describedby={!formData.personalName.trim() ? "reg-flow-pan-fname-err" : undefined}
                                     className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
                                   />
-                                  {!formData.personalName.trim() && <p className="text-[11px] font-medium text-red-600">First name is required.</p>}
+                                  {!formData.personalName.trim() && <p id="reg-flow-pan-fname-err" role="alert" className="text-[11px] font-medium text-red-600">First name is required.</p>}
                                 </div>
                                 <div className="space-y-1.5">
-                                  <label className="text-xs font-bold text-slate-700">Last Name</label>
+                                  <label htmlFor="reg-flow-pan-lname" className="text-xs font-bold text-slate-700">Last Name</label>
                                   <input
+                                    id="reg-flow-pan-lname"
                                     value={formData.personalLastName}
                                     onChange={(event) => setFormData({ ...formData, personalLastName: sanitizePersonNameInput(event.target.value) })}
                                     placeholder="Enter last name"
@@ -1944,16 +1978,19 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <div className="space-y-4">
                           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-800">
+                              <label htmlFor="reg-flow-aadhaar-num" className="text-sm font-semibold text-slate-800">
                                 Aadhaar Number / Virtual ID* 
                               </label>
                               <div className="relative">
                                 <input
+                                  id="reg-flow-aadhaar-num"
                                   type={showAadhaar ? "text" : "password"}
                                   placeholder="Enter Aadhaar number / Virtual ID"
                                   maxLength={16}
                                   inputMode="numeric"
                                   value={isAadhaarVerified ? formData.aadhaarNumber : rawAadhaar}
+                                  aria-invalid={!!aadhaarErrors.aadhaarNumber}
+                                  aria-describedby={aadhaarErrors.aadhaarNumber ? "reg-flow-aadhaar-num-err" : undefined}
                                   onChange={(event) => {
                                     const val = event.target.value.replace(/\D/g, '').slice(0, 16);
                                     setRawAadhaar(val);
@@ -1969,12 +2006,13 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 <button
                                   type="button"
                                   onClick={() => setShowAadhaar(!showAadhaar)}
-                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none"
+                                  aria-label={showAadhaar ? "Hide Aadhaar number" : "Show Aadhaar number"}
+                                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-800 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded p-0.5"
                                 >
                                   {showAadhaar ? (
-                                    <Eye className="h-4 w-4" />
+                                    <Eye className="h-4 w-4" aria-hidden="true" />
                                   ) : (
-                                    <EyeOff className="h-4 w-4" />
+                                    <EyeOff className="h-4 w-4" aria-hidden="true" />
                                   )}
                                 </button>
                               </div>
@@ -1983,15 +2021,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   {isAadhaarNumberValid ? 'Aadhaar' : 'Virtual ID'} masked: {maskedAadhaar}
                                 </p>
                               )}
-                              {aadhaarErrors.aadhaarNumber && <p className="text-xs font-medium text-red-600">{aadhaarErrors.aadhaarNumber}</p>}
+                              {aadhaarErrors.aadhaarNumber && <p id="reg-flow-aadhaar-num-err" role="alert" className="text-xs font-medium text-red-600">{aadhaarErrors.aadhaarNumber}</p>}
                             </div>
 
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-800">Mobile number linked with Aadhaar*</label>
+                              <label htmlFor="reg-flow-aadhaar-mobile" className="text-sm font-semibold text-slate-800">Mobile number linked with Aadhaar*</label>
                               <input
+                                id="reg-flow-aadhaar-mobile"
                                 placeholder="Enter mobile number linked with Aadhaar"
                                 maxLength={10}
                                 value={formData.mobile}
+                                aria-invalid={!!(submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered)}
+                                aria-describedby={submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "reg-flow-aadhaar-mobile-err" : undefined}
                                 onChange={(event) => handleAadhaarFieldChange({ mobile: event.target.value })}
                                 disabled={isAadhaarVerified}
                                 className={cn(
@@ -1999,9 +2040,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   submitErrors.mobile || aadhaarErrors.mobile || mobileAlreadyRegistered ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                 )}
                               />
-                              {(submitErrors.mobile || aadhaarErrors.mobile) && <p className="text-xs font-medium text-red-600">{submitErrors.mobile || aadhaarErrors.mobile}</p>}
+                              {(submitErrors.mobile || aadhaarErrors.mobile) && <p id="reg-flow-aadhaar-mobile-err" role="alert" className="text-xs font-medium text-red-600">{submitErrors.mobile || aadhaarErrors.mobile}</p>}
                               {isMobileValid && mobileAvailability === 'checking' && <p className="text-xs font-medium text-slate-500">Checking mobile number...</p>}
-                              {mobileAlreadyRegistered && <p className="text-xs font-medium text-red-600">This mobile number is already registered.</p>}
+                              {mobileAlreadyRegistered && <p id="reg-flow-aadhaar-mobile-err" role="alert" className="text-xs font-medium text-red-600">This mobile number is already registered.</p>}
 
                             </div>
                           </div>
@@ -2049,7 +2090,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                     isAadhaarReady && !mobileAlreadyRegistered && mobileAvailability !== 'checking' ? "bg-[#12335f] text-white hover:bg-slate-800" : "bg-slate-200 text-slate-500 cursor-not-allowed"
                                   )}
                                 >
-                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker / MeriPehchaan'}
+                                  {mobileAvailability === 'checking' ? 'Checking...' : 'Verify with DigiLocker'}
                                 </Button>
                               </div>
                             </>
@@ -2062,7 +2103,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               <div className="flex items-center justify-between gap-2.5 sm:gap-3 text-green-700">
                                 <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
                                   <CheckCircle2 className="h-5 w-5 fill-green-600 text-green-600" />
-                                  <p className="text-sm font-bold">Identity verified through DigiLocker/MeriPehchaan</p>
+                                  <p className="text-sm font-bold">Identity verified through DigiLocker</p>
                                 </div>
                                 <button
                                   type="button"
@@ -2094,11 +2135,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <div className="space-y-5">
                           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-800">PAN Number* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <label htmlFor="reg-flow-seller-pan-num" className="text-sm font-semibold text-slate-800">PAN Number* <Info className="inline h-3.5 w-3.5 text-slate-500" aria-hidden="true" /></label>
                               <input
+                                id="reg-flow-seller-pan-num"
                                 placeholder="ABCDE1234F"
                                 maxLength={10}
                                 value={formData.panNumber}
+                                aria-invalid={!!(submitErrors.pan || panErrors.panNumber)}
+                                aria-describedby={submitErrors.pan || panErrors.panNumber ? "reg-flow-seller-pan-num-err" : undefined}
                                 onChange={(event) => {
                                   setSubmitErrors(prev => {
                                     const { pan, ...rest } = prev;
@@ -2112,12 +2156,15 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   submitErrors.pan || panErrors.panNumber ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                 )}
                               />
-                              {(submitErrors.pan || panErrors.panNumber) && <p className="text-xs font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
+                              {(submitErrors.pan || panErrors.panNumber) && <p id="reg-flow-seller-pan-num-err" role="alert" className="text-xs font-medium text-red-600">{submitErrors.pan || panErrors.panNumber}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-800">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" /></label>
+                              <label htmlFor="reg-flow-seller-pan-name" className="text-sm font-semibold text-slate-800">Name (as on PAN)* <Info className="inline h-3.5 w-3.5 text-slate-500" aria-hidden="true" /></label>
                               <input
+                                id="reg-flow-seller-pan-name"
                                 value={formData.panName || formData.personalName}
+                                aria-invalid={!!panErrors.personalName}
+                                aria-describedby={panErrors.personalName ? "reg-flow-seller-pan-name-err" : undefined}
                                 onChange={(event) => {
                                   const val = sanitizePersonNameInput(event.target.value);
                                   setIsPanVerified(false);
@@ -2128,13 +2175,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   panErrors.personalName ? "border-red-400 focus:ring-red-500" : "border-slate-300 focus:ring-[#12335f]"
                                 )}
                               />
-                              {panErrors.personalName && <p className="text-xs font-medium text-red-600">{panErrors.personalName}</p>}
+                              {panErrors.personalName && <p id="reg-flow-seller-pan-name-err" role="alert" className="text-xs font-medium text-red-600">{panErrors.personalName}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label className="text-sm font-semibold text-slate-800">Date Of Birth*</label>
+                              <label htmlFor="reg-flow-seller-pan-dob" className="text-sm font-semibold text-slate-800">Date Of Birth*</label>
                               <Input
+                                id="reg-flow-seller-pan-dob"
                                 type="date"
                                 value={formData.dob}
+                                aria-invalid={!!(submitErrors.dob || panErrors.dob)}
+                                aria-describedby={submitErrors.dob || panErrors.dob ? "reg-flow-seller-pan-dob-err" : undefined}
                                 onChange={(event) => {
                                   setSubmitErrors(prev => {
                                     const { dob, ...rest } = prev;
@@ -2145,7 +2195,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                 }}
                                 className={cn("h-11 rounded border-slate-300 bg-white", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
                               />
-                              {(submitErrors.dob || panErrors.dob) && <p className="text-xs font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
+                              {(submitErrors.dob || panErrors.dob) && <p id="reg-flow-seller-pan-dob-err" role="alert" className="text-xs font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
                             </div>
                           </div>
                           <div className="flex justify-end">
@@ -2610,18 +2660,22 @@ function SellerRoleDetails({
     <div className="space-y-5">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-800">First Name*</label>
+          <label htmlFor="seller-role-fname" className="text-sm font-semibold text-slate-800">First Name*</label>
           <input
+            id="seller-role-fname"
             value={firstName}
             onChange={(event) => onChange({ personalName: sanitizePersonNameInput(event.target.value) })}
             placeholder="Enter first name"
+            aria-invalid={!firstName.trim()}
+            aria-describedby={!firstName.trim() ? "seller-role-fname-err" : undefined}
             className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
           />
-          {!firstName.trim() && <p className="text-xs font-medium text-red-600">First name is required.</p>}
+          {!firstName.trim() && <p id="seller-role-fname-err" role="alert" className="text-xs font-medium text-red-600">First name is required.</p>}
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-800">Last Name</label>
+          <label htmlFor="seller-role-lname" className="text-sm font-semibold text-slate-800">Last Name</label>
           <input
+            id="seller-role-lname"
             value={lastName}
             onChange={(event) => onChange({ personalLastName: sanitizePersonNameInput(event.target.value) })}
             placeholder="Enter last name"
@@ -2632,10 +2686,13 @@ function SellerRoleDetails({
 
       {!hideRoleField && (
         <div className="max-w-md space-y-1.5">
-          <label className="text-sm font-semibold text-slate-800">Role in Organisation*</label>
+          <label htmlFor="seller-role-select" className="text-sm font-semibold text-slate-800">Role in Organisation*</label>
           <select
+            id="seller-role-select"
             value={roleInOrg}
             onChange={(event) => onChange({ roleInOrg: event.target.value })}
+            aria-invalid={!roleInOrg}
+            aria-describedby={!roleInOrg ? "seller-role-select-err" : undefined}
             className="h-11 w-full rounded border border-slate-300 bg-white px-4 text-sm focus:outline-none focus:ring-1 focus:ring-[#12335f]"
           >
             <option value="">Select your role</option>
@@ -2643,7 +2700,7 @@ function SellerRoleDetails({
               <option key={option} value={option}>{option}</option>
             ))}
           </select>
-          {!roleInOrg && <p className="text-xs font-medium text-red-600">Please select your role.</p>}
+          {!roleInOrg && <p id="seller-role-select-err" role="alert" className="text-xs font-medium text-red-600">Please select your role.</p>}
         </div>
       )}
     </div>

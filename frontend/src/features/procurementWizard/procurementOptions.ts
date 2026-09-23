@@ -4,30 +4,8 @@ export const PROCUREMENT_TYPE_OPTIONS = [
   { value: 'OTHER', label: 'Other' },
 ] as const;
 
-export const CATEGORY_OPTIONS = [
-  
-  'Raw Materials',
-  'Steel, Plates & Structural Materials',
-  'Cement, Sand & Civil Materials',
-  'Pipes, Hume Pipes & Fittings',
-  'Mechanical Spares',
-  'Bearings & Industrial Components',
-  'Electrical Equipment',
-  'Automobile & HEMM Spares',
-  'Lubricants, Oils & Filters',
-  'Refractory & Furnace Materials',
-  'Hardware, Fasteners & Consumables',
-  'Lab Chemicals & Reagents',
-  'IT Hardware, Printers & Toners',
-  'Office Supplies & Stationery',
-  'Safety, Medical & Ambulance Supplies',
-  'Transport, Cab & Vehicle Hiring',
-  'Facility Management & Canteen Services',
-  'Repair, AMC & Overhauling Services',
-  'Mining, Material Handling & Crane Services',
-  'Construction & Works Contract',
-  'Other',
-];
+// Categories are fetched dynamically from the database (/api/categories).
+export const CATEGORY_OPTIONS: string[] = [];
 
 export const UNIT_OPTIONS = [
   { value: 'NO', label: 'NO - Number' },

@@ -379,8 +379,8 @@ export function MarketplaceHeader({ user }: Props) {
                 {isSearching
                     ? 'Searching marketplace...'
                     : totalSuggestions > 0
-                    ? `${totalSuggestions} search results found. Use up and down arrows to review.`
-                    : ''}
+                        ? `${totalSuggestions} search results found. Use up and down arrows to review.`
+                        : ''}
             </div>
 
             {/* ════════════════════════════════════════════════════════════════════
@@ -391,12 +391,12 @@ export function MarketplaceHeader({ user }: Props) {
 
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-105 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-103 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
                             <img src="/logoo.png" alt="Jharsuguda SMiLE MSME Marketplace Logo" className="h-full w-full object-contain" />
                         </div>
                         <div className="min-w-0 leading-tight">
-                            <p className="truncate text-base font-black tracking-tight text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
-                            <p className="truncate text-[9.5px] font-bold text-slate-400">MSME Marketplace Portal</p>
+                            <p className="truncate text-base font-black tracking- text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
+                            <p className="truncate text-[9.8px] font-bold text-slate-400">Jharsuguda MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
@@ -1115,7 +1115,7 @@ export function MarketplaceHeader({ user }: Props) {
                             {!user ? (
                                 <div className="space-y-2.5">
                                     <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Account Access</p>
-                                    
+
                                     {/* Primary Login Card */}
                                     <Link
                                         href="/login"
@@ -1138,8 +1138,8 @@ export function MarketplaceHeader({ user }: Props) {
                                             const iconColor = idx === 0
                                                 ? 'bg-blue-50 text-blue-600 border border-blue-100'
                                                 : idx === 1
-                                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                : 'bg-purple-50 text-purple-600 border border-purple-100';
+                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                    : 'bg-purple-50 text-purple-600 border border-purple-100';
 
                                             return (
                                                 <Link
@@ -1189,7 +1189,7 @@ export function MarketplaceHeader({ user }: Props) {
                             {/* Navigation Quick Links */}
                             <div className="space-y-1 pt-3 border-t border-slate-100">
                                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 mb-1.5">Explore Marketplace</p>
-                                
+
                                 <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}

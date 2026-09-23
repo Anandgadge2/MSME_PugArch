@@ -23,7 +23,7 @@ import {
 } from '../utils/procurementDisplay';
 import { cn } from '../../../lib/utils';
 import { formatRefId } from '../../../utils/refIdUtils';
-import { formatDisplayDate } from '../../shared/format';
+import { formatDisplayDate, formatDate, cleanOpportunitySummary } from '../../shared/format';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 function BuyerLogoIcon({ name, logoUrl }: { name?: string; logoUrl?: string | null }) {
@@ -69,6 +69,9 @@ interface OpportunityData {
     statusCode: ProcurementStatusCode;
     statusLabel: string;
     rawDescription?: string | null;
+    sourcingMethod?: string;
+    urgency?: string;
+    cleanDescription?: string;
 }
 
 const formatMethodLabel = (method: string) => {
@@ -80,30 +83,27 @@ const formatMethodLabel = (method: string) => {
 
 const parseDescription = (desc?: string | null) => {
     if (!desc) return { method: '', value: '', urgency: '', text: '' };
-    const cleanedDesc = desc.replace(/\r/g, '');
-    const methodMatch = cleanedDesc.match(/Sourcing Method:\s*(.*?)(?=(?:Value:|Urgency:|$))/i);
-    const valueMatch = cleanedDesc.match(/Value:\s*(.*?)(?=(?:Urgency:|$))/i);
-    const urgencyMatch = cleanedDesc.match(/Urgency:\s*(.*?)(?=$)/i);
+    const cleanedDesc = String(desc).replace(/\r/g, '');
+    const methodMatch = cleanedDesc.match(/Sourcing Method:\s*([^|\n]*)/i);
+    const valueMatch = cleanedDesc.match(/Value:\s*(?:INR|Rs\.?|₹)?\s*([^|\n]*)/i);
+    const urgencyMatch = cleanedDesc.match(/Urgency:\s*([^|\n]*)/i);
+
     let cleanText = cleanedDesc;
     if (methodMatch) {
-        cleanText = cleanText.replace(/Sourcing Method:\s*(.*?)(?=(?:Value:|Urgency:|$))/i, '');
+        cleanText = cleanText.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
     }
     if (valueMatch) {
-        cleanText = cleanText.replace(/Value:\s*(.*?)(?=(?:Urgency:|$))/i, '');
+        cleanText = cleanText.replace(/Value:\s*(?:INR|Rs\.?|₹)?\s*[^|\n]*/gi, '');
     }
     if (urgencyMatch) {
-        cleanText = cleanText.replace(/Urgency:\s*(.*?)(?=$)/i, '');
+        cleanText = cleanText.replace(/Urgency:\s*[^|\n]*/gi, '');
     }
     cleanText = cleanText.replace(/[\n\r|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    cleanText = cleanText.replace(/^[-:|,.\s]+|[-:|,.\s]+$/g, '').trim();
 
     let method = methodMatch ? methodMatch[1].trim() : '';
     let value = valueMatch ? valueMatch[1].trim() : '';
     let urgency = urgencyMatch ? urgencyMatch[1].trim() : '';
-
-    // Clean up trailing and leading pipe characters and spaces
-    method = method.replace(/^[|\s]+|[|\s]+$/g, '').trim();
-    value = value.replace(/^[|\s]+|[|\s]+$/g, '').trim();
-    urgency = urgency.replace(/^[|\s]+|[|\s]+$/g, '').trim();
 
     if (method) {
         method = formatMethodLabel(method);
@@ -117,11 +117,21 @@ const parseDescription = (desc?: string | null) => {
     };
 };
 
+const extractBudgetValue = (desc?: string | null): number | null => {
+    if (!desc) return null;
+    const match = String(desc).match(/Value:\s*(?:INR|Rs\.?|₹)?\s*([\d,]+(?:\.\d+)?)/i);
+    if (match) {
+        const num = Number(match[1].replace(/,/g, ''));
+        if (Number.isFinite(num) && num > 0) return num;
+    }
+    return null;
+};
+
 const getFormattedDescription = (desc?: string | null): string => {
     if (!desc) return 'No description provided.';
     const parsed = parseDescription(desc);
     if (!parsed.method && !parsed.urgency) {
-        return desc;
+        return cleanOpportunitySummary(desc) || desc;
     }
     const parts: string[] = [];
     if (parsed.method) parts.push(`Sourcing Method: ${parsed.method}`);
@@ -133,24 +143,32 @@ const getFormattedDescription = (desc?: string | null): string => {
 function mapTender(t: MarketplaceTender): OpportunityData {
     const status = getProcurementStatus({ status: t.status, dueDate: t.closesAt });
     const days = Math.max(0, Math.ceil((new Date(t.closesAt || '').getTime() - Date.now()) / 86400000));
+    const rawDesc = t.description;
+    const parsed = parseDescription(rawDesc);
+    const parsedBudget = t.budget ?? extractBudgetValue(rawDesc);
+    const cleanDesc = cleanOpportunitySummary(rawDesc);
+
     return {
         id: t.id,
         sourceKey: `tender-${t.id}`,
         displayId: formatRefId('TND', t.id, t.tenderId, 'TENDER'),
         title: t.title,
-        description: getFormattedDescription(t.description),
+        description: cleanDesc || getFormattedDescription(rawDesc),
+        cleanDescription: cleanDesc,
         category: t.category,
-        budget: t.budget ?? null,
+        budget: parsedBudget,
         buyerName: t.buyer?.buyerProfile?.organizationName || t.buyer?.name || 'Government Buyer',
         location: [t.buyer?.buyerProfile?.district, t.buyer?.buyerProfile?.state].filter(Boolean).join(', ') || 'Odisha, IN',
         startDate: t.publishedAt || t.createdAt,
         endDate: t.closesAt,
         isTender: true,
-        link: `/tenders?tender=${t.id}`,
+        link: `/tenders?tender=${encodeURIComponent(t.tenderId || t.id)}`,
         daysRemaining: days,
         deadlineLabel: status.deadlineLabel,
         statusCode: status.code,
         statusLabel: status.label,
+        sourcingMethod: parsed.method || 'Open Tender',
+        urgency: parsed.urgency,
         participantsCount: t.bidsCount || 0,
         rawDescription: t.description
     };
@@ -171,14 +189,22 @@ function mapBid(b: MarketplaceBid): OpportunityData {
     const deadlineMs = new Date(rawDeadline || '').getTime();
     const days = isNaN(deadlineMs) ? 0 : Math.max(0, Math.ceil((deadlineMs - Date.now()) / 86400000));
     const isTenderActivity = b.sourceModel === 'TENDER';
+    const rawDesc = b.description;
+    const parsed = parseDescription(rawDesc);
+    const parsedBudget = b.estimatedValue ?? extractBudgetValue(rawDesc);
+    const explicitMethod = (b as any).methodSlug || (b as any).procurementMethod || (b as any).bidType;
+    const cleanDesc = cleanOpportunitySummary(rawDesc);
+    const method = parsed.method || (isTenderActivity ? 'Tender' : explicitMethod ? formatMethodLabel(explicitMethod) : 'Bid');
+
     return {
         id: b.id,
         sourceKey: `bid-${b.sourceModel || 'PROCUREMENT_BID'}-${b.id}`,
-        displayId: formatRefId('BID', b.id, b.bidNumber, (b as any).methodSlug || (b as any).procurementMethod || (b as any).bidType),
+        displayId: formatRefId('BID', b.id, b.bidNumber, explicitMethod),
         title: b.title,
-        description: getFormattedDescription(b.description),
+        description: cleanDesc || getFormattedDescription(rawDesc),
+        cleanDescription: cleanDesc,
         category: b.category,
-        budget: b.estimatedValue ?? null,
+        budget: parsedBudget,
         buyerName: b.buyerOrganizationName || 'Verified Buyer',
         location: [b.district, b.state].filter(Boolean).join(', ') || b.deliveryLocation || 'Jharsuguda, Odisha',
         startDate: rawStartDate,
@@ -189,6 +215,8 @@ function mapBid(b: MarketplaceBid): OpportunityData {
         deadlineLabel: status.deadlineLabel,
         statusCode: status.code,
         statusLabel: isTenderActivity ? 'Tender Bids' : status.label,
+        sourcingMethod: method,
+        urgency: parsed.urgency,
         participantsCount: b.participantsCount || 0,
         rawDescription: b.description
     };
@@ -238,9 +266,9 @@ function OpportunitySkeleton() {
 }
 
 function OpportunityCard({ item, index, visible }: { item: OpportunityData; index: number; visible: boolean }) {
-    const isService = item.category.toLowerCase().includes('service');
     const badgeColor = getStatusBadgeClass(item.statusCode);
     const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
+    const showUrgency = item.urgency && !item.urgency.toLowerCase().includes('normal');
 
     return (
         <article
@@ -251,14 +279,16 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                 transition: `opacity 0.5s ease ${80 + index * 70}ms, transform 0.5s ease ${80 + index * 70}ms`
             }}
         >
-            <div className="space-y-3.5">
+            <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                         <span className="inline-block text-[10px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
                             {item.displayId}
                         </span>
                         <h4 className="mt-2 line-clamp-2 text-sm font-black text-slate-900 leading-snug group-hover:text-[#0b2447] transition-colors">
-                            {item.title}
+                            <Link href={item.link} className="hover:underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#0b2447]">
+                                {item.title}
+                            </Link>
                         </h4>
                     </div>
                     <span className={cn("shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider whitespace-nowrap shadow-2xs inline-flex items-center gap-1", badgeColor)}>
@@ -267,45 +297,32 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
                     </span>
                 </div>
 
-                 {(() => {
-                    const parsed = parseDescription(item.rawDescription || item.description);
-                    const showUrgency = parsed.urgency && !parsed.urgency.toLowerCase().includes('normal');
-                    const hasBadges = parsed.method || showUrgency;
-                    return (
-                        <>
-                            {hasBadges && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {parsed.method && (
-                                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
-                                            {parsed.method}
-                                        </span>
-                                    )}
-                                    {showUrgency && (
-                                        <span className={cn(
-                                            "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
-                                            parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
-                                                ? 'bg-rose-50 text-rose-700 border-rose-200/80'
-                                                : 'bg-amber-50 text-amber-700 border-amber-200/80'
-                                        )}>
-                                            {parsed.urgency} Urgency
-                                        </span>
-                                    )}
-                                </div>
-                            )}
-                            {parsed.text ? (
-                                <p className="line-clamp-2 text-xs leading-relaxed text-slate-500 font-medium">
-                                    {parsed.text}
-                                </p>
-                            ) : !hasBadges ? (
-                                <p className="line-clamp-2 text-xs leading-relaxed text-slate-500 font-medium">
-                                    {item.description}
-                                </p>
-                            ) : null}
-                        </>
-                    );
-                })()}
+                {/* Badges line: Method & Urgency */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {item.sourcingMethod && (
+                        <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
+                            {item.sourcingMethod}
+                        </span>
+                    )}
+                    {showUrgency && (
+                        <span className={cn(
+                            "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
+                            item.urgency?.toLowerCase().includes('urgent') || item.urgency?.toLowerCase().includes('high')
+                                ? 'bg-rose-50 text-rose-700 border-rose-200/80'
+                                : 'bg-amber-50 text-amber-700 border-amber-200/80'
+                        )}>
+                            {item.urgency} Urgency
+                        </span>
+                    )}
+                </div>
 
-                <div className="space-y-1.5 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
+                {item.cleanDescription ? (
+                    <p className="line-clamp-2 text-xs leading-relaxed text-slate-500 font-medium">
+                        {item.cleanDescription}
+                    </p>
+                ) : null}
+
+                <div className="space-y-2 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
                     <p className="flex items-center gap-2 truncate">
                         <BuyerLogoIcon name={item.buyerName} />
                         <span className="truncate text-slate-800 font-bold">{item.buyerName}</span>
@@ -343,111 +360,6 @@ function OpportunityCard({ item, index, visible }: { item: OpportunityData; inde
     );
 }
 
-function OpportunityListRow({ item, srNo }: { item: OpportunityData; srNo: number }) {
-    const badgeColor = getStatusBadgeClass(item.statusCode);
-    const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
-
-    return (
-        <tr className="group hover:bg-slate-50/80 transition-all duration-200 border-b border-slate-100 last:border-0">
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 font-black text-slate-400 text-xs group-hover:text-slate-600 transition-colors">{srNo}</td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
-                <span className="inline-block text-[11px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 whitespace-nowrap shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
-                    {item.displayId}
-                </span>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4">
-                <div className="space-y-1">
-                    <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">
-                        {item.title}
-                    </p>
-                    {(() => {
-                        const parsed = parseDescription(item.rawDescription || item.description);
-                        const showUrgency = parsed.urgency && !parsed.urgency.toLowerCase().includes('normal');
-                        const hasBadges = parsed.method || showUrgency;
-                        return (
-                            <div className="space-y-1">
-                                {hasBadges && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {parsed.method && (
-                                            <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
-                                                {parsed.method}
-                                            </span>
-                                        )}
-                                        {showUrgency && (
-                                            <span className={cn(
-                                                "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
-                                                parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
-                                                    ? 'bg-rose-50 text-rose-700 border-rose-200/80'
-                                                    : 'bg-amber-50 text-amber-700 border-amber-200/80'
-                                            )}>
-                                                {parsed.urgency} Urgency
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                                {parsed.text ? (
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                        {parsed.text}
-                                    </p>
-                                ) : !hasBadges && item.description ? (
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                        {item.description}
-                                    </p>
-                                ) : null}
-                            </div>
-                        );
-                    })()}
-                </div>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs sm:text-sm font-bold">
-                <div className="flex items-center gap-2.5">
-                    <BuyerLogoIcon name={item.buyerName} />
-                    <span className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug">{item.buyerName}</span>
-                </div>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold">
-                <span className="inline-block bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600 leading-snug">
-                    {item.category}
-                </span>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-600 text-xs font-semibold whitespace-nowrap">
-                {item.startDate ? formatDisplayDate(item.startDate) : 'N/A'}
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-slate-800 text-xs whitespace-nowrap">
-                <div className="space-y-0.5">
-                    <p className="font-extrabold text-slate-900">{item.endDate ? formatDisplayDate(item.endDate) : 'N/A'}</p>
-                    <span className={cn(
-                        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
-                        deadlineAlert
-                            ? 'bg-rose-50 text-rose-700 border-rose-200'
-                            : 'bg-slate-100 text-[#0b2447] border-slate-200'
-                    )}>
-                        {item.deadlineLabel}
-                    </span>
-                </div>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 whitespace-nowrap">
-                <span className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs",
-                    badgeColor
-                )}>
-                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                    {item.statusLabel}
-                </span>
-            </td>
-            <td className="px-4 py-3.5 sm:px-5 sm:py-4 text-right whitespace-nowrap">
-                <Link 
-                    href={item.link} 
-                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm"
-                >
-                    View Details 
-                    <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-            </td>
-        </tr>
-    );
-}
-
 interface Props {
     requirements?: any[];
     tenders?: MarketplaceTender[];
@@ -462,7 +374,6 @@ function extractCategoryName(r: any): string {
     if (typeof r.category === 'object' && r.category?.name) return r.category.name;
     if (typeof r.category === 'string' && r.category.trim() && r.category !== 'Multi-category' && r.category !== 'General') return r.category.trim();
     if (r.categoryName) return r.categoryName;
-    if (r.subCategory) return r.subCategory;
     if (r.procurementCategory) return r.procurementCategory;
 
     // Fallback: Infer category intelligently from Title / Description keywords if missing
@@ -481,6 +392,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
     const { ref, visible } = useFadeIn();
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:marketplace-opportunities:view-mode');
     const { user } = useAuth();
+    const router = useRouter();
 
     type OpportunitySortKey = 'id' | 'title' | 'buyerName' | 'category' | 'startDate' | 'budget' | 'endDate' | 'statusLabel';
     const [sortKey, setSortKey] = useState<OpportunitySortKey>('startDate');
@@ -516,42 +428,56 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                     method = parsed.method.replace(/\s+/g, '_').toUpperCase();
                 }
             }
-            const sourceId = r.requirementNumber || r.sourceId || (r.id ? Math.abs(r.id) : null);
+            const sourceId = r.sourceId || (r.id ? Math.abs(r.id) : null);
+            const displayId = formatRefId(
+                r.sourceModel === 'BUYER_REQUIREMENT' ? 'REQ' : 'BID', 
+                sourceId || r.id, 
+                r.bidNumber || r.requirementNumber, 
+                method
+            );
             
             // Link formatting based on authentication & procurement method
-            let link = sourceId ? `/marketplace/requirements/${sourceId}` : '/marketplace/requirements';
+            let link = `/bids/${encodeURIComponent(displayId)}`;
             if (r.linkedAuctionId) {
                 link = sellerRoutes.detail('REVERSE_AUCTION', r.linkedAuctionId);
+            } else if (method === 'OPEN_TENDER' || method === 'LIMITED_TENDER' || method.includes('TENDER')) {
+                link = `/tenders?tender=${encodeURIComponent(r.referenceNumber || r.bidNumber || r.sourceId || r.id)}`;
             } else {
                 const isLoggedIn = !!user;
                 const isSeller = user?.role === 'seller';
                 if (isLoggedIn && isSeller) {
                     if (method === 'RATE_CONTRACT' || method.includes('RATE')) {
-                        link = sellerRoutes.detail('RATE_CONTRACT', sourceId);
+                        link = sellerRoutes.detail('RATE_CONTRACT', displayId);
                     } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
-                        link = sellerRoutes.detail('RFQ', sourceId);
+                        link = sellerRoutes.detail('RFQ', displayId);
                     } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
-                        link = sellerRoutes.detail('RFP', sourceId);
+                        link = sellerRoutes.detail('RFP', displayId);
                     } else if (method === 'OPEN_TENDER' || method.includes('OPEN')) {
-                        link = sellerRoutes.detail('OPEN_TENDER', sourceId);
+                        link = sellerRoutes.detail('OPEN_TENDER', displayId);
                     } else if (method === 'LIMITED_TENDER' || method.includes('LIMITED')) {
-                        link = sellerRoutes.detail('LIMITED_TENDER', sourceId);
+                        link = sellerRoutes.detail('LIMITED_TENDER', displayId);
                     } else if (['TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(method)) {
-                        link = sellerRoutes.detail('OPEN_TENDER', sourceId);
+                        link = sellerRoutes.detail('OPEN_TENDER', displayId);
                     } else if (method === 'REVERSE_AUCTION') {
-                        link = sellerRoutes.detail('REVERSE_AUCTION', r.sourceId || sourceId);
+                        link = sellerRoutes.detail('REVERSE_AUCTION', r.sourceId || displayId);
                     }
                 }
             }
 
+            const rawDesc = r.description;
+            const parsed = parseDescription(rawDesc);
+            const parsedBudget = r.estimatedValue || r.budgetMin || extractBudgetValue(rawDesc);
+            const cleanDesc = cleanOpportunitySummary(rawDesc);
+
             return {
                 id: r.id,
                 sourceKey: `requirement-${r.sourceModel || 'BUYER_REQUIREMENT'}-${sourceId}-${r.id}`,
-                displayId: formatRefId(r.sourceModel === 'BUYER_REQUIREMENT' ? 'REQ' : 'BID', sourceId || r.id, r.bidNumber || r.requirementNumber, method),
+                displayId,
                 title: r.title,
-                description: getFormattedDescription(r.description),
+                description: cleanDesc || getFormattedDescription(rawDesc),
+                cleanDescription: cleanDesc,
                 category: extractCategoryName(r),
-                budget: r.estimatedValue || r.budgetMin || null,
+                budget: parsedBudget,
                 buyerName: r.buyerOrganization?.organizationName || r.buyerOrganizationName || r.buyerName || 'Verified Buyer',
                 location: r.deliveryLocation || r.location || 'Jharsuguda, Odisha',
                 startDate: rawStartDate,
@@ -562,6 +488,8 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                 deadlineLabel: status.deadlineLabel,
                 statusCode: status.code,
                 statusLabel: r.statusLabel || status.label,
+                sourcingMethod: method ? formatMethodLabel(method) : (parsed.method || 'Requirement'),
+                urgency: parsed.urgency,
                 participantsCount: r.participantsCount || r.responsesCount || 0,
                 rawDescription: r.description
             };
@@ -625,61 +553,35 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             header: 'Ref ID',
             sortable: true,
             sortKey: 'id',
-            width: 'w-28',
+            width: 'w-[11%]',
             cell: (item) => (
-                <span className="inline-block text-[11px] font-mono font-bold text-slate-700 bg-slate-100/90 px-2.5 py-1 rounded-md border border-slate-200/70 whitespace-nowrap shadow-2xs group-hover:border-blue-200 group-hover:bg-blue-50/40 transition-colors">
-                    {item.displayId}
-                </span>
+                <div className="space-y-1">
+                    <span className="inline-block text-[11px] font-mono font-bold text-slate-800 bg-slate-100/90 px-2 py-0.5 rounded border border-slate-200/80 whitespace-nowrap shadow-2xs group-hover:border-blue-300 group-hover:bg-blue-50/50 transition-colors">
+                        {item.displayId}
+                    </span>
+                    {item.sourcingMethod && (
+                        <div>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-slate-50 text-slate-600 border border-slate-200/70 whitespace-nowrap shadow-2xs">
+                                {item.sourcingMethod}
+                            </span>
+                        </div>
+                    )}
+                </div>
             )
         },
         {
             key: 'title',
-            header: 'Title / Description',
+            header: 'Title',
             sortable: true,
             sortKey: 'title',
+            width: 'w-[20%]',
             cell: (item) => (
-                <div className="space-y-1">
-                    <p className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug group-hover:text-[#0b2447] transition-colors">
-                        {item.title}
-                    </p>
-                    {(() => {
-                        const parsed = parseDescription(item.rawDescription || item.description);
-                        const showUrgency = parsed.urgency && !parsed.urgency.toLowerCase().includes('normal');
-                        const hasBadges = parsed.method || showUrgency;
-                        return (
-                            <div className="space-y-1">
-                                {hasBadges && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {parsed.method && (
-                                            <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/80 whitespace-nowrap shadow-2xs">
-                                                {parsed.method}
-                                            </span>
-                                        )}
-                                        {showUrgency && (
-                                            <span className={cn(
-                                                "px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wider border whitespace-nowrap shadow-2xs",
-                                                parsed.urgency.toLowerCase().includes('urgent') || parsed.urgency.toLowerCase().includes('high')
-                                                    ? 'bg-rose-50 text-rose-700 border-rose-200/80'
-                                                    : 'bg-amber-50 text-amber-700 border-amber-200/80'
-                                            )}>
-                                                {parsed.urgency} Urgency
-                                            </span>
-                                        )}
-                                    </div>
-                                )}
-                                {parsed.text ? (
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                        {parsed.text}
-                                    </p>
-                                ) : !hasBadges && item.description ? (
-                                    <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                                        {item.description}
-                                    </p>
-                                ) : null}
-                            </div>
-                        );
-                    })()}
-                </div>
+                <Link 
+                    href={item.link} 
+                    className="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug hover:text-[#0b2447] line-clamp-2 transition-colors block"
+                >
+                    {item.title}
+                </Link>
             )
         },
         {
@@ -687,10 +589,21 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             header: 'Buyer Organization',
             sortable: true,
             sortKey: 'buyerName',
+            width: 'w-[18%]',
             cell: (item) => (
-                <div className="flex items-center gap-2.5">
-                    <BuyerLogoIcon name={item.buyerName} />
-                    <span className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug">{item.buyerName}</span>
+                <div className="space-y-0.5 pr-2">
+                    <div className="flex items-center gap-1.5">
+                        <BuyerLogoIcon name={item.buyerName} />
+                        <span className="font-extrabold text-xs sm:text-sm text-slate-900 leading-snug line-clamp-1" title={item.buyerName}>
+                            {item.buyerName}
+                        </span>
+                    </div>
+                    {item.location && (
+                        <div className="flex items-center gap-1 text-[11px] text-slate-500 font-medium line-clamp-1" title={item.location}>
+                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{item.location}</span>
+                        </div>
+                    )}
                 </div>
             )
         },
@@ -699,21 +612,23 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             header: 'Category',
             sortable: true,
             sortKey: 'category',
+            width: 'w-[13%]',
             cell: (item) => (
-                <span className="inline-block bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200/60 text-slate-600 leading-snug text-xs font-semibold">
-                    {item.category}
+                <span className="inline-flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-md border border-slate-200/70 text-slate-700 text-xs font-semibold leading-snug max-w-full">
+                    <Package className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span className="truncate" title={item.category}>{item.category}</span>
                 </span>
             )
         },
         {
             key: 'startDate',
-            header: 'Published Date',
+            header: 'Published',
             sortable: true,
             sortKey: 'startDate',
-            width: 'w-28',
+            width: 'w-[8%]',
             cell: (item) => (
                 <span className="text-slate-600 text-xs font-semibold whitespace-nowrap">
-                    {item.startDate ? formatDisplayDate(item.startDate) : 'N/A'}
+                    {item.startDate ? formatDate(item.startDate) : '—'}
                 </span>
             )
         },
@@ -722,18 +637,21 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             header: 'Closes / Timeline',
             sortable: true,
             sortKey: 'endDate',
-            width: 'w-32',
+            width: 'w-[10%]',
             cell: (item) => {
                 const deadlineAlert = item.statusCode === 'CLOSING_TODAY' || item.statusCode === 'CLOSING_SOON' || item.daysRemaining <= 7;
                 return (
-                    <div className="space-y-0.5 whitespace-nowrap text-xs">
-                        <p className="font-extrabold text-slate-900">{item.endDate ? formatDisplayDate(item.endDate) : 'N/A'}</p>
+                    <div className="space-y-1 whitespace-nowrap">
+                        <p className="font-extrabold text-slate-900 text-xs">
+                            {item.endDate ? formatDate(item.endDate) : '—'}
+                        </p>
                         <span className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border shadow-2xs",
                             deadlineAlert
                                 ? 'bg-rose-50 text-rose-700 border-rose-200'
                                 : 'bg-slate-100 text-[#0b2447] border-slate-200'
                         )}>
+                            <Clock className="h-2.5 w-2.5 shrink-0" />
                             {item.deadlineLabel}
                         </span>
                     </div>
@@ -745,12 +663,12 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             header: 'Status',
             sortable: true,
             sortKey: 'statusLabel',
-            width: 'w-28',
+            width: 'w-[7%]',
             cell: (item) => {
                 const badgeColor = getStatusBadgeClass(item.statusCode);
                 return (
                     <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-wider shadow-2xs whitespace-nowrap",
+                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider shadow-2xs whitespace-nowrap",
                         badgeColor
                     )}>
                         <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -763,16 +681,16 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
             key: 'action',
             header: 'Action',
             align: 'right',
-            width: 'w-32',
+            width: 'w-[10%]',
             cellClassName: 'text-right',
             headerClassName: 'text-right',
             cell: (item) => (
                 <Link 
                     href={item.link} 
-                    className="inline-flex h-8.5 items-center gap-1.5 rounded-full bg-[#0b2447] px-3.5 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm"
+                    className="inline-flex h-8 items-center justify-center gap-1 rounded-full bg-[#0b2447] px-3 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm whitespace-nowrap cursor-pointer"
                 >
                     View Details 
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <ArrowRight className="h-3 w-3" />
                 </Link>
             )
         }
@@ -784,12 +702,12 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
     const emptyMessage = 'No active procurement opportunities found matching current records.';
 
     return (
-        <section ref={ref} className="mt-0 py-8 bg-[#f8fafc]" aria-labelledby="opportunities-heading">
+        <section ref={ref} className="mt-0 py-6 sm:py-8 bg-[#f8fafc]" aria-labelledby="opportunities-heading">
             <div className="mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
-                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 sm:p-8 shadow-sm">
+                <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 lg:p-7 shadow-sm">
                     {/* Header */}
                     <div
-                        className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end"
+                        className="mb-5 sm:mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end"
                         style={{ 
                             opacity: visible ? 1 : 0, 
                             transform: visible ? 'none' : 'translateY(-10px)', 
@@ -874,11 +792,24 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                             keyExtractor={(item) => item.sourceKey}
                             showSrNo={true}
                             srNoHeader="#"
+                            srNoWidth="w-[3%]"
                             sortKey={sortKey}
                             sortDirection={sortDirection}
                             onSort={(key) => toggleSort(key as any)}
+                            rowClassName="hover:bg-blue-50/20 transition-colors"
                             emptyTitle="No active procurement opportunities found"
                             emptyDescription={emptyMessage}
+                            minWidth="min-w-0 w-full"
+                            tableClassName="w-full table-fixed"
+                            className="border border-slate-200/90 rounded-xl shadow-2xs overflow-hidden"
+                            containerFooter={
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-2.5 bg-slate-50/70 border-t border-slate-200/80 text-xs text-slate-500 font-semibold">
+                                    <span>Showing <strong className="text-slate-800">{Math.min(activeOpportunities.length, 8)}</strong> of <strong className="text-slate-800">{activeOpportunities.length}</strong> active opportunities</span>
+                                    <Link href={viewAllHref} className="inline-flex items-center gap-1 font-bold text-[#0b2447] hover:underline">
+                                        Explore all procurements <ArrowRight className="h-3.5 w-3.5" />
+                                    </Link>
+                                </div>
+                            }
                         />
                     )}
                 </div>

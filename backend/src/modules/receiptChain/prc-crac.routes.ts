@@ -10,7 +10,7 @@ import { numberSeries } from '../../services/workflow/workflow-common.js';
 import { getProcurementModeSettings } from '../procurementMode/procurement-mode.service.js';
 
 const router = Router();
-router.use(authenticate);
+router.use(['/prc', '/crac'], authenticate);
 
 const asyncRoute = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
   async (req: AuthRequest, res: Response) => {

@@ -47,8 +47,9 @@ const STATUS_TONE: Record<DisputeStatus, string> = {
 
 export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' | 'grievances' } = {}) {
     const { user } = useAuth();
-    const isAdmin = user?.role === 'admin';
+    const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
     const [activeSection, setActiveSection] = useState<'disputes' | 'grievances'>(() => {
+        if (!isAdmin) return 'disputes';
         if (defaultTab) return defaultTab;
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
@@ -60,6 +61,10 @@ export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' |
     const [showCreate, setShowCreate] = useState(false);
 
     useEffect(() => {
+        if (!isAdmin) {
+            setActiveSection('disputes');
+            return;
+        }
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
             const tab = params.get('tab');
@@ -69,7 +74,7 @@ export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' |
                 setActiveSection('disputes');
             }
         }
-    }, []);
+    }, [isAdmin]);
 
     const handleSectionChange = (section: 'disputes' | 'grievances') => {
         setActiveSection(section);
@@ -87,45 +92,47 @@ export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' |
 
     return (
         <div className="mx-auto max-w-[1560px] space-y-5 px-4 pb-12">
-            {/* Top Navigation Tabs */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3">
-                <div>
-                    <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">
-                        Dispute Resolution & Grievances
-                    </h1>
-                    <p className="mt-0.5 text-xs font-semibold text-slate-500">
-                        Arbitrate formal purchase order disputes, investigate stakeholder grievances, and manage resolutions.
-                    </p>
+            {/* Top Navigation Tabs - Rendered exclusively for Admin / Master Admin */}
+            {isAdmin && (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3">
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">
+                            Dispute Resolution & Grievances
+                        </h1>
+                        <p className="mt-0.5 text-xs font-semibold text-slate-500">
+                            Arbitrate formal purchase order disputes, investigate stakeholder grievances, and manage resolutions.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1">
+                        <button
+                            role="tab"
+                            aria-selected={activeSection === 'disputes'}
+                            onClick={() => handleSectionChange('disputes')}
+                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                                activeSection === 'disputes'
+                                    ? 'bg-white text-[#12335f] shadow-sm font-black'
+                                    : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            <Shield className="h-3.5 w-3.5" />
+                            Contract Disputes
+                        </button>
+                        <button
+                            role="tab"
+                            aria-selected={activeSection === 'grievances'}
+                            onClick={() => handleSectionChange('grievances')}
+                            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                                activeSection === 'grievances'
+                                    ? 'bg-white text-[#12335f] shadow-sm font-black'
+                                    : 'text-slate-600 hover:text-slate-900'
+                            }`}
+                        >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Stakeholder Grievances
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 p-1">
-                    <button
-                        role="tab"
-                        aria-selected={activeSection === 'disputes'}
-                        onClick={() => handleSectionChange('disputes')}
-                        className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                            activeSection === 'disputes'
-                                ? 'bg-white text-[#12335f] shadow-sm font-black'
-                                : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                    >
-                        <Shield className="h-3.5 w-3.5" />
-                        Contract Disputes
-                    </button>
-                    <button
-                        role="tab"
-                        aria-selected={activeSection === 'grievances'}
-                        onClick={() => handleSectionChange('grievances')}
-                        className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                            activeSection === 'grievances'
-                                ? 'bg-white text-[#12335f] shadow-sm font-black'
-                                : 'text-slate-600 hover:text-slate-900'
-                        }`}
-                    >
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Stakeholder Grievances
-                    </button>
-                </div>
-            </div>
+            )}
 
             {activeSection === 'disputes' ? (
                 <DisputeList
@@ -136,7 +143,7 @@ export default function DisputesPage({ defaultTab }: { defaultTab?: 'disputes' |
                     onCloseCreate={() => setShowCreate(false)}
                 />
             ) : (
-                <GrievancesSection isAdmin={isAdmin} />
+                isAdmin && <GrievancesSection isAdmin={isAdmin} />
             )}
         </div>
     );
@@ -197,7 +204,11 @@ function DisputeList({ isAdmin, onSelect, onCreate, showCreate, onCloseCreate }:
             <div>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                     <div>
-                        <h2 className="text-lg font-black tracking-tight text-slate-900">Purchase Order Disputes</h2>
+                        {isAdmin ? (
+                            <h2 className="text-lg font-black tracking-tight text-slate-900">Purchase Order Disputes</h2>
+                        ) : (
+                            <h1 className="text-2xl font-black tracking-tight text-slate-950 mt-1">Purchase Order Disputes</h1>
+                        )}
                         <p className="mt-0.5 text-xs font-semibold text-slate-500">
                             Raise, track, and resolve disputes for purchase orders, payments, escrow, and milestone delivery.
                         </p>
@@ -493,7 +504,7 @@ function DisputeDetail({ id, onBack, isAdmin }: { id: number; onBack: () => void
     const sendMut = useSendDisputeMessage();
     const statusMut = useUpdateDisputeStatus();
     const withdrawMut = useWithdrawDispute();
-    const wsStatus = useDisputeWebSocket(id);
+    const wsStatus = useDisputeWebSocket(id, Boolean(user));
     const [content, setContent] = useState('');
     const [internal, setInternal] = useState(false);
     const [showStatusModal, setShowStatusModal] = useState(false);

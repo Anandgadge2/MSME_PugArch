@@ -240,14 +240,14 @@ export default function MarketplaceSellerStore() {
                             <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
                                 {/* Ambient backdrop so any aspect ratio fills wide desktop screens */}
                                 <img
-                                    src={resolveMediaUrl(vendor.bannerUrl) || ''}
+                                    src={resolveMediaUrl(vendor.bannerUrl) || undefined}
                                     alt=""
                                     aria-hidden="true"
                                     className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60 brightness-75 select-none pointer-events-none"
                                 />
                                 {/* Main banner: fully visible, sharp, uncropped */}
                                 <img
-                                    src={resolveMediaUrl(vendor.bannerUrl) || ''}
+                                    src={resolveMediaUrl(vendor.bannerUrl) || undefined}
                                     alt={`${name} Store Banner`}
                                     className="relative z-1 max-h-full max-w-full object-contain object-center drop-shadow-md"
                                 />
@@ -279,7 +279,7 @@ export default function MarketplaceSellerStore() {
                         <div className="absolute -top-7 sm:-top-9 md:-top-10 left-4 sm:left-6 w-16 h-16 sm:w-20 sm:h-20 md:w-22 md:h-22 rounded-xl bg-white border-2 border-white shadow-md flex items-center justify-center p-1.5 z-10">
                             {vendor.logoUrl ? (
                                 <img
-                                    src={resolveMediaUrl(vendor.logoUrl) || ''}
+                                    src={resolveMediaUrl(vendor.logoUrl) || undefined}
                                     alt={`${name} Logo`}
                                     className="w-full h-full object-contain rounded-lg bg-white"
                                 />

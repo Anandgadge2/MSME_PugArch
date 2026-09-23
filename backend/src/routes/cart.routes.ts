@@ -20,7 +20,6 @@ import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { authenticate, requirePermission } from '../middleware/auth.js';
 import { requireApprovedOrg } from '../middleware/requireApprovedOrg.js';
-import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
@@ -135,8 +134,11 @@ const cartIncludes = {
 
 // ─── GET /api/cart — my org's active cart ────────────────────────────────────
 
-router.get('/cart', authenticate, requirePermission('cart.view', orgScope), shortCache(10), asyncRoute(async (req, res) => {
+router.get('/cart', authenticate, requirePermission('cart.view', orgScope), asyncRoute(async (req, res) => {
     ensureOrg(req);
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     const cart = await getOrCreateActiveCart(orgId(req), userId(req));
     ok(res, cart);
 }));

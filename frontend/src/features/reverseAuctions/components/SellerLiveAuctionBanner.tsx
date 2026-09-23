@@ -282,7 +282,7 @@ export default function SellerLiveAuctionBanner({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-800">
           <Link
-            href={`/seller/procurement/reverse-auction/${auctionId}/live`}
+            href={`/seller/procurement/reverse-auction/${summary?.auction?.auctionCode || auctionId}/live`}
             className="w-full sm:w-auto h-11 px-5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition focus:outline-none focus:ring-2 focus:ring-blue-400"
           >
             <ExternalLink className="h-4 w-4" aria-hidden="true" />

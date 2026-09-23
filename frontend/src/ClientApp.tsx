@@ -7,8 +7,9 @@ const App = dynamic(() => import('@/App'), { ssr: false });
 
 interface ClientAppProps {
   serverInitialLoadComplete?: boolean;
+  initialSidebarCollapsed?: boolean;
 }
 
-export default function ClientApp({ serverInitialLoadComplete }: ClientAppProps) {
-  return <App serverInitialLoadComplete={serverInitialLoadComplete} />;
+export default function ClientApp({ serverInitialLoadComplete, initialSidebarCollapsed }: ClientAppProps) {
+  return <App serverInitialLoadComplete={serverInitialLoadComplete} initialSidebarCollapsed={initialSidebarCollapsed} />;
 }

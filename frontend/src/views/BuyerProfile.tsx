@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api, BASE_URL, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -33,6 +33,11 @@ import {
   AlertCircle,
   AlertTriangle,
   ImageIcon,
+  Check,
+  KeyRound,
+  RefreshCw,
+  Stamp,
+  FileSignature,
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
@@ -41,8 +46,11 @@ import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
-import { ProfileSkeleton } from '../components/ui/skeleton';
+import { BuyerProfileSkeleton, BuyerShowcaseFormSkeleton } from '../components/ui/skeleton';
 import { DataTable, ColumnDef } from '../components/ui/data-table';
+import { FocusTrap } from '../components/ui/FocusTrap';
+import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
+import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 
 interface SidebarNavItem {
   id: string;
@@ -52,19 +60,22 @@ interface SidebarNavItem {
 }
 
 const SIDEBAR_NAV: SidebarNavItem[] = [
-  { id: 'showcase_profile', label: 'Organization Showcase Profile', icon: Building2 },
-  { id: 'address', label: 'Organisation Address', icon: MapPin },
-  { id: 'delivery_addresses', label: 'Delivery Addresses', icon: MapPin, path: '/buyer/address-book' },
+  { id: 'showcase_profile', label: 'Org Profile', icon: Building2 },
+  { id: 'address', label: 'Org Address', icon: MapPin },
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
   { id: 'password', label: 'Change Password', icon: Lock },
+  { id: 'privacy', label: 'Privacy & Consent', icon: Shield },
   { id: 'deactivate', label: 'Deactivate Account', icon: Trash2 },
 ];
 
 export default function BuyerProfile() {
   const { user, refreshUser } = useAuth();
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState('showcase_profile');
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams?.get('section');
+  const tabParam = searchParams?.get('tab');
+  const [activeSection, setActiveSection] = useState(sectionParam || 'showcase_profile');
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -77,11 +88,50 @@ export default function BuyerProfile() {
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  // Address edit state & snapshot
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const initialAddressRef = useRef<any>(null);
+
+  // Password change states
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordOtp, setPasswordOtp] = useState('');
+  const [passwordOtpSent, setPasswordOtpSent] = useState(false);
+  const [isSendingPasswordOtp, setIsSendingPasswordOtp] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordCountdown, setPasswordCountdown] = useState(0);
+
   // Showcase profile states
-  const [showcaseTab, setShowcaseTab] = useState('details');
+  const [showcaseTab, setShowcaseTab] = useState(tabParam || 'details');
   const [showcaseProfile, setShowcaseProfile] = useState<any>(null);
   const [showcaseLoading, setShowcaseLoading] = useState(true);
   const [showcaseSaving, setShowcaseSaving] = useState(false);
+
+  // Stamp & Signature states
+  const [stampUrl, setStampUrl] = useState<string | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
+  const [isBrandingLoading, setIsBrandingLoading] = useState(false);
+  const [isStampLoading, setIsStampLoading] = useState(false);
+  const [isSignatureLoading, setIsSignatureLoading] = useState(false);
+
+  // Synchronize section and tab from URL query params
+  useEffect(() => {
+    if (!searchParams) return;
+    const s = searchParams.get('section');
+    const t = searchParams.get('tab');
+    if (s) {
+      setActiveSection(s);
+    }
+    if (t && (!s || s === 'showcase_profile')) {
+      setShowcaseTab(t);
+    }
+  }, [searchParams]);
+
   const [items, setItems] = useState<any[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
@@ -103,6 +153,7 @@ export default function BuyerProfile() {
   const [uploadSummary, setUploadSummary] = useState<{ savedCount: number; invalidCount: number; hasDuplicates: boolean; duplicateCount: number } | null>(null);
   // Image lightbox/preview
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
+  const [bannerLoadError, setBannerLoadError] = useState(false);
 
   // Items table sorting & pagination
   const [itemsSortKey, setItemsSortKey] = useState<string>('serialNo');
@@ -131,6 +182,7 @@ export default function BuyerProfile() {
       if (res.ok) {
         const body = await res.json();
         setShowcaseProfile(body.data);
+        setBannerLoadError(false);
         initialProfileRef.current = body.data;
       }
     } catch (err) {
@@ -139,6 +191,38 @@ export default function BuyerProfile() {
       setShowcaseLoading(false);
     }
   };
+
+  const fetchInvoiceBranding = async () => {
+    setIsBrandingLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.stampUrl) setStampUrl(data.stampUrl);
+        if (data.signatureUrl) setSignatureUrl(data.signatureUrl);
+        if (data.logoUrl) {
+          setShowcaseProfile((prev: any) => (prev && !prev.logoUrl ? { ...prev, logoUrl: data.logoUrl } : prev));
+        }
+      } else if (typeof window !== 'undefined') {
+        const lsStamp = localStorage.getItem('msme_invoice_stamp');
+        const lsSig = localStorage.getItem('msme_invoice_signature');
+        if (lsStamp) setStampUrl(lsStamp);
+        if (lsSig) setSignatureUrl(lsSig);
+      }
+    } catch (err) {
+      console.error('Failed to fetch invoice branding', err);
+    } finally {
+      setIsBrandingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'showcase_profile' && showcaseTab === 'branding') {
+      void fetchInvoiceBranding();
+    }
+  }, [activeSection, showcaseTab]);
 
   const fetchItems = async () => {
     try {
@@ -281,6 +365,7 @@ export default function BuyerProfile() {
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_logo');
     const loadingToast = toast.loading('Uploading logo...');
     try {
       const res = await api.fetch('/api/upload', {
@@ -301,6 +386,18 @@ export default function BuyerProfile() {
           const updateBody = await updateRes.json().catch(() => null);
           const finalLogoUrl = updateBody?.data?.logoUrl || logoUrl;
           setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: finalLogoUrl }));
+          // Sync with invoice-branding endpoint and localStorage
+          void api.fetch('/api/user/invoice-branding', {
+            method: 'PUT',
+            body: JSON.stringify({ logoUrl: finalLogoUrl }),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+          }).catch(() => null);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_logo', finalLogoUrl);
+          }
           toast.success('Logo uploaded successfully');
         } else {
           toast.error('Failed to update profile logo');
@@ -311,6 +408,7 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Upload failed due to network error');
     } finally {
+      e.target.value = '';
       toast.dismiss(loadingToast);
     }
   };
@@ -320,6 +418,7 @@ export default function BuyerProfile() {
     const file = e.target.files[0];
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('entityType', 'organization_banner');
     const loadingToast = toast.loading('Uploading banner...');
     try {
       const res = await api.fetch('/api/upload', {
@@ -340,6 +439,7 @@ export default function BuyerProfile() {
           const updateBody = await updateRes.json().catch(() => null);
           const finalBannerUrl = updateBody?.data?.bannerUrl || bannerUrl;
           setShowcaseProfile((prev: any) => ({ ...prev, bannerUrl: finalBannerUrl }));
+          setBannerLoadError(false);
           toast.success('Banner uploaded successfully');
         } else {
           toast.error('Failed to update profile banner');
@@ -350,6 +450,7 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Upload failed due to network error');
     } finally {
+      e.target.value = '';
       toast.dismiss(loadingToast);
     }
   };
@@ -365,6 +466,20 @@ export default function BuyerProfile() {
       });
       if (updateRes.ok) {
         setShowcaseProfile((prev: any) => ({ ...prev, [field]: null }));
+        if (field === 'bannerUrl') setBannerLoadError(false);
+        if (field === 'logoUrl') {
+          void api.fetch('/api/user/invoice-branding', {
+            method: 'PUT',
+            body: JSON.stringify({ logoUrl: null }),
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            }
+          }).catch(() => null);
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('msme_invoice_logo');
+          }
+        }
         toast.success(`${field === 'logoUrl' ? 'Logo' : 'Banner'} removed successfully`);
       } else {
         toast.error('Failed to update profile');
@@ -372,6 +487,176 @@ export default function BuyerProfile() {
     } catch (err) {
       toast.error('Failed to remove image');
     } finally {
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleStampUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const limitMB = 2;
+    if (file.size > limitMB * 1024 * 1024) {
+      return toast.error(`File size exceeds limit of ${limitMB}MB`);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'stamp');
+    const loadingToast = toast.loading('Uploading official stamp...');
+    setIsStampLoading(true);
+    try {
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const uploadedStampUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+        if (!uploadedStampUrl) throw new Error('Upload did not return a valid URL');
+
+        const saveRes = await api.fetch('/api/user/invoice-branding', {
+          method: 'PUT',
+          body: JSON.stringify({ stampUrl: uploadedStampUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (saveRes.ok) {
+          setStampUrl(uploadedStampUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_stamp', uploadedStampUrl);
+          }
+          toast.success('Official stamp uploaded successfully');
+        } else {
+          toast.error('Failed to update official stamp');
+        }
+      } else {
+        toast.error('Stamp file upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Stamp upload failed due to network error');
+    } finally {
+      e.target.value = '';
+      setIsStampLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleRemoveStamp = async () => {
+    const loadingToast = toast.loading('Removing official stamp...');
+    setIsStampLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        method: 'PUT',
+        body: JSON.stringify({ stampUrl: null }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        setStampUrl(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('msme_invoice_stamp');
+        }
+        toast.success('Official stamp removed successfully');
+      } else {
+        toast.error('Failed to remove official stamp');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to remove official stamp due to network error');
+    } finally {
+      setIsStampLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const limitMB = 2;
+    if (file.size > limitMB * 1024 * 1024) {
+      return toast.error(`File size exceeds limit of ${limitMB}MB`);
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entityType', 'signature');
+    const loadingToast = toast.loading('Uploading authorized signature...');
+    setIsSignatureLoading(true);
+    try {
+      const res = await api.fetch('/api/upload', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: formData
+      });
+      if (res.ok) {
+        const body = await res.json();
+        const uploadedSigUrl = body.data?.url || body.url || (body.fileId ? `/api/files/${body.fileId}/view` : (body.file?.id ? `/api/files/${body.file.id}/view` : null));
+        if (!uploadedSigUrl) throw new Error('Upload did not return a valid URL');
+
+        const saveRes = await api.fetch('/api/user/invoice-branding', {
+          method: 'PUT',
+          body: JSON.stringify({ signatureUrl: uploadedSigUrl }),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (saveRes.ok) {
+          setSignatureUrl(uploadedSigUrl);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('msme_invoice_signature', uploadedSigUrl);
+          }
+          toast.success('Authorized signature uploaded successfully');
+        } else {
+          toast.error('Failed to update authorized signature');
+        }
+      } else {
+        toast.error('Signature file upload failed');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Signature upload failed due to network error');
+    } finally {
+      e.target.value = '';
+      setIsSignatureLoading(false);
+      toast.dismiss(loadingToast);
+    }
+  };
+
+  const handleRemoveSignature = async () => {
+    const loadingToast = toast.loading('Removing authorized signature...');
+    setIsSignatureLoading(true);
+    try {
+      const res = await api.fetch('/api/user/invoice-branding', {
+        method: 'PUT',
+        body: JSON.stringify({ signatureUrl: null }),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (res.ok) {
+        setSignatureUrl(null);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('msme_invoice_signature');
+        }
+        toast.success('Authorized signature removed successfully');
+      } else {
+        toast.error('Failed to remove authorized signature');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to remove authorized signature due to network error');
+    } finally {
+      setIsSignatureLoading(false);
       toast.dismiss(loadingToast);
     }
   };
@@ -662,8 +947,7 @@ export default function BuyerProfile() {
           const data = await res.json();
           setProfile(data.profile);
           if (data.profile) {
-            setFormData(prev => ({
-              ...prev,
+            const addressSnapshot = {
               pincode: data.profile.pincode || '',
               state: data.profile.state || '',
               district: data.profile.district || '',
@@ -672,6 +956,11 @@ export default function BuyerProfile() {
               officeContact: data.profile.officeContact || data.profile.mobile || '',
               extensionNo: data.profile.extensionNo || '',
               websiteUrl: data.profile.website || '',
+            };
+            initialAddressRef.current = addressSnapshot;
+            setFormData(prev => ({
+              ...prev,
+              ...addressSnapshot,
               msmeType: data.profile.msmeType || '',
               organizationType: data.profile.organizationType || '',
               ministry: data.profile.ministry || '',
@@ -833,6 +1122,160 @@ export default function BuyerProfile() {
       toast.error(err?.message || 'Failed to update email');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    let timer: any;
+    if (passwordCountdown > 0) {
+      timer = setInterval(() => {
+        setPasswordCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [passwordCountdown]);
+
+  const handleCancelAddressEdit = () => {
+    if (initialAddressRef.current) {
+      setFormData(prev => ({
+        ...prev,
+        pincode: initialAddressRef.current.pincode || '',
+        state: initialAddressRef.current.state || '',
+        district: initialAddressRef.current.district || '',
+        streetAddress: initialAddressRef.current.streetAddress || '',
+        stdCode: initialAddressRef.current.stdCode || '',
+        officeContact: initialAddressRef.current.officeContact || '',
+        extensionNo: initialAddressRef.current.extensionNo || '',
+        websiteUrl: initialAddressRef.current.websiteUrl || '',
+      }));
+    }
+    setFormErrors({});
+    setIsEditingAddress(false);
+  };
+
+  const passwordStrength = useMemo(() => {
+    const pwd = passwordForm.newPassword;
+    return {
+      minLength: pwd.length >= 8,
+      hasUpper: /[A-Z]/.test(pwd),
+      hasLower: /[a-z]/.test(pwd),
+      hasNumber: /\d/.test(pwd),
+      hasSpecial: /[^A-Za-z0-9]/.test(pwd),
+      match: pwd.length > 0 && pwd === passwordForm.confirmPassword,
+    };
+  }, [passwordForm.newPassword, passwordForm.confirmPassword]);
+
+  const isPasswordValid =
+    passwordStrength.minLength &&
+    passwordStrength.hasUpper &&
+    passwordStrength.hasLower &&
+    passwordStrength.hasNumber &&
+    passwordStrength.hasSpecial &&
+    passwordStrength.match;
+
+  const handleGetPasswordOtp = async () => {
+    if (!passwordForm.newPassword) {
+      toast.error('Please enter new password first');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!passwordStrength.minLength || !passwordStrength.hasUpper || !passwordStrength.hasLower || !passwordStrength.hasNumber || !passwordStrength.hasSpecial) {
+      toast.error('Password does not meet the security criteria');
+      return;
+    }
+
+    setIsSendingPasswordOtp(true);
+    try {
+      const res = await api.fetch('/api/buyer/settings/change-password/send-otp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        toast.success('Password verification code sent to registered email');
+        setPasswordOtpSent(true);
+        setPasswordCountdown(60);
+      } else {
+        // Fallback to seller settings endpoint if running across unified routes
+        const fallbackRes = await api.fetch('/api/seller/settings/change-password/send-otp', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        });
+        const fallbackBody = await fallbackRes.json().catch(() => null);
+        if (fallbackRes.ok) {
+          toast.success('Password verification code sent to registered email');
+          setPasswordOtpSent(true);
+          setPasswordCountdown(60);
+        } else {
+          toast.error(body?.message || fallbackBody?.message || 'Failed to send OTP');
+        }
+      }
+    } catch (err) {
+      toast.error('Network error sending OTP');
+    } finally {
+      setIsSendingPasswordOtp(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordForm.newPassword) {
+      toast.error('Please enter new password');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+    if (!passwordOtp.trim()) {
+      toast.error('Please enter the 6-digit OTP');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const payload = {
+        newPassword: passwordForm.newPassword,
+        otp: passwordOtp.trim()
+      };
+      let res = await api.fetch('/api/buyer/settings/change-password', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      let body = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        // Fallback to seller settings endpoint
+        res = await api.fetch('/api/seller/settings/change-password', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        body = await res.json().catch(() => null);
+      }
+
+      if (res.ok) {
+        toast.success('Password updated successfully');
+        setPasswordForm({ newPassword: '', confirmPassword: '' });
+        setPasswordOtp('');
+        setPasswordOtpSent(false);
+        setPasswordCountdown(0);
+      } else {
+        toast.error(body?.message || 'Failed to update password');
+      }
+    } catch (err) {
+      toast.error('Network error updating password');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -1005,7 +1448,26 @@ export default function BuyerProfile() {
       if (res.ok) {
         const body = await res.json().catch(() => null);
         setProfile(body?.data || body || profile);
-        toast.success(`${activeSection === 'bank' ? 'Bank details' : 'Profile'} updated successfully`);
+        toast.success(
+          activeSection === 'bank'
+            ? 'Bank details updated successfully'
+            : activeSection === 'address'
+            ? 'Address updated successfully'
+            : 'Profile updated successfully'
+        );
+        if (activeSection === 'address') {
+          setIsEditingAddress(false);
+          initialAddressRef.current = {
+            pincode: formData.pincode,
+            state: formData.state,
+            district: formData.district,
+            streetAddress: formData.streetAddress,
+            stdCode: formData.stdCode,
+            officeContact: formData.officeContact,
+            extensionNo: formData.extensionNo,
+            websiteUrl: formData.websiteUrl,
+          };
+        }
         if (activeSection === 'personal') {
           setPersonalOtp('');
           setPersonalOtpSent(false);
@@ -1189,7 +1651,7 @@ export default function BuyerProfile() {
   ], [selectedItemIds, items]);
 
   if (loading) {
-    return <ProfileSkeleton />;
+    return <BuyerProfileSkeleton />;
   }
 
   return (
@@ -1312,9 +1774,7 @@ export default function BuyerProfile() {
                 </div>
 
                 {showcaseLoading ? (
-                  <div className="flex h-[200px] items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" />
-                  </div>
+                  <BuyerShowcaseFormSkeleton />
                 ) : (
                   <>
                     {/* Tab Content: Details */}
@@ -1510,20 +1970,26 @@ export default function BuyerProfile() {
                       <div className="space-y-8">
                         {/* Image lightbox/preview modal */}
                         {viewImageUrl && (
-                          <div
-                            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-                            onClick={() => setViewImageUrl(null)}
-                          >
-                            <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
-                              <button
-                                onClick={() => setViewImageUrl(null)}
-                                className="absolute -top-10 right-0 text-white hover:text-slate-300 font-black text-xs uppercase tracking-wider flex items-center gap-1"
-                              >
-                                <X className="h-4 w-4" /> Close
-                              </button>
-                              <img src={viewImageUrl} alt="Preview" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
+                          <FocusTrap active onEscape={() => setViewImageUrl(null)}>
+                            <div
+                              role="dialog"
+                              aria-modal="true"
+                              aria-label="Image preview"
+                              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+                              onClick={() => setViewImageUrl(null)}
+                            >
+                              <div className="relative max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setViewImageUrl(null)}
+                                  aria-label="Close image preview"
+                                  className="absolute -top-10 right-0 text-white hover:text-slate-300 font-black text-xs uppercase tracking-wider flex items-center gap-1"
+                                >
+                                  <X className="h-4 w-4" aria-hidden="true" /> Close
+                                </button>
+                                <img src={viewImageUrl} alt="Preview" className="w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10" />
+                              </div>
                             </div>
-                          </div>
+                          </FocusTrap>
                         )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -1544,7 +2010,7 @@ export default function BuyerProfile() {
                                 <div className="flex justify-center">
                                   <div className="relative group">
                                     <img
-                                      src={resolveMediaUrl(showcaseProfile.logoUrl) || ''}
+                                      src={resolveMediaUrl(showcaseProfile.logoUrl) || undefined}
                                       alt="Org Logo"
                                       className="h-32 w-32 object-contain rounded-xl border bg-white p-2 shadow-md"
                                     />
@@ -1608,31 +2074,42 @@ export default function BuyerProfile() {
                             {showcaseProfile.bannerUrl ? (
                               <div className="space-y-4">
                                 {/* Banner preview */}
-                                <div className="relative group rounded-xl overflow-hidden border shadow-md">
-                                  <img
-                                    src={resolveMediaUrl(showcaseProfile.bannerUrl) || ''}
-                                    alt="Org Banner"
-                                    referrerPolicy="no-referrer"
-                                    crossOrigin="anonymous"
-                                    className="w-full h-28 object-cover"
-                                  />
-                                  <button
-                                    onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
-                                    className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
-                                    title="View full size"
-                                  >
-                                    <Eye className="h-6 w-6 text-white drop-shadow" />
-                                  </button>
+                                <div className="relative group rounded-xl overflow-hidden border shadow-md bg-slate-100">
+                                  {!bannerLoadError ? (
+                                    <img
+                                      src={resolveMediaUrl(showcaseProfile.bannerUrl) || undefined}
+                                      alt="Org Banner"
+                                      className="w-full h-28 object-cover"
+                                      onError={() => setBannerLoadError(true)}
+                                    />
+                                  ) : (
+                                    <div className="w-full h-28 flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-1.5 p-4 text-center">
+                                      <ImageIcon className="h-6 w-6 text-slate-300" />
+                                      <p className="text-[11px] font-medium text-slate-500">Banner image could not be loaded</p>
+                                      <p className="text-[9px] text-slate-400 font-mono truncate max-w-xs">{showcaseProfile.bannerUrl}</p>
+                                    </div>
+                                  )}
+                                  {!bannerLoadError && (
+                                    <button
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      title="View full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" />
+                                    </button>
+                                  )}
                                 </div>
                                 {/* Action buttons */}
                                 <div className="flex flex-wrap gap-2 justify-center">
-                                  <Button
-                                    type="button"
-                                    onClick={() => setViewImageUrl(showcaseProfile.bannerUrl)}
-                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1"
-                                  >
-                                    <Eye className="h-3.5 w-3.5" /> View
-                                  </Button>
+                                  {!bannerLoadError && (
+                                    <Button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(showcaseProfile.bannerUrl))}
+                                      className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1"
+                                    >
+                                      <Eye className="h-3.5 w-3.5" /> View
+                                    </Button>
+                                  )}
                                   <label className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors">
                                     <Pencil className="h-3.5 w-3.5" /> Change
                                     <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} />
@@ -1656,6 +2133,224 @@ export default function BuyerProfile() {
                                 <label className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] text-white hover:bg-slate-800 font-black uppercase text-[10px] tracking-wider h-10 px-5 rounded-xl shadow-md gap-1.5">
                                   <Plus className="h-3.5 w-3.5" /> Select File
                                   <input type="file" accept="image/*" className="hidden" onChange={handleBannerUpload} />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Stamp & Authorized Signature Overview Card */}
+                          <div className="md:col-span-2 bg-gradient-to-br from-indigo-50/40 via-white to-slate-50 border border-indigo-100/80 hover:border-indigo-300 hover:shadow-md transition-all duration-300 rounded-2xl p-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+                            <div className="space-y-2 flex-1">
+                              <div className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200/60 px-2.5 py-1 rounded-full text-indigo-700 text-[10px] font-black uppercase tracking-wider">
+                                <Stamp className="h-3.5 w-3.5" aria-hidden="true" />
+                                ERP Invoices & Purchase Orders
+                              </div>
+                              <h3 className="text-base font-black text-slate-900">Official Stamp & Authorized Signature</h3>
+                              <p className="text-xs font-semibold text-slate-500 max-w-xl leading-relaxed">
+                                Customize your company seal and signatory marks printed on generated purchase orders, delivery notes, and verification documents.
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="h-16 w-28 rounded-xl border border-slate-200 bg-white shadow-xs p-1 flex items-center justify-center overflow-hidden">
+                                {stampUrl || signatureUrl ? (
+                                  <div className="relative h-full w-full flex items-center justify-center">
+                                    {stampUrl && (
+                                      <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Official Stamp" className="h-full w-auto object-contain opacity-90" />
+                                    )}
+                                    {signatureUrl && (
+                                      <img src={resolveMediaUrl(signatureUrl) || signatureUrl} alt="Authorized Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col items-center justify-center text-slate-300">
+                                    <Stamp className="h-6 w-6" aria-hidden="true" />
+                                    <span className="text-[8px] font-bold text-slate-400">No Stamp / Sign</span>
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={() => setIsStampModalOpen(true)}
+                                aria-label="Manage official stamp and signature"
+                                className="bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black uppercase text-xs tracking-wider h-11 px-5 rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                              >
+                                <Stamp className="h-4 w-4" aria-hidden="true" /> Manage Stamp & Sign
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Official Stamp Upload Card */}
+                          <div className="p-6 rounded-3xl border border-slate-200/60 bg-white shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Official Round Stamp</h3>
+                              {stampUrl && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-0.5 text-[9px] font-black uppercase">
+                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Uploaded
+                                </span>
+                              )}
+                            </div>
+
+                            {isStampLoading ? (
+                              <div className="flex flex-col items-center justify-center h-32 animate-pulse">
+                                <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" aria-hidden="true" />
+                              </div>
+                            ) : stampUrl ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-center">
+                                  <div className="relative group">
+                                    <img
+                                      src={resolveMediaUrl(stampUrl) || stampUrl}
+                                      alt="Official Stamp"
+                                      className="h-32 w-32 object-contain rounded-xl border bg-white p-2 shadow-md"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(stampUrl) || stampUrl)}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      aria-label="View official stamp full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                  <Button
+                                    type="button"
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(stampUrl) || stampUrl)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" aria-hidden="true" /> View
+                                  </Button>
+                                  <label
+                                    htmlFor="buyer-stamp-upload-change"
+                                    className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Change
+                                    <input
+                                      id="buyer-stamp-upload-change"
+                                      type="file"
+                                      accept="image/png, image/jpeg, image/jpg"
+                                      className="hidden"
+                                      onChange={handleStampUpload}
+                                    />
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    onClick={handleRemoveStamp}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                                  </Button>
+                                </div>
+                                <p className="text-center text-[10px] text-slate-400 font-semibold">PNG, JPG · Max 2MB · Transparent background recommended</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50 space-y-3">
+                                <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+                                  <Stamp className="h-8 w-8" aria-hidden="true" />
+                                </div>
+                                <p className="text-xs text-slate-400 font-semibold text-center">No official stamp uploaded yet<br />PNG, JPG · Max 2MB</p>
+                                <label
+                                  htmlFor="buyer-stamp-upload"
+                                  className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] text-white hover:bg-slate-800 font-black uppercase text-[10px] tracking-wider h-10 px-5 rounded-xl shadow-md gap-1.5"
+                                >
+                                  <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Select Stamp
+                                  <input
+                                    id="buyer-stamp-upload"
+                                    type="file"
+                                    accept="image/png, image/jpeg, image/jpg"
+                                    className="hidden"
+                                    onChange={handleStampUpload}
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Authorized Signature Upload Card */}
+                          <div className="p-6 rounded-3xl border border-slate-200/60 bg-white shadow-sm space-y-4">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-xs font-black uppercase tracking-wider text-slate-500">Authorized Signatory Signature</h3>
+                              {signatureUrl && (
+                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2 py-0.5 text-[9px] font-black uppercase">
+                                  <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Uploaded
+                                </span>
+                              )}
+                            </div>
+
+                            {isSignatureLoading ? (
+                              <div className="flex flex-col items-center justify-center h-32 animate-pulse">
+                                <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" aria-hidden="true" />
+                              </div>
+                            ) : signatureUrl ? (
+                              <div className="space-y-4">
+                                <div className="flex justify-center">
+                                  <div className="relative group">
+                                    <img
+                                      src={resolveMediaUrl(signatureUrl) || signatureUrl}
+                                      alt="Authorized Signature"
+                                      className="h-32 w-48 object-contain rounded-xl border bg-white p-2 shadow-md"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewImageUrl(resolveMediaUrl(signatureUrl) || signatureUrl)}
+                                      className="absolute inset-0 bg-black/0 group-hover:bg-black/30 rounded-xl transition-all flex items-center justify-center opacity-0 group-hover:opacity-100"
+                                      aria-label="View authorized signature full size"
+                                    >
+                                      <Eye className="h-6 w-6 text-white drop-shadow" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-2 justify-center">
+                                  <Button
+                                    type="button"
+                                    onClick={() => setViewImageUrl(resolveMediaUrl(signatureUrl) || signatureUrl)}
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="h-3.5 w-3.5" aria-hidden="true" /> View
+                                  </Button>
+                                  <label
+                                    htmlFor="buyer-signature-upload-change"
+                                    className="cursor-pointer inline-flex items-center gap-1 bg-[#12335f]/10 hover:bg-[#12335f]/20 text-[#12335f] font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 transition-colors"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Change
+                                    <input
+                                      id="buyer-signature-upload-change"
+                                      type="file"
+                                      accept="image/png, image/jpeg, image/jpg"
+                                      className="hidden"
+                                      onChange={handleSignatureUpload}
+                                    />
+                                  </label>
+                                  <Button
+                                    type="button"
+                                    onClick={handleRemoveSignature}
+                                    className="bg-red-50 hover:bg-red-100 text-red-600 font-extrabold uppercase text-[10px] tracking-wider h-8 rounded-lg px-3 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                                  </Button>
+                                </div>
+                                <p className="text-center text-[10px] text-slate-400 font-semibold">PNG, JPG · Max 2MB · Transparent background recommended</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-8 bg-slate-50/50 space-y-3">
+                                <div className="h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
+                                  <FileSignature className="h-8 w-8" aria-hidden="true" />
+                                </div>
+                                <p className="text-xs text-slate-400 font-semibold text-center">No signature uploaded yet<br />PNG, JPG · Max 2MB</p>
+                                <label
+                                  htmlFor="buyer-signature-upload"
+                                  className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] text-white hover:bg-slate-800 font-black uppercase text-[10px] tracking-wider h-10 px-5 rounded-xl shadow-md gap-1.5"
+                                >
+                                  <Plus className="h-3.5 w-3.5" aria-hidden="true" /> Select Signature
+                                  <input
+                                    id="buyer-signature-upload"
+                                    type="file"
+                                    accept="image/png, image/jpeg, image/jpg"
+                                    className="hidden"
+                                    onChange={handleSignatureUpload}
+                                  />
                                 </label>
                               </div>
                             )}
@@ -1818,33 +2513,46 @@ export default function BuyerProfile() {
 
                         {/* Add/Edit Modal dialog */}
                         {isItemModalOpen && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-                            <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg border overflow-hidden animate-in zoom-in-95 duration-200">
-                              <div className="bg-[#12335f] p-4 text-white flex justify-between items-center">
-                                <h4 className="text-sm font-black uppercase tracking-wider">{editingItem ? 'Edit Item' : 'Add Item Manually'}</h4>
-                                <button onClick={() => setIsItemModalOpen(false)} className="text-white hover:text-slate-200"><X className="h-5 w-5" /></button>
+                          <FocusTrap active onEscape={() => setIsItemModalOpen(false)}>
+                            <div
+                              role="dialog"
+                              aria-modal="true"
+                              aria-labelledby="item-modal-title"
+                              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+                            >
+                              <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200">
+                                <div className="bg-[#12335f] p-4 text-white flex justify-between items-center">
+                                  <h4 id="item-modal-title" className="text-sm font-black uppercase tracking-wider">{editingItem ? 'Edit Item' : 'Add Item Manually'}</h4>
+                                  <button
+                                    onClick={() => setIsItemModalOpen(false)}
+                                    aria-label="Close dialog"
+                                    className="text-white hover:text-slate-200 p-1 rounded-md focus:outline-none focus:ring-2 focus:ring-white/40"
+                                  >
+                                    <X className="h-5 w-5" aria-hidden="true" />
+                                  </button>
+                                </div>
+                                <form onSubmit={handleItemSubmit} className="p-6 space-y-4">
+                                  <div className="grid grid-cols-3 gap-4">
+                                    <div className="col-span-1"><Input label="Sl. No." id="item-serial-no" value={itemForm.serialNo} onChange={(e) => setItemForm(prev => ({ ...prev, serialNo: e.target.value }))} placeholder="e.g. 1" /></div>
+                                    <div className="col-span-2"><Input label="Category" id="item-category" value={itemForm.category} onChange={(e) => setItemForm(prev => ({ ...prev, category: e.target.value }))} placeholder="e.g. Safety" /></div>
+                                  </div>
+                                  <Input label="Item Description *" id="item-description" value={itemForm.itemDescription} onChange={(e) => setItemForm(prev => ({ ...prev, itemDescription: e.target.value }))} placeholder="Enter item description" required />
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <Input label="Monthly Qty" id="item-monthly-qty" value={itemForm.estimatedMonthlyRequirement} onChange={(e) => setItemForm(prev => ({ ...prev, estimatedMonthlyRequirement: e.target.value }))} placeholder="e.g. 100" />
+                                    <Input label="Unit" id="item-unit" value={itemForm.unit} onChange={(e) => setItemForm(prev => ({ ...prev, unit: e.target.value }))} placeholder="e.g. Nos" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label htmlFor="item-remarks" className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</label>
+                                    <textarea id="item-remarks" value={itemForm.remarks} onChange={(e) => setItemForm(prev => ({ ...prev, remarks: e.target.value }))} placeholder="Any additional information" rows={2} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none" />
+                                  </div>
+                                  <div className="pt-4 flex justify-end gap-2 border-t">
+                                    <Button type="button" onClick={() => setIsItemModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl">Cancel</Button>
+                                    <Button type="submit" className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl">Save Item</Button>
+                                  </div>
+                                </form>
                               </div>
-                              <form onSubmit={handleItemSubmit} className="p-6 space-y-4">
-                                <div className="grid grid-cols-3 gap-4">
-                                  <div className="col-span-1"><Input label="Sl. No." value={itemForm.serialNo} onChange={(e) => setItemForm(prev => ({ ...prev, serialNo: e.target.value }))} placeholder="e.g. 1" /></div>
-                                  <div className="col-span-2"><Input label="Category" value={itemForm.category} onChange={(e) => setItemForm(prev => ({ ...prev, category: e.target.value }))} placeholder="e.g. Safety" /></div>
-                                </div>
-                                <Input label="Item Description *" value={itemForm.itemDescription} onChange={(e) => setItemForm(prev => ({ ...prev, itemDescription: e.target.value }))} placeholder="Enter item description" required />
-                                <div className="grid grid-cols-2 gap-4">
-                                  <Input label="Monthly Qty" value={itemForm.estimatedMonthlyRequirement} onChange={(e) => setItemForm(prev => ({ ...prev, estimatedMonthlyRequirement: e.target.value }))} placeholder="e.g. 100" />
-                                  <Input label="Unit" value={itemForm.unit} onChange={(e) => setItemForm(prev => ({ ...prev, unit: e.target.value }))} placeholder="e.g. Nos" />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Remarks</label>
-                                  <textarea value={itemForm.remarks} onChange={(e) => setItemForm(prev => ({ ...prev, remarks: e.target.value }))} placeholder="Any additional information" rows={2} className="w-full rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none" />
-                                </div>
-                                <div className="pt-4 flex justify-end gap-2 border-t">
-                                  <Button type="button" onClick={() => setIsItemModalOpen(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-black uppercase text-[10px] tracking-wider h-10 px-4 rounded-xl">Cancel</Button>
-                                  <Button type="submit" className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl">Save Item</Button>
-                                </div>
-                              </form>
                             </div>
-                          </div>
+                          </FocusTrap>
                         )}
                       </div>
                     )}
@@ -1983,10 +2691,24 @@ export default function BuyerProfile() {
             )}
 
             {activeSection === 'address' && (
-              <div className="space-y-2 animate-in fade-in duration-500">
-                <div className="flex items-center justify-between border-b border-slate-50 pb-0">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Update Address</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">PRIMARY OFFICE</Badge>
+              <div className="space-y-4 animate-in fade-in duration-500">
+                <div className="flex items-center justify-between border-b border-slate-50 pb-2">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Org Address</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Official organizational registered office and communication address</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!isEditingAddress ? (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Active on Record
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Editing Mode
+                      </Badge>
+                    )}
+                    <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-3 py-1 text-[9px] font-black uppercase">PRIMARY OFFICE</Badge>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
@@ -1997,7 +2719,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('pincode', e.target.value)}
                       placeholder="e.g. 411030"
                       error={formErrors.pincode}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       label="State *"
@@ -2005,7 +2728,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('state', e.target.value)}
                       placeholder="MAHARASHTRA"
                       error={formErrors.state}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       label="District *"
@@ -2013,7 +2737,8 @@ export default function BuyerProfile() {
                       onChange={(e) => handleFieldChange('district', e.target.value)}
                       placeholder="Pune"
                       error={formErrors.district}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                   </div>
 
@@ -2025,8 +2750,10 @@ export default function BuyerProfile() {
                         onChange={(e) => handleFieldChange('streetAddress', e.target.value)}
                         placeholder="Enter full street address"
                         rows={5}
+                        disabled={!isEditingAddress}
                         className={cn(
-                          "w-full rounded-xl border border-slate-200 bg-slate-50/50 p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none",
+                          "w-full rounded-xl border p-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all resize-none",
+                          !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200",
                           formErrors.streetAddress && "border-red-500 focus:ring-red-500 bg-red-50/30"
                         )}
                       />
@@ -2045,21 +2772,24 @@ export default function BuyerProfile() {
                       value={formData.stdCode}
                       onChange={(e) => handleFieldChange('stdCode', e.target.value)}
                       error={formErrors.stdCode}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       placeholder="Office Contact No."
                       value={formData.officeContact}
                       onChange={(e) => handleFieldChange('officeContact', e.target.value)}
                       error={formErrors.officeContact}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                     <Input
                       placeholder="Extension No."
                       value={formData.extensionNo}
                       onChange={(e) => handleFieldChange('extensionNo', e.target.value)}
                       error={formErrors.extensionNo}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      disabled={!isEditingAddress}
+                      className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                     />
                   </div>
                 </div>
@@ -2071,18 +2801,41 @@ export default function BuyerProfile() {
                     onChange={(e) => handleFieldChange('websiteUrl', e.target.value)}
                     placeholder="WWW.GEMEXPERT.COM"
                     error={formErrors.websiteUrl}
-                    className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                    disabled={!isEditingAddress}
+                    className={cn("h-12 text-sm font-bold rounded-xl", !isEditingAddress ? "bg-slate-100/70 border-slate-200 text-slate-700 cursor-not-allowed" : "bg-slate-50/50 border-slate-200")}
                   />
                 </div>
 
-                <div className="pt-6 border-t border-slate-50 flex justify-end">
-                  <Button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase  text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98]"
-                  >
-                    {isSaving ? 'Processing...' : 'Save Changes'}
-                  </Button>
+                <div className="pt-6 border-t border-slate-50 flex justify-end gap-3">
+                  {!isEditingAddress ? (
+                    <Button
+                      type="button"
+                      onClick={() => setIsEditingAddress(true)}
+                      className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center gap-2"
+                    >
+                      <Pencil className="h-4 w-4" /> Edit Address
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleCancelAddressEdit}
+                        disabled={isSaving}
+                        className="border border-slate-200 text-slate-600 hover:bg-slate-50 font-black uppercase text-xs tracking-wider h-14 px-8 rounded-2xl transition-all"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-xs tracking-[0.2em] h-14 px-10 rounded-2xl shadow-xl shadow-blue-200 transition-all active:scale-[0.98] flex items-center gap-2"
+                      >
+                        <Save className="h-4 w-4" /> {isSaving ? 'Processing...' : 'Save Changes'}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -2710,21 +3463,182 @@ export default function BuyerProfile() {
             )}
 
             {activeSection === 'password' && (
-              <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
+              <div className="space-y-6 animate-in fade-in duration-300 min-w-0 w-full">
                 <div className="flex items-center justify-between border-b border-slate-50 pb-2">
-                  <h3 className="text-lg font-black text-slate-900 uppercase ">Change Password</h3>
-                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black ">SECURITY POLICIES</Badge>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Change Password</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">Update account password via secure multi-factor authorization</p>
+                  </div>
+                  <Badge className="bg-[#12335f]/5 text-[#12335f] border-[#12335f]/10 rounded-lg px-4 py-1 text-[9px] font-black uppercase">SECURITY POLICIES</Badge>
                 </div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-8 border-t border-gray-100 gap-4 mt-4">
-                  <p className="text-sm font-semibold text-slate-600  max-w-xl">Please complete OTP verification, by clicking the below button to proceed with change of password.</p>
-                  <Button className="bg-[#12335f] hover:bg-slate-800 text-white rounded-xl px-8 h-12 font-black uppercase  text-xs tracking-widest whitespace-nowrap shadow-lg shadow-blue-100">
-                    Get OTP
+
+                <div className="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center gap-2 text-[#12335f]">
+                    <KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <h4 className="text-xs font-black uppercase tracking-wide">Password Requirements &amp; Policy</h4>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-[11px] font-bold">
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.minLength ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.minLength ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>8+ Chars</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasUpper ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasUpper ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Uppercase</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasLower ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasLower ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Lowercase</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasNumber ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasNumber ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Number</span>
+                    </div>
+                    <div className={cn("flex items-center gap-1.5 p-2 rounded-xl border transition-colors", passwordStrength.hasSpecial ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-white text-slate-500 border-slate-200")}>
+                      <Check className={cn("h-3 w-3", passwordStrength.hasSpecial ? "opacity-100" : "opacity-30")} aria-hidden="true" />
+                      <span>Special Char</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  <div className="space-y-1.5 relative">
+                    <Input
+                      label="New Password *"
+                      type={showNewPassword ? "text" : "password"}
+                      value={passwordForm.newPassword}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                      placeholder="Enter new strong password"
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-8 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      title={showNewPassword ? "Hide password" : "Show password"}
+                      aria-label={showNewPassword ? "Hide new password" : "Show new password"}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5 relative">
+                    <Input
+                      label="Confirm New Password *"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      placeholder="Confirm new password"
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-8 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
+                      aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordForm.confirmPassword && (
+                  <div className="text-xs font-bold flex items-center gap-1.5">
+                    {passwordStrength.match ? (
+                      <span className="text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Passwords match
+                      </span>
+                    ) : (
+                      <span className="text-rose-600 flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5" /> Passwords do not match
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-[#12335f]/5 border border-[#12335f]/10 p-5 rounded-2xl flex items-start gap-3.5 mt-4">
+                  <div className="h-9 w-9 bg-white rounded-xl flex items-center justify-center text-[#12335f] shadow-xs shrink-0 mt-0.5">
+                    <Shield className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black uppercase text-[#12335f] tracking-widest leading-none">Authorization Code Security</p>
+                    <p className="text-xs font-medium text-slate-600 leading-relaxed pt-0.5">
+                      To complete the password update, an authorization code will be sent to your registered login email: <strong className="text-slate-900">{user?.email}</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {passwordOtpSent && (
+                  <div className="max-w-md pt-2 space-y-2 animate-in fade-in duration-300">
+                    <Input
+                      label="Enter Authorization OTP *"
+                      placeholder="Enter 6-digit OTP from email"
+                      value={passwordOtp}
+                      onChange={(e) => setPasswordOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      maxLength={6}
+                      inputMode="numeric"
+                    />
+                    <p className="text-[11px] text-slate-400 font-medium ml-1">
+                      Enter the 6-digit OTP code sent to your registered email to authorize the password reset.
+                    </p>
+                  </div>
+                )}
+
+                <div className="pt-6 border-t border-slate-100 flex flex-wrap items-center justify-end gap-3">
+                  <Button
+                    type="button"
+                    onClick={handleGetPasswordOtp}
+                    disabled={isSendingPasswordOtp || isChangingPassword || !isPasswordValid || passwordCountdown > 0}
+                    variant={passwordOtpSent ? "outline" : "primary"}
+                    className={cn(
+                      "font-black uppercase text-xs tracking-wider h-12 sm:h-14 px-8 rounded-2xl transition-all shadow-sm",
+                      passwordOtpSent
+                        ? "border-slate-200 text-[#12335f] hover:bg-slate-50"
+                        : "bg-[#12335f] hover:bg-slate-800 text-white shadow-xl shadow-blue-200"
+                    )}
+                  >
+                    {isSendingPasswordOtp ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Sending...
+                      </>
+                    ) : passwordCountdown > 0 ? (
+                      `Resend in ${passwordCountdown}s`
+                    ) : passwordOtpSent ? (
+                      'Resend OTP'
+                    ) : (
+                      'Get OTP'
+                    )}
                   </Button>
+
+                  {passwordOtpSent && (
+                    <Button
+                      type="button"
+                      onClick={handleChangePassword}
+                      disabled={isChangingPassword || isSendingPasswordOtp || passwordOtp.length < 6 || !isPasswordValid}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-xs tracking-[0.2em] h-12 sm:h-14 px-10 rounded-2xl shadow-xl shadow-emerald-200 transition-all active:scale-[0.98]"
+                    >
+                      {isChangingPassword ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Updating...
+                        </>
+                      ) : (
+                        'Verify & Change Password'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
 
-            {activeSection !== 'address' && activeSection !== 'bank' && activeSection !== 'personal' && activeSection !== 'referral' && activeSection !== 'mobile' && activeSection !== 'hierarchy' && activeSection !== 'email' && activeSection !== 'deactivate' && activeSection !== 'password' && activeSection !== 'showcase_profile' && (
+            {activeSection === 'privacy' && (
+              <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
+                <ConsentManagementCard />
+              </div>
+            )}
+
+            {activeSection !== 'address' && activeSection !== 'bank' && activeSection !== 'personal' && activeSection !== 'referral' && activeSection !== 'mobile' && activeSection !== 'hierarchy' && activeSection !== 'email' && activeSection !== 'deactivate' && activeSection !== 'password' && activeSection !== 'showcase_profile' && activeSection !== 'privacy' && (
               <div className="flex flex-col items-center justify-center py-20 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="h-20 w-20 rounded-[2rem] bg-slate-50 flex items-center justify-center rotate-3 transition-transform hover:rotate-0">
                   {SIDEBAR_NAV.find(s => s.id === activeSection)?.icon && (
@@ -2750,9 +3664,21 @@ export default function BuyerProfile() {
 
       </main>
 
-      {/* Background Decorations */}
-      <div className="fixed top-0 right-0 w-[800px] h-[800px] bg-[#12335f]/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
-      <div className="fixed bottom-0 left-0 w-[800px] h-[800px] bg-indigo-600/[0.02] rounded-full blur-[150px] -z-50 pointer-events-none" />
+      {/* Signature & Stamp Upload Modal */}
+      <SignatureStampUploadModal
+        isOpen={isStampModalOpen}
+        onClose={() => setIsStampModalOpen(false)}
+        initialLogo={showcaseProfile?.logoUrl}
+        initialStamp={stampUrl}
+        initialSignature={signatureUrl}
+        onSaved={(branding) => {
+          if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
+          if (branding.logoUrl !== undefined && branding.logoUrl) {
+            setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: branding.logoUrl }));
+          }
+        }}
+      />
     </div>
   );
 }

@@ -327,7 +327,7 @@ export default function LiveAuctionLeaderboard({
           </Button>
 
           <Link
-            href={`/seller/procurement/reverse-auction/${auction.id}/live`}
+            href={`/seller/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`}
             target="_blank"
             className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
           >
@@ -417,7 +417,7 @@ export default function LiveAuctionLeaderboard({
             {generatedPo ? (
               <Button
                 type="button"
-                onClick={() => router.push(`/procurement-orders/${generatedPo.id}`)}
+                onClick={() => router.push(`/buyer/orders?orderId=${generatedPo.id}`)}
                 className="h-11 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs uppercase tracking-wider shadow-sm flex items-center gap-2"
               >
                 <Receipt className="h-4 w-4" /> View PO ({generatedPo.poNumber})

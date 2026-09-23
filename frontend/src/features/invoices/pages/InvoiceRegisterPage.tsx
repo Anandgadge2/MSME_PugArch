@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, FileText, IndianRupee, RefreshCw, Search, Building2, CreditCard, Lock, ShieldCheck, Sparkles, Terminal, ArrowRight, AlertCircle, X, ChevronRight, Check, ArrowUp, ArrowDown, ArrowUpDown, Filter, LayoutGrid, List, Upload, Eye, Maximize2, Minimize2, MoreVertical, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -22,11 +23,11 @@ import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
+import { useAuth } from '../../../hooks/useAuth';
 import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
-import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
-import { Stamp, Printer, Download, ChevronDown } from 'lucide-react';
+import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
 
 type InvoiceRow = {
   id: number;
@@ -58,8 +59,315 @@ const statusOf = (invoice: InvoiceRow) => String(invoice.invoiceStatus || invoic
 
 const statuses = ['draft', 'submitted', 'under_review', 'approved', 'rejected', 'paid', 'cancelled'];
 
+function InvoiceRowActionCell({
+  invoice,
+  role,
+  submitting,
+  isOpen,
+  onToggle,
+  onClose,
+  onView,
+  onTrack,
+  onViewReceipt,
+  onApprove,
+  onUploadSlip,
+  onPayNow,
+}: {
+  invoice: InvoiceRow;
+  role: 'buyer' | 'seller' | 'admin';
+  submitting: boolean;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onView: () => void;
+  onTrack: () => void;
+  onViewReceipt: () => void;
+  onApprove: () => void;
+  onUploadSlip: () => void;
+  onPayNow: () => void;
+}) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuEstimatedHeight = 220;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
+
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          onClose();
+          return;
+        }
+      }
+      updatePosition();
+    };
+
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, updatePosition, onClose]);
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
+
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      onClose();
+    }
+  };
+
+  const state = statusOf(invoice);
+  const isSubmitted = state === 'submitted';
+  const isPayable = state === 'approved' || state === 'payment_initiated';
+  const hasSlip = Boolean(
+    (invoice as any).paymentSlipFileId ||
+    (invoice as any).paymentSlipFile ||
+    (invoice as any).paymentReference ||
+    (invoice as any).offlineProof ||
+    state === 'paid' ||
+    state === 'payment_initiated'
+  );
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for invoice ${invoice.invoiceNumber || invoice.id}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            onClose();
+          } else {
+            updatePosition();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900"
+        )}
+        title="Actions"
+      >
+        <MoreVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right',
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onKeyDown={handleMenuKeyDown}
+          className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for invoice ${invoice.invoiceNumber || invoice.id}`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onView();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>View</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+              onTrack();
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left cursor-pointer"
+          >
+            <Clock className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>Track</span>
+          </button>
+
+          {hasSlip && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+                onViewReceipt();
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+            >
+              <FileText className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+              <span>{state === 'paid' ? 'Receipt (Paid)' : 'Payment Slip (Uploaded)'}</span>
+            </button>
+          )}
+
+          {role === 'buyer' && isSubmitted && (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={submitting}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+                onApprove();
+              }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left cursor-pointer disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>Approve</span>
+            </button>
+          )}
+
+          {role === 'buyer' && isPayable && (
+            <>
+              {!hasSlip && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose();
+                    onUploadSlip();
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+                  <span>Upload Slip</span>
+                </button>
+              )}
+
+              {state !== 'payment_initiated' && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose();
+                    onPayNow();
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left cursor-pointer"
+                >
+                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+                  <span>Pay Now</span>
+                </button>
+              )}
+            </>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer' | 'seller' | 'admin' }) {
   const router = useRouter();
+  const { user } = useAuth();
+
+  const handleStampSignatureRedirect = () => {
+    const currentRole = user?.role || role;
+    if (currentRole === 'buyer') {
+      router.push('/buyer/profile?section=showcase_profile&tab=branding');
+    } else if (currentRole === 'shg') {
+      router.push('/shg/settings?section=branding');
+    } else {
+      router.push('/seller/settings?section=branding');
+    }
+  };
+
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -74,6 +382,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [isInvoiceFullscreen, setIsInvoiceFullscreen] = useState(true);
   const [detailedInvoice, setDetailedInvoice] = useState<any>(null);
   const [detailedLoading, setDetailedLoading] = useState(false);
+  const invoiceDetailCache = useRef<Map<number, any>>(new Map());
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [uploadProofInvoice, setUploadProofInvoice] = useState<InvoiceRow | null>(null);
   const [viewProofInvoiceId, setViewProofInvoiceId] = useState<number | null>(null);
@@ -83,7 +392,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [invoiceLogoUrl, setInvoiceLogoUrl] = useState<string | null>(null);
   const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
   const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);
-  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -199,15 +507,26 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   useEffect(() => {
     if (!selectedInvoice) {
       setDetailedInvoice(null);
+      setDetailedLoading(false);
       return;
     }
+
+    // Check fast cache first
+    if (invoiceDetailCache.current.has(selectedInvoice.id)) {
+      setDetailedInvoice(invoiceDetailCache.current.get(selectedInvoice.id));
+      setDetailedLoading(false);
+      return;
+    }
+
     const fetchDetailedInvoice = async () => {
       setDetailedLoading(true);
       try {
         const data = await getApi<any>(`/api/invoices/${selectedInvoice.id}`, true);
-        setDetailedInvoice(data);
+        if (data) {
+          invoiceDetailCache.current.set(selectedInvoice.id, data);
+          setDetailedInvoice(data);
+        }
       } catch (err) {
-        setDetailedInvoice(null);
         const message = err instanceof Error ? err.message : 'Unable to load invoice details.';
         if (!/session expired|sign in again/i.test(message)) {
           toast.error(message);
@@ -234,12 +553,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [cardCvv, setCardCvv] = useState('');
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!openKebabId) return;
-    const handleClickOutside = () => setOpenKebabId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, [openKebabId]);
 
   // Seller invoice creation modal state
   const [createInvoiceModalOpen, setCreateInvoiceModalOpen] = useState(false);
@@ -369,118 +682,38 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       header: 'Actions',
       width: 'w-[8%]',
       align: 'right',
-      cell: (invoice, index) => {
-        const state = statusOf(invoice);
-        const isSubmitted = state === 'submitted';
-        const isPayable = state === 'approved' || state === 'payment_initiated';
-        return (
-          <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenKebabId(openKebabId === invoice.id ? null : invoice.id);
-              }}
-              className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-              title="Actions"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </button>
-
-            {openKebabId === invoice.id && (
-              <div className={cn(
-                "absolute right-0 z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100",
-                pagedInvoices.length > 2 && index >= pagedInvoices.length - 2 ? "bottom-full mb-1.5 origin-bottom-right" : "top-full mt-1.5 origin-top-right"
-              )}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    setSelectedInvoice(invoice);
-                    setInvoiceModalMode('view');
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                >
-                  <Eye className="h-3.5 w-3.5 text-slate-500" />
-                  <span>View</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenKebabId(null);
-                    setSelectedInvoice(invoice);
-                    setInvoiceModalMode('track');
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors text-left"
-                >
-                  <Clock className="h-3.5 w-3.5 text-slate-500" />
-                  <span>Track</span>
-                </button>
-
-                {(state === 'paid' || state === 'payment_initiated') && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenKebabId(null);
-                      setViewProofInvoiceId(invoice.id);
-                    }}
-                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-                  >
-                    <FileText className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Receipt</span>
-                  </button>
-                )}
-
-                {role === 'buyer' && isSubmitted && (
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => {
-                      setOpenKebabId(null);
-                      handleApproveInvoice(invoice.id);
-                    }}
-                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    <span>Approve</span>
-                  </button>
-                )}
-
-                {role === 'buyer' && isPayable && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenKebabId(null);
-                        setUploadProofInvoice(invoice);
-                      }}
-                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
-                    >
-                      <Upload className="h-3.5 w-3.5 text-blue-600" />
-                      <span>Upload Slip</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenKebabId(null);
-                        handleOpenCheckout(invoice);
-                      }}
-                      className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-black rounded-lg text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 transition-colors text-left"
-                    >
-                      <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                      <span>Pay Now</span>
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      },
+      cell: (invoice) => (
+        <InvoiceRowActionCell
+          invoice={invoice}
+          role={role}
+          submitting={submitting}
+          isOpen={openKebabId === invoice.id}
+          onToggle={() => setOpenKebabId(openKebabId === invoice.id ? null : invoice.id)}
+          onClose={() => setOpenKebabId(null)}
+          onView={() => {
+            setSelectedInvoice(invoice);
+            setInvoiceModalMode('view');
+          }}
+          onTrack={() => {
+            setSelectedInvoice(invoice);
+            setInvoiceModalMode('track');
+          }}
+          onViewReceipt={() => {
+            setViewProofInvoiceId(invoice.id);
+          }}
+          onApprove={() => {
+            handleApproveInvoice(invoice.id);
+          }}
+          onUploadSlip={() => {
+            setUploadProofInvoice(invoice);
+          }}
+          onPayNow={() => {
+            handleOpenCheckout(invoice);
+          }}
+        />
+      ),
     },
-  ], [role, openKebabId, pagedInvoices, submitting]);
+  ], [role, openKebabId, submitting]);
 
   const SortHeader = ({ label, field, className = '' }: { label: string; field: 'invoiceNumber' | 'poNumber' | 'party' | 'taxableAmount' | 'totalTaxAmount' | 'tdsAmount' | 'totalAmount' | 'dueDate' | 'status'; className?: string }) => {
     const isActive = sortField === field;
@@ -603,6 +836,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     try {
       await postApi(`/api/invoices/${invoiceId}/approve`, {});
       await reload();
+      setSelectedInvoice(prev => (prev && prev.id === invoiceId ? { ...prev, status: 'approved', invoiceStatus: 'APPROVED' } : prev));
+      setDetailedInvoice(prev => (prev && prev.id === invoiceId ? { ...prev, status: 'approved', invoiceStatus: 'APPROVED' } : prev));
       toast.success('Invoice approved successfully.');
     } catch (err: any) {
       toast.error(err.message || 'Invoice approval failed');
@@ -986,8 +1221,8 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
   if (isKpisLoading) {
     return (
-      <div className="space-y-6 pt-4">
-        <PageTableSkeleton kpiCount={5} />
+      <div className="space-y-6">
+        <PageTableSkeleton kpiCount={5} title="Invoices" />
       </div>
     );
   }
@@ -1002,10 +1237,12 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => setIsBrandingModalOpen(true)}
-            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5"
+            onClick={handleStampSignatureRedirect}
+            aria-label="Manage official seal and signature in settings"
+            title="Manage official seal and signature in settings"
+            className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm text-indigo-700 hover:text-indigo-900 flex items-center gap-1.5 cursor-pointer"
           >
-            <Stamp className="h-4 w-4 text-indigo-600" /> Stamp & Signature
+            <Stamp className="h-4 w-4 text-indigo-600" aria-hidden="true" /> Stamp & Signature
           </Button>
           {role === 'seller' && (
             <Button
@@ -1024,7 +1261,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
         <KpiCard
           label="Invoices"
           value={total}
@@ -1084,9 +1321,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       {error && <InlineError message={error} onRetry={reload} />}
 
       {/* ── Search + Filter + View Toggle Toolbar ── */}
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-2.5 sm:p-3 shadow-sm">
         <ResponsiveFilterBar
-          singleRowDesktop={false}
+          singleRowDesktop={true}
+          searchWrapperClassName="min-w-[170px] sm:min-w-[190px] max-w-[240px] xl:max-w-[270px] flex-1 shrink-0"
           activeFilterCount={activeFilterCount + (searchTerm ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
@@ -1096,7 +1334,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 id="invoice-search-input"
                 value={searchTerm}
                 onChange={event => { setSearchTerm(event.target.value); setPage(1); }}
-                placeholder="Search invoice, PO, buyer, seller..."
+                placeholder="Search invoice, PO, party..."
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                 aria-label="Search invoice, PO, buyer, seller"
               />
@@ -1105,13 +1343,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           filters={
             <>
               {/* Status Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[110px] md:min-w-[115px] shrink-0">
                 <label htmlFor="filter-invoice-status" className="sr-only">Invoice Status</label>
                 <select
                   id="filter-invoice-status"
                   value={statusFilter}
                   onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                   aria-label="Filter by invoice status"
                 >
                   <option value="">Status: All</option>
@@ -1124,13 +1362,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               </div>
 
               {/* Date Period Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[120px] md:min-w-[125px] shrink-0">
                 <label htmlFor="filter-date-range" className="sr-only">Date Period</label>
                 <select
                   id="filter-date-range"
                   value={dateRangeFilter}
                   onChange={event => { setDateRangeFilter(event.target.value as any); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                   aria-label="Filter by date period"
                 >
                   <option value="all">Period: All Time</option>
@@ -1144,13 +1382,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               </div>
 
               {/* Payment / Due Status Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] md:min-w-[120px] shrink-0">
                 <label htmlFor="filter-payment-status" className="sr-only">Payment Status</label>
                 <select
                   id="filter-payment-status"
                   value={paymentStatusFilter}
                   onChange={event => { setPaymentStatusFilter(event.target.value as any); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                   aria-label="Filter by payment status"
                 >
                   <option value="all">Payment: All</option>
@@ -1162,13 +1400,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               </div>
 
               {/* Amount Range Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] md:min-w-[120px] shrink-0">
                 <label htmlFor="filter-amount-range" className="sr-only">Amount Range</label>
                 <select
                   id="filter-amount-range"
                   value={amountRangeFilter}
                   onChange={event => { setAmountRangeFilter(event.target.value as any); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                   aria-label="Filter by amount range"
                 >
                   <option value="all">Amount: All</option>
@@ -1180,13 +1418,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               </div>
 
               {/* Tax Scope Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full sm:w-auto sm:min-w-[115px] md:min-w-[120px] shrink-0">
                 <label htmlFor="filter-tax-scope" className="sr-only">Tax Scope</label>
                 <select
                   id="filter-tax-scope"
                   value={invoiceScope}
                   onChange={event => { setInvoiceScope(event.target.value as 'all' | 'interstate' | 'domestic'); setPage(1); }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                   aria-label="Filter by tax scope"
                 >
                   <option value="all">Tax: All Scopes</option>
@@ -1200,7 +1438,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 text-rose-700 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="h-10 px-3 rounded-xl border border-rose-200 bg-rose-50/70 hover:bg-rose-100/80 text-rose-700 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                   title="Reset all filters"
                   aria-label="Reset all active filters"
                 >
@@ -1311,14 +1549,23 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                         </Button>
                       )}
                       {role === 'buyer' && isSubmitted && (
-                        <Button
-                          size="sm"
-                          disabled={submitting}
-                          onClick={() => handleApproveInvoice(invoice.id)}
-                          className="h-8 flex-1 rounded-lg bg-[#12335f] text-[10px] font-black uppercase tracking-wide text-white hover:bg-slate-800"
-                        >
-                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
-                        </Button>
+                        <>
+                          <div className="w-full flex items-center justify-between gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold">
+                            <span className="flex items-center gap-1">
+                              <Lock className="h-3 w-3 text-amber-700 shrink-0" />
+                              Payment Locked
+                            </span>
+                            <span className="text-amber-700">Approval Required</span>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={submitting}
+                            onClick={() => handleApproveInvoice(invoice.id)}
+                            className="h-8 flex-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-[10px] font-black uppercase tracking-wide text-white shadow-2xs cursor-pointer"
+                          >
+                            <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Approve
+                          </Button>
+                        </>
                       )}
                       {role === 'buyer' && isPayable && (
                         <>
@@ -1417,9 +1664,46 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                 <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
                   {invoiceModalMode === 'view' ? "Tax Invoice Registry" : "JsgSmile / PFMS Bill Status Tracker"}
                 </p>
-                <h2 className="text-xl font-black text-slate-950">
-                  {selectedInvoice.invoiceNumber || `INV-${selectedInvoice.id}`}
-                </h2>
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-xl font-black text-slate-950">
+                    {selectedInvoice.invoiceNumber || `INV-${selectedInvoice.id}`}
+                  </h2>
+                  {(() => {
+                    const invState = statusOf(selectedInvoice);
+                    if (invState === 'paid') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-900">
+                          <ShieldCheck className="h-3 w-3" /> Paid
+                        </span>
+                      );
+                    }
+                    if (invState === 'approved' || invState === 'payment_initiated') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 border border-teal-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#0f766e]">
+                          <CheckCircle2 className="h-3 w-3" /> Approved
+                        </span>
+                      );
+                    }
+                    if (invState === 'submitted') {
+                      return (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-900">
+                          <Lock className="h-3 w-3 text-amber-700" /> Submitted (Pending Approval)
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700">
+                        {invState}
+                      </span>
+                    );
+                  })()}
+                  {detailedLoading && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
+                      <RefreshCw className="h-3 w-3 animate-spin text-[#12335f]" />
+                      Syncing ledger...
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-500">Created on {formatDate(selectedInvoice.createdAt)}</p>
               </div>
 
@@ -1444,7 +1728,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             </div>
 
             <div className="flex-1 overflow-y-auto pr-1">
-            {detailedLoading ? (
+            {detailedLoading && !selectedInvoice ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-3">
                 <RefreshCw className="h-8 w-8 animate-spin text-[#12335f]" />
                 <p className="text-xs font-bold text-slate-500">Retrieving digital bill ledger from MSME vaults...</p>
@@ -1455,10 +1739,185 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                 {invoiceModalMode === 'view' && (
                   <div className="space-y-4">
+                    {/* Payment Locked Alert Banner for Buyer / Admin */}
+                    {statusOf(selectedInvoice) === 'submitted' && (role === 'buyer' || user?.role === 'buyer' || role === 'admin') && (
+                      <div
+                        className="rounded-2xl border border-amber-300 bg-amber-50/95 p-3.5 text-amber-900 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs no-print"
+                        role="alert"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800 ring-1 ring-amber-300">
+                            <Lock className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <p className="font-black text-amber-950 text-xs sm:text-sm flex items-center gap-1.5">
+                              Payment Release Locked • Invoice Approval Required
+                            </p>
+                            <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+                              This tax invoice was submitted by the supplier and requires official buyer approval before disbursements or escrow settlements can be processed. Approve the invoice to unlock payment.
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={submitting}
+                          onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                          className="shrink-0 h-8 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-2xs gap-1.5 cursor-pointer"
+                        >
+                          {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Approve Invoice Now
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Notice for Seller when Invoice is Submitted */}
+                    {statusOf(selectedInvoice) === 'submitted' && role === 'seller' && (
+                      <div
+                        className="rounded-2xl border border-blue-200 bg-blue-50/90 p-3 text-blue-900 text-xs flex items-center gap-2.5 no-print"
+                        role="status"
+                      >
+                        <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                        <p className="text-[11px] text-blue-800 font-medium">
+                          <strong>Invoice Submitted:</strong> Awaiting buyer verification and approval. Once approved, the buyer can initiate escrow payment release.
+                        </p>
+                      </div>
+                    )}
+                    {/* Unified Connected Cross-Document Lifecycle Bar */}
+                    {selectedInvoice && (
+                      <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gradient-to-r from-slate-100 via-indigo-50/50 to-slate-100 rounded-2xl border border-slate-200/90 no-print">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-2 py-0.5">
+                          Connected Lifecycle:
+                        </span>
+
+                        {((selectedInvoice as any).bidId || (selectedInvoice as any).purchaseOrder?.bidId) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const bId = (selectedInvoice as any).bidId || (selectedInvoice as any).purchaseOrder?.bidId;
+                              router.push(`/bids/${bId}`);
+                            }}
+                            className="h-7 border-slate-250 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3 text-slate-500" />
+                            <span>View Quotation</span>
+                          </Button>
+                        )}
+
+                        {((selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const poSearch = (selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId || '';
+                              const poRoute = role === 'buyer' ? '/buyer/orders' : '/seller/orders';
+                              router.push(`${poRoute}?search=${encodeURIComponent(poSearch)}`);
+                            }}
+                            className="h-7 border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                          >
+                            <FileText className="h-3 w-3 text-indigo-600" />
+                            <span>View PO</span>
+                          </Button>
+                        )}
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const delSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
+                            const delRoute = role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
+                            router.push(`${delRoute}?search=${encodeURIComponent(delSearch)}`);
+                          }}
+                          className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        >
+                          <Truck className="h-3 w-3 text-blue-600" />
+                          <span>View Delivery</span>
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const grnSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
+                            router.push(`/grn?search=${encodeURIComponent(grnSearch)}`);
+                          }}
+                          className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        >
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          <span>View GRN</span>
+                        </Button>
+
+                        {(() => {
+                          const invState = statusOf(selectedInvoice);
+                          const isPaid = invState === 'paid';
+                          const isBuyer = role === 'buyer' || user?.role === 'buyer';
+                          const isSubmitted = invState === 'submitted';
+                          const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
+                          if (isPaid) {
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setViewProofInvoiceId(selectedInvoice.id)}
+                                className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                <span>View Payment Proof (Paid)</span>
+                              </Button>
+                            );
+                          }
+                          if (isBuyer) {
+                            if (isSubmitted) {
+                              return (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-lg">
+                                    <Lock className="h-3 w-3 text-amber-700" />
+                                    <span>Payment Locked</span>
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={submitting}
+                                    onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                                    className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                                  >
+                                    {submitting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                                    <span>Approve Invoice</span>
+                                  </Button>
+                                </div>
+                              );
+                            }
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => router.push(`${payRoute}?search=${encodeURIComponent(selectedInvoice.invoiceNumber || '')}`)}
+                                className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                              >
+                                <CreditCard className="h-3 w-3" />
+                                <span>Pay Now / Upload Payment Proof</span>
+                              </Button>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                              <Clock className="h-3 w-3 text-amber-600" />
+                              <span>{isSubmitted ? 'Invoice Pending Buyer Approval' : 'Payment Pending from Buyer'}</span>
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+
                     {/* Invoice Action Bar / Toolbar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 border border-slate-200 p-3 rounded-2xl no-print">
+                    <div className="flex items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-2xl no-print flex-nowrap overflow-x-auto scrollbar-none">
                       {/* Left: Copy Type Dropdown */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <label htmlFor="invoice-copy-select" className="text-xs font-black text-slate-700 uppercase tracking-wider whitespace-nowrap">
                           Copy Type:
                         </label>
@@ -1466,45 +1925,49 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           id="invoice-copy-select"
                           value={invoiceCopyType}
                           onChange={(e) => setInvoiceCopyType(e.target.value)}
-                          className="h-9 px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-[#12335f] focus:outline-none"
+                          className="h-9 px-2.5 sm:px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-[#12335f] focus:outline-none min-w-[150px] max-w-[210px] cursor-pointer"
                         >
-                          <option value="Original Copy">Original Copy (Tax Invoice - Original Copy)</option>
-                          <option value="Duplicate Copy">Duplicate Copy (Tax Invoice - Duplicate Copy)</option>
-                          <option value="Triplicate Copy">Triplicate Copy (Tax Invoice - Triplicate Copy)</option>
-                          <option value="Quadruplicate Copy">Quadruplicate Copy (Tax Invoice - Quadruplicate Copy)</option>
+                          <option value="Original Copy">Original Copy (Buyer)</option>
+                          <option value="Duplicate Copy">Duplicate Copy (Transporter)</option>
+                          <option value="Triplicate Copy">Triplicate Copy (Supplier)</option>
+                          <option value="Quadruplicate Copy">Quadruplicate Copy (Extra)</option>
                         </select>
                       </div>
 
                       {/* Right: Actions */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* Stamp & Signature Upload Button */}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setIsBrandingModalOpen(true)}
-                          className="h-9 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
-                        >
-                          <Stamp className="h-3.5 w-3.5 text-indigo-600" />
-                          Stamp & Signature
-                        </Button>
+                      <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
+                        {statusOf(selectedInvoice) === 'submitted' && (role === 'buyer' || user?.role === 'buyer' || role === 'admin') && (
+                          <Button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                            className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                          >
+                            {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            <span>Approve Invoice</span>
+                          </Button>
+                        )}
 
-                        {/* Print Invoice Button */}
+                        {/* Stamp & Signature Redirect Button */}
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={() => void handleDownloadPdf('print')}
-                          className="h-9 rounded-xl border-slate-300 bg-white hover:bg-slate-100 text-slate-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs"
+                          onClick={handleStampSignatureRedirect}
+                          aria-label="Manage official seal and signature in settings"
+                          title="Manage official seal and signature in settings"
+                          className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                         >
-                          <Printer className="h-3.5 w-3.5 text-slate-600" />
-                          Print
+                          <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
+                          <span className="hidden sm:inline">Stamp & Signature</span>
+                          <span className="sm:hidden">Stamp</span>
                         </Button>
 
                         {/* Download PDF with Dropdown */}
-                        <div className="relative inline-flex rounded-xl shadow-xs">
+                        <div className="relative inline-flex rounded-xl shadow-xs shrink-0">
                           <Button
                             type="button"
                             onClick={() => void handleDownloadPdf('download')}
-                            className="h-9 rounded-l-xl rounded-r-none bg-[#12335f] hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 px-3.5"
+                            className="h-9 rounded-l-xl rounded-r-none bg-[#12335f] hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 px-3 whitespace-nowrap"
                           >
                             <Download className="h-3.5 w-3.5" />
                             Download PDF ({invoiceCopyType.replace(' Copy', '')})
@@ -1576,7 +2039,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             logoUrl={invoiceLogoUrl}
                             stampUrl={invoiceStampUrl}
                             signatureUrl={invoiceSignatureUrl}
-                            onOpenUploadBranding={() => setIsBrandingModalOpen(true)}
+                            onOpenUploadBranding={handleStampSignatureRedirect}
                           />
                         );
                       })()}
@@ -2084,20 +2547,6 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         invoiceId={viewProofInvoiceId}
         onStatusChange={() => {
           void reload();
-        }}
-      />
-
-      {/* Signature & Stamp Upload Modal */}
-      <SignatureStampUploadModal
-        isOpen={isBrandingModalOpen}
-        onClose={() => setIsBrandingModalOpen(false)}
-        initialLogo={invoiceLogoUrl}
-        initialStamp={invoiceStampUrl}
-        initialSignature={invoiceSignatureUrl}
-        onSaved={(branding) => {
-          if (branding.logoUrl !== undefined) setInvoiceLogoUrl(branding.logoUrl);
-          if (branding.stampUrl !== undefined) setInvoiceStampUrl(branding.stampUrl);
-          if (branding.signatureUrl !== undefined) setInvoiceSignatureUrl(branding.signatureUrl);
         }}
       />
     </div>

@@ -29,10 +29,6 @@ const ORG_TYPES: Array<{ value: string; label: string }> = [
     { value: 'PRIVATE_LIMITED', label: 'Private Limited' },
     { value: 'PUBLIC_LIMITED', label: 'Public Limited' },
     { value: 'LLP', label: 'LLP' },
-    { value: 'TRUST', label: 'Trust' },
-    { value: 'SOCIETY', label: 'Society' },
-    { value: 'NGO', label: 'NGO' },
-    { value: 'EDUCATIONAL_INSTITUTION', label: 'Educational Institution' },
     { value: 'GOVERNMENT', label: 'Government Department' },
     { value: 'PSU', label: 'PSU' }
 ];
