@@ -78,6 +78,77 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const BROADCAST_AUTH_CHANNEL = 'msme_auth_sync';
+
+const USER_STORAGE_KEYS = [
+  'msme_user_cache',
+  'msme_permissions_cache',
+  'msme_invoice_logo',
+  'msme_invoice_stamp',
+  'msme_invoice_signature',
+  'preRegisterKycFormData',
+  'preRegisterKycSubStep',
+  'preRegisterKycStep',
+  'preRegisterKycBusinessType',
+  'preRegisterKycShgType',
+  'preRegisterKycSelectedDocs',
+  'preRegisterKycRedirectPath',
+  'buyer_onboarding_draft',
+  'msme:guided-procurement-create:v2',
+  'jsg_recent_searches',
+  'jsg_marketplace_recent_searches',
+];
+
+const purgeAllUserStorage = () => {
+  if (typeof window === 'undefined') return;
+  USER_STORAGE_KEYS.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  });
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith('rfq_submitted_') ||
+          key.startsWith('dashboard_summary_') ||
+          key.startsWith('seller_onboarding_saved_') ||
+          key.startsWith('msme_') ||
+          key.startsWith('preRegisterKyc') ||
+          key.startsWith('buyer_onboarding_'))
+      ) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {
+        // ignore
+      }
+    });
+  } catch {
+    // ignore
+  }
+};
+
+const broadcastSessionChange = (userId: string | null) => {
+  if (typeof window === 'undefined') return;
+  if (typeof BroadcastChannel !== 'undefined') {
+    try {
+      const channel = new BroadcastChannel(BROADCAST_AUTH_CHANNEL);
+      channel.postMessage({ type: 'SESSION_CHANGE', userId, timestamp: Date.now() });
+      channel.close();
+    } catch {
+      // ignore
+    }
+  }
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(() => {
@@ -117,7 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearLocalSession = useCallback(() => {
     clearStoredToken();
-    localStorage.removeItem('msme_user_cache');
+    purgeAllUserStorage();
     clearPermissionsCache();
     clearAuthCookie();
     disconnectPusher();
@@ -130,6 +201,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {
       // ignore
     }
+    broadcastSessionChange(null);
   }, []);
 
   const logout = useCallback(async (redirectPath?: string | any) => {
@@ -242,14 +314,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, [logout]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        channel = new BroadcastChannel(BROADCAST_AUTH_CHANNEL);
+        channel.onmessage = (event) => {
+          const { type } = event?.data || {};
+          if (type === 'SESSION_CHANGE') {
+            api.invalidate();
+            try {
+              getQueryClient().clear();
+            } catch {
+              // ignore
+            }
+            clearPermissionsCache();
+            refreshUser({ skipCache: true });
+          }
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === 'token' || event.key === 'msme_user_cache' || event.key === null) {
+        api.invalidate();
+        try {
+          getQueryClient().clear();
+        } catch {
+          // ignore
+        }
+        clearPermissionsCache();
+        refreshUser({ skipCache: true });
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      if (channel) {
+        try {
+          channel.close();
+        } catch {
+          // ignore
+        }
+      }
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [refreshUser]);
+
   const login = useCallback(async (token: string, user: User, _refreshToken?: string, redirectPath?: string) => {
     setIsLoggingIn(true);
-    setStoredToken(token || COOKIE_SESSION_TOKEN);
-    localStorage.removeItem('refreshToken');
-    localStorage.setItem('msme_user_cache', JSON.stringify(user));
-    setToken(token || COOKIE_SESSION_TOKEN);
-    setUser(user);
-    setLoading(false);
+
+    // 1. Snapshot guest cart before wiping local storage
     const guestCartToken = localStorage.getItem('jsg_guest_cart_token');
     const localGuestCart = (() => {
       try {
@@ -260,6 +380,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return [];
       }
     })();
+
+    // 2. Wipe previous user's cached storage, permissions, and query data
+    purgeAllUserStorage();
+    clearPermissionsCache();
+    api.invalidate();
+    try {
+      getQueryClient().clear();
+    } catch {
+      // ignore
+    }
+
+    // 3. Set the new user session
+    setStoredToken(token || COOKIE_SESSION_TOKEN);
+    localStorage.removeItem('refreshToken');
+    localStorage.setItem('msme_user_cache', JSON.stringify(user));
+    setToken(token || COOKIE_SESSION_TOKEN);
+    setUser(user);
+    setLoading(false);
+
+    // 4. Notify other browser tabs of the login
+    broadcastSessionChange(user.id);
+
+    // 5. Merge guest cart for buyer if applicable
     if (user.role === 'buyer' && (guestCartToken || localGuestCart.length > 0)) {
       void api.post('/api/cart/merge-guest', { cartToken: guestCartToken || undefined, items: localGuestCart }, {
         headers: { Authorization: `Bearer ${token}` }

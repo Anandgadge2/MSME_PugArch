@@ -334,6 +334,9 @@ router.patch('/rbac/users/:userId/roles/:assignmentId/status', asyncHandler(asyn
 }));
 
 router.get('/auth/me/permissions', asyncHandler(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   const user = (req as any).user;
   if (!user || !user.id) {
     return apiResponse.error(res, 401, 'Unauthorized', 'UNAUTHORIZED');
