@@ -10578,6 +10578,197 @@ router.get('/admin/reports/suppliers', authenticate, authorizeAdmin, asyncRoute(
   ok(res, { sellers, products, services, ratings });
 }));
 
+router.get('/admin/reports/category-volume', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const [categories, purchaseOrders, auctions] = await Promise.all([
+    db.category.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' }
+    }),
+    db.purchaseOrder.findMany({
+      select: {
+        id: true,
+        poNumber: true,
+        amount: true,
+        totalValue: true,
+        status: true,
+        sourceType: true,
+        sourceId: true,
+        metadata: true,
+        tender: {
+          select: {
+            id: true,
+            category: true,
+            categoryId: true,
+            categoryRef: { select: { id: true, name: true } }
+          }
+        },
+        items: {
+          select: {
+            id: true,
+            itemName: true,
+            totalAmount: true,
+            product: {
+              select: {
+                id: true,
+                categoryId: true,
+                category: { select: { id: true, name: true } }
+              }
+            }
+          }
+        }
+      }
+    }),
+    db.auction.findMany({
+      select: {
+        id: true,
+        category: true
+      }
+    })
+  ]);
+
+  const auctionCategoryMap = new Map<number, string>();
+  for (const auc of auctions) {
+    if (auc.id && auc.category) {
+      auctionCategoryMap.set(auc.id, auc.category);
+    }
+  }
+
+  const categoryNameMap = new Map<string, { id: number; name: string }>();
+  for (const cat of categories) {
+    categoryNameMap.set(cat.name.toLowerCase().trim(), { id: cat.id, name: cat.name });
+  }
+
+  const findCategory = (str?: string | null): { id: number | null; name: string } | null => {
+    if (!str || typeof str !== 'string') return null;
+    const cleanStr = str.toLowerCase().trim();
+    if (!cleanStr) return null;
+
+    if (categoryNameMap.has(cleanStr)) {
+      return categoryNameMap.get(cleanStr)!;
+    }
+
+    if (cleanStr.includes('it equipment') || cleanStr.includes('computer')) {
+      const match = categoryNameMap.get('it & computer equipment');
+      if (match) return match;
+    }
+    if (cleanStr.includes('office') || cleanStr.includes('stationery')) {
+      const match = categoryNameMap.get('office equipment & stationery');
+      if (match) return match;
+    }
+    if (cleanStr.includes('precision engineering') || cleanStr.includes('machinery & spares') || cleanStr.includes('industrial machinery')) {
+      const match = categoryNameMap.get('industrial machinery & spare parts') || categoryNameMap.get('mechanical & engineering');
+      if (match) return match;
+    }
+    if (cleanStr.includes('electrical')) {
+      const match = categoryNameMap.get('electrical & electronics');
+      if (match) return match;
+    }
+
+    for (const [key, cat] of categoryNameMap.entries()) {
+      if (cleanStr.includes(key) || key.includes(cleanStr)) {
+        return cat;
+      }
+    }
+
+    return null;
+  };
+
+  interface CategoryAggItem {
+    categoryId: number | null;
+    category: string;
+    transactionCount: number;
+    totalAmount: number;
+  }
+
+  const stats = new Map<string, CategoryAggItem>();
+
+  for (const po of purchaseOrders) {
+    const meta = (po.metadata || {}) as Record<string, any>;
+    let auctionCat: string | undefined;
+    const auctionId = meta.auctionId || (po.sourceType === 'auction' ? po.sourceId : null);
+    if (auctionId && auctionCategoryMap.has(Number(auctionId))) {
+      auctionCat = auctionCategoryMap.get(Number(auctionId));
+    }
+
+    if (po.items && po.items.length > 0) {
+      const poCatItems = new Map<string, { categoryId: number | null; name: string; amount: number }>();
+
+      for (const item of po.items) {
+        const resolved = (item.product?.category ? { id: item.product.category.id, name: item.product.category.name } : null) ||
+          findCategory(item.itemName) ||
+          findCategory(auctionCat) ||
+          (po.tender?.categoryRef ? { id: po.tender.categoryRef.id, name: po.tender.categoryRef.name } : null) ||
+          findCategory(po.tender?.category) ||
+          findCategory(meta.itemName);
+
+        const catName = resolved?.name || 'General / Uncategorized';
+        const catId = resolved?.id ?? null;
+        const itemAmt = Number(item.totalAmount) || (Number(po.amount) / po.items.length) || 0;
+
+        const current = poCatItems.get(catName) || { categoryId: catId, name: catName, amount: 0 };
+        current.amount += itemAmt;
+        poCatItems.set(catName, current);
+      }
+
+      for (const [catName, data] of poCatItems.entries()) {
+        const cur = stats.get(catName) || { categoryId: data.categoryId, category: catName, transactionCount: 0, totalAmount: 0 };
+        cur.transactionCount += 1;
+        cur.totalAmount += data.amount;
+        stats.set(catName, cur);
+      }
+    } else {
+      const resolved = findCategory(auctionCat) ||
+        (po.tender?.categoryRef ? { id: po.tender.categoryRef.id, name: po.tender.categoryRef.name } : null) ||
+        findCategory(po.tender?.category) ||
+        findCategory(meta.itemName);
+
+      const catName = resolved?.name || 'General / Uncategorized';
+      const catId = resolved?.id ?? null;
+      const poAmt = Number(po.amount) || Number(po.totalValue) || 0;
+
+      const cur = stats.get(catName) || { categoryId: catId, category: catName, transactionCount: 0, totalAmount: 0 };
+      cur.transactionCount += 1;
+      cur.totalAmount += poAmt;
+      stats.set(catName, cur);
+    }
+  }
+
+  const rawCategories = Array.from(stats.values());
+  const totalTransactions = rawCategories.reduce((sum, c) => sum + c.transactionCount, 0);
+  const totalTransactionValue = rawCategories.reduce((sum, c) => sum + c.totalAmount, 0);
+
+  const categoriesWithPercentages = rawCategories.map((c) => ({
+    ...c,
+    percentageTransactions: totalTransactions > 0 ? Number(((c.transactionCount / totalTransactions) * 100).toFixed(1)) : 0,
+    percentageValue: totalTransactionValue > 0 ? Number(((c.totalAmount / totalTransactionValue) * 100).toFixed(1)) : 0
+  })).sort((a, b) => b.transactionCount - a.transactionCount || b.totalAmount - a.totalAmount);
+
+  const topCategory = categoriesWithPercentages.length > 0
+    ? [...categoriesWithPercentages].sort((a, b) => b.totalAmount - a.totalAmount)[0].category
+    : 'None';
+
+  const highestVolume = categoriesWithPercentages.length > 0
+    ? Math.max(...categoriesWithPercentages.map(c => c.transactionCount))
+    : 0;
+
+  const averageTransactionValue = totalTransactions > 0
+    ? Math.round(totalTransactionValue / totalTransactions)
+    : 0;
+
+  const summary = {
+    totalCategories: categoriesWithPercentages.length,
+    totalCategoriesInSystem: categories.length,
+    totalTransactions,
+    totalTransactionValue,
+    averageTransactionValue,
+    topCategory,
+    highestTransactionVolume: highestVolume
+  };
+
+  ok(res, { summary, categories: categoriesWithPercentages });
+}));
+
 router.post('/admin/fraud-alerts', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const alert = await db.fraudAlert.create({ data: req.body || {} });
   await auditWrite(req, 'fraud_alert.created', 'fraudAlert', alert.id);

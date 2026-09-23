@@ -139,7 +139,7 @@ const generateGrnNumber = async () => {
     return `GRN-${yyyymmdd}-${String(seq + 1).padStart(4, '0')}`;
 };
 
-const assertPoOwnership = async (poId: number, organizationId: number, userId: number, allowSeller = false) => {
+const assertPoOwnership = async (poId: number, organizationId?: number, userId?: number, allowSeller = false, isAdmin = false) => {
     const po = await prisma.purchaseOrder.findUnique({
         where: { id: poId },
         select: {
@@ -152,8 +152,9 @@ const assertPoOwnership = async (poId: number, organizationId: number, userId: n
         }
     });
     if (!po) throw new ApiError(404, 'Purchase Order not found', 'PO_NOT_FOUND');
-    const isBuyerOrg = po.buyer?.organizationId === organizationId;
-    const isSellerOrg = allowSeller && (po.sellerId === userId || (po.seller?.organizationId && po.seller.organizationId === organizationId));
+    if (isAdmin) return po;
+    const isBuyerOrg = organizationId && po.buyer?.organizationId === organizationId;
+    const isSellerOrg = allowSeller && (po.sellerId === userId || (Boolean(organizationId) && po.seller?.organizationId === organizationId));
     if (!isBuyerOrg && !isSellerOrg) {
         throw new ApiError(403, 'PO does not belong to your organisation', 'PO_NOT_IN_ORG');
     }
@@ -208,18 +209,25 @@ router.get(
     requirePermission('grn.view', orgScope),
     shortCache(15),
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
+        if (!isAdmin) {
+            ensureOrg(req);
+        }
         const { status } = req.query;
-        const uOrgId = orgId(req);
+        const uOrgId = req.user?.organizationId;
         const uId = userId(req);
 
-        const orgCondition = [
-            { organizationId: uOrgId },
-            { purchaseOrder: { sellerId: uId } },
-            { purchaseOrder: { seller: { organizationId: uOrgId } } }
-        ];
-
-        const where: any = status ? { status, OR: orgCondition } : { OR: orgCondition };
+        let where: any = {};
+        if (isAdmin) {
+            where = status ? { status } : {};
+        } else {
+            const orgCondition = [
+                { organizationId: uOrgId },
+                { purchaseOrder: { sellerId: uId } },
+                { purchaseOrder: { seller: { organizationId: uOrgId } } }
+            ];
+            where = status ? { status, OR: orgCondition } : { OR: orgCondition };
+        }
 
         const grns = await prisma.goodsReceiptNote.findMany({
             where,
@@ -238,19 +246,26 @@ router.get(
     authenticate,
     requirePermission('grn.view', orgScope),
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
+        if (!isAdmin) {
+            ensureOrg(req);
+        }
         const poId = Number(req.params.poId);
-        const po = await assertPoOwnership(poId, orgId(req), userId(req), true);
+        const po = await assertPoOwnership(poId, req.user?.organizationId, userId(req), true, isAdmin);
 
         const existing = await prisma.goodsReceiptNote.findMany({
             where: { purchaseOrderId: poId },
             select: { id: true, status: true, grnNumber: true }
         });
 
+        const hasSubmitted = existing.some(g => g.status !== 'DRAFT');
+        const canCreate = !isAdmin && !hasSubmitted && !existing.some(g => g.status === 'APPROVED');
+
         ok(res, {
             poId,
             poStatus: po.status,
-            canCreate: !existing.some(g => g.status === 'APPROVED'),
+            canCreate,
+            hasSubmitted,
             existing
         });
     })
@@ -264,6 +279,9 @@ router.post(
     requirePermission('grn.create', orgScope),
     requireApprovedOrg,
     asyncRoute(async (req, res) => {
+        if (req.user?.role === 'admin' || req.user?.role === 'master_admin') {
+            throw new ApiError(403, 'Admin users cannot create Goods Receipt Notes', 'ADMIN_CANNOT_CREATE_GRN');
+        }
         ensureOrg(req);
         const body = createGrnSchema.parse(req.body);
 
@@ -305,20 +323,27 @@ router.get(
     authenticate,
     requirePermission('grn.view', orgScope),
     asyncRoute(async (req, res) => {
-        ensureOrg(req);
+        const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
+        if (!isAdmin) {
+            ensureOrg(req);
+        }
         const id = Number(req.params.id);
-        const uOrgId = orgId(req);
+        const uOrgId = req.user?.organizationId;
         const uId = userId(req);
 
-        const grn = await prisma.goodsReceiptNote.findFirst({
-            where: {
+        const where: any = isAdmin
+            ? { id }
+            : {
                 id,
                 OR: [
                     { organizationId: uOrgId },
                     { purchaseOrder: { sellerId: uId } },
                     { purchaseOrder: { seller: { organizationId: uOrgId } } }
                 ]
-            },
+            };
+
+        const grn = await prisma.goodsReceiptNote.findFirst({
+            where,
             include: grnIncludes
         });
         if (!grn) throw new ApiError(404, 'GRN not found', 'GRN_NOT_FOUND');
@@ -373,6 +398,9 @@ router.post(
     requirePermission('grn.create', orgScope),
     requireApprovedOrg,
     asyncRoute(async (req, res) => {
+        if (req.user?.role === 'admin' || req.user?.role === 'master_admin') {
+            throw new ApiError(403, 'Admin users cannot submit Goods Receipt Notes', 'ADMIN_CANNOT_SUBMIT_GRN');
+        }
         ensureOrg(req);
         const id = Number(req.params.id);
 

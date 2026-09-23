@@ -82,8 +82,9 @@ export default function GrnDetailPage({ id }: Props) {
     const { user } = useAuth();
     const { hasPermission } = usePermissions();
     const canViewGrn = hasPermission('grn.view');
-    const canCreateGrn = hasPermission('grn.create');
-    const canApproveGrn = hasPermission('grn.approve');
+    const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
+    const canCreateGrn = hasPermission('grn.create') && !isAdmin && user?.role !== 'seller';
+    const canApproveGrn = hasPermission('grn.approve') && !isAdmin;
     const { data: grn, isLoading, error, refetch } = useGrn(id, { enabled: canViewGrn });
     const submitMut = useSubmitGrn();
     const approveMut = useApproveGrn();

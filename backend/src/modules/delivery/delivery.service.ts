@@ -129,6 +129,10 @@ const loadDelivery = async (id: number) => {
               invoiceFile: { select: { id: true, originalName: true, mimeType: true } },
               paymentSlipFile: { select: { id: true, originalName: true, mimeType: true } }
             }
+          },
+          grns: {
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, grnNumber: true, status: true, createdAt: true }
           }
         }
       },
@@ -143,6 +147,14 @@ const loadDelivery = async (id: number) => {
   });
   if (!delivery) throw new ApiError(404, 'Delivery not found', 'DELIVERY_NOT_FOUND');
   delivery.dpExtensions = await fetchDpExtensions(delivery.id);
+  const grns = (delivery as any).purchaseOrder?.grns || [];
+  const submittedGrn = grns.find((g: any) => String(g.status || '').toUpperCase() !== 'DRAFT');
+  const latestGrn = grns[0] || null;
+  const primaryGrn = submittedGrn || latestGrn;
+  (delivery as any).grnId = primaryGrn?.id ?? null;
+  (delivery as any).grnStatus = primaryGrn?.status ?? null;
+  (delivery as any).hasGrn = Boolean(primaryGrn);
+  (delivery as any).hasSubmittedGrn = Boolean(submittedGrn);
   return delivery;
 };
 
@@ -162,6 +174,10 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
               invoiceFile: { select: { id: true, originalName: true, mimeType: true } },
               paymentSlipFile: { select: { id: true, originalName: true, mimeType: true } }
             }
+          },
+          grns: {
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, grnNumber: true, status: true, createdAt: true }
           }
         }
       },
@@ -176,6 +192,14 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
   });
   if (!delivery) return null;
   delivery.dpExtensions = await fetchDpExtensions(delivery.id);
+  const grns = (delivery as any).purchaseOrder?.grns || [];
+  const submittedGrn = grns.find((g: any) => String(g.status || '').toUpperCase() !== 'DRAFT');
+  const latestGrn = grns[0] || null;
+  const primaryGrn = submittedGrn || latestGrn;
+  (delivery as any).grnId = primaryGrn?.id ?? null;
+  (delivery as any).grnStatus = primaryGrn?.status ?? null;
+  (delivery as any).hasGrn = Boolean(primaryGrn);
+  (delivery as any).hasSubmittedGrn = Boolean(submittedGrn);
   return delivery;
 };
 
@@ -659,7 +683,11 @@ export const deliveryService = {
               status: true,
               poStatus: true,
               buyer: { select: { id: true, name: true } },
-              seller: { select: { id: true, name: true } }
+              seller: { select: { id: true, name: true } },
+              grns: {
+                select: { id: true, grnNumber: true, status: true, createdAt: true },
+                orderBy: { createdAt: 'desc' }
+              }
             }
           },
           logisticsPartner: { select: { id: true, name: true } },
@@ -670,7 +698,20 @@ export const deliveryService = {
       }),
       db.deliveryTracking.count({ where })
     ]);
-    return { records, total, skip, take };
+    const enrichedRecords = records.map((record: any) => {
+      const grns = record.purchaseOrder?.grns || [];
+      const submittedGrn = grns.find((g: any) => String(g.status || '').toUpperCase() !== 'DRAFT');
+      const latestGrn = grns[0] || null;
+      const primaryGrn = submittedGrn || latestGrn;
+      return {
+        ...record,
+        grnId: primaryGrn?.id ?? null,
+        grnStatus: primaryGrn?.status ?? null,
+        hasGrn: Boolean(primaryGrn),
+        hasSubmittedGrn: Boolean(submittedGrn)
+      };
+    });
+    return { records: enrichedRecords, total, skip, take };
   },
 
   async getDetail(actor: DeliveryActor, id: number) {

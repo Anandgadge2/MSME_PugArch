@@ -704,7 +704,36 @@ interface ViewProps {
   onSort?: (key: string) => void;
 }
 
+function getDeliveryGrnInfo(record: DeliveryDetailDto) {
+  const po = record.purchaseOrder as any;
+  const grns: Array<{ id: number; status?: string; grnNumber?: string }> =
+    (record as any).grns || po?.grns || [];
+
+  const submittedGrn = grns.find(g => String(g.status || '').toUpperCase() !== 'DRAFT');
+  const directGrnId = record.grnId || po?.grnId || (record as any).grn?.id;
+  const directGrnStatus = record.grnStatus || (record as any).grn?.status;
+
+  const hasSubmittedGrn = Boolean(
+    record.hasSubmittedGrn ||
+    submittedGrn ||
+    (directGrnStatus && String(directGrnStatus).toUpperCase() !== 'DRAFT')
+  );
+
+  const targetGrnId = submittedGrn?.id || directGrnId || grns[0]?.id || null;
+  const isDelivered = ['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase());
+
+  return {
+    hasSubmittedGrn,
+    targetGrnId,
+    isDelivered,
+    poId: record.purchaseOrder?.id || record.purchaseOrderId
+  };
+}
+
 function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, onPageChange, onPageSizeChange, isFetching, sortKey, sortDir, onSort }: ViewProps) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
   const deliveryColumns: ColumnDef<DeliveryDetailDto>[] = [
     {
       key: 'tracking',
@@ -799,8 +828,7 @@ function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, on
       align: 'right',
       cellClassName: 'text-right',
       cell: (record) => {
-        const canGrn = ['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase());
-        const poId = record.purchaseOrder?.id || record.purchaseOrderId;
+        const { hasSubmittedGrn, targetGrnId, isDelivered, poId } = getDeliveryGrnInfo(record);
         return (
           <div className="flex items-center justify-end gap-1.5">
             <Button
@@ -810,24 +838,38 @@ function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, on
             >
               <Eye className="mr-1 h-3.5 w-3.5" /> Track
             </Button>
-            {canGrn ? (
+            {hasSubmittedGrn && targetGrnId ? (
               <Button
                 size="sm"
-                onClick={() => poId && onOpenGrnModal?.(poId)}
-                className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-2.5 rounded-lg shadow-2xs cursor-pointer"
-                title="Generate Goods Receipt Note (GRN)"
+                type="button"
+                onClick={() => router.push(`/grn/${targetGrnId}`)}
+                className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase px-2.5 rounded-lg shadow-2xs cursor-pointer"
+                title="View Goods Receipt Note (GRN)"
               >
-                <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> GRN
+                <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> View GRN
               </Button>
-            ) : (
-              <Button
-                size="sm"
-                disabled
-                className="h-8 bg-slate-100 text-slate-400 text-[10px] font-black uppercase px-2 rounded-lg cursor-not-allowed border border-slate-200"
-                title="Consignment must be delivered before generating GRN"
-              >
-                GRN
-              </Button>
+            ) : !isAdmin && (
+              isDelivered ? (
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => poId && onOpenGrnModal?.(poId)}
+                  className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-2.5 rounded-lg shadow-2xs cursor-pointer"
+                  title="Generate Goods Receipt Note (GRN)"
+                >
+                  <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> GRN
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  type="button"
+                  disabled
+                  className="h-8 bg-slate-100 text-slate-400 text-[10px] font-black uppercase px-2 rounded-lg cursor-not-allowed border border-slate-200"
+                  title="Consignment must be delivered before generating GRN"
+                >
+                  GRN
+                </Button>
+              )
             )}
           </div>
         );
@@ -860,6 +902,8 @@ function ListView({ records, page, pageSize, total, onSelect, onOpenGrnModal, on
 
 function GridView({ records, startIndex, page, pageSize, total, onSelect, onOpenGrnModal, onPageChange, onPageSizeChange, isFetching }: ViewProps) {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
   return (
     <div className={cn('space-y-4 transition-opacity', isFetching && 'opacity-90')}>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -916,44 +960,52 @@ function GridView({ records, startIndex, page, pageSize, total, onSelect, onOpen
                 >
                   <Eye className="mr-1.5 h-3.5 w-3.5" /> Track Progress
                 </Button>
-                {['DELIVERED', 'COMPLETED', 'ACCEPTED'].includes(String(record.status || '').toUpperCase()) ? (
-                  (() => {
-                    const po = record.purchaseOrder as any;
-                    const grnId = (record as any).grnId || po?.grnId || po?.grns?.[0]?.id || (record as any).grn?.id;
-                    if (grnId) {
-                      return (
-                        <Button
-                          size="sm"
-                          type="button"
-                          onClick={() => router.push(`/grn/${grnId}`)}
-                          className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
-                        >
-                          <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
-                        </Button>
-                      );
-                    }
+                {(() => {
+                  const { hasSubmittedGrn, targetGrnId, isDelivered, poId } = getDeliveryGrnInfo(record);
+
+                  if (hasSubmittedGrn && targetGrnId) {
+                    return (
+                      <Button
+                        size="sm"
+                        type="button"
+                        onClick={() => router.push(`/grn/${targetGrnId}`)}
+                        className="h-8 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                        title="View Goods Receipt Note (GRN)"
+                      >
+                        <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
+                      </Button>
+                    );
+                  }
+
+                  if (isAdmin) {
+                    return null;
+                  }
+
+                  if (isDelivered) {
                     return (
                       <Button
                         size="sm"
                         type="button"
                         onClick={() => {
-                          const pId = record.purchaseOrder?.id || record.purchaseOrderId;
-                          if (pId) onOpenGrnModal?.(pId);
+                          if (poId) onOpenGrnModal?.(poId);
                         }}
                         className="h-8 bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-black uppercase px-3 rounded-lg shadow-2xs cursor-pointer"
+                        title="Generate Goods Receipt Note (GRN)"
                       >
                         <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> Generate GRN
                       </Button>
                     );
-                  })()
-                ) : (
-                  <span
-                    className="text-[10px] font-bold text-slate-400 italic"
-                    title="Consignment must be delivered before generating GRN"
-                  >
-                    GRN on Delivery
-                  </span>
-                )}
+                  }
+
+                  return (
+                    <span
+                      className="text-[10px] font-bold text-slate-400 italic"
+                      title="Consignment must be delivered before generating GRN"
+                    >
+                      GRN on Delivery
+                    </span>
+                  );
+                })()}
               </div>
             </div>
           </div>

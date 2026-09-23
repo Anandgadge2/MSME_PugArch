@@ -61,7 +61,7 @@ import { openFileAsset } from '../../../lib/files';
 import { formatDate, formatTime, formatDateTime as formatSharedDateTime, formatCleanLocation, cleanOpportunitySummary } from '../../shared/format';
 import { DataTable, type ColumnDef, type SortDirection } from '../../../components/ui/data-table';
 import { useQuery } from '@tanstack/react-query';
-import { sellerRoutes, buyerRoutes } from '@/lib/routes';
+import { buyerRoutes } from '@/lib/routes';
 import { CancelProcurementModal, type CancelTargetProcurement } from '../components/CancelProcurementModal';
 import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 
@@ -237,7 +237,26 @@ const resolveProcurementActionUrl = (p: NormalizedProcurement) => {
   const statusLower = String(p.status || '').toLowerCase();
   const statusGroup = String(p.statusGroup || '').toLowerCase();
   const typeLower = String(p.type || '').toLowerCase();
+  const methodLower = String(p.method || '').toLowerCase();
   const rawActionUrl = String(p.actionUrl || '');
+
+  const isReverseAuction =
+    typeLower === 'reverse_auction' ||
+    methodLower === 'reverse_auction' ||
+    methodLower === 'reverse-auction' ||
+    methodLower === 'bid-with-reverse-auction' ||
+    methodLower === 'bid_with_reverse_auction';
+
+  if (isReverseAuction) {
+    const auctionId = p.linkedAuctionId || (typeLower === 'reverse_auction' ? p.id : null) || p.referenceNumber || p.id;
+    if (['published', 'open', 'active', 'sourcing', 'live'].includes(statusLower)) {
+      return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(auctionId))}/live`;
+    }
+    if (['closed', 'completed', 'awarded', 'fulfilled', 'finalized'].includes(statusLower)) {
+      return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(auctionId))}/results`;
+    }
+    return auctionId ? buyerRoutes.detail('REVERSE_AUCTION', auctionId) : '/buyer/my-procurements';
+  }
 
   if (statusLower === 'converted_to_order' || statusLower === 'completed') return '/buyer/orders';
   if (typeLower === 'direct_purchase' && (statusLower === 'approved' || statusLower === 'completed')) return '/buyer/orders';
@@ -252,8 +271,16 @@ const procurementActionLabel = (p: NormalizedProcurement) => {
   const statusLower = String(p.status || '').toLowerCase();
   const statusGroup = String(p.statusGroup || '').toLowerCase();
   const typeLower = String(p.type || '').toLowerCase();
+  const methodLower = String(p.method || '').toLowerCase();
 
-  if (typeLower === 'reverse_auction') {
+  const isReverseAuction =
+    typeLower === 'reverse_auction' ||
+    methodLower === 'reverse_auction' ||
+    methodLower === 'reverse-auction' ||
+    methodLower === 'bid-with-reverse-auction' ||
+    methodLower === 'bid_with_reverse_auction';
+
+  if (isReverseAuction) {
     if (['published', 'open', 'active', 'sourcing', 'live'].includes(statusLower)) return 'Join Live Auction';
     if (['closed', 'completed', 'awarded', 'fulfilled', 'finalized'].includes(statusLower)) return 'View Auction Results';
     return 'View Auction Details';
@@ -517,8 +544,8 @@ export default function MyProcurementsPage() {
     if (isReverseAuction) {
       // A reverse auction is stored as a Requirement; the biddable entity is the
       // linked Auction. Use its id (falling back to the auction row's own id).
-      const auctionId = p.linkedAuctionId || (typeLower === 'reverse_auction' ? p.id : null);
-      route = auctionId ? sellerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
+      const auctionId = p.linkedAuctionId || (typeLower === 'reverse_auction' ? p.id : null) || p.referenceNumber || p.id;
+      route = auctionId ? buyerRoutes.detail('REVERSE_AUCTION', auctionId) : null;
     } else if (typeLower === 'bid_tender') {
       const consolidated = getConsolidatedType(p);
       const targetId = encodeURIComponent(p.referenceNumber || p.id);

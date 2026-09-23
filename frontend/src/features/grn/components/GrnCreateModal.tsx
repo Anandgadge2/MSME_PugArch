@@ -196,7 +196,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
 
                     {selectedPo && eligibility.data && !eligibility.data.canCreate && (
                         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                            This PO already has an approved GRN. Creating another may not be necessary.
+                            This Purchase Order already has a submitted or approved Goods Receipt Note. Creating another is not permitted.
                         </div>
                     )}
 
@@ -297,7 +297,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
 
                 <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex justify-end gap-2">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={createMut.isPending || !selectedPoId} className="bg-[#12335f] text-white">
+                    <Button onClick={handleSubmit} disabled={createMut.isPending || !selectedPoId || eligibility.data?.canCreate === false} className="bg-[#12335f] text-white">
                         {createMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                         Create GRN
                     </Button>

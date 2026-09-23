@@ -164,7 +164,8 @@ export default function GrnListPage() {
     const [filterItems, setFilterItems] = useState<string>('ALL');
 
     const canViewGrns = hasPermission('grn.view');
-    const canCreate = hasPermission('grn.create') && user?.role !== 'seller';
+    const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
+    const canCreate = hasPermission('grn.create') && user?.role !== 'seller' && !isAdmin;
     const { data, isLoading, error, refetch, isFetching } = useGrns(undefined, { enabled: canViewGrns });
 
     const grns = data || [];

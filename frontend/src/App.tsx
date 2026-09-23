@@ -79,6 +79,7 @@ const SecuritySettingsPage = lazy(() => import('./features/settings/pages/Securi
 const NotificationPrefsPage = lazy(() => import('./features/settings/pages/NotificationPrefsPage'));
 const AadhaarKycPage = lazy(() => import('./features/kyc/AadhaarKycPage'));
 const RoleReportsPage = lazy(() => import('./features/reports/pages/RoleReportsPage'));
+const CategoryVolumeAnalysisPage = lazy(() => import('./features/reports/pages/CategoryVolumeAnalysisPage'));
 const ProcurementReportPage = lazy(() => import('./features/reports/pages/ProcurementReportPage'));
 const PaymentsReportPage = lazy(() => import('./features/reports/pages/PaymentsReportPage'));
 const SuppliersReportPage = lazy(() => import('./features/reports/pages/SuppliersReportPage'));
@@ -1060,6 +1061,7 @@ export default function App({
     if (pathname === '/admin/compliance-rules' && roleOk(user.role, ['admin'])) return <ComplianceRulesPage />;
     if (['/admin/governance', '/admin/procurement', '/admin/compliance'].includes(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding" />;
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
+    if ((pathname === '/admin/analytics/category-volume' || pathname === '/admin/reports/category-volume') && roleOk(user.role, ['admin'])) return <CategoryVolumeAnalysisPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;
     if (pathname === '/roles-permissions') return <PermissionRouteGuard permission="team.role.manage"><RbacPanel /></PermissionRouteGuard>;
     if (pathname === '/admin/rbac' && roleOk(user.role, ['admin'])) return <RbacPanel />;

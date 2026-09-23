@@ -206,6 +206,10 @@ export interface DeliveryDetailDto {
   remarks?: string;
   metadata?: Record<string, unknown>;
   closedAt?: string;
+  grnId?: number | null;
+  grnStatus?: string | null;
+  hasGrn?: boolean;
+  hasSubmittedGrn?: boolean;
   createdAt?: string;
   updatedAt?: string;
   purchaseOrder?: {
@@ -222,6 +226,12 @@ export interface DeliveryDetailDto {
     sellerId?: number;
     buyer?: { id?: number; name?: string; email?: string };
     seller?: { id?: number; name?: string; email?: string };
+    grns?: Array<{
+      id: number;
+      grnNumber?: string;
+      status?: string;
+      createdAt?: string;
+    }>;
     invoices?: Array<{
       id: number;
       invoiceNumber?: string;

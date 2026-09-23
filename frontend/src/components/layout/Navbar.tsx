@@ -152,6 +152,7 @@ const preloadRegistry: Record<string, () => Promise<any>> = {
   '/buyer/onboarding': () => import('../../views/BuyerOnboarding'),
   '/seller/settings': () => import('../../views/SellerSettings'),
   '/buyer/profile': () => import('../../views/BuyerProfile'),
+  '/admin/analytics/category-volume': () => import('../../features/reports/pages/CategoryVolumeAnalysisPage'),
   '/help': () => import('../../views/HelpPage'),
   '/profile': () => import('../../views/Profile'),
 };
@@ -194,6 +195,7 @@ const HIGH_PRIORITY_PREFETCH_ROUTES = [
   '/admin/organizations',
   '/admin/onboarding',
   '/admin/reports',
+  '/admin/analytics/category-volume',
   '/admin/banners',
   '/admin/monthly-rankings',
   '/payments',
@@ -543,6 +545,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Team & RBAC', path: '/admin/rbac', icon: ShieldCheck, roles: ['admin'], featureCode: 'role-management' },
     ] },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, roles: ['admin'], featureCode: 'reports-mis' },
+    { label: 'Category Volume Analysis', path: '/admin/analytics/category-volume', icon: Layers, roles: ['admin'] },
     { label: 'Compliance', path: '/admin/compliance-rules', icon: ShieldCheck, roles: ['admin'] },
     // Buyer Marketplace
     { label: 'Marketplace', icon: ShoppingCart, roles: ['buyer'], children: [
