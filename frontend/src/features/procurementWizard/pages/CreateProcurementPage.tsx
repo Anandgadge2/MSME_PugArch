@@ -1692,15 +1692,9 @@ export default function CreateProcurementPage() {
         const contract = d.rateContractConfig;
         const start = new Date(contract.periodStartDate).getTime();
         const end = new Date(contract.periodEndDate).getTime();
-        if (!contract.contractTitle.trim()) return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (!contract.rateValidityPeriod.trim()) return false;
-        if (contract.itemRateSchedule.length === 0) return false;
-        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
-        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
-        if (!contract.deliverySla.trim()) return false;
-        if (!contract.penaltyClause.trim()) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -1959,10 +1953,6 @@ export default function CreateProcurementPage() {
         const contract = d.rateContractConfig;
         const start = new Date(contract.periodStartDate).getTime();
         const end = new Date(contract.periodEndDate).getTime();
-        if (!contract.contractTitle.trim()) {
-          toast.error('Contract title is required.');
-          return false;
-        }
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
           toast.error('Rate Contract start date must be before end date.');
           return false;
@@ -1971,28 +1961,8 @@ export default function CreateProcurementPage() {
           toast.error('Rate validity period is required.');
           return false;
         }
-        if (contract.itemRateSchedule.length === 0) {
-          toast.error('Rate Contract requires at least one item in the rate schedule.');
-          return false;
-        }
-        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) {
-          toast.error('Every rate schedule item must have item name, UOM, annual quantity, and base rate.');
-          return false;
-        }
-        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) {
-          toast.error('Slab pricing rows must have valid quantity ranges and positive rates.');
-          return false;
-        }
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) {
           toast.error('Maximum call-off quantity cannot be lower than minimum order quantity.');
-          return false;
-        }
-        if (!contract.deliverySla.trim()) {
-          toast.error('Delivery SLA is required.');
-          return false;
-        }
-        if (!contract.penaltyClause.trim()) {
-          toast.error('Penalty clause is required.');
           return false;
         }
       }
@@ -6025,47 +5995,6 @@ function ScheduleStepForm({
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
   const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20');
-  const updateRateItem = <K extends keyof RateContractItem>(id: string, key: K, val: RateContractItem[K]) => {
-    updateDraft(c => ({
-      ...c,
-      rateContractConfig: {
-        ...c.rateContractConfig,
-        itemRateSchedule: c.rateContractConfig.itemRateSchedule.map(item => item.id === id ? { ...item, [key]: val } : item),
-      },
-    }));
-  };
-  const addRateItem = () => {
-    updateDraft(c => ({
-      ...c,
-      rateContractConfig: {
-        ...c.rateContractConfig,
-        itemRateSchedule: [
-          ...c.rateContractConfig.itemRateSchedule,
-          {
-            id: makeId(),
-            itemName: '',
-            specification: '',
-            uom: 'Nos',
-            estimatedAnnualQuantity: 1,
-            baseRate: 0,
-            gst: 18,
-            discount: 0,
-            slabPricingEnabled: false,
-            slabPricing: [],
-          },
-        ],
-      },
-    }));
-  };
-  const removeRateItem = (id: string) => {
-    updateDraft(c => ({
-      ...c,
-      rateContractConfig: {
-        ...c.rateContractConfig,
-        itemRateSchedule: c.rateContractConfig.itemRateSchedule.filter(item => item.id !== id),
-      },
-    }));
-  };
 
   const [uploadingAuctionDoc, setUploadingAuctionDoc] = useState(false);
 
@@ -6228,7 +6157,7 @@ function ScheduleStepForm({
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Establish standardized pre-negotiated unit rates, delivery SLAs, and call-off order parameters.
+                  Establish contract validity schedules, supplier selection strategy, and call-off order parameters.
                 </p>
               </div>
             </div>
@@ -6244,33 +6173,9 @@ function ScheduleStepForm({
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
               <FileText className="h-3.5 w-3.5 text-[#0b2447]" />
-              <span>Contract Master &amp; Validity Parameters</span>
+              <span>Contract Validity &amp; Selection Strategy</span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Contract Title" required>
-                <input
-                  value={draft.rateContractConfig.contractTitle}
-                  onChange={e => updateRateContract('contractTitle', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Annual Rate Contract for Industrial PPE & Safety Equipment"
-                />
-              </Field>
-              <Field label="Contract Category">
-                <input
-                  value={draft.rateContractConfig.contractCategory}
-                  onChange={e => updateRateContract('contractCategory', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Safety Gear & Supplies"
-                />
-              </Field>
-              <Field label="Contract Subcategory (Optional)">
-                <input
-                  value={draft.rateContractConfig.contractSubCategory}
-                  onChange={e => updateRateContract('contractSubCategory', e.target.value)}
-                  className={inputClass}
-                  placeholder="Enter contract subcategory (Optional)"
-                />
-              </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Contract Start Date" required>
                 <input
                   type="date"
@@ -6306,265 +6211,55 @@ function ScheduleStepForm({
                   <option value="PANEL_RATE_CONTRACT">Panel Rate Contract (Pre-qualified Empaneled)</option>
                 </select>
               </Field>
-              <Field label="Allocated Supplier(s)" required className="sm:col-span-2">
-                <div className="relative">
-                  <input
-                    value={`${draft.rateContractConfig.selectedSuppliers.length || draft.vendors.invitedSellers.length} supplier(s) allocated from Supplier step`}
-                    readOnly
-                    className={cn(inputClass, 'bg-slate-50 text-slate-600 font-semibold cursor-default')}
-                  />
-                  <Users className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
-              </Field>
-              <div className="sm:col-span-2 lg:col-span-3">
-                <Field label="Contract Scope & Purpose Description">
-                  <textarea
-                    value={draft.rateContractConfig.contractDescription}
-                    onChange={e => updateRateContract('contractDescription', e.target.value)}
-                    className={cn(inputClass, 'min-h-[72px] resize-y')}
-                    placeholder="Provide scope, authorized drawing/grade standards, and delivery terms overview..."
-                  />
-                </Field>
-              </div>
             </div>
           </div>
 
-          {/* Subsection 2: Item & Rate Schedule (BOQ) */}
-          <div className="rounded-xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-2xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Package className="h-4 w-4 text-[#0b2447]" />
-                  <h4 className="text-xs font-black uppercase tracking-wide text-slate-900">
-                    Item &amp; Unit Rate Schedule (BOQ)
-                  </h4>
-                  <span className="rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-                    {draft.rateContractConfig.itemRateSchedule.length} Item(s)
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                  Define item specifications, estimated annual quantities, ceiling unit base rates, and applicable GST/discount.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addRateItem}
-                className="h-8.5 px-3 rounded-lg border-blue-200 bg-blue-50 text-[#0b2447] hover:bg-blue-100 font-bold text-xs flex items-center gap-1.5 shadow-2xs shrink-0"
-              >
-                <Plus className="h-3.5 w-3.5 text-blue-600" />
-                <span>Add Contract Item</span>
-              </Button>
-            </div>
-
-            <div className="space-y-3.5">
-              {draft.rateContractConfig.itemRateSchedule.map((item, idx) => {
-                const base = Number(item.baseRate || 0);
-                const gst = Number(item.gst || 0);
-                const disc = Number(item.discount || 0);
-                const afterDisc = base * (1 - disc / 100);
-                const landedUnit = afterDisc * (1 + gst / 100);
-
-                return (
-                  <div key={item.id} className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-4 transition-all hover:border-slate-300 hover:shadow-xs space-y-3">
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/60 pb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-[#0b2447] text-white text-[10px] font-bold">
-                          {idx + 1}
-                        </span>
-                        <span className="text-xs font-black text-slate-900 truncate">
-                          {item.itemName || 'Untitled Item'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {landedUnit > 0 && (
-                          <span className="rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            Est. Landed: ₹{landedUnit.toFixed(2)} / {item.uom || 'Unit'}
-                          </span>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeRateItem(item.id)}
-                          className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-                      <Field label="Item Name" required>
-                        <input
-                          value={item.itemName}
-                          onChange={e => updateRateItem(item.id, 'itemName', e.target.value)}
-                          className={inputClass}
-                          placeholder="e.g. Safety Helmets Type II"
-                        />
-                      </Field>
-                      <Field label="Specification / Grade">
-                        <input
-                          value={item.specification}
-                          onChange={e => updateRateItem(item.id, 'specification', e.target.value)}
-                          className={inputClass}
-                          placeholder="IS:2925 standard or custom specs"
-                        />
-                      </Field>
-                      <Field label="UOM" required>
-                        <input
-                          value={item.uom}
-                          onChange={e => updateRateItem(item.id, 'uom', e.target.value)}
-                          maxLength={20}
-                          placeholder="Nos, Sets, Meters..."
-                          className={inputClass}
-                        />
-                      </Field>
-                      <Field label="Est. Annual Quantity" required>
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.estimatedAnnualQuantity || ''}
-                          onChange={e => updateRateItem(item.id, 'estimatedAnnualQuantity', Number(e.target.value || 0))}
-                          className={inputClass}
-                          placeholder="Annual projected volume"
-                        />
-                      </Field>
-                      <Field label="Base Rate (₹ / UOM)" required>
-                        <input
-                          type="number"
-                          min={0}
-                          value={item.baseRate || ''}
-                          onChange={e => updateRateItem(item.id, 'baseRate', Number(e.target.value || 0))}
-                          className={inputClass}
-                          placeholder="0.00"
-                        />
-                      </Field>
-                      <Field label="GST (%)">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={item.gst}
-                          onChange={e => updateRateItem(item.id, 'gst', Number(e.target.value || 0))}
-                          className={inputClass}
-                          placeholder="18"
-                        />
-                      </Field>
-                      <Field label="Discount (%)">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={item.discount}
-                          onChange={e => updateRateItem(item.id, 'discount', Number(e.target.value || 0))}
-                          className={inputClass}
-                          placeholder="0"
-                        />
-                      </Field>
-                      <div className="flex items-end justify-between gap-2 pb-1">
-                        <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={item.slabPricingEnabled}
-                            onChange={e => updateRateItem(item.id, 'slabPricingEnabled', e.target.checked)}
-                            className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
-                          />
-                          <span>Slab Pricing Tier</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {draft.rateContractConfig.itemRateSchedule.length === 0 && (
-                <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-2">
-                  <Package className="h-8 w-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-bold text-slate-700">No Rate Schedule Items Configured</p>
-                  <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
-                    Add at least one item with unit base rates to establish this rate contract.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addRateItem}
-                    className="h-8 px-3 rounded-lg border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold text-xs mt-1"
-                  >
-                    <Plus className="mr-1 h-3.5 w-3.5" /> Add First Item
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Subsection 3: Fulfillment SLA & Call-Off Controls */}
+          {/* Subsection 2: Periodic Call-Off Controls */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
               <Truck className="h-3.5 w-3.5 text-[#0b2447]" />
-              <span>Fulfillment SLA &amp; Call-Off Order Controls</span>
+              <span>Call-Off Order Controls</span>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Delivery SLA" required>
+            <div className="rounded-xl border border-slate-200/80 bg-white p-4 space-y-3 shadow-2xs">
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
                 <input
-                  value={draft.rateContractConfig.deliverySla}
-                  onChange={e => updateRateContract('deliverySla', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Door delivery within 7 working days from call-off issue"
+                  type="checkbox"
+                  checked={draft.rateContractConfig.callOffOrderAllowed}
+                  onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
                 />
-              </Field>
-              <Field label="Penalty Clause" required>
-                <input
-                  value={draft.rateContractConfig.penaltyClause}
-                  onChange={e => updateRateContract('penaltyClause', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
-                />
-              </Field>
+                <div>
+                  <span className="text-xs font-bold text-slate-900">Enable Periodic Call-off Purchase Orders</span>
+                  <span className="block text-[11px] text-slate-500 font-medium">
+                    Allow buyer departments to trigger staggered release orders against locked contract rates over the validity duration.
+                  </span>
+                </div>
+              </label>
 
-              <div className="sm:col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 space-y-3">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={draft.rateContractConfig.callOffOrderAllowed}
-                    onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 accent-[#0b2447]"
-                  />
-                  <div>
-                    <span className="text-xs font-bold text-slate-900">Enable Periodic Call-off Purchase Orders</span>
-                    <span className="block text-[11px] text-slate-500 font-medium">
-                      Allow buyer departments to trigger staggered release orders against locked contract rates over the validity duration.
-                    </span>
-                  </div>
-                </label>
-
-                {draft.rateContractConfig.callOffOrderAllowed && (
-                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
-                    <Field label="Maximum Order Quantity Per Call-off">
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
-                        onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
-                        className={inputClass}
-                        placeholder="0 = No ceiling"
-                      />
-                    </Field>
-                    <Field label="Minimum Order Quantity Per Call-off">
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.rateContractConfig.minimumOrderQuantity || ''}
-                        onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
-                        className={inputClass}
-                        placeholder="0 = No minimum"
-                      />
-                    </Field>
-                  </div>
-                )}
-              </div>
+              {draft.rateContractConfig.callOffOrderAllowed && (
+                <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
+                  <Field label="Maximum Order Quantity Per Call-off">
+                    <input
+                      type="number"
+                      min={0}
+                      value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
+                      onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
+                      className={inputClass}
+                      placeholder="0 = No ceiling"
+                    />
+                  </Field>
+                  <Field label="Minimum Order Quantity Per Call-off">
+                    <input
+                      type="number"
+                      min={0}
+                      value={draft.rateContractConfig.minimumOrderQuantity || ''}
+                      onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
+                      className={inputClass}
+                      placeholder="0 = No minimum"
+                    />
+                  </Field>
+                </div>
+              )}
             </div>
           </div>
 
@@ -8020,12 +7715,15 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     }
   } : null;
 
+  const fallbackRateSchedule = rateScheduleFromDraftItems(draft);
   const rateContractConfigPayload = isRateContractMethod(draft.type) ? {
     ...draft.rateContractConfig,
     contractTitle: draft.rateContractConfig.contractTitle || title,
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
     contractSubCategory: draft.rateContractConfig.contractSubCategory || '',
+    deliverySla: draft.rateContractConfig.deliverySla || draft.terms.deliveryTerms || 'Delivery within agreed SLA from call-off order date',
+    penaltyClause: draft.rateContractConfig.penaltyClause || draft.terms.penaltyClause || 'As per agreed contract terms',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, '')
@@ -8033,7 +7731,23 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     selectedSuppliers: draft.rateContractConfig.selectedSuppliers.length
       ? draft.rateContractConfig.selectedSuppliers
       : draft.vendors.invitedSellers.map(supplierId => ({ supplierId })),
-    itemRateSchedule: draft.rateContractConfig.itemRateSchedule.map(item => ({
+    itemRateSchedule: (draft.rateContractConfig.itemRateSchedule.length
+      ? draft.rateContractConfig.itemRateSchedule
+      : (fallbackRateSchedule.length
+        ? fallbackRateSchedule
+        : [{
+            id: makeId(),
+            itemName: title || 'Rate Contract Item',
+            specification: '',
+            uom: 'Nos',
+            estimatedAnnualQuantity: 1,
+            baseRate: draft.basics.estimatedValue || 1,
+            gst: 0,
+            discount: 0,
+            slabPricingEnabled: false,
+            slabPricing: []
+          }])
+    ).map(item => ({
       ...item,
       uom: (item.uom || 'Nos').trim().slice(0, 20),
       slabPricing: item.slabPricingEnabled ? item.slabPricing : []
