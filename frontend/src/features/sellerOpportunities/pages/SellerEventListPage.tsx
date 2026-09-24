@@ -8,7 +8,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { procurementBidApi } from '../../procurementBid/api';
 import type { ProcurementBid } from '../../procurementBid/data';
-import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procurementWizard/components/SourcingWizardComponents';
+import { MethodBadge, ProcurementStatusBadge, OrganizationBadge } from '../../procurementWizard/components/SourcingWizardComponents';
 import { Pagination } from '../../shared/Pagination';
 import { usePagination } from '../../shared/hooks';
 import { KpiCard } from '../../shared/KpiCard';
@@ -217,7 +217,7 @@ export default function SellerEventListPage() {
           <p className="text-xs font-bold text-slate-800 leading-snug line-clamp-1">{bid.title}</p>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-semibold text-slate-500">{bid.buyerName}</span>
-            {bid.buyerType && <BuyerTypeBadge buyerType={bid.buyerType} />}
+            {bid.buyerType && <OrganizationBadge organizationType={bid.buyerType} />}
           </div>
         </div>
       )

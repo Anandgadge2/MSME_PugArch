@@ -88,8 +88,7 @@ import {
   suggestProcurementMethod,
   mapToDatabaseMethod,
   METHOD_DEFINITIONS,
-  type ProcurementMethodId,
-  type BuyerType
+  type ProcurementMethodId
 } from '../procurementMethodsConfig';
 import { normalizeProcurementMethod } from '../procurementMethodHelpers';
 import { getWizardConfig } from '../modules';
@@ -99,7 +98,6 @@ import {
   ProcurementStepper,
   ProcurementMethodCard,
   ProcurementStatusBadge,
-  BuyerTypeBadge,
   MethodBadge,
   SectionCard,
   StickyActionBar,
@@ -249,7 +247,7 @@ type Draft = {
   id?: number;
   type: ProcurementMethodId;
   basics: {
-    buyerType: BuyerType;
+    buyerType?: string;
     title: string;
     whatAreYouBuying: string;
     category: string;
@@ -969,8 +967,7 @@ const stepLibrary = {
 
 const ALL_STEPS: StepKind[] = ['selection', 'basics', 'internal', 'items', 'vendors', 'schedule', 'terms', 'documents', 'evaluation', 'publish'];
 
-const defaultRequiredDocs = (_buyerType: BuyerType, _method: ProcurementMethodId): DocumentRow[] => {
-  // const isGov = buyerType === 'GOVERNMENT_BUYER';
+const defaultRequiredDocs = (_method?: ProcurementMethodId): DocumentRow[] => {
   const docs: DocumentRow[] = [
     { id: 'gst', name: 'GST Certificate', required: true, fileType: 'pdf', maxSize: 5, instructions: 'Upload verified GST registration document.' },
     { id: 'pan', name: 'PAN Card', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Upload official PAN card.' },
@@ -979,23 +976,12 @@ const defaultRequiredDocs = (_buyerType: BuyerType, _method: ProcurementMethodId
     { id: 'financial_quote', name: 'Detailed Price Breakup', required: true, fileType: 'pdf,xlsx', maxSize: 5, instructions: 'Itemized cost schedule.' },
   ];
 
-  /* Government Buyer specific documents commented out as requested
-  if (isGov) {
-    docs.push(
-      { id: 'experience', name: 'Experience Certificate', required: true, fileType: 'pdf', maxSize: 10, instructions: 'Proof of similar supply in past 3 years.' },
-      { id: 'turnover', name: 'Turnover Certificate', required: true, fileType: 'pdf', maxSize: 5, instructions: 'Chartered Accountant certified turnover.' },
-      { id: 'no_deviation', name: 'No-Deviation Certificate', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Declaration confirming no specs deviation.' }
-    );
-  }
-  */
-
   return docs;
 };
 
-const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 'PRIVATE_BUYER'): Draft => ({
+const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
   type,
   basics: {
-    buyerType,
     title: '',
     whatAreYouBuying: 'Product',
     category: 'Office Supplies & Stationery',
@@ -1093,7 +1079,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ', buyerType: BuyerType = 
     documentFee: 0,
     pbgRequired: false,
   },
-  requiredDocs: defaultRequiredDocs(buyerType, type),
+  requiredDocs: defaultRequiredDocs(type),
   evaluation: {
     method: 'L1 total value',
     techWeight: 70,
@@ -1137,11 +1123,6 @@ export default function CreateProcurementPage() {
     () => normalizeProcurementMethod(searchParams?.get('method'), 'RFQ'),
     [searchParams]
   );
-
-  // Determine initial buyer type from profile (Government Buyer option removed, defaulting to PRIVATE_BUYER)
-  const initialBuyerType = useMemo<BuyerType>(() => {
-    return 'PRIVATE_BUYER';
-  }, []);
 
   const [draft, setDraft] = useState<Draft>(() => {
     let cachedOrg = '';
@@ -1195,7 +1176,7 @@ export default function CreateProcurementPage() {
         console.error('Failed to load local draft from localStorage', e);
       }
     }
-    const def = defaultDraft(initialMethod, initialBuyerType);
+    const def = defaultDraft(initialMethod);
     if (cachedOrg) {
       def.internal.orgName = cachedOrg;
     }
@@ -1368,19 +1349,6 @@ export default function CreateProcurementPage() {
     setHasAutofilled(true);
   }, [user, orgStatus, resolvedOrgName, resolvedAddress, draftIdParam]);
 
-  // Auto-fill buyer type on load
-  useEffect(() => {
-    if (initialBuyerType && !draft.basics.title) {
-      queueMicrotask(() => {
-        setDraft(current => ({
-          ...current,
-          basics: { ...current.basics, buyerType: initialBuyerType },
-          requiredDocs: defaultRequiredDocs(initialBuyerType, current.type)
-        }));
-      });
-    }
-  }, [initialBuyerType]);
-
   // Save activeStep and updatedAt when activeStep changes for local draft
   useEffect(() => {
     if (!draftIdParam) {
@@ -1406,7 +1374,7 @@ export default function CreateProcurementPage() {
         const payload = res?.payload;
         if (!payload) return;
 
-        const base = defaultDraft(payload.type || 'RFQ', payload.basics?.buyerType || initialBuyerType);
+        const base = defaultDraft(payload.type || 'RFQ');
 
         const u = userRef.current as any;
         const orgName = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
@@ -1500,7 +1468,7 @@ export default function CreateProcurementPage() {
       .catch((err) => {
         toast.error('Failed to load draft: ' + err.message);
       });
-  }, [draftIdParam, initialBuyerType]);
+  }, [draftIdParam]);
 
   const updateDraft = (updater: (current: Draft) => Draft) => {
     setDraft(current => {
@@ -1535,17 +1503,6 @@ export default function CreateProcurementPage() {
 
     // Step 2 Internal Details - Errors
     list.push({ label: 'Internal Org Name is required', ok: d.internal.orgName.trim().length > 0, severity: 'error', stepIdx: 2 });
-    /* Government buyer checks commented out as requested
-    if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-      list.push({ label: 'Competent Authority (CFA) is required', ok: d.internal.competentAuthority.trim().length > 0, severity: 'error', stepIdx: 2 });
-      list.push({ label: 'Department File / Case Number is required', ok: d.internal.internalFileNumber.trim().length > 0, severity: 'error', stepIdx: 2 });
-      list.push({ label: 'Sanction Approval Authority is required', ok: d.internal.approvalAuthority.trim().length > 0, severity: 'error', stepIdx: 2 });
-    } else {
-      // Buying Department and Cost Center checks commented out as requested
-      // list.push({ label: 'Cost Center code is required', ok: d.internal.costCenter.trim().length > 0, severity: 'error', stepIdx: 2 });
-      // list.push({ label: 'Buying Department name is required', ok: d.internal.department.trim().length > 0, severity: 'error', stepIdx: 2 });
-    }
-    */
 
     // Step 3 Sourcing specification items - Errors
     // Total procurement quantity drives the auto-generated consignee. If it is 0, the backend
@@ -1635,16 +1592,6 @@ export default function CreateProcurementPage() {
     // }
 
     // Warnings / Advisories
-    /* Government buyer GFR rule advisory commented out as requested
-    if (d.basics.buyerType === 'GOVERNMENT_BUYER' && d.basics.estimatedValue > 250000 && d.vendors.selection !== 'Open') {
-      const isExempt = d.basics.isOnlyOneVendor || d.basics.priority === 'Emergency';
-      list.push({
-        label: 'Est. value > 2.5 Lakhs. GFR rules require open advertised tender unless PAC/Single/Emergency is justified.',
-        ok: isExempt,
-        severity: 'warning'
-      });
-    }
-    */
     if (d.basics.isOnlyOneVendor) {
       list.push({
         label: 'Only one vendor justification note is short (recommend min 15 chars)',
@@ -1693,17 +1640,6 @@ export default function CreateProcurementPage() {
       if (!d.internal.contactPerson.trim()) return false;
       if (!d.internal.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.internal.email.trim())) return false;
       if (!d.internal.mobile.trim() || !/^\d{10}$/.test(d.internal.mobile.trim())) return false;
-      /* Government buyer validation checks commented out as requested
-      if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-        if (!d.internal.internalFileNumber.trim()) return false;
-        if (!d.internal.competentAuthority.trim()) return false;
-        if (!d.internal.approvalAuthority.trim()) return false;
-      } else {
-        // Buying Department and Cost Center checks commented out as requested
-        // if (!d.internal.department.trim()) return false;
-        // if (!d.internal.costCenter.trim()) return false;
-      }
-      */
     } else if (stepIdx === 3) {
       if (d.basics.whatAreYouBuying === 'BOQ') {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
@@ -1893,32 +1829,6 @@ export default function CreateProcurementPage() {
         toast.error('A valid 10-digit Contact Mobile Number is required (e.g. 9876543210).');
         return false;
       }
-      /* Government buyer validation toasts commented out as requested
-      if (d.basics.buyerType === 'GOVERNMENT_BUYER') {
-        if (!d.internal.internalFileNumber.trim()) {
-          toast.error('Department File/Case Number is required for government buyers.');
-          return false;
-        }
-        if (!d.internal.competentAuthority.trim()) {
-          toast.error('Competent Financial Authority is required.');
-          return false;
-        }
-        if (!d.internal.approvalAuthority.trim()) {
-          toast.error('Sanction Approval Authority is required.');
-          return false;
-        }
-      } else {
-        // Buying Department and Cost Center validation toasts commented out as requested
-        // if (!d.internal.department.trim()) {
-        //   toast.error('Buying Department name is required.');
-        //   return false;
-        // }
-        // if (!d.internal.costCenter.trim()) {
-        //   toast.error('Cost Center code is required for private buyers.');
-        //   return false;
-        // }
-      }
-      */
     } else if (stepIdx === 3) {
       // Step 3 Items details
       if (d.basics.whatAreYouBuying === 'BOQ') {
@@ -2507,8 +2417,8 @@ function SelectionsStepForm({
 }) {
   const availableMethods = useMemo(() => {
     const allowed = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'RATE_CONTRACT'];
-    return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id) && m.buyerTypes.includes(draft.basics.buyerType));
-  }, [draft.basics.buyerType]);
+    return METHOD_DEFINITIONS.filter(m => allowed.includes(m.id));
+  }, []);
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -2527,7 +2437,7 @@ function SelectionsStepForm({
               onSelect={() => {
                 updateDraft(current => ({
                   ...applyMethodDefaults(current, method.id),
-                  requiredDocs: defaultRequiredDocs(current.basics.buyerType, method.id)
+                  requiredDocs: defaultRequiredDocs(method.id)
                 }));
               }}
             />
@@ -3519,7 +3429,6 @@ function InternalDetailsForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   resolvedOrgName?: string;
 }) {
-  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
   };
@@ -6069,7 +5978,6 @@ function ScheduleStepForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
 }) {
-  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const isTwoPacket = draft.schedule.packetType === 'Two';
   const isAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
   const isRateContract = isRateContractMethod(draft.type);
@@ -7490,7 +7398,6 @@ function CommercialTermsForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
 }) {
-  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
   const updateTerms = (key: keyof Draft['terms'], val: any) => {
     updateDraft(c => ({ ...c, terms: { ...c.terms, [key]: val } }));
   };
@@ -7789,11 +7696,6 @@ function PreviewPublishForm({
   complianceAccepted: boolean;
   onComplianceAcceptedChange: (accepted: boolean) => void;
 }) {
-  // const isGov = draft.basics.buyerType === 'GOVERNMENT_BUYER';
-  // const approvalHandoff = isGov
-  //   ? ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance & Audit Team', 'Competent Authority (Sanction)', 'Govt Admin Audit']
-  //   : ['Requester Sourcing Officer', 'Department Head (DH)', 'Finance Controller', 'Procurement Head Approval'];
-
   const errors = readiness.filter(r => r.severity === 'error');
   const warnings = readiness.filter(r => r.severity === 'warning');
   const infos = readiness.filter(r => r.severity === 'info');
@@ -7805,7 +7707,6 @@ function PreviewPublishForm({
       {/* Sourcing summary panel from Loop 3 */}
       <ProcurementSummaryPanel
         title={draft.basics.title}
-        buyerType={draft.basics.buyerType}
         method={draft.type}
         estimatedValue={draft.basics.estimatedValue}
         priority={draft.basics.priority}
@@ -8136,7 +8037,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     title,
     justification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     description: `Sourcing Method: ${draft.type}\nValue: INR ${estimatedValue.toLocaleString('en-IN')}\nUrgency: ${draft.basics.priority}`,
-    buyerType: draft.basics.buyerType,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
     estimatedValue,
     discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
@@ -8229,7 +8129,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   // Run suggestion engine to capture recommendation result
   const recommendation = suggestProcurementMethod({
-    buyerType: draft.basics.buyerType,
     estimatedValue: draft.basics.estimatedValue,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
     isCatalogueAvailable: draft.basics.isCatalogueAvailable,
@@ -8295,7 +8194,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     rfqType: draft.rfqType,
     items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
     fullProcurementMethod: draft.type,
-    buyerType: draft.basics.buyerType,
     buyingType: draft.basics.whatAreYouBuying,
     recommendation,
     consigneeDetails,

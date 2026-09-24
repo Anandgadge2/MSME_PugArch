@@ -44,7 +44,6 @@ import { cn } from '../../../lib/utils';
 import {
   EmptyState,
   ProcurementStatusBadge,
-  BuyerTypeBadge,
   MethodBadge,
   SectionCard
 } from '../../procurementWizard/components/SourcingWizardComponents';
@@ -108,23 +107,8 @@ export default function BuyerProcurementHub() {
   const router = useRouter();
   const authHeaders = useMemo(() => (token ? { Authorization: `Bearer ${token}` } : {}), [token]) as Record<string, string>;
 
-  // Detect buyer type workflow
-  const buyerType = useMemo<'PRIVATE_BUYER' | 'GOVERNMENT_BUYER' | null>(() => {
-    if (!user) return null;
-    const u = user as any;
-    const orgType = u?.buyerProfile?.organizationType || u?.organization?.organizationType || u?.organizationType || '';
-    if (!orgType) return null;
-    const isGov = String(orgType).toUpperCase().includes('GOVT') ||
-      String(orgType).toUpperCase().includes('GOVERNMENT') ||
-      String(orgType).toUpperCase().includes('MINISTRY') ||
-      String(orgType).toUpperCase().includes('DEPT') ||
-      String(orgType).toUpperCase().includes('PSU');
-    return isGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER';
-  }, [user]);
-
   // Filters state
   const [activePreset, setActivePreset] = useState<'all' | 'pending_approval' | 'published' | 'drafts' | 'awarded'>('all');
-  const [buyerTypeFilter, setBuyerTypeFilter] = useState('');
   const [methodFilter, setMethodFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -149,7 +133,7 @@ export default function BuyerProcurementHub() {
 
   // Fetch procurements list
   const { data: listResponse, isLoading: isListLoading, refetch: refetchList } = useQuery({
-    queryKey: ['buyer-procurement-hub-list', buyerTypeFilter, methodFilter, statusFilter, categoryFilter, departmentFilter, startDateFilter, endDateFilter],
+    queryKey: ['buyer-procurement-hub-list', methodFilter, statusFilter, categoryFilter, departmentFilter, startDateFilter, endDateFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter) params.set('status', statusFilter);
@@ -229,19 +213,6 @@ export default function BuyerProcurementHub() {
       list = list.filter(p => p.statusGroup === 'draft' || String(p.status).toLowerCase().includes('draft'));
     } else if (activePreset === 'awarded') {
       list = list.filter(p => String(p.status).toUpperCase() === 'AWARDED' || p.statusGroup === 'awarded' || String(p.status).toUpperCase() === 'COMPLETED' || p.type === 'rate_contract');
-    }
-
-    // Buyer type
-    if (buyerTypeFilter) {
-      list = list.filter(p => {
-        const isGovType = (p.typeLabel || '').toLowerCase().includes('bid') ||
-                          (p.type || '').toLowerCase().includes('bid') ||
-                          (p.method || '').toLowerCase().includes('tender') ||
-                          (p.type || '').toLowerCase().includes('tender');
-        if (buyerTypeFilter === 'GOVERNMENT') return isGovType;
-        if (buyerTypeFilter === 'PRIVATE') return !isGovType;
-        return true;
-      });
     }
 
     // Method filter
@@ -334,12 +305,11 @@ export default function BuyerProcurementHub() {
     }
 
     return list;
-  }, [allProcurements, activePreset, buyerTypeFilter, methodFilter, statusFilter, categoryFilter, departmentFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
+  }, [allProcurements, activePreset, methodFilter, statusFilter, categoryFilter, departmentFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
 
   const hasActiveFilters = useMemo(() => {
     return !!(
       activePreset !== 'all' ||
-      buyerTypeFilter ||
       methodFilter ||
       statusFilter ||
       departmentFilter ||
@@ -349,11 +319,10 @@ export default function BuyerProcurementHub() {
       endDateFilter ||
       searchQuery
     );
-  }, [activePreset, buyerTypeFilter, methodFilter, statusFilter, departmentFilter, categoryFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
+  }, [activePreset, methodFilter, statusFilter, departmentFilter, categoryFilter, valueRangeFilter, startDateFilter, endDateFilter, searchQuery]);
 
   const clearAllFilters = () => {
     setActivePreset('all');
-    setBuyerTypeFilter('');
     setMethodFilter('');
     setStatusFilter('');
     setDepartmentFilter('');
@@ -364,7 +333,7 @@ export default function BuyerProcurementHub() {
     setSearchQuery('');
   };
 
-  type HubSortKey = 'referenceNumber' | 'title' | 'method' | 'buyerType' | 'category' | 'estimatedValue' | 'status' | 'createdAt' | 'endDate' | 'responsesCount' | 'statusGroup';
+  type HubSortKey = 'referenceNumber' | 'title' | 'method' | 'category' | 'estimatedValue' | 'status' | 'createdAt' | 'endDate' | 'responsesCount' | 'statusGroup';
   const [sortKey, setSortKey] = useState<HubSortKey>('createdAt');
   const [sortDir, setSortDir] = useState<SortDirection>('desc');
 
@@ -387,9 +356,6 @@ export default function BuyerProcurementHub() {
       } else if (sortKey === 'method') {
         va = a.methodLabel || a.method || '';
         vb = b.methodLabel || b.method || '';
-      } else if (sortKey === 'buyerType') {
-        va = a.typeLabel || a.type || '';
-        vb = b.typeLabel || b.type || '';
       } else if (sortKey === 'category') {
         va = a.category || '';
         vb = b.category || '';
@@ -464,16 +430,6 @@ export default function BuyerProcurementHub() {
       sortable: true,
       sortKey: 'method',
       cell: (p) => <MethodBadge method={p.methodLabel || p.method} />
-    },
-    {
-      key: 'buyerType',
-      header: 'Buyer Type',
-      sortable: true,
-      sortKey: 'buyerType',
-      cell: (p) => {
-        const isRowGov = p.typeLabel.toLowerCase().includes('bid') || p.type.toLowerCase().includes('bid') || p.method.toLowerCase().includes('tender') || p.type.toLowerCase().includes('tender');
-        return <BuyerTypeBadge buyerType={isRowGov ? 'GOVERNMENT_BUYER' : 'PRIVATE_BUYER'} />;
-      }
     },
     {
       key: 'category',
@@ -734,24 +690,11 @@ export default function BuyerProcurementHub() {
           </span>
           <h1 className="text-3xl font-black tracking-tight text-white">Procurement Command Center</h1>
           
-          {/* Buyer Type Badging & Custom Helper Text */}
-          {buyerType === 'PRIVATE_BUYER' ? (
-            <div className="flex flex-wrap items-center gap-3 mt-3">
-              <p className="text-xs text-slate-300 font-semibold leading-relaxed">
-                Supports corporate sourcing workflows (RFQ, RFP, Open Tender, Limited Tender, Reverse Auction, Rate Contracts, Vendor comparison sheets, and internal approval flows).
-              </p>
-            </div>
-          ) : buyerType === 'GOVERNMENT_BUYER' ? (
-            <div className="flex flex-wrap items-center gap-3 mt-3">
-              <p className="text-xs text-slate-300 font-semibold leading-relaxed">
-                Supports public procurement workflows (Open Tender, Limited Tender, Reverse Auction, compliance document auditing, and approval workflows).
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-slate-300 font-semibold mt-2">
-              Supports private and government procurement workflows.
+          <div className="flex flex-wrap items-center gap-3 mt-3">
+            <p className="text-xs text-slate-300 font-semibold leading-relaxed">
+              Create RFQs, RFPs, Open Tenders, Limited Tenders, Reverse Auctions, and Rate Contracts. Track approvals, evaluate bids, and manage awards.
             </p>
-          )}
+          </div>
         </div>
         <div className="flex gap-2 shrink-0 sm:self-center relative z-10">
           <Button variant="outline" size="sm" onClick={handleRefresh} className="h-10 rounded-full border-white/20 bg-white/10 px-4 text-white hover:bg-white/15 hover:text-white text-[10px] font-black uppercase tracking-wider shadow-2xs transition-all">
@@ -1077,9 +1020,7 @@ export default function BuyerProcurementHub() {
             description={
               hasActiveFilters
                 ? "No procurement records match your selected filter criteria. Try adjusting or clearing your filters."
-                : buyerType === 'PRIVATE_BUYER'
-                ? "No corporate RFQ, RFP, or rate contracts available. Start a new procurement event using the guided sourcing setup."
-                : "No government bids, tenders, or direct purchases found. Click below to initialize a guided compliant workflow."
+                : "No procurement events found. Start a new procurement event using the guided sourcing setup."
             }
             actionText={hasActiveFilters ? "Reset Filters" : "Create Sourcing Event"}
             onAction={() => {

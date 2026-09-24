@@ -12,7 +12,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 import { procurementBidApi } from '../../procurementBid/api';
 import type { ProcurementBid } from '../../procurementBid/data';
-import { MethodBadge, ProcurementStatusBadge, BuyerTypeBadge } from '../../procurementWizard/components/SourcingWizardComponents';
+import { MethodBadge, ProcurementStatusBadge } from '../../procurementWizard/components/SourcingWizardComponents';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';

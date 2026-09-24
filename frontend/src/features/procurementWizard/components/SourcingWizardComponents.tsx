@@ -219,22 +219,42 @@ export function ProcurementStatusBadge({ status }: ProcurementStatusBadgeProps) 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. BuyerTypeBadge
+// 4. OrganizationBadge — Shows entity classification for trust/context
 // ─────────────────────────────────────────────────────────────────────────────
-interface BuyerTypeBadgeProps {
-  buyerType: 'PRIVATE_BUYER' | 'GOVERNMENT_BUYER' | string;
+interface OrganizationBadgeProps {
+  organizationType?: string;
+  className?: string;
 }
 
-export function BuyerTypeBadge({ buyerType }: BuyerTypeBadgeProps) {
-  const isGov = String(buyerType || '').toUpperCase().includes('GOVT') || String(buyerType || '').toUpperCase().includes('GOVERNMENT');
+export function OrganizationBadge({ organizationType, className }: OrganizationBadgeProps) {
+  const clean = String(organizationType || '').toUpperCase();
+  const isPsu = clean.includes('PSU') || clean.includes('PUBLIC SECTOR');
+  const isGov = clean.includes('GOV') || clean.includes('MINISTRY') || clean.includes('DEPARTMENT');
+
+  let label = 'Private Enterprise';
+  let badgeStyle = "bg-indigo-50 text-indigo-850 border-indigo-250";
+  if (isPsu) {
+    label = 'PSU Buyer';
+    badgeStyle = "bg-sky-50 text-sky-850 border-sky-300";
+  } else if (isGov) {
+    label = 'Government Buyer';
+    badgeStyle = "bg-amber-50 text-amber-850 border-amber-300";
+  }
+
   return (
     <span className={cn(
       "inline-flex items-center px-2 py-0.5 rounded border text-[8.5px] font-black uppercase tracking-wider leading-none",
-      isGov ? "bg-amber-50 text-amber-850 border-amber-250" : "bg-indigo-50 text-indigo-850 border-indigo-250"
+      badgeStyle,
+      className
     )}>
-      {isGov ? 'Government Buyer' : 'Private Buyer'}
+      {label}
     </span>
   );
+}
+
+// Backward compatibility alias for legacy imports
+export function BuyerTypeBadge({ buyerType, className }: { buyerType: string; className?: string }) {
+  return <OrganizationBadge organizationType={buyerType} className={className} />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1231,7 +1251,7 @@ export function ApprovalTimeline({ stages, currentIdx = 0 }: ApprovalTimelinePro
 // ─────────────────────────────────────────────────────────────────────────────
 interface ProcurementSummaryPanelProps {
   title: string;
-  buyerType: string;
+  buyerType?: string;
   method: string;
   estimatedValue: number;
   priority: string;
@@ -1267,7 +1287,7 @@ function formatDateTimeDisplay(val?: string) {
 
 export function ProcurementSummaryPanel({
   title,
-  buyerType,
+  buyerType: _buyerType,
   method,
   estimatedValue,
   priority,
@@ -1280,7 +1300,6 @@ export function ProcurementSummaryPanel({
   return (
     <div className="grid gap-3.5 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 font-bold text-xs">
       <SummaryItem label="Sourcing Title" value={title} className="sm:col-span-2 xl:col-span-2" />
-      <SummaryItem label="Workflow Type" value={buyerType === 'GOVERNMENT_BUYER' ? 'Government Buyer' : 'Private Buyer'} />
       <SummaryItem label="Sourcing Method" value={method ? method.replace(/_/g, ' ') : 'N/A'} />
       <SummaryItem label="Estimated Budget" value={formatCurrency(estimatedValue)} />
       <SummaryItem label="Priority Level" value={priority || 'Normal'} />

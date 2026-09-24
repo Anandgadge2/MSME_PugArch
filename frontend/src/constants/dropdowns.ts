@@ -75,11 +75,6 @@ export const PRODUCT_CATEGORIES: readonly string[] = [];
 export const PRODUCT_CATEGORY_OTHER = 'Other';
 
 // Procurement wizard common fields. Values are stable codes saved to backend payloads.
-export const PROCUREMENT_BUYER_TYPES = [
-  { value: 'PRIVATE_BUYER', label: 'Private Buyer' },
-  { value: 'GOVERNMENT_BUYER', label: 'Government Buyer' },
-] as const;
-
 export const PROCUREMENT_REQUIREMENT_TYPES = [
   { value: 'GOODS', label: 'Goods' },
   { value: 'SERVICES', label: 'Services' },
@@ -108,7 +103,6 @@ export const PROCUREMENT_INSPECTION_TYPES = [
   { value: 'NOT_REQUIRED', label: 'Not Required' },
 ] as const;
 
-export type ProcurementBuyerType = typeof PROCUREMENT_BUYER_TYPES[number]['value'];
 export type ProcurementRequirementType = typeof PROCUREMENT_REQUIREMENT_TYPES[number]['value'];
 export type ProcurementPriority = typeof PROCUREMENT_PRIORITIES[number]['value'];
 export type ProcurementCurrency = typeof PROCUREMENT_CURRENCIES[number]['value'];

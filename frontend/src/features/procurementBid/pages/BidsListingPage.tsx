@@ -359,7 +359,7 @@ export default function BidsListingPage() {
         ['Bid type', bidType, setBidType, ['All', 'Product', 'Service', 'Works', 'Rate Contract']],
         ['Category', category, setCategory, ['All', 'Safety Equipment', 'Repair and Maintenance', 'IT Hardware and Software', 'Furniture']],
         ['Location', location, setLocation, ['All', 'Jharsuguda', 'Raigarh', 'Bhubaneswar', 'Sambalpur']],
-        ['Buyer type', buyerType, setBuyerType, ['All', 'Large Industry', 'MSME Buyer', 'Government Buyer', 'Private Enterprise', 'PSU Buyer']],
+        ['Organization', buyerType, setBuyerType, ['All', 'Private Enterprise', 'Government / Department', 'Public Sector Undertaking (PSU)', 'Large Industry', 'MSME Buyer']],
         ['Bid value', bidValue, setBidValue, ['All', 'Below 10L', '10L to 25L', 'Above 25L', 'Confidential']],
         ['Closing date', closingDate, setClosingDate, ['All', 'Next 7 days']],
         ['Participation', participation, setParticipation, ['All', 'Participated', 'Not participated']],

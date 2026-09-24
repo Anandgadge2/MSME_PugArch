@@ -378,7 +378,7 @@ const getDaysLeftText = (closingDate?: string) => {
   return `${days} Day${days > 1 ? 's' : ''} Left`;
 };
 
-const formatBuyerType = (type?: string): string => {
+const formatOrganizationType = (type?: string): string => {
   if (!type) return 'Not specified';
   const cleanType = type.trim().toUpperCase();
   if (cleanType === 'PRIVATE_BUYER' || cleanType === 'PRIVATE ENTERPRISE' || cleanType === 'PRIVATE') {
@@ -386,6 +386,9 @@ const formatBuyerType = (type?: string): string => {
   }
   if (cleanType === 'GOVERNMENT_BUYER' || cleanType === 'GOVERNMENT' || cleanType === 'GOVT') {
     return 'Government / Department';
+  }
+  if (cleanType === 'PSU_BUYER' || cleanType === 'PSU' || cleanType.includes('PUBLIC SECTOR')) {
+    return 'Public Sector Undertaking (PSU)';
   }
   if (cleanType === 'PUBLIC_BUYER' || cleanType === 'PUBLIC_LIMITED' || cleanType === 'PUBLIC') {
     return 'Public Enterprise';
@@ -398,6 +401,8 @@ const formatBuyerType = (type?: string): string => {
     .toLowerCase()
     .replace(/\b\w/g, c => c.toUpperCase());
 };
+
+const formatBuyerType = formatOrganizationType;
 
 const formatLocation = (loc?: string): string => {
   if (!loc) return 'Location not specified';

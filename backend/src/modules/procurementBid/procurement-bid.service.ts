@@ -453,7 +453,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
       buyerId: buyerReq.createdById,
       buyerOrganizationId: buyerReq.buyerOrganizationId,
       buyerOrganizationName: buyerReq.buyerOrganization?.organizationName || 'Buyer',
-      buyerType: 'COMMERCIAL_BUYER',
+      buyerType: buyerReq.buyerOrganization?.organizationType || buyerReq.buyerType || 'Private Enterprise',
       category: buyerReq.category?.name || 'General',
       bidType: buyerReq.requirementType || 'RFQ',
       procurementType: buyerReq.requirementType || 'RFQ',
@@ -556,13 +556,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 
         if (!bid) {
           let validBuyerId = rawBuyerId;
+          let buyerUser: any = null;
           if (validBuyerId) {
-            const userExists = await db.user.findUnique({ where: { id: Number(validBuyerId) } });
-            if (!userExists) validBuyerId = null;
+            buyerUser = await db.user.findUnique({ where: { id: Number(validBuyerId) }, include: { organization: true, buyerProfile: true } });
+            if (!buyerUser) validBuyerId = null;
           }
           if (!validBuyerId) {
-            const fallbackUser = await db.user.findFirst({ where: { role: { in: ['buyer', 'admin', 'master_admin'] } } });
+            const fallbackUser = await db.user.findFirst({ where: { role: { in: ['buyer', 'admin', 'master_admin'] } }, include: { organization: true, buyerProfile: true } });
             validBuyerId = fallbackUser?.id;
+            buyerUser = fallbackUser;
           }
 
           logger.info({ reqNumber, reqId, validBuyerId }, '[RESOLVE_BID] Creating shadow procurementBid record for QuoteRequest in DB...');
@@ -572,7 +574,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
               title: qReq.subject || 'RFQ Procurement',
               description: qReq.description || qReq.subject || 'RFQ Procurement',
               category: 'General',
-              buyerType: 'Private Enterprise',
+              buyerType: buyerUser?.organization?.organizationType || buyerUser?.buyerProfile?.organizationType || 'Private Enterprise',
               procurementType: 'RFQ',
               bidType: 'Product',
               buyerId: Number(validBuyerId),
@@ -644,7 +646,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             title: buyerReq.title || 'Requirement Procurement',
             description: buyerReq.description || buyerReq.title || 'Procurement requirement',
             category: buyerReq.category?.name || buyerReq.category || 'General',
-            buyerType: buyerReq.buyerType || buyerReq.buyerOrganization?.organizationType || 'Private Enterprise',
+            buyerType: buyerReq.buyerOrganization?.organizationType || buyerReq.buyerType || 'Private Enterprise',
             procurementType: buyerReq.procurementMethod || 'RFQ',
             bidType: buyerReq.bidType || 'Product',
             buyerId: Number(validBuyerId),
@@ -718,13 +720,15 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
 
       if (!bid) {
         let validBuyerId = contract.buyerId || meta.buyerId || null;
+        let buyerUser: any = null;
         if (validBuyerId) {
-          const userExists = await db.user.findUnique({ where: { id: Number(validBuyerId) } }).catch(() => null);
-          if (!userExists) validBuyerId = null;
+          buyerUser = await db.user.findUnique({ where: { id: Number(validBuyerId) }, include: { organization: true, buyerProfile: true } }).catch(() => null);
+          if (!buyerUser) validBuyerId = null;
         }
         if (!validBuyerId) {
-          const fallbackUser = await db.user.findFirst({ where: { role: { in: ['buyer', 'admin', 'master_admin'] } } }).catch(() => null);
+          const fallbackUser = await db.user.findFirst({ where: { role: { in: ['buyer', 'admin', 'master_admin'] } }, include: { organization: true, buyerProfile: true } }).catch(() => null);
           validBuyerId = fallbackUser?.id;
+          buyerUser = fallbackUser;
         }
 
         logger.info({ rcBidNumber, contractId: contract.id, validBuyerId }, '[RESOLVE_BID] Creating shadow procurementBid for Rate Contract...');
@@ -739,7 +743,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             title: contract.contractTitle || contract.title || 'Rate Contract',
             description: contract.scope || contract.contractTitle || 'Rate Contract Procurement',
             category: (typeof meta.category === 'string' ? meta.category : null) || 'General',
-            buyerType: 'Private Enterprise',
+            buyerType: meta.buyerType || buyerUser?.organization?.organizationType || buyerUser?.buyerProfile?.organizationType || 'Private Enterprise',
             procurementType: 'RATE_CONTRACT',
             bidType: 'Product',
             buyerId: Number(validBuyerId),
@@ -1836,7 +1840,7 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
       buyerId: req.user!.id,
       buyerOrganizationId: user?.organizationId || user?.buyerProfile?.organizationId,
       buyerOrganizationName: body.buyerOrganizationName || user?.organization?.organizationName || user?.buyerProfile?.organizationName || user?.name || 'Buyer organization',
-      buyerType: body.buyerType,
+      buyerType: body.buyerType || user?.organization?.organizationType || user?.buyerProfile?.organizationType || 'Private Enterprise',
       category: body.category,
       bidType: body.bidType,
       procurementType: body.procurementType,

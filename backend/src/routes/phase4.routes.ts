@@ -1905,7 +1905,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     buyerId: userId(req),
     buyerOrganizationId: req.user?.organizationId || requirement.organizationId || buyer?.organizationId || buyer?.buyerProfile?.organizationId || null,
     buyerOrganizationName: internal.orgName || buyer?.organization?.organizationName || buyer?.buyerProfile?.organizationName || buyer?.name || 'Buyer organization',
-    buyerType: basics.buyerType || buyer?.organization?.organizationType || 'Buyer',
+    buyerType: buyer?.organization?.organizationType || buyer?.buyerProfile?.organizationType || basics.buyerType || 'Private Enterprise',
     category: basics.category || requirement.category?.name || 'General procurement',
     bidType,
     procurementType: canonicalMethod,

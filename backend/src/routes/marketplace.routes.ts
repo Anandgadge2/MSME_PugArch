@@ -2673,7 +2673,15 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
         if (query.tab === 'services') pbWhere.bidType = { contains: 'SERVICE', mode: 'insensitive' };
         if (query.tab === 'closing_soon') pbWhere.endDate = { gte: new Date(), lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
         if (query.tab === 'large_industries') pbWhere.buyerType = { contains: 'LARGE', mode: 'insensitive' };
-        if (query.tab === 'government') pbWhere.buyerType = { in: ['GOVERNMENT', 'PSU'] };
+        if (query.tab === 'government') {
+            pbWhere.OR = [
+                ...(pbWhere.OR || []),
+                { buyerType: { contains: 'GOVERNMENT', mode: 'insensitive' } },
+                { buyerType: { contains: 'GOVT', mode: 'insensitive' } },
+                { buyerType: { contains: 'PSU', mode: 'insensitive' } },
+                { buyerType: { contains: 'PUBLIC SECTOR', mode: 'insensitive' } }
+            ];
+        }
         if (query.buyerOrganizationId) pbWhere.buyerOrganizationId = query.buyerOrganizationId;
         if (query.location) {
             pbWhere.OR = [

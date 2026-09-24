@@ -15,7 +15,7 @@ import { formatDate as formatSharedDate } from '../shared/format';
 
 export type BidStatus = 'Open' | 'Closing Soon' | 'Under Evaluation' | 'Awarded' | 'Closed';
 export type BidType = 'Product' | 'Service' | 'Works' | 'Rate Contract';
-export type BuyerType = 'Large Industry' | 'MSME Buyer' | 'Government Buyer' | 'Private Enterprise' | 'PSU Buyer';
+export type BuyerType = string;
 export type EvaluationStatus = 'Pending' | 'Technical Evaluation' | 'Financial Evaluation' | 'Qualified' | 'Disqualified' | 'Awarded';
 export type ClarificationStatus = 'Pending' | 'Responded' | 'Completed' | 'Reopened' | 'Rejected' | 'None';
 

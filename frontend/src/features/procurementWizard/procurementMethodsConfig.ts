@@ -15,8 +15,6 @@ import {
 } from 'lucide-react';
 import { broadMethodForCanonical } from './procurementMethodHelpers';
 
-export type BuyerType = 'PRIVATE_BUYER' | 'GOVERNMENT_BUYER';
-
 export type ProcurementMethodId =
   | 'RFQ'
   | 'RFP'
@@ -38,7 +36,6 @@ export interface MethodDefinition {
   gates: string[];
   complexity: 'Low' | 'Medium' | 'High';
   estimatedTime: string;
-  buyerTypes: BuyerType[];
   requiredFields: string[];
   allowedEvaluations: string[];
 }
@@ -56,7 +53,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Technical specifications sheet', 'Supplier invite list', 'Deadline rules'],
     complexity: 'Medium',
     estimatedTime: '5-7 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'requiredByDate'],
     allowedEvaluations: ['L1 total value']
   },
@@ -72,7 +68,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Detailed scope of work', 'Weighted evaluation matrix (QCBS)', 'Pre-proposal meeting details'],
     complexity: 'High',
     estimatedTime: '14-21 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
     allowedEvaluations: ['QCBS / weighted technical-commercial score']
   },
@@ -88,7 +83,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Notice Inviting Tender (NIT)', 'Pre-bid clarifications', 'Two-stage opening criteria'],
     complexity: 'High',
     estimatedTime: '21-45 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
     allowedEvaluations: ['L1 total value', 'QCBS / weighted technical-commercial score']
   },
@@ -104,7 +98,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Select vendor list approval', 'Reason for limiting invites', 'Security clearance'],
     complexity: 'Medium',
     estimatedTime: '10-15 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
     allowedEvaluations: ['L1 total value']
   },
@@ -120,7 +113,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Starting bid price', 'Minimum bid decrement', 'Extension rules'],
     complexity: 'Medium',
     estimatedTime: '1-3 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
     allowedEvaluations: ['Dynamic Reverse Auction L1']
   },
@@ -136,14 +128,12 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     gates: ['Estimated annual quantity', 'Price adjustment formula', 'Renewal triggers'],
     complexity: 'Medium',
     estimatedTime: '10-20 Days',
-    buyerTypes: ['PRIVATE_BUYER', 'GOVERNMENT_BUYER'],
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
     allowedEvaluations: ['L1 total value']
   }
 ];
 
 export interface SuggestionCriteria {
-  buyerType: BuyerType;
   estimatedValue: number;
   whatAreYouBuying: 'GOODS' | 'SERVICES' | 'WORKS' | 'BOQ' | 'CATALOG_ITEM' | string;
   isCatalogueAvailable: boolean;
@@ -168,7 +158,6 @@ export interface RecommendationResult {
 
 export const suggestProcurementMethod = (criteria: SuggestionCriteria): RecommendationResult => {
   const {
-    buyerType,
     estimatedValue,
     whatAreYouBuying,
     isCatalogueAvailable,
@@ -181,8 +170,6 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     isRepeatedSupply = false,
     marketResearchOnly = false
   } = criteria;
-
-  // const isGov = buyerType === 'GOVERNMENT_BUYER';
   const requirementType = String(whatAreYouBuying || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   const priority = String(urgency || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
   const isBoq = requirementType === 'BOQ';
