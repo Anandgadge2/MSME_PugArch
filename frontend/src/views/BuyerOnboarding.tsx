@@ -25,7 +25,8 @@ import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts'
 import { formatGstVerificationError } from '../features/shared/gstVerification';
 
 const PRIMARY_USER_TYPES = [
- 
+  'Government Department / Ministry',
+  'Public Sector Undertaking (PSU)',
   'Proprietorship',
   'Partnership Firm',
   'Company (Pvt Ltd / Ltd)',
@@ -1655,7 +1656,8 @@ export default function BuyerOnboarding() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <Input label="Organization / Company Name" name="organizationName" value={formData.organizationName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('organizationName')} required />
                     <Select label="Business Type" name="businessType" value={formData.businessType} onChange={handleChange} onBlur={handleBlur} error={getFieldError('businessType')} required disabled={isPrimaryUserType(formData.businessType)}>
-                      <option value="GOVERNMENT">Government / Department</option>
+                      <option value="GOVERNMENT">Government Department / Ministry</option>
+                      <option value="PSU">Public Sector Undertaking (PSU)</option>
                       <option value="Private Limited Company">Private Limited Company</option>
                       <option value="Public Limited Company">Public Limited Company</option>
                       <option value="Partnership Firm">Partnership Firm</option>

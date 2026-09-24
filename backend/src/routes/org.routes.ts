@@ -1937,4 +1937,192 @@ router.post(
     })
 );
 
+// ─── POST /api/org/update-name/send-otp ──────────────────────────────────────
+router.post(
+    '/org/update-name/send-otp',
+    authenticate,
+    asyncRoute(async (req, res) => {
+        const { generateOtp, storeOtp } = await import('../services/otp.service.js');
+        const { sendOtpEmail } = await import('../services/mail.service.js');
+        const { smsService } = await import('../services/sms.service.js');
+
+        const currentUserId = userId(req);
+        const user = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            include: {
+                organization: true,
+                sellerProfile: true,
+                buyerProfile: true
+            }
+        });
+
+        if (!user) throw new ApiError(404, 'User not found');
+
+        const rawTypes = [
+            user.organization?.organizationType,
+            user.sellerProfile?.organizationType,
+            user.sellerProfile?.organizationTypeEnum,
+            user.buyerProfile?.businessType,
+            user.buyerProfile?.organizationType,
+            (user.registrationDetails as any)?.businessType,
+            (user.registrationDetails as any)?.constitutionOfBusiness
+        ].filter(Boolean).map(t => String(t).toUpperCase());
+
+        const isEligible = rawTypes.some(t =>
+            t.includes('PROPRIETOR') ||
+            t.includes('PARTNERSHIP')
+        );
+
+        if (!isEligible) {
+            throw new ApiError(403, 'Display name update is only permitted for Sole Proprietorships and Partnership firms. Incorporated entities (Pvt Ltd, Ltd, LLP) are bound to their statutory registration name.');
+        }
+
+        if (!user.email) {
+            throw new ApiError(400, 'Registered email is required for OTP delivery');
+        }
+
+        const otp = generateOtp();
+        const channel = req.body?.channel === 'sms' && user.mobileVerified && user.mobile && smsService.isEnabled() ? 'sms' : 'email';
+        const identity = channel === 'sms' ? user.mobile! : user.email;
+
+        await storeOtp('org_name_update', identity, otp, { userId: user.id, channel }, channel);
+
+        if (channel === 'sms') {
+            await smsService.sendOtpSms(identity, otp, 'onboarding_alert');
+        } else {
+            await sendOtpEmail(user.email, otp, '[SECURE AUTH] Organization Business Name Update Verification');
+        }
+
+        ok(res, {
+            success: true,
+            message: `Verification code sent to your registered ${channel === 'sms' ? 'mobile' : 'email'}`,
+            channel,
+            maskedDestination: channel === 'sms'
+                ? user.mobile!.slice(-4).padStart(user.mobile!.length, '*')
+                : user.email.replace(/(?<=^.).(?=.*@)/g, '*')
+        });
+    })
+);
+
+// ─── POST /api/org/update-name/verify ────────────────────────────────────────
+router.post(
+    '/org/update-name/verify',
+    authenticate,
+    asyncRoute(async (req, res) => {
+        const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+        const { newOrganizationName, otp } = req.body || {};
+
+        if (!newOrganizationName || typeof newOrganizationName !== 'string' || newOrganizationName.trim().length < 3) {
+            throw new ApiError(400, 'A valid business or organization name (at least 3 characters) is required');
+        }
+        if (!otp || typeof otp !== 'string') {
+            throw new ApiError(400, '6-digit verification OTP is required');
+        }
+
+        const trimmedName = newOrganizationName.trim().slice(0, 120);
+        const currentUserId = userId(req);
+
+        const user = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            include: {
+                organization: true,
+                sellerProfile: true,
+                buyerProfile: true
+            }
+        });
+
+        if (!user) throw new ApiError(404, 'User not found');
+
+        const rawTypes = [
+            user.organization?.organizationType,
+            user.sellerProfile?.organizationType,
+            user.sellerProfile?.organizationTypeEnum,
+            user.buyerProfile?.businessType,
+            user.buyerProfile?.organizationType,
+            (user.registrationDetails as any)?.businessType,
+            (user.registrationDetails as any)?.constitutionOfBusiness
+        ].filter(Boolean).map(t => String(t).toUpperCase());
+
+        const isEligible = rawTypes.some(t =>
+            t.includes('PROPRIETOR') ||
+            t.includes('PARTNERSHIP')
+        );
+
+        if (!isEligible) {
+            throw new ApiError(403, 'Display name update is only permitted for Sole Proprietorships and Partnership firms.');
+        }
+
+        const channel = req.body?.channel === 'sms' && user.mobileVerified && user.mobile ? 'sms' : 'email';
+        const identity = channel === 'sms' ? user.mobile! : user.email;
+
+        const verifyResult = await verifyOtp('org_name_update', identity, otp.trim());
+        if (!verifyResult.ok) {
+            throw new ApiError(400, 'Invalid or expired OTP code');
+        }
+
+        const previousName = user.organization?.organizationName || user.sellerProfile?.businessName || user.buyerProfile?.organizationName || '';
+
+        // 1. Update Organization if present
+        if (user.organizationId) {
+            await prisma.organization.update({
+                where: { id: user.organizationId },
+                data: { organizationName: trimmedName }
+            });
+        }
+
+        // 2. Update SellerProfile if present
+        if (user.sellerProfile) {
+            await prisma.sellerProfile.update({
+                where: { id: user.sellerProfile.id },
+                data: { businessName: trimmedName }
+            });
+        }
+
+        // 3. Update BuyerProfile if present
+        if (user.buyerProfile) {
+            await prisma.buyerProfile.update({
+                where: { id: user.buyerProfile.id },
+                data: { organizationName: trimmedName }
+            });
+        }
+
+        // 4. Update User registrationDetails
+        const currentRegDetails = (user.registrationDetails as Record<string, any>) || {};
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                registrationDetails: {
+                    ...currentRegDetails,
+                    businessName: trimmedName,
+                    tradeName: trimmedName
+                }
+            }
+        });
+
+        // 5. Audit Log
+        await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'org.name.updated',
+            entityType: 'organization',
+            entityId: user.organizationId || user.id,
+            ipAddress: req.ip,
+            metadata: {
+                previousName,
+                newName: trimmedName,
+                verifiedVia: 'OTP',
+                channel
+            }
+        }).catch(() => null);
+
+        await consumeOtp('org_name_update', identity);
+
+        ok(res, {
+            success: true,
+            message: 'Organization trade name updated successfully',
+            organizationName: trimmedName
+        });
+    })
+);
+
 export default router;

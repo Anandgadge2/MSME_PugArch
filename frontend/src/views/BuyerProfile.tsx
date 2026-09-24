@@ -51,6 +51,7 @@ import { DataTable, ColumnDef } from '../components/ui/data-table';
 import { FocusTrap } from '../components/ui/FocusTrap';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
+import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
 
 interface SidebarNavItem {
   id: string;
@@ -110,6 +111,7 @@ export default function BuyerProfile() {
   const [showcaseProfile, setShowcaseProfile] = useState<any>(null);
   const [showcaseLoading, setShowcaseLoading] = useState(true);
   const [showcaseSaving, setShowcaseSaving] = useState(false);
+  const [isEditBuyerOrgNameOpen, setIsEditBuyerOrgNameOpen] = useState(false);
 
   // Stamp & Signature states
   const [stampUrl, setStampUrl] = useState<string | null>(null);
@@ -1782,12 +1784,38 @@ export default function BuyerProfile() {
                       <div className="space-y-6">
                         <h3 className="text-base font-extrabold text-slate-900 uppercase">Organization Profile Details</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <Input
-                            label="Organization Name *"
-                            value={showcaseProfile.organizationName || ''}
-                            onChange={(e) => handleShowcaseFieldChange('organizationName', e.target.value)}
-                            placeholder="Enter organization name"
-                          />
+                          {(() => {
+                            const bOrgType = String(showcaseProfile.organizationType || (user as any)?.organization?.organizationType || (user as any)?.buyerProfile?.businessType || '');
+                            const isPropOrPart = ['proprietorship', 'partnership', 'PROPRIETORSHIP', 'PARTNERSHIP'].includes(bOrgType.toLowerCase()) || bOrgType.toLowerCase().includes('proprietor') || bOrgType.toLowerCase().includes('partnership');
+                            return (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-bold text-slate-700 uppercase tracking-tight">Organization / Business Name *</label>
+                                  {isPropOrPart && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsEditBuyerOrgNameOpen(true)}
+                                      className="text-[11px] text-blue-700 hover:text-blue-900 font-bold underline flex items-center gap-1"
+                                    >
+                                      <Shield className="w-3.5 h-3.5" />
+                                      Edit Name (OTP)
+                                    </button>
+                                  )}
+                                </div>
+                                <Input
+                                  value={showcaseProfile.organizationName || ''}
+                                  onChange={(e) => handleShowcaseFieldChange('organizationName', e.target.value)}
+                                  placeholder="Enter organization name"
+                                  readOnly={!isPropOrPart}
+                                />
+                                {!isPropOrPart && (
+                                  <p className="text-[11px] text-slate-500">
+                                    Statutory entity name is locked to registration documents.
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <Input
                             label="Department Name *"
                             value={showcaseProfile.departmentName || ''}
@@ -3677,6 +3705,19 @@ export default function BuyerProfile() {
           if (branding.logoUrl !== undefined && branding.logoUrl) {
             setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: branding.logoUrl }));
           }
+        }}
+      />
+
+      {/* Edit Organization Name Modal */}
+      <EditOrganizationNameModal
+        isOpen={isEditBuyerOrgNameOpen}
+        onClose={() => setIsEditBuyerOrgNameOpen(false)}
+        currentName={showcaseProfile?.organizationName || (user as any)?.organization?.organizationName || (user as any)?.buyerProfile?.organizationName || ''}
+        legalName={(user as any)?.registrationDetails?.lgnm || (user as any)?.buyerProfile?.nameAsInPan || user?.name || ''}
+        organizationType={showcaseProfile?.organizationType || (user as any)?.organization?.organizationType || 'Proprietorship'}
+        onSuccess={async (newName) => {
+          handleShowcaseFieldChange('organizationName', newName);
+          await refreshUser();
         }}
       />
     </div>

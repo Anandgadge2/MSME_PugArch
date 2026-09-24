@@ -15,6 +15,7 @@ import { SignatureStampUploadModal } from '../features/invoices/components/Signa
 import { isShgUser } from '../lib/shg';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 import { FocusTrap } from '../components/ui/FocusTrap';
+import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
@@ -34,6 +35,12 @@ export default function SellerSettings() {
   const cachedProfile = user?.sellerProfile || (user as any)?.shgProfile || null;
   const [profileData, setProfileData] = useState<any>(cachedProfile);
   const [isFetching, setIsFetching] = useState(!cachedProfile);
+  const [isEditOrgNameOpen, setIsEditOrgNameOpen] = useState(false);
+
+  const resolvedOrgType = profileData?.organizationType || profileData?.organizationTypeEnum || (user as any)?.organization?.organizationType || (user as any)?.registrationDetails?.businessType || 'Proprietorship';
+  const currentBusinessName = profileData?.businessName || (user as any)?.organization?.organizationName || (user as any)?.registrationDetails?.businessName || (user as any)?.registrationDetails?.tradeName || '';
+  const statutoryLegalName = profileData?.nameAsInPan || (user as any)?.registrationDetails?.lgnm || (user as any)?.registrationDetails?.legalName || user?.name || '';
+  const isProprietorshipOrPartnership = ['PROPRIETORSHIP', 'PARTNERSHIP'].includes(String(resolvedOrgType).toUpperCase()) || String(resolvedOrgType).toLowerCase().includes('proprietor') || String(resolvedOrgType).toLowerCase().includes('partnership');
 
   // Logo & Branding states
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -714,6 +721,92 @@ export default function SellerSettings() {
                     </div>
                   </div>
                 )}
+
+                {/* Organization / Trade Name Card */}
+                <div className="pt-6 border-t border-gray-200 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <Building2 className="w-5 h-5 text-blue-900" />
+                        Business & Trade Name
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Statutory GST details and portal display name
+                      </p>
+                    </div>
+                    {isProprietorshipOrPartnership && (
+                      <Button
+                        type="button"
+                        onClick={() => setIsEditOrgNameOpen(true)}
+                        className="bg-blue-900 hover:bg-slate-800 text-white font-bold text-xs uppercase tracking-wider h-10 px-5 rounded gap-2 shadow-sm"
+                      >
+                        <ShieldCheck className="w-4 h-4 text-amber-300" />
+                        Edit Trade Name (OTP)
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Display Business / Trade Name</span>
+                        {isProprietorshipOrPartnership ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            Customizable via OTP
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Statutory Locked
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-base font-black text-gray-900 pt-1">
+                        {currentBusinessName || 'N/A'}
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Appears across all marketplace quotations, catalogues, and purchase orders.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-200 bg-gray-50/80 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">GST/PAN Statutory Legal Name</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200">
+                          Tax Record
+                        </span>
+                      </div>
+                      <div className="text-base font-black text-gray-800 pt-1">
+                        {statutoryLegalName || user?.name || 'N/A'}
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Matches the taxpayer/proprietor name registered under PAN & GST.
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Constitution / Business Type</span>
+                      <div className="text-sm font-bold text-gray-800 pt-1">
+                        {resolvedOrgType}
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        {isProprietorshipOrPartnership
+                          ? 'Single PAN business structure allows separate trade name with OTP authorization.'
+                          : 'Corporate entity bound to Ministry of Corporate Affairs / statutory registration.'}
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Tax Identifiers</span>
+                      <div className="text-sm font-bold text-gray-800 pt-1 flex items-center gap-3">
+                        <span>PAN: {profileData?.pan || user?.sellerProfile?.pan || 'Verified'}</span>
+                        {profileData?.gstin && <span>• GSTIN: {profileData.gstin}</span>}
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        Tax identification linked to this account.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1096,6 +1189,19 @@ export default function SellerSettings() {
           if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
           if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
           if (branding.logoUrl !== undefined && branding.logoUrl) setLogoUrl(branding.logoUrl);
+        }}
+      />
+
+      {/* Edit Organization Name Modal */}
+      <EditOrganizationNameModal
+        isOpen={isEditOrgNameOpen}
+        onClose={() => setIsEditOrgNameOpen(false)}
+        currentName={currentBusinessName}
+        legalName={statutoryLegalName}
+        organizationType={resolvedOrgType}
+        onSuccess={async (newName) => {
+          setProfileData((prev: any) => ({ ...prev, businessName: newName }));
+          await refreshUser();
         }}
       />
     </div>

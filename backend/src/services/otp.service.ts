@@ -15,6 +15,7 @@ export type OtpPurpose =
   | 'ownership_submission'
   | 'buyer_profile_update'
   | 'seller_profile_update'
+  | 'org_name_update'
   | 'onboarding_verification'
   | 'tender_alert'
   | 'transaction_2fa'
