@@ -8230,6 +8230,13 @@ router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), pay
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({
     quantity: z.coerce.number().positive().optional(),
+    items: z.array(z.object({
+      id: z.number().optional(),
+      itemId: z.number().optional(),
+      quantity: z.coerce.number().positive(),
+      unitPrice: z.coerce.number().optional(),
+      totalAmount: z.coerce.number().optional()
+    })).optional(),
     deliveryAddress: z.string().trim().min(3).max(1000).optional(),
     expectedDelivery: safeCoercedDate,
     repeatOrderDate: safeCoercedDate.optional(),
@@ -8266,18 +8273,43 @@ router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), pay
   const poNumber = `PO-REP-${Date.now().toString().slice(-6)}`;
   
   let newTotalAmount = 0;
-  const itemsToCreate = existing.items.map(item => {
-    const itemQty = (body.quantity && existing.items.length === 1) ? Number(body.quantity) : Number(item.quantity);
-    const itemPrice = Number(item.unitPrice);
-    const itemTotal = itemPrice * itemQty;
+  const itemsToCreate = existing.items.map((item, idx) => {
+    let itemQty = Number(item.quantity) || 1;
+    if (body.items && body.items.length > 0) {
+      const match = body.items.find(i => (i.id && i.id === item.id) || (i.itemId && i.itemId === item.id)) || body.items[idx];
+      if (match && Number(match.quantity) > 0) {
+        itemQty = Number(match.quantity);
+      }
+    } else if (body.quantity && existing.items.length === 1) {
+      itemQty = Number(body.quantity);
+    }
+
+    const rawUnitPrice = Number(item.unitPrice) || 0;
+    const rawTotal = Number(item.totalAmount) || 0;
+    const gstRate = Number(item.taxRate || 0);
+    const taxMultiplier = 1 + gstRate / 100;
+
+    let effectiveUnitPrice = rawUnitPrice;
+    if (Number(item.quantity) > 1 && Math.abs(rawUnitPrice - rawTotal) < 0.05 && rawTotal > 0) {
+      effectiveUnitPrice = gstRate > 0 ? (rawTotal / (Number(item.quantity) * taxMultiplier)) : (rawTotal / Number(item.quantity));
+    } else if (rawUnitPrice <= 0 && rawTotal > 0) {
+      effectiveUnitPrice = gstRate > 0 ? (rawTotal / (Number(item.quantity) * taxMultiplier)) : (rawTotal / Number(item.quantity));
+    }
+
+    const isTaxExclusive = Math.abs(Number(item.quantity) * effectiveUnitPrice * taxMultiplier - rawTotal) < 0.05;
+    const itemTotal = isTaxExclusive
+      ? Math.round(effectiveUnitPrice * itemQty * taxMultiplier * 100) / 100
+      : Math.round(effectiveUnitPrice * itemQty * 100) / 100;
+
     newTotalAmount += itemTotal;
+
     return {
       productId: item.productId,
       itemName: item.itemName,
       description: item.description,
       quantity: itemQty,
       unitOfMeasure: item.unitOfMeasure,
-      unitPrice: item.unitPrice,
+      unitPrice: effectiveUnitPrice,
       taxRate: item.taxRate,
       totalAmount: itemTotal
     };

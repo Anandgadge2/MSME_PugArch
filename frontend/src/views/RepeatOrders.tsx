@@ -29,7 +29,9 @@ import {
   CalendarClock,
   X,
   Send,
-  PackageCheck
+  PackageCheck,
+  Plus,
+  Minus
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
@@ -57,6 +59,30 @@ export interface PreviousPoItem {
   hsnCode?: string;
   specifications?: Record<string, any> | string | null;
   totalAmount: number;
+  originalQuantity?: number;
+}
+
+export function computeItemPricing(item: PreviousPoItem) {
+  const qty = Number(item.quantity) || 1;
+  const rawUnitPrice = Number(item.unitPrice) || 0;
+  const rawTotal = Number(item.totalAmount) || 0;
+  const gstRate = Number(item.taxRate ?? item.gstRate ?? 0);
+  const taxMultiplier = 1 + gstRate / 100;
+
+  let unitPrice = rawUnitPrice;
+  if (qty > 1 && Math.abs(rawUnitPrice - rawTotal) < 0.05 && rawTotal > 0) {
+    unitPrice = gstRate > 0 ? (rawTotal / (qty * taxMultiplier)) : (rawTotal / qty);
+  } else if (rawUnitPrice <= 0 && rawTotal > 0) {
+    unitPrice = gstRate > 0 ? (rawTotal / (qty * taxMultiplier)) : (rawTotal / qty);
+  }
+
+  const isTaxExclusive = Math.abs(qty * unitPrice * taxMultiplier - rawTotal) < 0.05;
+
+  return {
+    unitPrice: Math.round(unitPrice * 100) / 100,
+    isTaxExclusive,
+    gstRate
+  };
 }
 
 export interface PreviousPoDto {
@@ -141,6 +167,7 @@ export default function RepeatOrders() {
   // Selection & Details state
   const [selectedPo, setSelectedPo] = useState<PreviousPoDto | null>(null);
   const [inspectingPo, setInspectingPo] = useState<PreviousPoDto | null>(null);
+  const [editableItems, setEditableItems] = useState<(PreviousPoItem & { originalQuantity?: number })[]>([]);
 
   // Step 3 Editable Dates
   const todayIso = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -154,6 +181,12 @@ export default function RepeatOrders() {
   const [requiredByDate, setRequiredByDate] = useState<string>(defaultDeliveryIso);
   const [newDeliveryDate, setNewDeliveryDate] = useState<string>(defaultDeliveryIso);
   const [remarks, setRemarks] = useState<string>('');
+
+  // Dynamically computed total repeat order value
+  const totalRepeatValue = useMemo(() => {
+    if (!editableItems.length) return selectedPo?.amount || 0;
+    return Math.round(editableItems.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0) * 100) / 100;
+  }, [editableItems, selectedPo]);
 
   // Submission state
   const [submitting, setSubmitting] = useState(false);
@@ -243,6 +276,26 @@ export default function RepeatOrders() {
   // Handle selecting a PO
   const handleSelectPo = (po: PreviousPoDto) => {
     setSelectedPo(po);
+
+    // Initialize editable line items with normalized unit pricing & line total
+    const initialItems = (po.items || []).map(item => {
+      const pricing = computeItemPricing(item);
+      const qty = Number(item.quantity) || 1;
+      const lineTotal = pricing.isTaxExclusive
+        ? Math.round(pricing.unitPrice * qty * (1 + pricing.gstRate / 100) * 100) / 100
+        : Math.round(pricing.unitPrice * qty * 100) / 100;
+      return {
+        ...item,
+        quantity: qty,
+        unitPrice: pricing.unitPrice,
+        taxRate: pricing.gstRate,
+        gstRate: pricing.gstRate,
+        totalAmount: lineTotal,
+        originalQuantity: qty
+      };
+    });
+    setEditableItems(initialItems);
+
     setRepeatOrderDate(todayIso);
     
     // Set default new delivery date to 14 days out
@@ -253,7 +306,47 @@ export default function RepeatOrders() {
     setRequiredByDate(dIso);
     setRemarks(`Repeat purchase order as per terms of original PO #${po.poNumber}.`);
     setCurrentStep(2);
-    toast.success(`Selected PO #${po.poNumber}. All procurement details auto-populated.`);
+    toast.success(`Selected PO #${po.poNumber}. Quantities are editable.`);
+  };
+
+  // Handle quantity changes for an item
+  const handleQuantityChange = (index: number, newQtyRaw: string | number) => {
+    setEditableItems(prev => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      const target = { ...updated[index] };
+      const parsed = typeof newQtyRaw === 'string' ? (newQtyRaw === '' ? '' : parseFloat(newQtyRaw)) : newQtyRaw;
+      const validNum = typeof parsed === 'number' && !isNaN(parsed) ? Math.max(0, parsed) : 0;
+      target.quantity = validNum;
+
+      const pricing = computeItemPricing(target);
+      const lineTotal = pricing.isTaxExclusive
+        ? Math.round(pricing.unitPrice * validNum * (1 + pricing.gstRate / 100) * 100) / 100
+        : Math.round(pricing.unitPrice * validNum * 100) / 100;
+      target.totalAmount = lineTotal;
+      updated[index] = target;
+      return updated;
+    });
+  };
+
+  // Stepper increment/decrement
+  const handleQuantityStep = (index: number, delta: number) => {
+    setEditableItems(prev => {
+      const updated = [...prev];
+      if (!updated[index]) return prev;
+      const target = { ...updated[index] };
+      const current = Math.max(1, Number(target.quantity) || 1);
+      const next = Math.max(1, current + delta);
+      target.quantity = next;
+
+      const pricing = computeItemPricing(target);
+      const lineTotal = pricing.isTaxExclusive
+        ? Math.round(pricing.unitPrice * next * (1 + pricing.gstRate / 100) * 100) / 100
+        : Math.round(pricing.unitPrice * next * 100) / 100;
+      target.totalAmount = lineTotal;
+      updated[index] = target;
+      return updated;
+    });
   };
 
   // Date Presets
@@ -268,6 +361,14 @@ export default function RepeatOrders() {
   // Submit Repeat Order
   const handleSubmitRepeatOrder = async () => {
     if (!selectedPo) return;
+
+    // Validate quantities
+    const invalidItem = editableItems.find(i => !i.quantity || Number(i.quantity) <= 0);
+    if (invalidItem) {
+      toast.error(`Please enter a valid positive quantity for "${invalidItem.itemName}"`);
+      return;
+    }
+
     if (!newDeliveryDate) {
       toast.error('New Delivery Date is required');
       return;
@@ -285,6 +386,13 @@ export default function RepeatOrders() {
     setSubmitting(true);
     try {
       const res = await api.post(`/api/purchase-orders/${selectedPo.id}/repeat`, {
+        quantity: editableItems.length === 1 ? Number(editableItems[0].quantity) : undefined,
+        items: editableItems.map(item => ({
+          id: item.id,
+          quantity: Number(item.quantity),
+          unitPrice: item.unitPrice,
+          totalAmount: item.totalAmount
+        })),
         expectedDelivery: delivDateObj.toISOString(),
         repeatOrderDate: repeatOrderDate ? new Date(repeatOrderDate).toISOString() : new Date().toISOString(),
         requiredByDate: requiredByDate ? new Date(requiredByDate).toISOString() : delivDateObj.toISOString(),
@@ -308,6 +416,7 @@ export default function RepeatOrders() {
   // Reset to create another repeat order
   const handleResetWizard = () => {
     setSelectedPo(null);
+    setEditableItems([]);
     setSubmissionResult(null);
     setCurrentStep(1);
     setSearchTerm('');
@@ -766,8 +875,15 @@ export default function RepeatOrders() {
                       <span className="text-xs text-blue-200 font-mono font-bold">#{selectedPo.poNumber}</span>
                     </div>
                     <h2 className="text-lg sm:text-xl font-black text-white">{selectedPo.procurementTitle || selectedPo.title}</h2>
-                    <p className="text-xs text-blue-100/80">
-                      Supplier: <strong className="text-white font-bold">{selectedPo.supplierName}</strong> • Total Contract Value: <strong className="text-white font-bold">{formatCurrency(selectedPo.amount)}</strong>
+                    <p className="text-xs text-blue-100/80 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>Supplier: <strong className="text-white font-bold">{selectedPo.supplierName}</strong></span>
+                      <span>•</span>
+                      <span>Original PO Value: <strong className="text-white font-bold">{formatCurrency(selectedPo.amount)}</strong></span>
+                      {totalRepeatValue !== selectedPo.amount && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/20 px-2 py-0.5 text-[11px] font-bold text-emerald-200 border border-emerald-300/30">
+                          Repeat Total: {formatCurrency(totalRepeatValue)}
+                        </span>
+                      )}
                     </p>
                   </div>
 
@@ -780,20 +896,20 @@ export default function RepeatOrders() {
                   </Button>
                 </div>
 
-                {/* Strict Read-Only Notice */}
+                {/* Auto-Populated Contract Terms Notice */}
                 <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 flex items-start gap-3">
                   <Info className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="text-xs text-blue-900 leading-relaxed">
-                    <strong className="font-bold">Auto-Populated Information (Read-Only): </strong>
-                    All procurement details, supplier details, item specifications, quantities, prices, taxes, and commercial terms below have been automatically retrieved from Purchase Order <strong>{selectedPo.poNumber}</strong>. Per Repeat Order governance, original contractual terms cannot be altered. You only need to provide the new delivery and order dates.
+                    <strong className="font-bold">Auto-Populated Information: </strong>
+                    All procurement details, supplier details, item specifications, unit prices, taxes, and commercial terms below have been automatically retrieved from Purchase Order <strong>{selectedPo.poNumber}</strong>. You can adjust the <strong>reorder quantity</strong> for each item below as needed; contractual unit rates and terms remain locked.
                   </div>
                 </div>
 
-                {/* Section Tabs for Read-Only Details */}
+                {/* Section Tabs for Details */}
                 <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
                   <div className="border-b border-slate-200 bg-slate-50/70 px-4 pt-3 flex items-center gap-2 overflow-x-auto">
                     {[
-                      { id: 'items', label: 'Item Details & Specs', icon: PackageCheck, count: selectedPo.items.length },
+                      { id: 'items', label: 'Item Details & Specs', icon: PackageCheck, count: (editableItems.length || selectedPo.items.length) },
                       { id: 'procurement', label: 'Procurement & Buyer', icon: Building2 },
                       { id: 'supplier', label: 'Supplier Details', icon: ShieldCheck },
                       { id: 'terms', label: 'Delivery & Payment Terms', icon: Truck },
@@ -828,11 +944,13 @@ export default function RepeatOrders() {
                     {/* SUB-SECTION 1: ITEM DETAILS & SPECS */}
                     {activeDetailSection === 'items' && (
                       <div className="space-y-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                            <Lock className="h-3.5 w-3.5 text-slate-400" /> Copied Item Details & Specifications
+                            <PackageCheck className="h-3.5 w-3.5 text-blue-600" /> Item Details & Reorder Quantities
                           </h3>
-                          <span className="text-xs text-slate-500 font-medium">All item prices and tax rates are locked to contract terms</span>
+                          <span className="text-xs text-slate-500 font-medium">
+                            Adjust quantities as needed. Contracted unit prices and tax rates are locked to contract terms.
+                          </span>
                         </div>
 
                         <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -842,7 +960,7 @@ export default function RepeatOrders() {
                                 <th className="px-3 py-2.5">#</th>
                                 <th className="px-3 py-2.5">Product / Service Info</th>
                                 <th className="px-3 py-2.5">HSN/SAC</th>
-                                <th className="px-3 py-2.5">Quantity</th>
+                                <th className="px-3 py-2.5">Quantity (Editable)</th>
                                 <th className="px-3 py-2.5">Unit</th>
                                 <th className="px-3 py-2.5">Price (₹)</th>
                                 <th className="px-3 py-2.5">GST Rate</th>
@@ -850,7 +968,7 @@ export default function RepeatOrders() {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
-                              {selectedPo.items.map((item, idx) => (
+                              {(editableItems.length ? editableItems : selectedPo.items).map((item, idx) => (
                                 <tr key={item.id || idx} className="hover:bg-slate-50/50">
                                   <td className="px-3 py-3 text-slate-400 font-mono">{idx + 1}</td>
                                   <td className="px-3 py-3 font-bold text-slate-900 max-w-sm">
@@ -870,8 +988,48 @@ export default function RepeatOrders() {
                                   <td className="px-3 py-3 font-mono text-slate-600">
                                     {item.hsnSac || item.hsnCode || '8471'}
                                   </td>
-                                  <td className="px-3 py-3 font-black text-slate-900">
-                                    {item.quantity}
+                                  <td className="px-3 py-3">
+                                    <div className="flex flex-col gap-1">
+                                      <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white p-0.5 shadow-2xs hover:border-[#12335f]/50 transition-colors">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuantityStep(idx, -1)}
+                                          disabled={Number(item.quantity) <= 1}
+                                          className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+                                          aria-label={`Decrease quantity for ${item.itemName}`}
+                                        >
+                                          <Minus className="h-3.5 w-3.5" />
+                                        </button>
+                                        <input
+                                          id={`repeat-qty-input-${item.id || idx}`}
+                                          type="number"
+                                          min="1"
+                                          step="any"
+                                          value={item.quantity === 0 ? '' : item.quantity}
+                                          onChange={(e) => handleQuantityChange(idx, e.target.value)}
+                                          onBlur={() => {
+                                            if (!item.quantity || Number(item.quantity) <= 0) {
+                                              handleQuantityChange(idx, item.originalQuantity || 1);
+                                            }
+                                          }}
+                                          className="w-16 h-7 text-center font-mono font-black text-xs text-slate-900 bg-transparent focus:outline-none focus:ring-1 focus:ring-[#12335f] rounded"
+                                          aria-label={`Quantity for ${item.itemName}`}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleQuantityStep(idx, 1)}
+                                          className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                                          aria-label={`Increase quantity for ${item.itemName}`}
+                                        >
+                                          <Plus className="h-3.5 w-3.5" />
+                                        </button>
+                                      </div>
+                                      {item.originalQuantity !== undefined && Number(item.quantity) !== Number(item.originalQuantity) && (
+                                        <span className="text-[10px] font-semibold text-blue-600">
+                                          Original: {item.originalQuantity}
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td className="px-3 py-3 text-slate-600 uppercase font-medium">
                                     {item.unitOfMeasure || 'Nos'}
@@ -883,7 +1041,7 @@ export default function RepeatOrders() {
                                     {item.taxRate ?? item.gstRate ?? 18}%
                                   </td>
                                   <td className="px-3 py-3 text-right font-black font-mono text-slate-900">
-                                    {formatCurrency(item.totalAmount || item.quantity * item.unitPrice)}
+                                    {formatCurrency(item.totalAmount)}
                                   </td>
                                 </tr>
                               ))}
@@ -891,10 +1049,10 @@ export default function RepeatOrders() {
                             <tfoot>
                               <tr className="bg-slate-50 font-black text-slate-900 border-t border-slate-200">
                                 <td colSpan={7} className="px-3 py-2.5 text-right uppercase tracking-wider text-[11px]">
-                                  Total Order Value:
+                                  Total Repeat Order Value:
                                 </td>
                                 <td className="px-3 py-2.5 text-right font-mono text-sm text-[#12335f]">
-                                  {formatCurrency(selectedPo.amount)}
+                                  {formatCurrency(totalRepeatValue)}
                                 </td>
                               </tr>
                             </tfoot>
@@ -1169,6 +1327,11 @@ export default function RepeatOrders() {
 
                     <Button
                       onClick={() => {
+                        const invalidItem = editableItems.find(i => !i.quantity || Number(i.quantity) <= 0);
+                        if (invalidItem) {
+                          toast.error(`Please enter a valid positive quantity for "${invalidItem.itemName}"`);
+                          return;
+                        }
                         if (!newDeliveryDate) {
                           toast.error('Please specify the New Delivery Date');
                           return;
@@ -1197,7 +1360,7 @@ export default function RepeatOrders() {
                     </div>
                     <h2 className="text-xl font-black text-slate-900">Review Repeat Purchase Order</h2>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Carefully verify the auto-populated contractual terms and newly scheduled delivery dates before submission.
+                      Carefully verify the auto-populated contractual terms, customized quantities, and newly scheduled delivery dates before submission.
                     </p>
                   </div>
 
@@ -1258,7 +1421,7 @@ export default function RepeatOrders() {
                         </div>
                         <div className="flex justify-between py-1">
                           <span className="text-slate-600">Total Repeat Value:</span>
-                          <span className="font-black text-[#12335f] text-sm font-mono">{formatCurrency(selectedPo.amount)}</span>
+                          <span className="font-black text-[#12335f] text-sm font-mono">{formatCurrency(totalRepeatValue)}</span>
                         </div>
                       </div>
                     </div>
@@ -1278,12 +1441,19 @@ export default function RepeatOrders() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {selectedPo.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td className="px-3 py-2 font-bold text-slate-900">{item.itemName}</td>
-                              <td className="px-3 py-2 font-mono">{item.quantity} {item.unitOfMeasure}</td>
+                          {(editableItems.length ? editableItems : selectedPo.items).map((item, idx) => (
+                            <tr key={item.id || idx}>
+                              <td className="px-3 py-2 font-bold text-slate-900">
+                                <div>{item.itemName}</div>
+                                {item.originalQuantity !== undefined && Number(item.quantity) !== Number(item.originalQuantity) && (
+                                  <span className="text-[10px] text-blue-600 font-semibold block">
+                                    Qty adjusted from {item.originalQuantity}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 font-mono font-bold text-slate-900">{item.quantity} {item.unitOfMeasure}</td>
                               <td className="px-3 py-2 font-mono">{formatCurrency(item.unitPrice)}</td>
-                              <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.totalAmount || item.quantity * item.unitPrice)}</td>
+                              <td className="px-3 py-2 text-right font-mono font-bold">{formatCurrency(item.totalAmount)}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1390,7 +1560,7 @@ export default function RepeatOrders() {
                       </div>
                       <div>
                         <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Order Value:</span>
-                        <span className="font-mono font-black text-slate-900">{formatCurrency(selectedPo?.amount || 0)}</span>
+                        <span className="font-mono font-black text-slate-900">{formatCurrency(totalRepeatValue || selectedPo?.amount || 0)}</span>
                       </div>
                     </div>
                   </div>
