@@ -1516,11 +1516,7 @@ export default function CreateProcurementPage() {
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (d.basics.whatAreYouBuying === 'Service') {
-      const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
-      list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
-      list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 3 });
-      list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 3 });
-      list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
+      list.push({ label: 'Contract Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Add at least one service line with quantity > 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else {
       list.push({ label: 'At least one product item is required', ok: d.items.length > 0, severity: 'error', stepIdx: 3 });
@@ -1645,10 +1641,6 @@ export default function CreateProcurementPage() {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
       } else if (d.basics.whatAreYouBuying === 'Service') {
-        const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
-        if (!title) return false;
-        if (d.serviceDetails.scopeOfWork.trim().length < 10) return false;
-        if (d.serviceDetails.deliverables.trim().length < 5) return false;
         if (!d.serviceDetails.duration.trim()) return false;
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) return false;
@@ -1842,23 +1834,11 @@ export default function CreateProcurementPage() {
         }
       } else if (d.basics.whatAreYouBuying === 'Service') {
         const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
-        if (!effectiveTitle) {
-          toast.error('Service Contract Title is required.');
-          return false;
-        }
-        if (!d.serviceDetails.serviceTitle?.trim()) {
+        if (!d.serviceDetails.serviceTitle?.trim() && effectiveTitle) {
           d.serviceDetails.serviceTitle = effectiveTitle;
         }
-        if (d.serviceDetails.scopeOfWork.trim().length < 10) {
-          toast.error('Scope of Work is required (min 10 chars).');
-          return false;
-        }
-        if (d.serviceDetails.deliverables.trim().length < 5) {
-          toast.error('Service deliverables list is required.');
-          return false;
-        }
         if (!d.serviceDetails.duration.trim()) {
-          toast.error('Service duration is required.');
+          toast.error('Contract Duration is required.');
           return false;
         }
       } else {
@@ -5369,48 +5349,20 @@ function ItemsDetailsForm({
           </div>
           <div>
             <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms</h4>
-            <p className="text-[10px] text-purple-700 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
+            <p className="text-[10px] text-purple-700 font-medium">Define overall SLA response, contract duration, and manpower requirements</p>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-        <Field label="Service Contract Title" required className="sm:col-span-2">
+      <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="Required Manpower Count">
           <input
-            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
-            onChange={e => updateService('serviceTitle', e.target.value)}
+            type="number"
+            min={0}
+            value={draft.serviceDetails.manpowerRequired}
+            onChange={e => updateService('manpowerRequired', e.target.value)}
             className={inputClass}
-            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
-          />
-        </Field>
-
-        <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
-          <textarea
-            value={draft.serviceDetails.scopeOfWork}
-            onChange={e => updateService('scopeOfWork', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Detailed description of the service scope, technical responsibilities, and coverage..."
-          />
-        </Field>
-
-        <Field label="Key Deliverables & Milestones" required>
-          <textarea
-            value={draft.serviceDetails.deliverables}
-            onChange={e => updateService('deliverables', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="e.g. Monthly uptime reports, quarterly preventive maintenance, SLA log..."
-          />
-        </Field>
-
-        <Field label="Exclusions / Boundaries">
-          <textarea
-            value={draft.serviceDetails.exclusions}
-            onChange={e => updateService('exclusions', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Consumables or equipment outside service contract scope..."
+            placeholder="e.g. 3"
           />
         </Field>
 
@@ -5429,26 +5381,6 @@ function ItemsDetailsForm({
             onChange={e => updateService('duration', e.target.value)}
             className={inputClass}
             placeholder="e.g. 1 Year (12 Months), 6 Months"
-          />
-        </Field>
-
-        <Field label="Required Manpower Count">
-          <input
-            type="number"
-            min={0}
-            value={draft.serviceDetails.manpowerRequired}
-            onChange={e => updateService('manpowerRequired', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 3"
-          />
-        </Field>
-
-        <Field label="Late Delivery / Downtime Penalty Terms">
-          <input
-            value={draft.serviceDetails.penaltyClause}
-            onChange={e => updateService('penaltyClause', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 0.5% per week of delay up to max 10%"
           />
         </Field>
       </div>
@@ -8021,7 +7953,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     bidStartDate: draft.schedule.submissionStartDate || new Date().toISOString(),
     bidClosingDate: draft.schedule.submissionDate || draft.basics.requiredByDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
     performanceSecurityAmount: draft.terms.securityDeposit || 0,
-    scopeOfWork: draft.serviceDetails.scopeOfWork || draft.basics.justification || '',
+    scopeOfWork: draft.serviceDetails.scopeOfWork || draft.basics.justification || draft.basics.title || '',
     deliveryLocation,
     deliveryAddress: deliveryLocation,
   };
