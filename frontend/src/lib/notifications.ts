@@ -67,7 +67,7 @@ function normalizeExplicitRoute(url: string, role?: string): string | null {
 
   // Rewrite legacy approvals -> role-based target
   if (trimmed === '/approvals' || trimmed.startsWith('/approvals?')) {
-    return role === 'admin' ? '/admin/bids' : '/buyer/my-procurements';
+    return role === 'admin' ? '/admin/onboarding' : '/buyer/my-procurements';
   }
 
   // Rewrite generic /orders/repeat
@@ -155,7 +155,7 @@ export const routeForNotification = (
       if (bidId) return `/bids/${bidId}`;
       return '/buyer/my-procurements';
     }
-    return bidId ? `/bids/${bidId}` : '/admin/bids';
+    return bidId ? `/bids/${bidId}` : '/admin/delivery';
   }
 
   // 2. Purchase Order & Direct Orders
@@ -269,7 +269,7 @@ export const routeForNotification = (
     if (bidId) return `/bids/${bidId}`;
     if (userRole === 'buyer') return '/buyer/my-procurements';
     if (userRole === 'seller' || userRole === 'shg') return '/seller/procurement/events';
-    return '/admin/bids';
+    return '/admin/delivery';
   }
 
   // 12. Organization & Categories
@@ -283,7 +283,7 @@ export const routeForNotification = (
   // Fallback to role-specific active section rather than the generic dashboard home
   if (userRole === 'seller' || userRole === 'shg') return '/seller/orders';
   if (userRole === 'buyer') return '/buyer/my-procurements';
-  if (userRole === 'admin') return '/admin/bids';
+  if (userRole === 'admin') return '/admin/onboarding';
 
   return '/notifications';
 };

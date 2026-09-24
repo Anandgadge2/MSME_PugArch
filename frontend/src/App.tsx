@@ -98,7 +98,7 @@ const BidDetailsPage = lazy(() => import('./features/procurementBid/pages/BidDet
 const BidParticipationPage = lazy(() => import('./features/procurementBid/pages/BidParticipationPage'));
 const BidResultsPage = lazy(() => import('./features/procurementBid/pages/BidResultsPage'));
 const BidComparisonPage = lazy(() => import('./features/procurementBid/pages/BidComparisonPage'));
-const AdminBidManagementPage = lazy(() => import('./features/procurementBid/pages/AdminBidManagementPage'));
+
 const ReverseAuctionCreatePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionCreatePage'));
 const ReverseAuctionDetailPage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionDetailPage'));
 const ReverseAuctionLivePage = lazy(() => import('./features/reverseAuctions/pages/ReverseAuctionLivePage'));
@@ -779,14 +779,7 @@ export default function App({
       return <BidDetailsPage />;
     }
 
-    if (pathname === '/admin/bids') {
-      if (!user || user.role !== 'admin') return <Redirect to={user ? authenticatedHome : '/login'} />;
-      const isFeatureEnabled = user?.enabledFeatures?.includes('admin-bid-approval');
-      if (!isFeatureEnabled) {
-        return <Redirect to={authenticatedHome} />;
-      }
-      return <AdminBidManagementPage />;
-    }
+
     if (/^\/marketplace\/products\/-?\d+$/.test(pathname)) return <MarketplaceProductDetail />;
     if (/^\/marketplace\/services\/-?\d+$/.test(pathname)) return <MarketplaceServiceDetail />;
     {
@@ -1047,8 +1040,7 @@ export default function App({
     if (pathname === '/admin/shg-applications' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
     if (/^\/admin\/shg-applications\/\d+$/.test(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding?tab=shg" />;
     if (pathname === '/admin/users' && roleOk(user.role, ['admin'])) return <AdminRecordsPage kind="users" />;
-    if (pathname === '/admin/catalogue-moderation' && roleOk(user.role, ['admin'])) return <CataloguePage mode="admin" />;
-    if (pathname === '/admin/marketplace' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/catalogue-moderation" />;
+
     if (pathname === '/admin/cms' && roleOk(user.role, ['admin'])) return <AdminCmsHubPage />;
     if (pathname === '/admin/marketplace/home-sections' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/cms?tab=sections" />;
     if (pathname === '/admin/banners' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/cms?tab=banners" />;
@@ -1125,7 +1117,7 @@ export default function App({
     }
     if (pathname === '/seller/awards' && roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
     if (pathname === '/buyer/procurement-orders' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
-    if (pathname === '/admin/procurement-orders' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/bids" />;
+    if (pathname === '/admin/procurement-orders' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/delivery" />;
     if (pathname === '/orders/procurement') {
       if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/orders" />;
       if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;

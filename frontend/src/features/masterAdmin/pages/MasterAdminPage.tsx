@@ -2062,7 +2062,6 @@ export default function MasterAdminPage() {
               links={[
                 ['Categories', '/admin/categories', 0, 'Preserved existing category controls'],
                 ['CMS & Banners', '/admin/cms', 0, 'Centralized banners and marketplace discovery rails'],
-                ['Catalogue Moderation', '/admin/catalogue-moderation', 0, 'Moderate seller product and service submissions'],
                 ['Monthly Rankings', '/admin/monthly-rankings', 0, 'Seller and listing visibility signals']
               ]}
             />

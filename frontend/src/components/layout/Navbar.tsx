@@ -523,11 +523,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Approvals', icon: ClipboardCheck, roles: ['admin'], children: [
-      { label: 'Stakeholder Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] },
-      { label: 'Tender Approvals', path: '/admin/bids', icon: FileText, roles: ['admin'], featureCode: 'admin-bid-approval' },
-      { label: 'Final Award Approvals', path: '/admin/bids', icon: Trophy, roles: ['admin'] },
-    ] },
+    { label: 'Org Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] }, 
     { label: 'Monitoring', icon: FileSearch, roles: ['admin'], children: [
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
@@ -535,7 +531,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['admin'] },
     ] },
     { label: 'Marketplace & Content', icon: ShoppingCart, roles: ['admin'], children: [
-      { label: 'Catalogue Moderation', path: '/admin/catalogue-moderation', icon: ShoppingCart, roles: ['admin'] },
       { label: 'Categories', path: '/admin/categories', icon: ClipboardList, roles: ['admin'] },
       { label: 'CMS & Banners', path: '/admin/cms', icon: Images, roles: ['admin'] },
     ] },

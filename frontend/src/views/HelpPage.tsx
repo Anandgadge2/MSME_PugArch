@@ -221,13 +221,7 @@ const SOP_WORKFLOWS: SopWorkflow[] = [
         actionLabel: 'Stakeholder Approvals',
         actionHref: '/admin/onboarding'
       },
-      {
-        title: 'Tender Governance & Fair-Price Oversight',
-        description: 'Monitor published tenders, verify technical criteria for anti-competitive restrictions, and approve major procurement notices before public broadcasting.',
-        prerequisites: ['Tender Vetting Rules', 'Category Classification Check'],
-        actionLabel: 'Tender Approvals',
-        actionHref: '/admin/bids'
-      },
+
       {
         title: 'Monitoring Delivery, GRN & Payment Timelines',
         description: 'Track district-wide order fulfillment, identify overdue deliveries, inspect flagged GRN discrepancies, and ensure MSME payment timelines are adhered to.',
@@ -411,13 +405,7 @@ export default function HelpPage() {
           text: 'Review pending buyer, seller, and SHG registrations, verify KYC documents, and approve compliant accounts.',
           badge: 'Admin Desk'
         },
-        {
-          icon: ClipboardCheck,
-          title: 'Tender & Bid Governance',
-          href: '/admin/bids',
-          text: 'Vetting active procurements, bid evaluations, and authorizing procurement order awards.',
-          badge: 'Procurement Oversight'
-        },
+
         {
           icon: AlertTriangle,
           title: 'Disputes & Escrow Holds',

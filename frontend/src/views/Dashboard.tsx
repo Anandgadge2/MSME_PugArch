@@ -639,11 +639,9 @@ export default function Dashboard() {
         <div className="grid gap-4 lg:grid-cols-3">
           <AdminActionPanel
             title="Review Command Center"
-            description="Fast path for stakeholder approval, tender approval, and final award checks."
+            description="Fast path for stakeholder approval and onboarding checks."
             actions={[
               ['Stakeholder approvals', '/admin/onboarding', ShieldCheck],
-              // ['Tender approvals', '/admin/bids', Gavel],
-              ['Final award approvals', '/admin/bids', Trophy],
             ]}
           />
           <AdminActionPanel
