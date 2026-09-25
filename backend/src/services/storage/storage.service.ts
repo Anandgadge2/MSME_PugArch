@@ -214,7 +214,7 @@ const canSellerViewBid = (sellerId: number, bid: any) => {
 
 export const canAccessFileAsset = async (asset: any, user: { id: number; role: string }) => {
   if (
-    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding'].includes(asset.entityType) ||
+    ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'stamp', 'signature', 'invoice-branding', 'rate_contract', 'rate_contract_document'].includes(asset.entityType) ||
     (typeof asset.mimeType === 'string' && asset.mimeType.startsWith('image/') && ['general', 'onboarding', 'registration', 'procurement_draft', 'seller_profile', 'buyer_profile'].includes(asset.entityType)) ||
     await isPublicCatalogueAsset(asset.id)
   ) return true;
