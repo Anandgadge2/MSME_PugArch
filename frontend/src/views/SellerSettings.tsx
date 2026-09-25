@@ -1151,13 +1151,13 @@ export default function SellerSettings() {
 
       {isCloseModalOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="close-account-title"
         >
           <FocusTrap onEscape={() => setIsCloseModalOpen(false)} className="w-full max-w-md">
-            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-t-2xl sm:rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
               <div className="flex items-center gap-3 text-red-600">
                 <div className="bg-red-50 p-2 rounded-full">
                   <AlertTriangle className="h-6 w-6" />
@@ -1169,7 +1169,7 @@ export default function SellerSettings() {
                 This action is permanent and irreversible. Your account will be <span className="font-bold text-red-600">permanently deleted</span> and you will <span className="font-bold text-red-600">not be able to retrieve this account</span> or any associated data.
               </p>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
                 <Button 
                   onClick={() => setIsCloseModalOpen(false)} 
                   disabled={isLoading}

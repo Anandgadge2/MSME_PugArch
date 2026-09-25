@@ -57,23 +57,23 @@ export function EntityDetailModal({ open, title, subtitle, entity, fields, onClo
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-150"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150"
             role="dialog"
             aria-modal="true"
             onClick={e => e.target === e.currentTarget && onClose()}
         >
-            <div className="w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl animate-in zoom-in-95 duration-200">
-                <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white">
+            <div className="w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-xl bg-white shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
+                <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white shrink-0">
                     <div className="min-w-0">
                         <h2 className="text-sm font-black uppercase tracking-widest text-wrap-anywhere">{title}</h2>
                         {subtitle && <p className="mt-0.5 text-[10px] font-bold text-white/70 text-wrap-anywhere">{subtitle}</p>}
                     </div>
-                    <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-white/80 hover:bg-white/10">
-                        <X className="h-4 w-4" />
+                    <button onClick={onClose} aria-label="Close" className="rounded-md p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center text-white/80 hover:bg-white/10 active:scale-95">
+                        <X className="h-5 w-5 sm:h-4 sm:w-4" />
                     </button>
                 </header>
 
-                <div className="max-h-[75vh] overflow-y-auto p-5 space-y-4">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
                     {!entity ? (
                         <p className="text-xs font-semibold text-slate-500">Loading...</p>
                     ) : (

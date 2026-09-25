@@ -26,8 +26,8 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             aria-invalid={!!error}
             aria-describedby={error ? errorId : props["aria-describedby"]}
             className={cn(
-              "flex h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-1.5 text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
-              isPassword && "pr-10",
+              "flex h-11 min-h-[44px] sm:h-9 sm:min-h-0 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3.5 py-2 sm:px-3 sm:py-1.5 text-sm sm:text-xs ring-offset-white file:border-0 file:bg-transparent file:text-xs file:font-medium placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
+              isPassword && "pr-11 sm:pr-10",
               className,
               error && "border-red-500 focus-visible:ring-red-500 bg-red-50/30",
               isValid && !error && "border-green-500 focus-visible:ring-green-500 bg-green-50/30"
@@ -42,9 +42,9 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
+              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 h-9 w-9 sm:h-7 sm:w-7 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
             >
-              {showPassword ? <EyeOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+              {showPassword ? <EyeOff className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> : <Eye className="h-4 w-4 sm:h-3.5 sm:w-3.5" />}
             </button>
           )}
         </div>
@@ -74,7 +74,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
           aria-invalid={!!error}
           aria-describedby={error ? errorId : props["aria-describedby"]}
           className={cn(
-            "h-9 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3 py-1 text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all sm:text-xs",
+            "h-11 min-h-[44px] sm:h-9 sm:min-h-0 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100/50 px-3.5 py-2 sm:px-3 sm:py-1 text-sm sm:text-xs ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 transition-all",
             className,
             error && "border-red-500 focus-visible:ring-red-500 bg-red-50/30"
           )}
