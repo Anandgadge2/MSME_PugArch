@@ -99,10 +99,6 @@ const getBuyerRequiredDocs = (selectedType: string) => [
       <>
         Active Official Email Id:- Official Government / PSU E-mail ID (e.g. .gov.in, .nic.in, or corporate PSU domain) to verify the OTP.
       </>
-    ) : selectedType === 'Primary User (Co-operative)' ? (
-      <>
-        Active Email Id:- Use E-mail ID, Company/ organisation E-mail ID to verify the OTP.
-      </>
     ) : (
       <>
         Email id - preferably designation based.

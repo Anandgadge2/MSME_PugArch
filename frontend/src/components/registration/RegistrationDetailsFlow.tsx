@@ -39,49 +39,6 @@ interface RegistrationDetailsFlowProps {
   prereqSelectedDocuments?: string[];
 }
 
-const cooperativeOrganisationTypes = [
-  'Government Department / Ministry',
-  'Public Sector Undertaking (PSU)',
-  'Proprietorship',
-  'Partnership Firm',
-  'Company (Pvt Ltd / Ltd)',
-  'LLP',
-  'MSME',
-  'Startup'
-];
-
-const districtOrganisationOverrides: Record<string, string[]> = {
-  'MAHARASHTRA:Mumbai': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Mumbai City': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Mumbai Suburban': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Pune': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Latur': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Nagpur': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ]
-};
-
-const getDistrictOrganisations = (state: string, district: string) =>
-  state && district ? districtOrganisationOverrides[`${state}:${district}`] || [] : [];
 
 const buyerDocOptions = [
   { id: 'panCard', label: 'PAN Card of Organization' },
@@ -503,7 +460,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     formData.officeZoneName
   );
   const districtOptions = formData.state ? indiaStatesDistricts[formData.state] || [] : [];
-  getDistrictOrganisations(formData.state, formData.district);
   const missingPrimaryBuyerFields = [
     !formData.state && 'State',
     !formData.district && 'District',
