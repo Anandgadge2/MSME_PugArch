@@ -11086,11 +11086,24 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
     verificationStatus: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional(),
     isBlacklisted: z.boolean().optional(),
     blacklistReason: z.string().trim().max(1000).optional()
-  }).partial(), req.body);
+  }).refine((data) => {
+    if (data.isBlacklisted === true) {
+      return typeof data.blacklistReason === 'string' && data.blacklistReason.trim().length >= 5;
+    }
+    return true;
+  }, {
+    message: 'Blacklist reason must be at least 5 characters.',
+    path: ['blacklistReason']
+  }), req.body);
+
+  if (body.isBlacklisted === true && existingOrg.isBlacklisted) {
+    throw new ApiError(400, 'Organization is already suspended.', 'ALREADY_SUSPENDED');
+  }
 
   const updateData: any = { ...body };
   if (body.isBlacklisted !== undefined) {
     if (body.isBlacklisted) {
+      updateData.verificationStatus = 'SUSPENDED';
       updateData.blacklistedAt = new Date();
       updateData.blacklistedByUserId = req.user.id;
       updateData.suspensionType = 'MANUAL';
@@ -11102,17 +11115,18 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
       updateData.appealReviewedByUserId = null;
       updateData.appealRejectionReason = null;
     } else {
+      if (existingOrg.verificationStatus === 'SUSPENDED') {
+        updateData.verificationStatus = 'VERIFIED';
+      }
       updateData.blacklistReason = null;
       updateData.blacklistedAt = null;
       updateData.blacklistedByUserId = null;
       updateData.suspensionType = null;
-      updateData.appealStatus = 'NONE';
-      updateData.appealMessage = null;
-      updateData.appealDocumentUrl = null;
-      updateData.appealSubmittedAt = null;
-      updateData.appealReviewedAt = null;
-      updateData.appealReviewedByUserId = null;
-      updateData.appealRejectionReason = null;
+      if (existingOrg.appealStatus === 'PENDING') {
+        updateData.appealStatus = 'APPROVED';
+        updateData.appealReviewedAt = new Date();
+        updateData.appealReviewedByUserId = req.user.id;
+      }
     }
   }
 
@@ -11128,20 +11142,21 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   await auditWrite(req, 'organization.updated', 'organization', id, body);
 
   // Notify org users about status changes
-  if (body.verificationStatus || body.isBlacklisted !== undefined) {
+  if (updateData.verificationStatus || body.isBlacklisted !== undefined) {
     const orgUsers = await db.user.findMany({ where: { organizationId: id }, select: { id: true } });
     const { notificationService } = await import('../services/notification.service.js');
+    const finalStatus = updateData.verificationStatus || existingOrg.verificationStatus;
     for (const u of orgUsers) {
       await notificationService.notifyWithEmail(u.id, {
         title: 'Organization Status Updated',
         message: body.isBlacklisted
           ? `Your organization has been restricted. Reason: ${body.blacklistReason || 'Policy violation'}`
-          : `Your organization verification status is now: ${body.verificationStatus}`,
+          : `Your organization verification status is now: ${finalStatus}`,
         type: 'organization_status_updated',
         priority: body.isBlacklisted ? 'urgent' : 'high',
         redirectUrl: '/dashboard',
         emailSubject: 'Organization Status Update — MSME Procurement Portal',
-        emailHtml: `<p>Your organization's status has been updated.</p><p><strong>Status:</strong> ${body.verificationStatus || (body.isBlacklisted ? 'RESTRICTED' : 'Updated')}</p>${body.blacklistReason ? `<p><strong>Reason:</strong> ${body.blacklistReason}</p>` : ''}`
+        emailHtml: `<p>Your organization's status has been updated.</p><p><strong>Status:</strong> ${finalStatus}</p>${body.blacklistReason ? `<p><strong>Reason:</strong> ${body.blacklistReason}</p>` : ''}`
       });
     }
   }

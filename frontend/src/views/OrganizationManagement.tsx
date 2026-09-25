@@ -372,23 +372,28 @@ export default function OrganizationManagement() {
   };
 
   const handleSaveBlacklist = async (isBlacklisting: boolean) => {
-    if (!selectedOrg) return;
+    if (!selectedOrg || savingAction) return;
+    if (isBlacklisting && blacklistReason.trim().length < 5) {
+      toast.error('Suspension reason must be at least 5 characters.');
+      return;
+    }
     setSavingAction(true);
     try {
       const res = await api.put(`/api/admin/organizations/${selectedOrg.id}`, {
         isBlacklisted: isBlacklisting,
-        blacklistReason: isBlacklisting ? blacklistReason : ''
+        blacklistReason: isBlacklisting ? blacklistReason.trim() : ''
       }, authHeaders);
       if (res.ok) {
         toast.success(isBlacklisting ? 'Organization access restricted.' : 'Organization access restriction cleared.');
         queryClient.invalidateQueries({ queryKey: ['organizations'] });
         setIsBlacklistModalOpen(false);
       } else {
-        toast.error('Failed to change restriction status.');
+        const errJson = await res.json().catch(() => null);
+        toast.error(errJson?.message || 'Failed to change restriction status.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Restriction toggling request error.');
+      toast.error(err?.message || 'Restriction toggling request error.');
     } finally {
       setSavingAction(false);
     }
@@ -973,11 +978,16 @@ export default function OrganizationManagement() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for suspension / restriction</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for suspension / restriction</label>
+                    <span className={`text-[11px] font-semibold ${blacklistReason.trim().length >= 5 ? 'text-slate-400' : 'text-amber-600'}`}>
+                      {blacklistReason.trim().length < 5 ? `Min 5 characters (${blacklistReason.trim().length}/5)` : `${blacklistReason.trim().length} chars`}
+                    </span>
+                  </div>
                   <textarea
                     value={blacklistReason}
                     onChange={(e) => setBlacklistReason(e.target.value)}
-                    placeholder="Enter compliance breach, dispute violations, or reason for suspension..."
+                    placeholder="Enter compliance breach, dispute violations, or reason for suspension (min 5 characters)..."
                     rows={4}
                     className="w-full p-3 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-150 focus:border-red-500 bg-slate-50/50 focus:bg-white transition-all resize-none"
                   />
@@ -1005,7 +1015,7 @@ export default function OrganizationManagement() {
               ) : (
                 <Button
                   onClick={() => handleSaveBlacklist(true)}
-                  disabled={savingAction || !blacklistReason.trim()}
+                  disabled={savingAction || blacklistReason.trim().length < 5}
                   className="bg-red-650 hover:bg-red-750 text-white text-xs font-bold uppercase tracking-wider gap-2 px-4 shadow-sm"
                 >
                   {savingAction ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}

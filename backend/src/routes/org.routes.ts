@@ -41,6 +41,7 @@ import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { getBuyerProcurementsData } from './phase4.routes.js';
 import { invalidateUserAuthCache, invalidateRoleMembersAuthCache } from '../services/rbac.service.js';
 import { dashboardAnalyticsService } from '../services/dashboard-analytics.service.js';
+import { normalizeDistrictList } from '../middleware/authorize.js';
 
 const router = Router();
 
@@ -2244,10 +2245,27 @@ router.post(
             }
         });
 
-        // Notify Collectorate Admins (role: 'admin' only per user instruction)
-        const admins = await prisma.user.findMany({
+        // Notify Collectorate Admins (district-scoped)
+        const appealDistricts = org.district ? normalizeDistrictList([org.district]) : [];
+        const districtAdmins = appealDistricts.length > 0 ? await prisma.user.findMany({
             where: {
                 role: 'admin',
+                accountStatus: { not: 'BLOCKED' as any },
+                assignedUserRoles: {
+                    some: {
+                        isActive: true,
+                        scopeType: 'DISTRICT',
+                        scopeId: { in: appealDistricts },
+                        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+                    }
+                }
+            },
+            select: { id: true, email: true, name: true }
+        }) : [];
+
+        const admins = districtAdmins.length > 0 ? districtAdmins : await prisma.user.findMany({
+            where: {
+                role: { in: ['admin', 'master_admin'] as any },
                 accountStatus: { not: 'BLOCKED' as any }
             },
             select: { id: true, email: true, name: true }
@@ -2337,10 +2355,27 @@ router.post(
             return apiResponse.error(res, 409, 'This GSTIN is already registered to another organization on the portal.', 'DUPLICATE_GSTIN');
         }
 
-        // Notify Collectorate Admins (role: 'admin' only per user instruction)
-        const admins = await prisma.user.findMany({
+        // Notify Collectorate Admins (strictly district-scoped)
+        const gstDistricts = org.district ? normalizeDistrictList([org.district]) : [];
+        const districtAdmins = gstDistricts.length > 0 ? await prisma.user.findMany({
             where: {
                 role: 'admin',
+                accountStatus: { not: 'BLOCKED' as any },
+                assignedUserRoles: {
+                    some: {
+                        isActive: true,
+                        scopeType: 'DISTRICT',
+                        scopeId: { in: gstDistricts },
+                        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+                    }
+                }
+            },
+            select: { id: true, email: true, name: true }
+        }) : [];
+
+        const admins = districtAdmins.length > 0 ? districtAdmins : await prisma.user.findMany({
+            where: {
+                role: { in: ['admin', 'master_admin'] as any },
                 accountStatus: { not: 'BLOCKED' as any }
             },
             select: { id: true, email: true, name: true }

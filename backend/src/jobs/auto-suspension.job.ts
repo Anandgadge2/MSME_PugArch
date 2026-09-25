@@ -92,16 +92,24 @@ export const processAutoSuspensions = async () => {
         }).catch(err => console.warn('[AutoSuspensionOrgNotifyError]', err));
       }
 
-      // 2. Notify Collectorate Admins (role: 'admin' only per user instruction)
+      // 2. Notify Collectorate Admins (role: 'admin' only per user instruction, scoped to district)
       const admins = await prisma.user.findMany({
         where: {
           role: 'admin',
           accountStatus: { not: 'BLOCKED' as any }
         },
-        select: { id: true, email: true, name: true }
+        select: { id: true, email: true, name: true, assignedUserRoles: true }
       });
 
-      for (const admin of admins) {
+      const { matchesDistrictScope } = await import('../middleware/authorize.js');
+      const targetAdmins = org.district
+        ? admins.filter(a => {
+            if (!a.assignedUserRoles || a.assignedUserRoles.length === 0) return true;
+            return a.assignedUserRoles.some((r: any) => !r.scopeId || matchesDistrictScope(r.scopeId, org.district));
+          })
+        : admins;
+
+      for (const admin of (targetAdmins.length > 0 ? targetAdmins : admins)) {
         await notificationService.notifyWithEmail(admin.id, {
           title: 'Auto-Suspension Triggered',
           message: `${org.organizationName} was auto-suspended by system due to ${disputeCount} critical disputes.`,

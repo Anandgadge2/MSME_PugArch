@@ -1573,7 +1573,9 @@ export const assertSellerVerified = async (actor: Actor) => {
     include: { sellerProfile: true, organization: true }
   });
   assertActiveAccount(user, 'Seller');
-  if (user?.organization?.isBlacklisted) throw new ApiError(403, 'Seller organization is blocked for procurement participation.', 'SELLER_NOT_VERIFIED');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Seller organization is blocked for procurement participation.', 'SELLER_NOT_VERIFIED');
+  }
   const profileVerified = user?.isDualRole
     ? user?.sellerProfile?.verificationStatusEnum === 'VERIFIED'
     : user?.sellerProfile?.verificationStatusEnum === 'VERIFIED' || user?.sellerProfile?.panVerified || user?.sellerProfile?.isUdyamCertified;
@@ -1591,7 +1593,9 @@ export const assertBuyerVerified = async (actor: Actor) => {
     include: { buyerProfile: true, organization: true }
   });
   assertActiveAccount(user, 'Buyer');
-  if (user?.organization?.isBlacklisted) throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   const orgVerified = user?.organization ? verifiedOrganizationStatuses.includes(String(user.organization.verificationStatus)) : false;
   const profileVerified = user?.buyerProfile?.verificationStatusEnum === 'VERIFIED' || user?.buyerProfile?.verificationStatus === 'VERIFIED';
   const legacyApproved = user?.isDualRole ? false : sellerVerifiedStatuses.includes(String(user?.onboardingStatus));
@@ -1832,6 +1836,9 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
   if (req.user!.role !== 'buyer') throw new ApiError(403, 'Buyer access required', 'FORBIDDEN_ROLE');
   const user = await db.user.findUnique({ where: { id: req.user!.id }, include: { buyerProfile: true, organization: true } });
   assertActiveAccount(user, 'Buyer');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   const bid = await db.procurementBid.create({
     data: {
       bidNumber: await nextBidNumber(),
@@ -1880,6 +1887,10 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
 export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, { participations: true });
   assertBuyerOwner(req.user!, bid);
+  const user = await db.user.findUnique({ where: { id: req.user!.id }, include: { organization: true } });
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   
   const isPublished = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(String(bid.status).toUpperCase());
   

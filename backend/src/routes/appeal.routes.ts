@@ -6,9 +6,8 @@ import {
   authorizeAdmin,
   canAccessOrganization,
   createAuditLog,
-  requirePermission
+  normalizeDistrictList
 } from '../middleware/authorize.js';
-import { PERMISSIONS } from '../constants/permissions.js';
 import { notificationService } from '../services/notification.service.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 
@@ -43,9 +42,7 @@ router.get(
         },
         select: { scopeId: true }
       });
-      const districts = districtAssignments
-        .map(d => d.scopeId)
-        .filter(Boolean) as string[];
+      const districts = normalizeDistrictList(districtAssignments.map(d => d.scopeId));
 
       if (districts.length > 0) {
         where.district = { in: districts };
@@ -108,22 +105,10 @@ router.post(
   '/admin/organizations/:id/appeal/resolve',
   authenticate,
   authorizeAdmin,
-  requirePermission(PERMISSIONS.ORGANIZATION_MANAGE),
   wrap(async (req: AuthRequest, res: Response) => {
     const id = Number(req.params.id);
     if (!id || Number.isNaN(id)) {
       return res.status(400).json({ error: 'INVALID_ID', message: 'Valid organization ID required.' });
-    }
-
-    // District scope check for admin
-    if (req.user?.role === 'admin') {
-      const canAccess = await canAccessOrganization(req, id);
-      if (!canAccess) {
-        return res.status(403).json({
-          error: 'DISTRICT_ACCESS_DENIED',
-          message: 'You can only manage organizations within your assigned district.'
-        });
-      }
     }
 
     const schema = z.object({
@@ -138,6 +123,17 @@ router.post(
       });
     }
     const { verdict, adminRemarks } = parsed.data;
+
+    // District scope check for admin
+    if (req.user?.role === 'admin') {
+      const canAccess = await canAccessOrganization(req, id);
+      if (!canAccess) {
+        return res.status(403).json({
+          error: 'DISTRICT_ACCESS_DENIED',
+          message: 'You can only manage organizations within your assigned district.'
+        });
+      }
+    }
 
     const org = await prisma.organization.findUnique({
       where: { id },
@@ -157,31 +153,32 @@ router.post(
       });
     }
 
-    if (verdict === 'APPROVED') {
-      await prisma.organization.update({
-        where: { id },
-        data: {
-          isBlacklisted: false,
-          blacklistReason: null,
-          blacklistedAt: null,
-          blacklistedByUserId: null,
-          suspensionType: null,
-          verificationStatus: 'VERIFIED',
-          appealStatus: 'APPROVED',
-          appealReviewedAt: new Date(),
-          appealReviewedByUserId: req.user?.id,
-          appealRejectionReason: null
-        }
-      });
-    } else {
-      await prisma.organization.update({
-        where: { id },
-        data: {
-          appealStatus: 'REJECTED',
-          appealReviewedAt: new Date(),
-          appealReviewedByUserId: req.user?.id,
-          appealRejectionReason: adminRemarks
-        }
+    // Atomic update guarded by appealStatus: 'PENDING' to prevent double-click race conditions
+    const updateResult = await prisma.organization.updateMany({
+      where: { id, appealStatus: 'PENDING' },
+      data: verdict === 'APPROVED' ? {
+        isBlacklisted: false,
+        blacklistReason: null,
+        blacklistedAt: null,
+        blacklistedByUserId: null,
+        suspensionType: null,
+        verificationStatus: 'VERIFIED',
+        appealStatus: 'APPROVED',
+        appealReviewedAt: new Date(),
+        appealReviewedByUserId: req.user?.id,
+        appealRejectionReason: null
+      } : {
+        appealStatus: 'REJECTED',
+        appealReviewedAt: new Date(),
+        appealReviewedByUserId: req.user?.id,
+        appealRejectionReason: adminRemarks
+      }
+    });
+
+    if (updateResult.count === 0) {
+      return res.status(404).json({
+        error: 'APPEAL_NOT_FOUND',
+        message: 'No pending appeal found for this organization.'
       });
     }
 

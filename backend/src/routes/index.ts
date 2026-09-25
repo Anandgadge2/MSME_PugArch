@@ -96,6 +96,7 @@ router.use('/ratings', ratingsRoutes);
 router.use('/', compareRoutes);
 router.use('/', bannerRoutes);
 router.use('/', disputeRoutes);
+router.use('/', appealRoutes);
 router.use('/', phase4Routes);
 router.use('/', catalogueImportRoutes);
 router.use('/', marketplaceRoutes);
@@ -123,7 +124,6 @@ router.use('/', rbacRoutes);
 router.use('/', navigationRoutes);
 router.use('/', emdRoutes);
 router.use('/consent', consentRoutes);
-router.use('/', appealRoutes);
 
   return router;
 };
