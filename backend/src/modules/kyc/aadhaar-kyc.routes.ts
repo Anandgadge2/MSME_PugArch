@@ -186,6 +186,8 @@ router.get('/kyc/aadhaar/status', (req, res, next) => {
           maskedAadhaar: result.aadhaarLast4 ? `XXXX XXXX ${result.aadhaarLast4}` : 'XXXX XXXX 5417',
           firstName: result.verifiedName ? result.verifiedName.split(' ')[0] : '',
           lastName: result.verifiedName ? result.verifiedName.split(' ').slice(1).join(' ') : '',
+          mobile: result.verifiedMobile || undefined,
+          verifiedMobile: result.verifiedMobile || undefined,
           status: result.status,
           isValid: result.isValid,
           used: result.used

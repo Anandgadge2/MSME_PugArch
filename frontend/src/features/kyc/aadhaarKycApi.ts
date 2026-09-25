@@ -14,6 +14,8 @@ export type AadhaarKycStatus = {
   maskedAadhaar?: string;
   firstName?: string;
   lastName?: string;
+  mobile?: string;
+  verifiedMobile?: string;
 };
 
 export const aadhaarKycApi = {

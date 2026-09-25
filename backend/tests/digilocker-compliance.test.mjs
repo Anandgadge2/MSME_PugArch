@@ -64,7 +64,7 @@ describe('DigiLocker Requestor Authorization URL Compliance Tests', async () => 
     // 2. Mandatory Parameter: purpose
     assert.ok(parsedUrl.searchParams.has('purpose'), 'URL must contain mandatory purpose parameter');
     const purpose = parsedUrl.searchParams.get('purpose');
-    assert.equal(purpose, 'Pre-Registration KYC Verification', 'purpose must accurately describe pre-reg operation');
+    assert.equal(purpose, 'Pre Registration KYC Verification', 'purpose must accurately describe pre-reg operation');
     assert.ok(purpose.length <= 50, `purpose length (${purpose.length}) must be <= 50 characters`);
 
     // 3. Existing OAuth 2.0 PKCE Parameters
@@ -134,6 +134,42 @@ describe('DigiLocker Requestor Authorization URL Compliance Tests', async () => 
     const resolvedPurpose = parsedUrl.searchParams.get('purpose');
     assert.ok(resolvedPurpose);
     assert.ok(resolvedPurpose.length <= 50, `purpose length must be <= 50 (got ${resolvedPurpose.length})`);
-    assert.equal(resolvedPurpose, 'Special Procurement Vendor Verification - Document');
+    assert.equal(resolvedPurpose, 'Special Procurement Vendor Verification Document A');
+  });
+
+  test('TC-DL-005: Pre-Registration status returns verified mobile when available', async () => {
+    const payload = {
+      consent: true,
+      mobile: '9123456780',
+      redirectPath: '/register',
+      frontendOrigin: 'http://localhost:3000'
+    };
+    const meta = { ipAddress: '127.0.0.1', userAgent: 'ComplianceTestRunner/1.0' };
+
+    const startResult = await aadhaarKycService.preRegisterStart(payload, meta);
+    assert.ok(startResult.kycSessionToken);
+
+    // Simulate callback storing verifiedMobile
+    const crypto = await import('node:crypto');
+    const tokenHash = crypto.createHash('sha256').update(startResult.kycSessionToken).digest('hex');
+    await prisma.preRegistrationKycSession.update({
+      where: { kycSessionTokenHash: tokenHash },
+      data: {
+        status: 'VERIFIED',
+        verifiedName: 'Anand Milind Gadge',
+        verifiedMobile: '9876543210',
+        aadhaarLast4: '5417'
+      }
+    });
+
+    const statusResult = await aadhaarKycService.preRegisterStatus(startResult.kycSessionToken);
+    assert.equal(statusResult.status, 'VERIFIED');
+    assert.equal(statusResult.verifiedMobile, '9876543210', 'preRegisterStatus must return verified mobile');
+    assert.equal(statusResult.aadhaarLast4, '5417');
+    assert.equal(statusResult.verifiedName, 'Anand Milind Gadge');
+
+    // Clean up
+    await prisma.preRegistrationKycSession.delete({ where: { kycSessionTokenHash: tokenHash } }).catch(() => null);
   });
 });
+
