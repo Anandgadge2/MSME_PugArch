@@ -1808,13 +1808,14 @@ export default function BuyerProfile() {
                                   value={showcaseProfile.organizationName || ''}
                                   onChange={(e) => handleShowcaseFieldChange('organizationName', e.target.value)}
                                   placeholder="Enter organization name"
-                                  readOnly={!isPropOrPart}
+                                  readOnly={true}
+                                  className="bg-slate-50 cursor-not-allowed text-slate-700"
                                 />
-                                {!isPropOrPart && (
-                                  <p className="text-[11px] text-slate-500">
-                                    Statutory entity name is locked to registration documents.
-                                  </p>
-                                )}
+                                <p className="text-[11px] text-slate-500">
+                                  {isPropOrPart
+                                    ? 'Trade name changes require OTP authorization via the "Edit Name (OTP)" button above.'
+                                    : 'Statutory entity name is locked to registration documents.'}
+                                </p>
                               </div>
                             );
                           })()}

@@ -126,6 +126,13 @@ export function EditOrganizationNameModal({
     >
       <FocusTrap active={isOpen} onEscape={onClose}>
         <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden">
+          {/* Accessible Screen Reader Status Announcement (WCAG 4.1.3 / VPAT Compliance) */}
+          <div aria-live="polite" aria-atomic="true" className="sr-only" role="status">
+            {otpSent
+              ? `Verification OTP sent to your registered ${channel === 'sms' ? 'mobile' : 'email'} ${maskedDestination ? `(${maskedDestination})` : ''}. Please enter the 6-digit code.`
+              : 'Enter a new business or trade name to request a verification OTP.'}
+          </div>
+
           {/* Header */}
           <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-5 flex items-center justify-between">
             <div className="flex items-center gap-3">

@@ -1970,6 +1970,20 @@ router.post(
 
         if (!user) throw new ApiError(404, 'User not found');
 
+        // Sub-user authorization: Only ORG_ADMIN or account owner can initiate trade name changes
+        if (user.organizationId) {
+            const membership = await prisma.orgMembership.findFirst({
+                where: {
+                    userId: user.id,
+                    organizationId: user.organizationId,
+                    isActive: true
+                }
+            });
+            if (membership && membership.orgRole !== 'ORG_ADMIN') {
+                throw new ApiError(403, 'Permission denied: Only organization administrators can initiate organization trade name updates.');
+            }
+        }
+
         const rawTypes = [
             user.organization?.organizationType,
             user.sellerProfile?.organizationType,
@@ -2022,16 +2036,32 @@ router.post(
     authenticate,
     asyncRoute(async (req, res) => {
         const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
+        const { smsService } = await import('../services/sms.service.js');
+        const { invalidateByPattern } = await import('../services/cache.service.js');
         const { newOrganizationName, otp } = req.body || {};
 
-        if (!newOrganizationName || typeof newOrganizationName !== 'string' || newOrganizationName.trim().length < 3) {
+        if (!newOrganizationName || typeof newOrganizationName !== 'string') {
             throw new ApiError(400, 'A valid business or organization name (at least 3 characters) is required');
         }
+
+        // Stored XSS & input sanitization prevention (BUG-004)
+        if (/<[^>]*>|script|javascript:/i.test(newOrganizationName)) {
+            throw new ApiError(400, 'Organization name cannot contain HTML or script tags.');
+        }
+
+        const sanitizedInput = newOrganizationName.replace(/<[^>]*>/g, '').trim();
+        if (sanitizedInput.length < 3) {
+            throw new ApiError(400, 'A valid business or organization name (at least 3 characters) is required');
+        }
+        if (!/^[a-zA-Z0-9\s.,&'\-()]+$/.test(sanitizedInput)) {
+            throw new ApiError(400, 'Organization name contains invalid characters.');
+        }
+
         if (!otp || typeof otp !== 'string') {
             throw new ApiError(400, '6-digit verification OTP is required');
         }
 
-        const trimmedName = newOrganizationName.trim().slice(0, 120);
+        const trimmedName = sanitizedInput.slice(0, 120);
         const currentUserId = userId(req);
 
         const user = await prisma.user.findUnique({
@@ -2044,6 +2074,20 @@ router.post(
         });
 
         if (!user) throw new ApiError(404, 'User not found');
+
+        // Sub-user authorization: Only ORG_ADMIN or account owner can update trade name
+        if (user.organizationId) {
+            const membership = await prisma.orgMembership.findFirst({
+                where: {
+                    userId: user.id,
+                    organizationId: user.organizationId,
+                    isActive: true
+                }
+            });
+            if (membership && membership.orgRole !== 'ORG_ADMIN') {
+                throw new ApiError(403, 'Permission denied: Only organization administrators can update the organization trade name.');
+            }
+        }
 
         const rawTypes = [
             user.organization?.organizationType,
@@ -2064,13 +2108,28 @@ router.post(
             throw new ApiError(403, 'Display name update is only permitted for Sole Proprietorships and Partnership firms.');
         }
 
-        const channel = req.body?.channel === 'sms' && user.mobileVerified && user.mobile ? 'sms' : 'email';
+        // Entity impersonation and duplicate name collision check (BUG-003)
+        const existingConflict = await prisma.organization.findFirst({
+            where: {
+                organizationName: { equals: trimmedName, mode: 'insensitive' },
+                ...(user.organizationId ? { id: { not: user.organizationId } } : {})
+            },
+            select: { id: true }
+        });
+        if (existingConflict) {
+            throw new ApiError(409, 'An organization with this business/trade name is already registered on the portal.', 'DUPLICATE_ORGANIZATION_NAME');
+        }
+
+        // Synchronized channel resolution (BUG-005)
+        const channel = req.body?.channel === 'sms' && user.mobileVerified && user.mobile && smsService.isEnabled() ? 'sms' : 'email';
         const identity = channel === 'sms' ? user.mobile! : user.email;
 
+        // Verify and immediately consume OTP to eliminate TOCTOU race conditions (BUG-002)
         const verifyResult = await verifyOtp('org_name_update', identity, otp.trim());
         if (!verifyResult.ok) {
             throw new ApiError(400, 'Invalid or expired OTP code');
         }
+        await consumeOtp('org_name_update', identity);
 
         const previousName = user.organization?.organizationName || user.sellerProfile?.businessName || user.buyerProfile?.organizationName || '';
 
@@ -2111,6 +2170,11 @@ router.post(
             }
         });
 
+        // Invalidate marketplace and vendor search caches
+        await invalidateByPattern('cache:marketplace:*').catch(() => undefined);
+        await invalidateByPattern('cache:product_search:*').catch(() => undefined);
+        await invalidateByPattern('cache:vendor_search:*').catch(() => undefined);
+
         // 5. Audit Log
         await auditLog({
             actorUserId: user.id,
@@ -2126,8 +2190,6 @@ router.post(
                 channel
             }
         }).catch(() => null);
-
-        await consumeOtp('org_name_update', identity);
 
         ok(res, {
             success: true,
