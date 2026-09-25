@@ -49,7 +49,6 @@ export const MSME_TYPES = [
 // ── Vendor Type ─────────────────────────────────────────────────────────────
 export const VENDOR_TYPES = [
   { value: 'MANUFACTURER', label: 'Manufacturer' },
-  { value: 'TRADER', label: 'Trader' },
   { value: 'DISTRIBUTOR', label: 'Distributor' },
   { value: 'DEALER', label: 'Dealer' },
   { value: 'SERVICE_PROVIDER', label: 'Service Provider' },
