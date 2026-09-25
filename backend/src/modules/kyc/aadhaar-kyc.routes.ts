@@ -40,7 +40,7 @@ const requestMeta = (req: Request) => {
 router.get('/kyc/aadhaar/start', authenticate, rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
   if (!req.user) return apiResponse.error(res, 401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
   try {
-    const { redirectPath, frontendOrigin } = req.query;
+    const { redirectPath, frontendOrigin, purpose } = req.query;
     const safeRedirectPath =
       typeof redirectPath === 'string' &&
       redirectPath.startsWith('/') &&
@@ -48,8 +48,9 @@ router.get('/kyc/aadhaar/start', authenticate, rateLimit(5, 10 * 60_000), asyncR
       !redirectPath.includes('\\')
         ? redirectPath
         : undefined;
+    const safePurpose = typeof purpose === 'string' && purpose.trim() ? purpose.trim().slice(0, 50) : undefined;
 
-    const url = await aadhaarKycService.start(req.user, requestMeta(req), safeRedirectPath, typeof frontendOrigin === 'string' ? frontendOrigin : undefined);
+    const url = await aadhaarKycService.start(req.user, requestMeta(req), safeRedirectPath, typeof frontendOrigin === 'string' ? frontendOrigin : undefined, safePurpose);
     return res.redirect(url);
   } catch (error: any) {
     return apiResponse.error(res, error?.statusCode || 500, error?.message || 'Unable to start Aadhaar verification', error?.code || 'AADHAAR_KYC_START_FAILED');
@@ -59,7 +60,7 @@ router.get('/kyc/aadhaar/start', authenticate, rateLimit(5, 10 * 60_000), asyncR
 router.post('/kyc/aadhaar/start-url', authenticate, rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
   if (!req.user) return apiResponse.error(res, 401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
   try {
-    const { redirectPath, frontendOrigin } = req.body;
+    const { redirectPath, frontendOrigin, purpose } = req.body;
     const safeRedirectPath =
       typeof redirectPath === 'string' &&
       redirectPath.startsWith('/') &&
@@ -67,8 +68,9 @@ router.post('/kyc/aadhaar/start-url', authenticate, rateLimit(5, 10 * 60_000), a
       !redirectPath.includes('\\')
         ? redirectPath
         : undefined;
+    const safePurpose = typeof purpose === 'string' && purpose.trim() ? purpose.trim().slice(0, 50) : undefined;
 
-    const url = await aadhaarKycService.start(req.user, requestMeta(req), safeRedirectPath, frontendOrigin);
+    const url = await aadhaarKycService.start(req.user, requestMeta(req), safeRedirectPath, frontendOrigin, safePurpose);
     return apiResponse.success(res, { authorizationUrl: url });
   } catch (error: any) {
     return apiResponse.error(res, error?.statusCode || 500, error?.message || 'Unable to start Aadhaar verification', error?.code || 'AADHAAR_KYC_START_FAILED');
@@ -87,7 +89,7 @@ router.get(['/kyc/aadhaar/callback', '/kyc/aadhar/callback'], rateLimit(30, 10 *
 
 router.post('/kyc/aadhaar/pre-register/start', rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
   try {
-    const { consent, mobile, aadhaarNumber, vid, redirectPath, frontendOrigin } = req.body;
+    const { consent, mobile, aadhaarNumber, vid, redirectPath, frontendOrigin, purpose } = req.body;
 
 if (!consent) {
   return apiResponse.error(res, 400, 'Consent is required', 'CONSENT_REQUIRED');
@@ -100,6 +102,7 @@ const safeRedirectPath =
   !redirectPath.includes('\\')
     ? redirectPath
     : undefined;
+const safePurpose = typeof purpose === 'string' && purpose.trim() ? purpose.trim().slice(0, 50) : undefined;
 
 const result = await aadhaarKycService.preRegisterStart(
   {
@@ -109,6 +112,7 @@ const result = await aadhaarKycService.preRegisterStart(
     vid,
     redirectPath: safeRedirectPath,
     frontendOrigin,
+    purpose: safePurpose,
   },
   requestMeta(req)
 );

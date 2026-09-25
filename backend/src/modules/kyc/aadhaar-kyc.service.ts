@@ -66,6 +66,9 @@ const requiredConfig = () => {
     frontendUrl: env.FRONTEND_URL!,
     scopes,
     acr: env.MERIPEHCHAAN_ACR,
+    serviceName: String(env.DIGILOCKER_SERVICE_NAME || 'JsgSmile MSME Portal').trim().slice(0, 50),
+    purposeOnboarding: String(env.DIGILOCKER_PURPOSE_ONBOARDING || 'User Onboarding KYC Verification').trim().slice(0, 50),
+    purposePreReg: String(env.DIGILOCKER_PURPOSE_PREREG || 'Pre-Registration KYC Verification').trim().slice(0, 50),
     ttlMinutes: env.AADHAAR_KYC_SESSION_TTL_MINUTES || 10,
     needsIdTokenVerification,
   };
@@ -508,9 +511,10 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
 export const aadhaarKycService = {
   redirectUrl,
 
-  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string, frontendOrigin?: string) {
+  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string, frontendOrigin?: string, customPurpose?: string) {
     const config = requiredConfig();
     const organizationId = getOrgId(user);
+    const purpose = String(customPurpose || config.purposeOnboarding).trim().slice(0, 50);
 
     const existing = await prisma.userKycVerification.findUnique({
       where: { userId_provider_verificationType: { userId: user.id, provider: PROVIDER, verificationType: VERIFICATION_TYPE } }
@@ -571,6 +575,8 @@ export const aadhaarKycService = {
     authUrl.searchParams.set('scope', config.scopes);
     authUrl.searchParams.set('code_challenge', challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    authUrl.searchParams.set('service_name', config.serviceName);
+    authUrl.searchParams.set('purpose', purpose);
     if (config.acr) authUrl.searchParams.set('acr', config.acr);
 
     return authUrl.toString();
@@ -766,8 +772,9 @@ export const aadhaarKycService = {
     return this.status(user);
   },
 
-  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string }, meta: RequestMeta) {
+  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string; purpose?: string }, meta: RequestMeta) {
     const config = requiredConfig();
+    const purpose = String(payload.purpose || config.purposePreReg).trim().slice(0, 50);
     
     const stateData = {
       path: payload.redirectPath || DEFAULT_RETURN_PATH,
@@ -807,6 +814,8 @@ export const aadhaarKycService = {
     authUrl.searchParams.set('scope', config.scopes);
     authUrl.searchParams.set('code_challenge', challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    authUrl.searchParams.set('service_name', config.serviceName);
+    authUrl.searchParams.set('purpose', purpose);
     if (config.acr) authUrl.searchParams.set('acr', config.acr);
 
     return { authorizationUrl: authUrl.toString(), kycSessionToken };
