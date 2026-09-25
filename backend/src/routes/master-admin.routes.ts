@@ -606,6 +606,17 @@ const organizationSelect = {
   verificationStatus: true,
   isBlacklisted: true,
   blacklistReason: true,
+  blacklistedAt: true,
+  blacklistedByUserId: true,
+  suspensionType: true,
+  appealStatus: true,
+  appealMessage: true,
+  appealDocumentUrl: true,
+  appealSubmittedAt: true,
+  appealReviewedAt: true,
+  appealReviewedByUserId: true,
+  appealRejectionReason: true,
+  appealCount: true,
   createdAt: true,
   updatedAt: true,
   users: {
@@ -1567,10 +1578,32 @@ const organizationStatusAction = (action: 'activate' | 'inactivate' | 'suspend' 
     const reason = ensureReason(res, req.body, action);
     if (!reason) return;
     const data: any = action === 'activate' || action === 'reactivate'
-      ? { verificationStatus: 'VERIFIED', isBlacklisted: false, blacklistReason: null }
+      ? {
+          verificationStatus: 'VERIFIED',
+          isBlacklisted: false,
+          blacklistReason: null,
+          blacklistedAt: null,
+          blacklistedByUserId: null,
+          suspensionType: null,
+          appealStatus: 'NONE',
+          appealMessage: null,
+          appealDocumentUrl: null,
+          appealSubmittedAt: null,
+          appealReviewedAt: null,
+          appealReviewedByUserId: null,
+          appealRejectionReason: null
+        }
       : action === 'inactivate'
         ? { verificationStatus: 'UNDER_REVIEW', blacklistReason: reason }
-        : { verificationStatus: 'SUSPENDED', isBlacklisted: true, blacklistReason: reason };
+        : {
+            verificationStatus: 'SUSPENDED',
+            isBlacklisted: true,
+            blacklistReason: reason,
+            blacklistedAt: new Date(),
+            blacklistedByUserId: (req as any).user?.id,
+            suspensionType: 'MANUAL',
+            appealStatus: 'NONE'
+          };
     const organization = await prisma.organization.update({ where: { id }, data, select: organizationSelect as any });
     await createAuditLog(req, { action: `organization.${action}`, entityType: 'organization', entityId: id, metadata: { reason } });
     jsonOk(res, organization, `Organization ${action} successful`);

@@ -6,7 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { isShgUser } from '../lib/shg';
 import { Button } from '../components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, Badge } from '../components/ui/card';
-import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2, Images, Trophy, Package, Wrench, KeyRound, UserPlus, Truck, CreditCard, Store, PlusCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, XCircle, FileText, ArrowRight, ShieldCheck, ShieldAlert, Bell, Info, ShoppingBag, MessageSquare, Gavel, Briefcase, Users, BarChart3, ClipboardCheck, FileSearch, Loader2, Images, Trophy, Package, Wrench, KeyRound, UserPlus, Truck, CreditCard, Store, PlusCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { validators } from '../lib/validators';
@@ -26,6 +26,7 @@ import { formatDate } from '../features/shared/format';
 import { BuyerSpendAndCompliance } from '../features/dashboard/components/BuyerSpendAndCompliance';
 import { BuyerProcurementSpendChart } from '../features/dashboard/components/BuyerProcurementSpendChart';
 import { SellerRevenueTrendChart } from '../features/dashboard/components/SellerRevenueTrendChart';
+import { SuspensionAppealForm } from '../features/shared/SuspensionAppealForm';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -676,6 +677,97 @@ export default function Dashboard() {
             </div>
           </section>
         </div>
+      </div>
+    );
+  }
+
+  // Check if non-admin user's organization is suspended
+  const org = (user?.organization || profileData?.user?.organization || profile?.organization) as any;
+  const isSuspended = Boolean(
+    org?.isBlacklisted ||
+    user?.accountStatus === 'BLOCKED' ||
+    org?.verificationStatus === 'SUSPENDED'
+  );
+
+  if (isSuspended) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 py-6 px-4 animate-in fade-in duration-500">
+        {/* Suspension Banner */}
+        <div
+          role="alert"
+          aria-live="polite"
+          className="rounded-2xl border-2 border-red-300 bg-red-50/90 p-6 text-red-950 shadow-sm"
+        >
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-600 text-white shadow">
+              <ShieldAlert className="h-6 w-6" aria-hidden="true" />
+            </div>
+            <div className="space-y-2 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-black tracking-tight text-red-950">
+                  Platform Access Suspended
+                </h1>
+                <span className="rounded-full bg-red-200/80 px-3 py-0.5 text-xs font-bold uppercase tracking-wider text-red-900">
+                  {org?.suspensionType === 'AUTO_DISPUTE' ? 'System Auto-Suspension' : 'Compliance Restriction'}
+                </span>
+              </div>
+              <p className="text-sm leading-relaxed text-red-900/90 font-medium">
+                Your organization (<strong>{org?.organizationName || user?.name}</strong>) has been restricted from creating new procurements, participating in tenders, placing orders, or submitting bids.
+              </p>
+              <div className="rounded-xl border border-red-200 bg-white/90 p-3.5 text-xs text-slate-800">
+                <span className="block font-bold text-red-900 uppercase tracking-wider text-[11px] mb-1">
+                  Reason on Record:
+                </span>
+                <p className="font-medium text-slate-900">
+                  {org?.blacklistReason || 'Restricted due to compliance inquiry or dispute resolution findings.'}
+                </p>
+                {org?.blacklistedAt && (
+                  <p className="mt-1.5 text-[10px] text-slate-500">
+                    Suspension Date: {new Date(org.blacklistedAt).toLocaleDateString('en-IN', { dateStyle: 'long' })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Read-Only Access & Past Obligations Notice */}
+        <Card className="rounded-2xl border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-bold text-slate-900">Permitted Historical Records (Read-Only)</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Suspended organizations retain full read access to historical orders, invoices, and dispute proceedings to settle all pending obligations.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            <Link href="/payments/transactions">
+              <Button variant="outline" className="h-9 rounded-xl border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <CreditCard className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+                Past Transactions
+              </Button>
+            </Link>
+            <Link href="/admin/disputes">
+              <Button variant="outline" className="h-9 rounded-xl border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <AlertTriangle className="mr-1.5 h-3.5 w-3.5 text-amber-500" />
+                Dispute Proceedings
+              </Button>
+            </Link>
+            <Link href="/seller/orders">
+              <Button variant="outline" className="h-9 rounded-xl border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <Package className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+                Orders &amp; Fulfillments
+              </Button>
+            </Link>
+          </div>
+        </Card>
+
+        {/* Suspension Appeal Form */}
+        <SuspensionAppealForm
+          organization={org || {}}
+          authHeaders={authHeaders}
+          onAppealSubmitted={() => {
+            refreshUser({ skipCache: true });
+            queryClient.invalidateQueries({ queryKey: ['profile'] });
+          }}
+        />
       </div>
     );
   }

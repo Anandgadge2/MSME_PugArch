@@ -38,6 +38,7 @@ import { useResponsiveViewMode } from '../features/shared/hooks';
 import { formatDateTime } from '../features/shared/format';
 import { cn } from '../lib/utils';
 import { DataTable, ColumnDef } from '../components/ui/data-table';
+import { AppealQueue } from '../features/shared/AppealQueue';
 
 interface Organization {
   id: number;
@@ -84,6 +85,19 @@ export default function OrganizationManagement() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
   const [viewMode, setViewMode] = useResponsiveViewMode();
+
+  const { data: pendingAppealsData } = useQuery({
+    queryKey: ['admin-appeals', 'pending-count'],
+    queryFn: async () => {
+      const res = await api.fetch('/api/admin/organizations/appeals?status=PENDING', { ...authHeaders });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.data || [];
+    },
+    enabled: !!token,
+    staleTime: 30_000
+  });
+  const pendingAppealCount = Array.isArray(pendingAppealsData) ? pendingAppealsData.length : 0;
 
   // Detail dialogs
   const [detailOrg, setDetailOrg] = useState<Organization | null>(null);
@@ -598,6 +612,16 @@ export default function OrganizationManagement() {
           active={statusFilter === 'SUSPENDED'}
           onClick={() => setStatusFilter('SUSPENDED')}
         />
+        <KpiCard
+          label="Appeals Pending"
+          value={pendingAppealCount}
+          subtext="Awaiting determination"
+          icon={ShieldAlert}
+          tone="purple"
+          loading={loading}
+          active={statusFilter === 'APPEALS'}
+          onClick={() => setStatusFilter('APPEALS')}
+        />
       </div>
 
       {/* Search & Filter Controls */}
@@ -621,8 +645,8 @@ export default function OrganizationManagement() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:flex-1">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1 hidden sm:block">Verification:</span>
-          {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1 hidden sm:block">Filter:</span>
+          {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'APPEALS'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -631,7 +655,7 @@ export default function OrganizationManagement() {
                 : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 }`}
             >
-              {status}
+              {status === 'APPEALS' ? `Appeals ${pendingAppealCount > 0 ? `(${pendingAppealCount})` : ''}` : status}
             </button>
           ))}
         </div>
@@ -641,7 +665,9 @@ export default function OrganizationManagement() {
         </div>
       </div>
       {/* Main Stakeholders Content */}
-      {viewMode === 'list' ? (
+      {statusFilter === 'APPEALS' ? (
+        <AppealQueue authHeaders={authHeaders.headers} districtScoped />
+      ) : viewMode === 'list' ? (
         <DataTable<Organization>
           data={sortedOrgs}
           columns={orgColumns}
@@ -930,9 +956,11 @@ export default function OrganizationManagement() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-400" /> Platform Restriction Desk
+                <AlertTriangle className="h-5 w-5 text-red-400" /> Platform Suspension &amp; Restriction Desk
               </h3>
-              <p className="text-xs text-slate-300 mt-1">Manage portal wide restrictions for {selectedOrg.organizationName}.</p>
+              <p className="text-xs text-slate-300 mt-1">
+                Manage portal-wide restrictions for {selectedOrg.organizationName}. The organization will be notified and can submit up to 2 appeals.
+              </p>
             </div>
 
             <div className="p-6 space-y-4">
@@ -940,16 +968,16 @@ export default function OrganizationManagement() {
                 <div>
                   <p className="text-xs text-slate-600 leading-relaxed bg-amber-50 border border-amber-200 p-3 rounded-lg flex gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                    This stakeholder is currently blacklisted from direct system interactions. Clearing this restriction restores standard operational rights.
+                    This stakeholder is currently suspended/blacklisted from direct system interactions. Clearing this restriction restores standard operational rights.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for restriction</label>
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for suspension / restriction</label>
                   <textarea
                     value={blacklistReason}
                     onChange={(e) => setBlacklistReason(e.target.value)}
-                    placeholder="Enter compliance breach or reason for blacklist restriction..."
+                    placeholder="Enter compliance breach, dispute violations, or reason for suspension..."
                     rows={4}
                     className="w-full p-3 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-150 focus:border-red-500 bg-slate-50/50 focus:bg-white transition-all resize-none"
                   />
@@ -972,7 +1000,7 @@ export default function OrganizationManagement() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider gap-2 px-4 shadow-sm"
                 >
                   {savingAction ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  Clear Restriction
+                  Lift Suspension
                 </Button>
               ) : (
                 <Button
@@ -981,7 +1009,7 @@ export default function OrganizationManagement() {
                   className="bg-red-650 hover:bg-red-750 text-white text-xs font-bold uppercase tracking-wider gap-2 px-4 shadow-sm"
                 >
                   {savingAction ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                  Apply Restriction
+                  Apply Suspension
                 </Button>
               )}
             </div>

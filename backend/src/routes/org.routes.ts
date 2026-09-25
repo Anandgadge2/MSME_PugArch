@@ -202,7 +202,19 @@ router.get('/org/status', authenticate, asyncRoute(async (req, res) => {
                     id: true,
                     organizationName: true,
                     verificationStatus: true,
-                    organizationOnboardingStatus: true
+                    organizationOnboardingStatus: true,
+                    isBlacklisted: true,
+                    blacklistReason: true,
+                    blacklistedAt: true,
+                    suspensionType: true,
+                    appealStatus: true,
+                    appealMessage: true,
+                    appealDocumentUrl: true,
+                    appealSubmittedAt: true,
+                    appealReviewedAt: true,
+                    appealRejectionReason: true,
+                    appealCount: true,
+                    district: true
                 }
             }
         }
@@ -2121,6 +2133,194 @@ router.post(
             success: true,
             message: 'Organization trade name updated successfully',
             organizationName: trimmedName
+        });
+    })
+);
+
+// ─── Suspension Appeal Submission ──────────────────────────────────────────
+// POST /org/appeal — Suspended org submits clarification/appeal
+router.post(
+    '/org/appeal',
+    authenticate,
+    asyncRoute(async (req, res) => {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            include: { organization: true }
+        });
+
+        if (!user?.organization) {
+            return apiResponse.error(res, 404, 'No organization associated with user.', 'ORG_NOT_FOUND');
+        }
+
+        const org = user.organization;
+        if (!org.isBlacklisted) {
+            return apiResponse.error(res, 400, 'Your organization is not currently suspended.', 'NOT_SUSPENDED');
+        }
+
+        if (org.appealStatus === 'PENDING') {
+            return apiResponse.error(res, 409, 'An appeal is already under review for your organization.', 'APPEAL_ALREADY_PENDING');
+        }
+
+        if (org.appealCount >= 2) {
+            return apiResponse.error(res, 403, 'Maximum number of appeals (2) has been reached. Please contact administration directly.', 'MAX_APPEALS_REACHED');
+        }
+
+        const schema = z.object({
+            message: z.string().trim().min(20, 'Clarification message must be at least 20 characters').max(2000),
+            documentUrl: z.string().trim().max(1000).optional().nullable()
+        });
+        const body = schema.parse(req.body);
+
+        const updatedOrg = await prisma.organization.update({
+            where: { id: org.id },
+            data: {
+                appealStatus: 'PENDING',
+                appealMessage: body.message,
+                appealDocumentUrl: body.documentUrl || null,
+                appealSubmittedAt: new Date(),
+                appealCount: { increment: 1 }
+            }
+        });
+
+        // Notify Collectorate Admins (role: 'admin' only per user instruction)
+        const admins = await prisma.user.findMany({
+            where: {
+                role: 'admin',
+                accountStatus: { not: 'BLOCKED' as any }
+            },
+            select: { id: true, email: true, name: true }
+        });
+
+        for (const admin of admins) {
+            await notificationService.notifyWithEmail(admin.id, {
+                title: 'New Suspension Appeal Submitted',
+                message: `${org.organizationName} has submitted an appeal against their suspension.`,
+                type: 'appeal_submitted',
+                priority: 'high',
+                redirectUrl: '/admin/organizations?status=APPEALS',
+                emailSubject: `[Action Required] New Suspension Appeal: ${org.organizationName}`,
+                emailHtml: `
+                    <p>Dear ${admin.name || 'Admin'},</p>
+                    <p>Organization <strong>${org.organizationName}</strong> (${org.gstin || 'No GSTIN'}) has submitted a formal appeal against platform suspension.</p>
+                    <p><strong>Appeal Statement:</strong></p>
+                    <blockquote style="border-left: 4px solid #c5a556; padding-left: 12px; color: #475569; font-style: italic;">
+                        ${body.message.replace(/\n/g, '<br/>')}
+                    </blockquote>
+                    <p>Please review and decide on this appeal via the Appeals Queue on the Admin portal.</p>
+                `
+            }).catch(err => console.warn('[AppealAdminNotifyError]', err));
+        }
+
+        await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'organization.appeal_submitted',
+            entityType: 'organization',
+            entityId: org.id,
+            ipAddress: req.ip,
+            metadata: {
+                appealCount: updatedOrg.appealCount,
+                hasAttachment: Boolean(body.documentUrl)
+            }
+        }).catch(() => null);
+
+        ok(res, {
+            success: true,
+            message: 'Suspension appeal submitted successfully. It will be reviewed by the Collectorate administration.',
+            appealCount: updatedOrg.appealCount,
+            appealStatus: 'PENDING'
+        });
+    })
+);
+
+// ─── GST Update Request ───────────────────────────────────────────────────
+// POST /org/request-gst-update — Org requests GST update with PAN consistency check
+router.post(
+    '/org/request-gst-update',
+    authenticate,
+    asyncRoute(async (req, res) => {
+        const user = await prisma.user.findUnique({
+            where: { id: req.user!.id },
+            include: { organization: true }
+        });
+
+        if (!user?.organization) {
+            return apiResponse.error(res, 404, 'No organization associated with user.', 'ORG_NOT_FOUND');
+        }
+
+        const org = user.organization;
+
+        const schema = z.object({
+            newGstin: z.string().trim().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/, 'Invalid GSTIN format. Expected 15-character Indian GST format.'),
+            reason: z.string().trim().min(10, 'Reason must be at least 10 characters').max(500),
+            certificateUrl: z.string().trim().min(5, 'Certificate proof URL is required').max(1000)
+        });
+        const body = schema.parse(req.body);
+
+        // PAN consistency check
+        const derivedPan = body.newGstin.substring(2, 12);
+        if (org.panNumber && org.panNumber.toUpperCase() !== derivedPan.toUpperCase()) {
+            return apiResponse.error(res, 400, `The PAN (${derivedPan}) derived from the new GSTIN does not match your registered PAN (${org.panNumber}). GST update rejected.`, 'PAN_MISMATCH');
+        }
+
+        // Check if another organization is already using this GSTIN
+        const existingOrgWithGst = await prisma.organization.findFirst({
+            where: {
+                gstin: body.newGstin,
+                id: { not: org.id }
+            },
+            select: { id: true }
+        });
+        if (existingOrgWithGst) {
+            return apiResponse.error(res, 409, 'This GSTIN is already registered to another organization on the portal.', 'DUPLICATE_GSTIN');
+        }
+
+        // Notify Collectorate Admins (role: 'admin' only per user instruction)
+        const admins = await prisma.user.findMany({
+            where: {
+                role: 'admin',
+                accountStatus: { not: 'BLOCKED' as any }
+            },
+            select: { id: true, email: true, name: true }
+        });
+
+        for (const admin of admins) {
+            await notificationService.notifyWithEmail(admin.id, {
+                title: 'GST Update Request',
+                message: `${org.organizationName} has requested a GST update from ${org.gstin || 'N/A'} to ${body.newGstin}.`,
+                type: 'gst_update_requested',
+                priority: 'high',
+                redirectUrl: `/admin/organizations`,
+                emailSubject: `[Action Required] GST Update Request: ${org.organizationName}`,
+                emailHtml: `
+                    <p>Dear ${admin.name || 'Admin'},</p>
+                    <p>Organization <strong>${org.organizationName}</strong> has submitted a request to update their GSTIN.</p>
+                    <p><strong>Current GSTIN:</strong> ${org.gstin || 'None'}</p>
+                    <p><strong>Requested New GSTIN:</strong> ${body.newGstin}</p>
+                    <p><strong>Reason:</strong> ${body.reason}</p>
+                    <p><strong>Certificate Proof:</strong> <a href="${body.certificateUrl}">View Document</a></p>
+                `
+            }).catch(err => console.warn('[GstUpdateAdminNotifyError]', err));
+        }
+
+        await auditLog({
+            actorUserId: user.id,
+            actorRole: user.role,
+            action: 'organization.gst_update_requested',
+            entityType: 'organization',
+            entityId: org.id,
+            ipAddress: req.ip,
+            metadata: {
+                currentGstin: org.gstin,
+                newGstin: body.newGstin,
+                reason: body.reason,
+                certificateUrl: body.certificateUrl
+            }
+        }).catch(() => null);
+
+        ok(res, {
+            success: true,
+            message: 'GST update request submitted successfully. It has been routed to the administration for verification.'
         });
     })
 );

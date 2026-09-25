@@ -61,6 +61,7 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { masterAdminApi } from '../masterAdminApi';
+import { AppealQueue } from '../../shared/AppealQueue';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
 type TabId = 'overview' | 'organizations' | 'branding' | 'users' | 'procurement' | 'marketplace' | 'payments' | 'features' | 'exports' | 'email' | 'audit' | 'settings' | 'security';
@@ -497,6 +498,7 @@ export default function MasterAdminPage() {
     reports: true
   });
   const [error, setError] = useState<Record<string, string | null>>({});
+  const [orgSubTab, setOrgSubTab] = useState<'directory' | 'appeals'>('directory');
   const [filters, setFilters] = useState<Record<FilterId, Record<string, string>>>({
     overview: {},
     organizations: { search: '', status: '', organizationType: '' },
@@ -1611,65 +1613,105 @@ export default function MasterAdminPage() {
 
         {activeTab === 'organizations' && (
           <section className="space-y-4">
-            <Toolbar
-              tab="organizations"
-              filters={filters.organizations}
-              updateFilter={updateFilter}
-              resetFilters={resetFilters}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              selects={[
-                ['status', 'All statuses', ['VERIFIED', 'PENDING', 'UNDER_REVIEW', 'REJECTED', 'SUSPENDED']],
-                ['organizationType', 'All organization types', ['Buyer', 'Seller', 'MSME', 'Large Industry', 'Government', 'Private', 'PSU', 'Service Provider']]
-              ]}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Organization
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Desk View:</span>
+                <div className="inline-flex rounded-lg bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setOrgSubTab('directory')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                      orgSubTab === 'directory'
+                        ? 'bg-[#0c2340] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Organizations Directory
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrgSubTab('appeals')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                      orgSubTab === 'appeals'
+                        ? 'bg-[#0c2340] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Suspension Appeals Desk
+                  </button>
+                </div>
+              </div>
+
+              {orgSubTab === 'directory' && (
+                <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Organization
+                </Button>
+              )}
             </div>
-            <div>
-              <PaginatedTable
-                title="Registered Organizations (Sellers & Buyers)"
-                icon={Building2}
-                rows={organizations.items}
-                total={organizations.total}
-                page={pages.organizations.page}
-                pageSize={pages.organizations.pageSize}
-                loading={loading.organizations}
-                error={error.organizations}
-                columns={[
-                  ['organizationName', 'Organization'],
-                  ['organizationType', 'Type'],
-                  ['verificationStatus', 'Verification'],
-                  ['state', 'State', (row: any) => {
-                    const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
-                    return formatCell(val);
-                  }],
-                  ['updatedAt', 'Updated']
-                ]}
-                sort={sorts.organizations}
-                onSort={field => onSort('organizations', field)}
-                onPageChange={page => setPageState('organizations', page)}
-                onPageSizeChange={size => setPageSizeState('organizations', size)}
-                viewMode={viewMode}
-                actions={row => (
-                  <OrganizationActions
-                    org={row}
-                    onEdit={() => setEditor({ type: 'organization', mode: 'edit', record: row })}
-                    onActivate={() => openAction({ entity: 'organization', action: row.verificationStatus === 'VERIFIED' && !row.isBlacklisted ? 'inactivate' : 'reactivate', id: row.id, label: row.organizationName || 'organization' })}
-                    onSuspend={() => openAction({ entity: 'organization', action: 'suspend', id: row.id, label: row.organizationName || 'organization' })}
-                    onArchive={() => openAction({ entity: 'organization', action: 'archive', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onClose={() => openAction({ entity: 'organization', action: 'close', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onRestore={() => openAction({ entity: 'organization', action: 'restore', id: row.id, label: row.organizationName || 'organization' })}
-                    onAllowGstReuse={() => openAction({ entity: 'organization', action: 'allowGstReuse', id: row.id, label: row.organizationName || 'organization' })}
-                    onRevokeGstReuse={() => openAction({ entity: 'organization', action: 'revokeGstReuse', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onCascadeDelete={() => openAction({ entity: 'organization', action: 'cascadeDelete', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                  />
-                )}
+
+            {orgSubTab === 'appeals' ? (
+              <AppealQueue
+                authHeaders={{ Authorization: token ? `Bearer ${token}` : '' }}
+                title="Global Suspension Appeals Desk (Master Admin Override)"
               />
-            </div>
+            ) : (
+              <>
+                <Toolbar
+                  tab="organizations"
+                  filters={filters.organizations}
+                  updateFilter={updateFilter}
+                  resetFilters={resetFilters}
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  selects={[
+                    ['status', 'All statuses', ['VERIFIED', 'PENDING', 'UNDER_REVIEW', 'REJECTED', 'SUSPENDED']],
+                    ['organizationType', 'All organization types', ['Buyer', 'Seller', 'MSME', 'Large Industry', 'Government', 'Private', 'PSU', 'Service Provider']]
+                  ]}
+                />
+                <div>
+                  <PaginatedTable
+                    title="Registered Organizations (Sellers & Buyers)"
+                    icon={Building2}
+                    rows={organizations.items}
+                    total={organizations.total}
+                    page={pages.organizations.page}
+                    pageSize={pages.organizations.pageSize}
+                    loading={loading.organizations}
+                    error={error.organizations}
+                    columns={[
+                      ['organizationName', 'Organization'],
+                      ['organizationType', 'Type'],
+                      ['verificationStatus', 'Verification'],
+                      ['state', 'State', (row: any) => {
+                        const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
+                        return formatCell(val);
+                      }],
+                      ['updatedAt', 'Updated']
+                    ]}
+                    sort={sorts.organizations}
+                    onSort={field => onSort('organizations', field)}
+                    onPageChange={page => setPageState('organizations', page)}
+                    onPageSizeChange={size => setPageSizeState('organizations', size)}
+                    viewMode={viewMode}
+                    actions={row => (
+                      <OrganizationActions
+                        org={row}
+                        onEdit={() => setEditor({ type: 'organization', mode: 'edit', record: row })}
+                        onActivate={() => openAction({ entity: 'organization', action: row.verificationStatus === 'VERIFIED' && !row.isBlacklisted ? 'inactivate' : 'reactivate', id: row.id, label: row.organizationName || 'organization' })}
+                        onSuspend={() => openAction({ entity: 'organization', action: 'suspend', id: row.id, label: row.organizationName || 'organization' })}
+                        onArchive={() => openAction({ entity: 'organization', action: 'archive', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onClose={() => openAction({ entity: 'organization', action: 'close', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onRestore={() => openAction({ entity: 'organization', action: 'restore', id: row.id, label: row.organizationName || 'organization' })}
+                        onAllowGstReuse={() => openAction({ entity: 'organization', action: 'allowGstReuse', id: row.id, label: row.organizationName || 'organization' })}
+                        onRevokeGstReuse={() => openAction({ entity: 'organization', action: 'revokeGstReuse', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onCascadeDelete={() => openAction({ entity: 'organization', action: 'cascadeDelete', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                      />
+                    )}
+                  />
+                </div>
+              </>
+            )}
           </section>
         )}
 

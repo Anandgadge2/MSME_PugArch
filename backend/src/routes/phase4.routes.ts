@@ -11074,15 +11074,51 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   // Tenant isolation: non-master admins can only update organizations from their own company
 
 
+  if (req.user?.role === 'admin') {
+    const { canAccessOrganization } = await import('../middleware/authorize.js');
+    const canAccess = await canAccessOrganization(req, id);
+    if (!canAccess) {
+      throw new ApiError(403, 'You can only manage organizations within your assigned district.', 'DISTRICT_ACCESS_DENIED');
+    }
+  }
+
   const body = parse(z.object({
     verificationStatus: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional(),
     isBlacklisted: z.boolean().optional(),
     blacklistReason: z.string().trim().max(1000).optional()
   }).partial(), req.body);
 
+  const updateData: any = { ...body };
+  if (body.isBlacklisted !== undefined) {
+    if (body.isBlacklisted) {
+      updateData.blacklistedAt = new Date();
+      updateData.blacklistedByUserId = req.user.id;
+      updateData.suspensionType = 'MANUAL';
+      updateData.appealStatus = 'NONE';
+      updateData.appealMessage = null;
+      updateData.appealDocumentUrl = null;
+      updateData.appealSubmittedAt = null;
+      updateData.appealReviewedAt = null;
+      updateData.appealReviewedByUserId = null;
+      updateData.appealRejectionReason = null;
+    } else {
+      updateData.blacklistReason = null;
+      updateData.blacklistedAt = null;
+      updateData.blacklistedByUserId = null;
+      updateData.suspensionType = null;
+      updateData.appealStatus = 'NONE';
+      updateData.appealMessage = null;
+      updateData.appealDocumentUrl = null;
+      updateData.appealSubmittedAt = null;
+      updateData.appealReviewedAt = null;
+      updateData.appealReviewedByUserId = null;
+      updateData.appealRejectionReason = null;
+    }
+  }
+
   const org = await db.organization.update({
     where: { id },
-    data: body,
+    data: updateData,
     include: {
       buyerProfiles: { select: { organizationName: true, nameAsInPan: true } },
       sellerProfiles: { select: { businessName: true, nameAsInPan: true } },

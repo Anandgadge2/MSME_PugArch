@@ -16,6 +16,7 @@ import { isShgUser } from '../lib/shg';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 import { FocusTrap } from '../components/ui/FocusTrap';
 import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
+import { RequestGstUpdateModal } from '../features/shared/RequestGstUpdateModal';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
@@ -36,6 +37,7 @@ export default function SellerSettings() {
   const [profileData, setProfileData] = useState<any>(cachedProfile);
   const [isFetching, setIsFetching] = useState(!cachedProfile);
   const [isEditOrgNameOpen, setIsEditOrgNameOpen] = useState(false);
+  const [isGstModalOpen, setIsGstModalOpen] = useState(false);
 
   const resolvedOrgType = profileData?.organizationType || profileData?.organizationTypeEnum || (user as any)?.organization?.organizationType || (user as any)?.registrationDetails?.businessType || 'Proprietorship';
   const currentBusinessName = profileData?.businessName || (user as any)?.organization?.organizationName || (user as any)?.registrationDetails?.businessName || (user as any)?.registrationDetails?.tradeName || '';
@@ -796,13 +798,23 @@ export default function SellerSettings() {
                     </div>
 
                     <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Tax Identifiers</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Tax Identifiers</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsGstModalOpen(true)}
+                          className="h-7 text-[10px] font-bold uppercase tracking-wider border-slate-200 text-[#0c2340] hover:bg-slate-50"
+                        >
+                          Update GST
+                        </Button>
+                      </div>
                       <div className="text-sm font-bold text-gray-800 pt-1 flex items-center gap-3">
                         <span>PAN: {profileData?.pan || user?.sellerProfile?.pan || 'Verified'}</span>
                         {profileData?.gstin && <span>• GSTIN: {profileData.gstin}</span>}
                       </div>
                       <p className="text-[11px] text-gray-500">
-                        Tax identification linked to this account.
+                        Tax identification linked to this account. Submit an amendment request to migrate GSTIN.
                       </p>
                     </div>
                   </div>
@@ -1203,6 +1215,14 @@ export default function SellerSettings() {
           setProfileData((prev: any) => ({ ...prev, businessName: newName }));
           await refreshUser();
         }}
+      />
+      <RequestGstUpdateModal
+        isOpen={isGstModalOpen}
+        onClose={() => setIsGstModalOpen(false)}
+        currentGstin={profileData?.gstin || user?.sellerProfile?.gst}
+        panNumber={profileData?.pan || user?.sellerProfile?.pan}
+        authHeaders={{ Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''}` }}
+        onSuccess={() => refreshUser()}
       />
     </div>
   );

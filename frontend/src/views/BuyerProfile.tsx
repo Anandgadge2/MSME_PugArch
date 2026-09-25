@@ -52,6 +52,7 @@ import { FocusTrap } from '../components/ui/FocusTrap';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
+import { RequestGstUpdateModal } from '../features/shared/RequestGstUpdateModal';
 
 interface SidebarNavItem {
   id: string;
@@ -81,6 +82,7 @@ export default function BuyerProfile() {
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isGstModalOpen, setIsGstModalOpen] = useState(false);
   const [personalOtp, setPersonalOtp] = useState('');
   const [personalOtpSent, setPersonalOtpSent] = useState(false);
   const [emailOtp, setEmailOtp] = useState('');
@@ -1846,12 +1848,23 @@ export default function BuyerProfile() {
                             onChange={(e) => handleShowcaseFieldChange('registrationNumber', e.target.value)}
                             placeholder="CIN, Registration No. etc."
                           />
-                          <Input
-                            label="GST Number"
-                            value={showcaseProfile.gstNumber || ''}
-                            onChange={(e) => handleShowcaseFieldChange('gstNumber', e.target.value)}
-                            placeholder="15-digit GSTIN"
-                          />
+                          <div className="space-y-1">
+                            <Input
+                              label="GST Number"
+                              value={showcaseProfile.gstNumber || ''}
+                              onChange={(e) => handleShowcaseFieldChange('gstNumber', e.target.value)}
+                              placeholder="15-digit GSTIN"
+                            />
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => setIsGstModalOpen(true)}
+                                className="text-[10px] font-bold uppercase tracking-wider text-[#0c2340] hover:underline"
+                              >
+                                Request Official GST Amendment
+                              </button>
+                            </div>
+                          </div>
                           <Input
                             label="PAN Number"
                             value={showcaseProfile.panNumber || ''}
@@ -3719,6 +3732,14 @@ export default function BuyerProfile() {
           handleShowcaseFieldChange('organizationName', newName);
           await refreshUser();
         }}
+      />
+      <RequestGstUpdateModal
+        isOpen={isGstModalOpen}
+        onClose={() => setIsGstModalOpen(false)}
+        currentGstin={showcaseProfile?.gstNumber || profile?.gst || (user as any)?.organization?.gstin}
+        panNumber={showcaseProfile?.panNumber || profile?.pan || (user as any)?.organization?.panNumber}
+        authHeaders={{ Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''}` }}
+        onSuccess={() => refreshUser()}
       />
     </div>
   );

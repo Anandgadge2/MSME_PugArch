@@ -376,6 +376,17 @@ model Organization {
   organizationOnboardingStatus String?
   isBlacklisted                Boolean                  @default(false)
   blacklistReason              String?
+  blacklistedAt                DateTime?
+  blacklistedByUserId          Int?
+  suspensionType               SuspensionType?
+  appealStatus                 AppealStatus             @default(NONE)
+  appealMessage                String?                  @db.Text
+  appealDocumentUrl            String?                  @db.Text
+  appealSubmittedAt            DateTime?
+  appealReviewedAt             DateTime?
+  appealReviewedByUserId       Int?
+  appealRejectionReason        String?                  @db.Text
+  appealCount                  Int                      @default(0)
   createdAt                    DateTime                 @default(now())
   updatedAt                    DateTime                 @updatedAt
   deletedAt                    DateTime?
@@ -436,6 +447,8 @@ model Organization {
   @@index([udyamNumber])
   @@index([verificationStatus])
   @@index([isBlacklisted])
+  @@index([appealStatus])
+  @@index([suspensionType])
   @@index([organizationLogoFileId])
   @@index([createdAt])
   @@index([updatedAt])
@@ -5450,4 +5463,17 @@ model EmdPayment {
   @@index([requirementId])
   @@index([bidId])
   @@index([status])
+}
+
+enum SuspensionType {
+  MANUAL
+  AUTO_DISPUTE
+  AUTO_KYC_EXPIRED
+}
+
+enum AppealStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
 }
