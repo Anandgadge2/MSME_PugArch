@@ -82,7 +82,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     [currentSchedule.financialOpeningDate],
   );
   const initialReqBy = useMemo(
-    () => toInputDate(currentSchedule.requiredByDate),
+    () => toInputDateTime(currentSchedule.requiredByDate),
     [currentSchedule.requiredByDate],
   );
   const initialValidity = useMemo(
@@ -133,7 +133,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
 
         if (initialReqBy) {
           const oldReqMs = new Date(initialReqBy).getTime();
-          setRequiredByDate(toInputDate(new Date(oldReqMs + deltaMs)));
+          setRequiredByDate(toInputDateTime(new Date(oldReqMs + deltaMs)));
         } else {
           setRequiredByDate("");
         }
@@ -196,7 +196,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     if (initialReqBy) {
       const baseReqTime = new Date(initialReqBy).getTime();
       if (!isNaN(baseReqTime)) {
-        setRequiredByDate(toInputDate(new Date(baseReqTime + deltaMs)));
+        setRequiredByDate(toInputDateTime(new Date(baseReqTime + deltaMs)));
       }
     }
 
@@ -302,11 +302,15 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       };
 
       const updated = await procurementBidApi.extendBidSchedule(bidId, payload);
-      toast.success("Schedule extended successfully! Corrigendum notice issued.");
+      toast.success("Schedule extended successfully! Corrigendum notice issued. Tender is now OPEN for submissions.");
       if (onSuccess) {
         onSuccess(updated);
       }
       onClose();
+      // Force page reload so all date-dependent calculations and caches refresh cleanly
+      setTimeout(() => {
+        if (typeof window !== "undefined") window.location.reload();
+      }, 700);
     } catch (err: any) {
       const msg =
         err?.message || err?.error || "Failed to extend schedule. Please try again.";
@@ -538,18 +542,17 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                   htmlFor="extend-reqby-date-input"
                   className="block text-xs font-bold text-slate-800 mb-1"
                 >
-                  Required-By / Delivery Date
+                  Required-By / Delivery Date &amp; Time
                 </label>
                 <DateTimePicker
                   id="extend-reqby-date-input"
-                  mode="date"
                   value={requiredByDate}
                   onChange={setRequiredByDate}
-                  placeholder="Select required delivery date"
-                  min={closingDate ? closingDate.split("T")[0] : undefined}
+                  placeholder="Select required delivery date & time"
+                  min={closingDate || new Date().toISOString()}
                 />
                 <p className="text-[10.5px] text-slate-500 mt-0.5">
-                  Contractual goods/services delivery deadline.
+                  Contractual goods/services delivery deadline (date &amp; time).
                 </p>
               </div>
 
