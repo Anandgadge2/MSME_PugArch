@@ -851,6 +851,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner || actorRole === 'buyer';
   const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && financialOpenStatuses.includes(bid.status));
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
+  const isTwoPacket = String(bid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(bid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
   const linkedRequirementId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
 
   const discloseEstimatedCost = Boolean(
@@ -1114,7 +1115,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return false;
     }).map((p: any) => {
       const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-      const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+      const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status)) : isBuyerOwner);
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
     results: canSeeParticipants ? (bid.participations || [])
@@ -1131,10 +1132,16 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       })
       .map((p: any) => {
         const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-        const allowFinancial = options.includeFinancial || isAdmin || isBuyerOwner || isOwn || (canSeeFinancial && financialOpenStatuses.includes(bid.status));
+        const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status)) : isBuyerOwner);
         return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
       })
       .sort((a: any, b: any) => {
+        if (isTwoPacket && !financialOpenStatuses.includes(bid.status)) {
+          const aQual = a.technicalStatus === 'QUALIFIED' ? 1 : 0;
+          const bQual = b.technicalStatus === 'QUALIFIED' ? 1 : 0;
+          if (aQual !== bQual) return bQual - aQual;
+          return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
+        }
         const priceA = Number(a.totalAmount || a.quotedAmount || 0);
         const priceB = Number(b.totalAmount || b.quotedAmount || 0);
         if (priceA > 0 && priceB > 0 && priceA !== priceB) return priceA - priceB;
@@ -1143,9 +1150,17 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
         return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
       })
       .map((p: any, idx: number) => {
-        const quotedAmt = Number(p.totalAmount || p.quotedAmount || 0);
+        const isFinSealed = Boolean(p.financialSealed || (isTwoPacket && !financialOpenStatuses.includes(bid.status) && !isAdmin));
+        const rawQuotedAmt = p.totalAmount ?? p.quotedAmount ?? null;
+        const quotedAmt = isFinSealed ? null : (rawQuotedAmt != null ? Number(rawQuotedAmt) : null);
         const sellerOrg = p.sellerName || p.seller?.organization?.organizationName || p.seller?.name || 'Supplier';
         const contactPerson = p.seller?.name || p.contactPerson || p.sellerName || 'Representative';
+        const rawTech = String(p.technicalStatus || '').toUpperCase();
+        const techStatusNormalized = rawTech === 'QUALIFIED' || rawTech === 'SHORTLISTED' || rawTech === 'ACCEPTED'
+          ? 'Qualified'
+          : rawTech === 'DISQUALIFIED' || rawTech === 'REJECTED'
+            ? 'Disqualified'
+            : 'Pending';
         return {
           id: p.id,
           participationId: p.id,
@@ -1159,17 +1174,18 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
           offeredItem: p.offeredItemDescription || 'Procurement requirement',
           makeBrand: p.makeBrand || 'Standard',
           model: p.model || 'Standard',
-          technicalStatus: p.technicalStatus === 'DISQUALIFIED' ? 'Disqualified' : 'Qualified',
+          technicalStatus: techStatusNormalized,
           totalPrice: quotedAmt,
           quotedAmount: quotedAmt,
-          gstPercentage: Number(p.gstPercentage || 0),
+          gstPercentage: isFinSealed ? null : Number(p.gstPercentage || 0),
           totalAmount: quotedAmt,
           offeredQuantity: p.offeredQuantity || 1,
           deliveryTimeline: p.deliveryTimeline || 'Standard',
           documents: p.documents || [],
           lineItems: p.lineItems || [],
-          finalRank: `L${idx + 1}`,
-          resultStatus: 'Responsive',
+          finalRank: isFinSealed ? '-' : `L${idx + 1}`,
+          resultStatus: rawTech === 'DISQUALIFIED' ? 'Ineligible' : 'Responsive',
+          financialSealed: isFinSealed,
           details: {
             organizationName: sellerOrg,
             contactPerson: contactPerson,
@@ -2821,6 +2837,24 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
     throw new ApiError(400, 'Technical evaluation can start only after bid closes.', 'INVALID_STATUS_TRANSITION');
   }
 
+  // Two-Packet Gating: Technical Opening Date Check
+  const techOpenCandidate = firstPresent(
+    bid.technicalOpeningDate,
+    sched?.technicalOpeningDate,
+    (bid.technicalPacket as any)?.technicalOpeningDate,
+    (bid.technicalPacket as any)?.technicalEvaluationDate
+  );
+  if (techOpenCandidate) {
+    const techOpenTime = new Date(techOpenCandidate).getTime();
+    if (!isNaN(techOpenTime) && techOpenTime > Date.now()) {
+      throw new ApiError(
+        400,
+        `Technical evaluation cannot begin before the scheduled technical opening date and time (${new Date(techOpenCandidate).toLocaleString('en-IN')}).`,
+        'TECHNICAL_OPENING_NOT_REACHED'
+      );
+    }
+  }
+
   const updatedRows = await db.$transaction(async (tx: any) => {
     if (bid.status !== 'TECHNICAL_EVALUATION') assertBidTransition(bid.status, 'TECHNICAL_EVALUATION');
     if (!bid.isBuyerRequirement) {
@@ -2943,33 +2977,33 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
         const packet = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
         const linkedReqId = Number(packet.sourceRequirementId || packet.requirementId || bid.sourceId || 0);
 
-        // Sync RequirementResponse
-        await tx.requirementResponse.updateMany({
-          where: {
-            OR: [
-              { id: participation.id },
-              ...(linkedReqId > 0 ? [{ requirementId: linkedReqId, sellerUserId: sId }] : []),
-              { sellerUserId: sId }
-            ]
-          },
-          data: {
-            status: technicalStatus === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED'
-          }
-        }).catch(() => {});
+        // Sync RequirementResponse - strictly scoped to this procurement's requirement
+        if (linkedReqId > 0) {
+          await tx.requirementResponse.updateMany({
+            where: {
+              requirementId: linkedReqId,
+              sellerUserId: sId
+            },
+            data: {
+              status: technicalStatus === 'QUALIFIED' ? 'SHORTLISTED' : 'REJECTED'
+            }
+          }).catch(() => {});
+        }
 
-        // Sync QuoteResponse
-        await tx.quoteResponse.updateMany({
-          where: {
-            OR: [
-              { id: participation.id },
-              { sellerId: sId }
-            ]
-          },
-          data: {
-            technicalStatus,
-            technicalRemarks: item.remarks || null
-          }
-        }).catch(() => {});
+        // Sync QuoteResponse - strictly scoped to this procurement's quote request
+        const linkedQuoteReqId = Number(bid.sourceId || packet.quoteRequestId || 0);
+        if (linkedQuoteReqId > 0) {
+          await tx.quoteResponse.updateMany({
+            where: {
+              quoteRequestId: linkedQuoteReqId,
+              sellerId: sId
+            },
+            data: {
+              technicalStatus,
+              technicalRemarks: item.remarks || null
+            }
+          }).catch(() => {});
+        }
 
         // Sync Tender Bid if applicable
         const tenderNum = Number(String(bid.bidNumber || '').replace(/\D+/g, '')) || Number(bid.sourceId || 0);
@@ -3064,6 +3098,25 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
     throw new ApiError(400, 'Technical evaluation must be completed before opening financial bids.', 'TECHNICAL_EVALUATION_PENDING');
   }
   assertBidTransition(bid.status, 'FINANCIAL_EVALUATION');
+
+  // Two-Packet Gating: Financial Opening Date Check
+  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+  const finOpenCandidate = firstPresent(
+    bid.financialOpeningDate,
+    sched?.financialOpeningDate,
+    (bid.technicalPacket as any)?.financialOpeningDate,
+    (bid.technicalPacket as any)?.financialEvaluationDate
+  );
+  if (finOpenCandidate) {
+    const finOpenTime = new Date(finOpenCandidate).getTime();
+    if (!isNaN(finOpenTime) && finOpenTime > Date.now()) {
+      throw new ApiError(
+        400,
+        `Financial bids cannot be opened before the scheduled financial opening date and time (${new Date(finOpenCandidate).toLocaleString('en-IN')}).`,
+        'FINANCIAL_OPENING_NOT_REACHED'
+      );
+    }
+  }
 
   const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
 

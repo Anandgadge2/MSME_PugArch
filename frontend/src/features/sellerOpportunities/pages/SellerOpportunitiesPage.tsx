@@ -1032,10 +1032,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       (Array.isArray(auctions) ? auctions : []).forEach((auction: any) => {
         if (!auction) return;
         const documents = asTextList(auction.documents);
+        const refNumber = auction.referenceNo || (auction.linkedBidId ? `PBID-${auction.linkedBidId}` : null);
+        const resolvedTitle = auction.title || (refNumber ? `${refNumber} — Live Reverse Auction` : (auction.itemName || 'Reverse Auction Opportunity'));
+        const sourceRef = refNumber ? `${refNumber} • ${auction.auctionCode || `RA-${auction.id}`}` : (auction.auctionCode || `RA-${auction.id}`);
         const opportunity: SellerOpportunity = {
           id: `ra-${auction.id}`,
           type: 'Reverse Auction',
-          title: auction.title || auction.itemName || 'Reverse Auction Opportunity',
+          title: resolvedTitle,
           buyer: auction.buyerOrgName || auction.buyerName || 'Verified Buyer',
           category: 'Negotiate Price',
           location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
@@ -1047,7 +1050,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel: 'Join Auction',
           href: sellerRoutes.auctionLive(auction.id),
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
-          sourceRef: auction.auctionCode || `RA-${auction.id}`,
+          sourceRef,
           publishedAt: auction.createdAt || auction.publishedAt || auction.startTime,
           createdAt: auction.createdAt || auction.startTime,
           description: auction.description,

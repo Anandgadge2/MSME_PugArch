@@ -291,6 +291,12 @@ const withEffectiveStatus = async (auction: any) => {
     data.statusEnum = effective;
     if (effective === 'CLOSED' && !auction.actualClosedAt) data.actualClosedAt = new Date();
     await db.auction.update({ where: { id: auction.id }, data }).catch(() => undefined);
+    if (effective === 'CLOSED' && auction.linkedBidId) {
+      await db.procurementBid.update({
+        where: { id: auction.linkedBidId },
+        data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED' }
+      }).catch(() => undefined);
+    }
   }
   return { ...auction, ...data, evaluationPending };
 };
@@ -1057,12 +1063,13 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       });
     }
 
-    // Advance linked procurementBid lifecycle stage
+    // Advance linked procurementBid lifecycle stage & status
     if (linkedBid) {
       await db.procurementBid.update({
         where: { id: linkedBid.id },
         data: {
-          lifecycleStage: 'FINANCIAL_EVALUATION'
+          status: 'REVERSE_AUCTION_ACTIVE',
+          lifecycleStage: 'REVERSE_AUCTION_ACTIVE'
         }
       }).catch(() => null);
     }
@@ -1202,6 +1209,31 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
       const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req, auction) : {}) };
       const updated = await db.auction.update({ where: { id }, data });
       await writeAuctionEvent(req, id, target.toLowerCase(), `Auction moved to ${target}`, data);
+      if (auction.linkedBidId && ['CLOSED', 'COMPLETED'].includes(target)) {
+        await db.procurementBid.update({
+          where: { id: auction.linkedBidId },
+          data: {
+            status: 'L1_GENERATED',
+            lifecycleStage: 'L1_GENERATED'
+          }
+        }).catch(() => null);
+
+        if (updated.currentWinnerId && updated.currentLowestAmount) {
+          const finalAmount = Number(updated.currentLowestAmount);
+          await db.procurementBidParticipation.updateMany({
+            where: {
+              bidId: auction.linkedBidId,
+              sellerId: updated.currentWinnerId
+            },
+            data: {
+              quotedAmount: finalAmount,
+              totalAmount: finalAmount,
+              rank: 1,
+              finalStatus: 'L1'
+            }
+          }).catch(() => null);
+        }
+      }
       return apiResponse.success(res, maskSensitive(updated));
     } catch (error: any) {
       return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to update auction status', error.code || 'REVERSE_AUCTION_STATUS_ERROR');

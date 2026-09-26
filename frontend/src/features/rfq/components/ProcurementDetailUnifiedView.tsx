@@ -6638,9 +6638,13 @@ export function ProcurementDetailUnifiedView(
       const ts = String(p.technicalStatus || "").toUpperCase();
       const isDisq =
         ts === "DISQUALIFIED" || ts === "NOT_QUALIFIED" || p.isDisqualified;
-      return !isDisq;
+      if (isDisq) return false;
+      if (isTwoPacket) {
+        return ts === "QUALIFIED" || ts === "SHORTLISTED" || ts === "ACCEPTED";
+      }
+      return true;
     });
-  }, [submittedParticipations]);
+  }, [submittedParticipations, isTwoPacket]);
 
   const lowestQualifiedL1ParticipationId = useMemo(() => {
     let lowestId: any = null;
@@ -6867,8 +6871,25 @@ export function ProcurementDetailUnifiedView(
     return statusLabel;
   }, [statusUpper, isDeadlinePassed, isBiddingClosed, isBeforeSubmissionStart, statusLabel]);
 
+  const isTechnicalOpeningReady = useMemo(() => {
+    if (!isTwoPacket) return true;
+    if (isTechEvalCompleted || isPostBiddingStage) return true;
+    if (!technicalDateValue) return true;
+    const parsed = parseDateValue(technicalDateValue, false);
+    return parsed ? parsed.getTime() <= nowMs : true;
+  }, [isTwoPacket, isTechEvalCompleted, isPostBiddingStage, technicalDateValue, nowMs]);
+
+  const isFinancialOpeningReady = useMemo(() => {
+    if (!isTwoPacket) return true;
+    if (["AWARDED", "PO_GENERATED", "COMPLETED"].includes(statusUpper)) return true;
+    if (!financialDateValue) return true;
+    const parsed = parseDateValue(financialDateValue, false);
+    return parsed ? parsed.getTime() <= nowMs : true;
+  }, [isTwoPacket, statusUpper, financialDateValue, nowMs]);
+
   const isEvaluationReady = Boolean(
-    isPostBiddingStage ||
+    isTechnicalOpeningReady &&
+    (isPostBiddingStage ||
     isDeadlinePassed ||
     Boolean(props.isSubmitDisabled) ||
     [
@@ -6880,7 +6901,7 @@ export function ProcurementDetailUnifiedView(
       "AWARDED",
       "COMPLETED",
       "EXPIRED",
-    ].includes(statusUpper),
+    ].includes(statusUpper)),
   );
 
   const isBidAwarded = useMemo(() => {
@@ -6983,7 +7004,7 @@ export function ProcurementDetailUnifiedView(
               </span>
             );
           }
-          if (isTwoPacketMode && !isTechEvalCompleted) {
+          if (isTwoPacketMode && (!isTechEvalCompleted || !isFinancialOpeningReady)) {
             return (
               <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50/80 px-2.5 py-0.5 text-[10.5px] font-bold text-indigo-700 whitespace-nowrap">
                 <Lock className="h-3 w-3 text-indigo-500 shrink-0" />
@@ -10822,7 +10843,7 @@ export function ProcurementDetailUnifiedView(
                                 <Button
                                   type="button"
                                   size="sm"
-                                  disabled={isCompletingTechEval}
+                                  disabled={isCompletingTechEval || !isTechnicalOpeningReady}
                                   onClick={handleCompleteTechnicalEvaluation}
                                   className="h-7.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
                                 >
@@ -10850,24 +10871,45 @@ export function ProcurementDetailUnifiedView(
                               <Button
                                 type="button"
                                 size="sm"
+                                disabled={isTwoPacketMode && !isFinancialOpeningReady}
                                 variant={
-                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
-                                    ? "primary"
-                                    : "outline"
+                                  isTwoPacketMode && !isFinancialOpeningReady
+                                    ? "outline"
+                                    : techEvaluationStats.pending === 0 || isTechEvalCompleted
+                                      ? "primary"
+                                      : "outline"
                                 }
-                                onClick={() =>
-                                  router.push(`/bids/${targetId}/results`)
-                                }
+                                onClick={() => {
+                                  if (isTwoPacketMode && !isFinancialOpeningReady) {
+                                    toast.warning(
+                                      `Financial packets remain sealed until scheduled financial opening on ${financialDateFormatted || "the scheduled date"}.`,
+                                    );
+                                    return;
+                                  }
+                                  router.push(`/bids/${targetId}/results`);
+                                }}
                                 className={cn(
-                                  "h-7.5 gap-1.5 text-xs font-bold shadow-2xs cursor-pointer",
-                                  techEvaluationStats.pending === 0 || isTechEvalCompleted
-                                    ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                                    : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50",
+                                  "h-7.5 gap-1.5 text-xs font-bold shadow-2xs",
+                                  isTwoPacketMode && !isFinancialOpeningReady
+                                    ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-80"
+                                    : techEvaluationStats.pending === 0 || isTechEvalCompleted
+                                      ? "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                                      : "text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 cursor-pointer",
                                 )}
+                                title={
+                                  isTwoPacketMode && !isFinancialOpeningReady
+                                    ? `Financial packets sealed until ${financialDateFormatted || "the scheduled opening"}`
+                                    : undefined
+                                }
                               >
+                                {isTwoPacketMode && !isFinancialOpeningReady && (
+                                  <Lock className="h-3.5 w-3.5 text-slate-400" />
+                                )}
                                 <span>
                                   {isTwoPacketMode
-                                    ? "View Stage 2 Financial Opening & Results"
+                                    ? !isFinancialOpeningReady
+                                      ? `Financial Sealed (Opens ${financialDateFormatted || "at scheduled time"})`
+                                      : "View Stage 2 Financial Opening & Results"
                                     : "View Evaluation & Results"}
                                 </span>
                                 <ArrowRight className="h-3.5 w-3.5" />
@@ -10895,34 +10937,63 @@ export function ProcurementDetailUnifiedView(
                       </p>
                     </div>
                   ) : !isEvaluationReady ? (
-                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 py-8 px-5 text-center">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white mb-3 shadow-md shadow-indigo-600/20">
-                        <Lock className="h-5 w-5" />
+                    !isDeadlinePassed ? (
+                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 py-8 px-5 text-center">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white mb-3 shadow-md shadow-indigo-600/20">
+                          <Lock className="h-5 w-5" />
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-0.5 text-xs font-black text-emerald-800 mb-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Bidding Window Active
+                        </span>
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                          {submittedParticipations.length} Quotation
+                          {submittedParticipations.length === 1 ? "" : "s"}{" "}
+                          Received (Sealed)
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
+                          In accordance with procurement integrity and
+                          sealed-bidding rules, supplier quotes and commercial
+                          proposals remain strictly confidential until bidding
+                          concludes on{" "}
+                          <strong className="text-slate-800">
+                            {displaySealedClosingDate}
+                          </strong>
+                          .
+                        </p>
+                        <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-100/80 px-3 py-1 text-xs font-bold text-indigo-900 border border-indigo-200">
+                          <Clock className="h-3.5 w-3.5 text-indigo-600" />{" "}
+                          Quotations and evaluation tools will unlock upon closing
+                        </span>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-0.5 text-xs font-black text-emerald-800 mb-2">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Bidding Window Active
-                      </span>
-                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                        {submittedParticipations.length} Quotation
-                        {submittedParticipations.length === 1 ? "" : "s"}{" "}
-                        Received (Sealed)
-                      </h4>
-                      <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
-                        In accordance with procurement integrity and
-                        sealed-bidding rules, supplier quotes and commercial
-                        proposals remain strictly confidential until bidding
-                        concludes on{" "}
-                        <strong className="text-slate-800">
-                          {displaySealedClosingDate}
-                        </strong>
-                        .
-                      </p>
-                      <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-100/80 px-3 py-1 text-xs font-bold text-indigo-900 border border-indigo-200">
-                        <Clock className="h-3.5 w-3.5 text-indigo-600" />{" "}
-                        Quotations and evaluation tools will unlock upon closing
-                      </span>
-                    </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-200 bg-amber-50/40 py-8 px-5 text-center">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-600 text-white mb-3 shadow-md shadow-amber-600/20">
+                          <Clock className="h-5 w-5" />
+                        </div>
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-300 px-3 py-0.5 text-xs font-black text-slate-800 mb-2">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          Submission Window Closed
+                        </span>
+                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                          {submittedParticipations.length} Technical Packet
+                          {submittedParticipations.length === 1 ? "" : "s"}{" "}
+                          Received (Sealed)
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
+                          Quotations have been securely submitted. In accordance with two-packet procurement governance,
+                          technical packets remain view-only and scrutiny tools will unlock at the scheduled technical opening on{" "}
+                          <strong className="text-slate-900">
+                            {technicalDateFormatted || "the scheduled technical opening date"}
+                          </strong>
+                          .
+                        </p>
+                        <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-100/80 px-3 py-1 text-xs font-bold text-amber-900 border border-amber-200">
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />{" "}
+                          Technical scrutiny unlocks at scheduled opening time
+                        </span>
+                      </div>
+                    )
                   ) : (
                     <DataTable<any>
                       data={submittedParticipations}
@@ -11102,6 +11173,10 @@ export function ProcurementDetailUnifiedView(
                   )}
                   onAuctionStarted={() => {
                     linkedAuctionQuery.refetch();
+                    queryClient.invalidateQueries({ queryKey: ["procurement-bid-detail"] });
+                    queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2"] });
+                    queryClient.invalidateQueries({ queryKey: ["procurement-bid-participations"] });
+                    toast.success("Reverse auction initiated. Bidders will participate through this procurement.");
                   }}
                   auctionDefaults={
                     linkedAuction

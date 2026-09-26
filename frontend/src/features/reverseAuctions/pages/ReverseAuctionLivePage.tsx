@@ -290,12 +290,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           <span className={cn(
             "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-extrabold shadow-xs tracking-tight",
             isL1
-              ? "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300"
+              ? "bg-amber-100 text-amber-900 border border-amber-300"
               : rankNum === 2
-              ? "bg-slate-100 text-slate-800 border border-slate-300 dark:bg-slate-800 dark:text-slate-200"
+              ? "bg-slate-100 text-slate-800 border border-slate-300"
               : rankNum === 3
-              ? "bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400"
-              : "bg-zinc-100 text-zinc-600 border border-zinc-200"
+              ? "bg-amber-50 text-amber-800 border border-amber-200"
+              : "bg-slate-100 text-slate-600 border border-slate-200"
           )}>
             {isL1 ? '🥇 L1' : rankNum === 2 ? '🥈 L2' : rankNum === 3 ? '🥉 L3' : `L${rankNum || '-'}`}
           </span>
@@ -313,7 +313,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               <span className="inline-flex items-center rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow-xs">
                 YOU
               </span>
-              <span className="font-extrabold text-blue-900 dark:text-blue-300 truncate max-w-[180px]" title={row.sellerOrgName || 'Your Organization'}>
+              <span className="font-extrabold text-blue-900 truncate max-w-[180px]" title={row.sellerOrgName || 'Your Organization'}>
                 {isBuyerOrAdmin ? row.sellerOrgName : 'Your Organization'}
               </span>
             </div>
@@ -321,8 +321,8 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         }
         return (
           <div className="flex items-center gap-2">
-            <span className="inline-flex h-2 w-2 rounded-full bg-zinc-300 shrink-0" aria-hidden="true" />
-            <span className="font-bold text-zinc-700 dark:text-zinc-300 truncate max-w-[200px]" title={row.sellerOrgName || 'Competitor'}>
+            <span className="inline-flex h-2 w-2 rounded-full bg-slate-300 shrink-0" aria-hidden="true" />
+            <span className="font-bold text-slate-700 truncate max-w-[200px]" title={row.sellerOrgName || 'Competitor'}>
               {row.sellerOrgName || 'Competitor Bidder'}
             </span>
           </div>
@@ -334,7 +334,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Bid Time',
       width: 'w-[20%]',
       cell: (row) => (
-        <span className="font-semibold text-zinc-500 dark:text-zinc-400 text-xs">
+        <span className="font-semibold text-slate-500 text-xs">
           {formatDateTime(row.submittedAt)}
         </span>
       )
@@ -349,7 +349,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         return (
           <span className={cn(
             "font-black font-mono text-sm tracking-tight",
-            isLowest ? "text-emerald-700 dark:text-emerald-400 font-extrabold" : "text-zinc-900 dark:text-zinc-100"
+            isLowest ? "text-emerald-700 font-extrabold" : "text-slate-900"
           )}>
             {formatCurrency(amt)}
           </span>
@@ -365,7 +365,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wide",
           row.isValid === false
             ? "bg-red-50 text-red-700 border border-red-200"
-            : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
         )}>
           {row.isValid === false ? 'Invalid' : '✓ Valid'}
         </span>
@@ -386,12 +386,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           <span className={cn(
             "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black shadow-xs",
             isL1
-              ? "bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-300"
+              ? "bg-amber-100 text-amber-900 border border-amber-300"
               : rank === 2
               ? "bg-slate-100 text-slate-800 border border-slate-300"
               : rank === 3
               ? "bg-amber-50 text-amber-800 border border-amber-200"
-              : "bg-zinc-100 text-zinc-600"
+              : "bg-slate-100 text-slate-600"
           )}>
             {isL1 ? '🥇 L1' : rank === 2 ? '🥈 L2' : rank === 3 ? '🥉 L3' : `L${rank}`}
           </span>
@@ -409,14 +409,14 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               <span className="inline-flex items-center rounded-md bg-blue-600 px-2 py-0.5 text-[10px] font-black uppercase text-white">
                 YOU
               </span>
-              <span className="font-black text-blue-900 dark:text-blue-200">
+              <span className="font-black text-blue-900">
                 {isBuyerOrAdmin ? part.sellerOrgName : 'Your Organization'}
               </span>
             </div>
           );
         }
         return (
-          <span className="font-bold text-zinc-800 dark:text-zinc-200">
+          <span className="font-bold text-slate-800">
             {part.sellerOrgName || `Bidder #${part.sellerOrgId || '?'}`}
           </span>
         );
@@ -430,7 +430,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         const amt = Number(part.lastBidAmount || 0);
         const isL1 = (part.currentRank || 1) === 1;
         return (
-          <span className={cn("font-mono text-xs font-black", isL1 ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-900 dark:text-zinc-100")}>
+          <span className={cn("font-mono text-xs font-black", isL1 ? "text-emerald-700" : "text-slate-900")}>
             {amt > 0 ? formatCurrency(amt) : 'Awaiting First Bid'}
           </span>
         );
@@ -442,7 +442,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       width: 'w-[25%]',
       cell: (part) => {
         const amt = Number(part.lastBidAmount || 0);
-        if (amt <= 0) return <span className="text-zinc-400 text-xs">-</span>;
+        if (amt <= 0) return <span className="text-slate-400 text-xs">-</span>;
         if ((part.currentRank || 1) === 1) {
           return (
             <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
@@ -453,7 +453,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         const gap = currentLowest > 0 && amt > currentLowest ? amt - currentLowest : 0;
         const gapPct = currentLowest > 0 ? (gap / currentLowest) * 100 : 0;
         return (
-          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 font-mono">
+          <span className="text-xs font-bold text-amber-700 font-mono">
             +{formatCurrency(gap)} (+{gapPct.toFixed(1)}%)
           </span>
         );
@@ -514,7 +514,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   };
 
   return (
-    <div className="space-y-6 pb-12 bg-zinc-50/50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 p-4 sm:p-6 lg:p-8 rounded-3xl border border-zinc-200/80 dark:border-zinc-800 shadow-sm animate-in fade-in duration-300">
+    <div className="space-y-6 pb-12 bg-white text-slate-900 p-4 sm:p-6 lg:p-8 rounded-3xl border border-slate-200 shadow-sm animate-in fade-in duration-300">
       
       {/* Error notification */}
       {localError && (
@@ -539,30 +539,30 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       )}
 
       {/* Header section with status, title, details & glowing countdown */}
-      <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-zinc-200/80 dark:border-zinc-800 pb-6">
+      <section className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 border-b border-slate-200 pb-6">
         <div className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <Link 
               href={`${rolePrefix}/procurement/reverse-auction/${canonicalCode}`} 
-              className="inline-flex h-8 items-center rounded-xl border border-zinc-200 bg-white dark:bg-zinc-900 px-3 text-xs font-bold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition shadow-xs"
+              className="inline-flex h-8 items-center rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-xs"
             >
               <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Auction Details
             </Link>
             
             {/* Live Indicator */}
             {live ? (
-              <span className="inline-flex items-center rounded-full bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-900/60 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-red-600 dark:text-red-400 shadow-xs">
+              <span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-3 py-1 text-[11px] font-black uppercase tracking-wider text-red-600 shadow-xs">
                 <span className="mr-2 h-2 w-2 rounded-full bg-red-500 animate-ping" />
                 Live Reverse Auction
               </span>
             ) : (
-              <span className="inline-flex items-center rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+              <span className="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-600">
                 {status.replace(/_/g, ' ')}
               </span>
             )}
             
             {auction.auctionCode && (
-              <span className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+              <span className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
                 {auction.auctionCode}
               </span>
             )}
@@ -571,19 +571,19 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               <span className={cn(
                 "rounded-xl border px-2.5 py-1 text-[10px] font-bold transition flex items-center gap-1.5",
                 extensionCount > 0 
-                  ? "border-amber-300 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shadow-xs" 
-                  : "border-blue-200 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400"
+                  ? "border-amber-300 bg-amber-50 text-amber-800 shadow-xs" 
+                  : "border-blue-200 bg-blue-50 text-blue-700"
               )}>
-                {extensionCount > 0 && <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" aria-hidden="true" />}
+                {extensionCount > 0 && <Sparkles className="h-3 w-3 text-amber-600" aria-hidden="true" />}
                 Auto-Extended: {extensionCount} / {maxExtensions}
               </span>
             )}
           </div>
           
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
             {auction.title || `Auction #${id}`}
           </h1>
-          <p className="max-w-4xl text-xs sm:text-sm font-semibold leading-relaxed text-zinc-500 dark:text-zinc-400">
+          <p className="max-w-4xl text-xs sm:text-sm font-semibold leading-relaxed text-slate-500">
             {auction.description || 'Participate in a competitive reverse auction with live downward price tracking, real-time rank updates, and server timestamp verification.'}
           </p>
         </div>
@@ -591,7 +591,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         {/* Countdown & Action Buttons */}
         <div className="flex flex-col sm:items-end gap-3.5 shrink-0">
           <div className="flex flex-col sm:items-end">
-            <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               Remaining Bidding Window
             </p>
             <div 
@@ -613,12 +613,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               variant="outline" 
               onClick={invalidate} 
               disabled={summary.isFetching} 
-              className="rounded-xl border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 shadow-xs"
+              className="rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs"
             >
               <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', summary.isFetching && 'animate-spin')} /> Refresh
             </Button>
             <Link href={`${rolePrefix}/procurement/reverse-auction/${canonicalCode}`}>
-              <Button type="button" variant="outline" className="rounded-xl border-zinc-200 bg-white hover:bg-zinc-50 dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 shadow-xs">
+              <Button type="button" variant="outline" className="rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs">
                 Details
               </Button>
             </Link>
@@ -626,13 +626,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             {isBuyerOrAdmin && (
               <>
                 {status === 'DRAFT' && (
-                  <Button onClick={() => transition.mutate('schedule')} variant="outline" className="rounded-xl border-zinc-200">Schedule</Button>
+                  <Button onClick={() => transition.mutate('schedule')} variant="outline" className="rounded-xl border-slate-200">Schedule</Button>
                 )}
                 {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(status) && (
                   <Button onClick={() => transition.mutate('start')} className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Start</Button>
                 )}
                 {status === 'LIVE' && (
-                  <Button onClick={() => transition.mutate('pause')} variant="secondary" className="rounded-xl bg-zinc-100 text-zinc-800">Pause</Button>
+                  <Button onClick={() => transition.mutate('pause')} variant="secondary" className="rounded-xl bg-slate-100 text-slate-800">Pause</Button>
                 )}
                 {['LIVE', 'PAUSED'].includes(status) && (
                   <Button onClick={() => transition.mutate('close')} className="rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold">Close Auction</Button>
@@ -640,7 +640,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                 <button
                   type="button"
                   onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
-                  className="rounded-xl bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 px-3 py-1.5 text-xs font-bold transition"
+                  className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 text-xs font-bold transition"
                 >
                   Results
                 </button>
@@ -730,24 +730,24 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       </div>
 
       {/* Real-time Dynamic Price Chart */}
-      <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+      <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                 <TrendingDown className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
                   <span>Live Bidding Price Movement</span>
                   {live && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700 dark:text-emerald-300">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-700">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Live Stream
                     </span>
                   )}
                 </h2>
-                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
                   Visual mapping of downward commercial offers across all participants over time.
                 </p>
               </div>
@@ -755,28 +755,28 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
             {/* Quick Chart Legend / Metric Pills */}
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2.5 py-1 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-700">
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 border border-slate-200/60">
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />
                 Current L1: <span className="font-mono font-black text-emerald-600">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</span>
               </span>
               {!isBuyerOrAdmin && myBestBid > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-blue-700 border border-blue-200/60">
                   <span className="h-2.5 w-2.5 rounded-full bg-blue-600 inline-block" />
                   Your Best: <span className="font-mono font-black">{formatCurrency(myBestBid)}</span>
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 px-2 py-1 text-zinc-600 dark:text-zinc-400">
-                Total Bids: <span className="font-mono font-bold text-zinc-800 dark:text-zinc-200">{chartData.length}</span>
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-slate-600">
+                Total Bids: <span className="font-mono font-bold text-slate-800">{chartData.length}</span>
               </span>
             </div>
           </div>
 
           <div className="h-72 sm:h-80 w-full pt-2">
             {chartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-900/50 text-zinc-400 p-6">
-                <LineChartIcon className="h-10 w-10 text-zinc-300 dark:text-zinc-600 mb-2 stroke-[1.5]" />
-                <p className="text-xs font-bold text-zinc-500">Waiting for live bids to populate chart…</p>
-                <p className="text-[11px] text-zinc-400 mt-1">Once verified downward bids are registered, the price drop curve will display here.</p>
+              <div className="flex flex-col items-center justify-center h-full border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 text-slate-400 p-6">
+                <LineChartIcon className="h-10 w-10 text-slate-300 mb-2 stroke-[1.5]" />
+                <p className="text-xs font-bold text-slate-500">Waiting for live bids to populate chart…</p>
+                <p className="text-[11px] text-slate-400 mt-1">Once verified downward bids are registered, the price drop curve will display here.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -850,33 +850,33 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       <div className="grid gap-6 xl:grid-cols-[1fr_390px]">
         
         {/* Left Column: Live Bidding Log & Leaderboard with Tabs */}
-        <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+        <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
               <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                   <History className="h-5 w-5" />
                 </span>
                 <div>
-                  <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                  <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
                     Live Bidding Log & Standings
                   </h2>
-                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+                  <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
                     Real-time sequence of downward commercial offers. Your submissions are highlighted.
                   </p>
                 </div>
               </div>
 
               {/* Tab Selector: Live Stream vs Leaderboard */}
-              <div className="inline-flex rounded-xl bg-zinc-100 dark:bg-zinc-800 p-1 text-xs font-bold">
+              <div className="inline-flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setActiveLogTab('stream')}
                   className={cn(
                     "rounded-lg px-3 py-1.5 transition duration-150",
                     activeLogTab === 'stream'
-                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
                   )}
                 >
                   Live Bid Stream ({bidRows.length})
@@ -887,8 +887,8 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   className={cn(
                     "rounded-lg px-3 py-1.5 transition duration-150",
                     activeLogTab === 'leaderboard'
-                      ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-xs"
-                      : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
                   )}
                 >
                   Participant Leaderboard ({participantRows.length})
@@ -906,7 +906,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   emptyTitle="No bids placed yet"
                   emptyDescription="Once live bids are validated by the server, they will populate here in real-time."
                   minWidth="min-w-[560px]"
-                  rowClassName={(row) => row.isMyBid ? 'bg-blue-50/50 dark:bg-blue-950/20 border-l-4 border-l-blue-600 font-medium' : ''}
+                  rowClassName={(row) => row.isMyBid ? 'bg-blue-50/50 border-l-4 border-l-blue-600 font-medium' : ''}
                 />
               </div>
             )}
@@ -921,7 +921,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   emptyTitle="No participants joined"
                   emptyDescription="Qualified participants will appear here with their live standing and lowest offers."
                   minWidth="min-w-[560px]"
-                  rowClassName={(row) => row.isCurrentViewer ? 'bg-blue-50/60 dark:bg-blue-950/30 border-l-4 border-l-blue-600' : ''}
+                  rowClassName={(row) => row.isCurrentViewer ? 'bg-blue-50/60 border-l-4 border-l-blue-600' : ''}
                 />
               </div>
             )}
@@ -930,16 +930,16 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
         {/* Right Column: PLACE YOUR BID Console Card */}
         <aside className="space-y-4">
-          <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+          <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden">
             <CardContent className="p-6 space-y-5">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">
+                <p className="text-[10px] font-black uppercase tracking-widest text-red-600">
                   {isBuyerOrAdmin ? 'Live Console' : 'Competitive Bid Console'}
                 </p>
-                <h2 className="mt-1 text-lg font-black text-zinc-900 dark:text-zinc-100">
+                <h2 className="mt-1 text-lg font-black text-slate-900">
                   {isBuyerOrAdmin ? 'Sourcing Monitor' : 'Place Your Downward Bid'}
                 </h2>
-                <p className="mt-1 text-xs font-semibold leading-relaxed text-zinc-500 dark:text-zinc-400">
+                <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
                   {isBuyerOrAdmin
                     ? 'Monitor active MSME participant bids, review ranks, and manage auction stages.'
                     : 'Submit a lower commercial offer. Bids are cryptographically verified using server timestamps.'}
@@ -948,10 +948,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
               {/* Status constraints warning if not live */}
               {!live && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/40 p-3.5">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3.5">
                   <div className="flex items-start gap-2.5">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <p className="text-xs font-bold leading-relaxed text-amber-800 dark:text-amber-300">
+                    <p className="text-xs font-bold leading-relaxed text-amber-800">
                       Bidding console is locked. Auction status: {status.toLowerCase().replace(/_/g, ' ')}.
                     </p>
                   </div>
@@ -968,12 +968,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
               {/* Buyer Monitor Mode or Seller Bidding Form */}
               {isBuyerOrAdmin ? (
-                <div className="rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 p-4 text-xs font-semibold leading-relaxed text-zinc-600 dark:text-zinc-300 space-y-2">
-                  <p className="font-bold text-zinc-900 dark:text-zinc-100 mb-2">Buyer Monitor Statistics</p>
-                  <p className="flex justify-between"><span>Invited Suppliers:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{participantRows.length}</span></p>
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-xs font-semibold leading-relaxed text-slate-600 space-y-2">
+                  <p className="font-bold text-slate-900 mb-2">Buyer Monitor Statistics</p>
+                  <p className="flex justify-between"><span>Invited Suppliers:</span> <span className="font-bold text-slate-800">{participantRows.length}</span></p>
                   <p className="flex justify-between"><span>Active Qualified Sellers:</span> <span className="font-bold text-emerald-600">{activeParticipantsCount}</span></p>
-                  <p className="flex justify-between"><span>Total Bids Placed:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{bidRows.length}</span></p>
-                  <p className="flex justify-between"><span>Auto Extensions Triggered:</span> <span className="font-bold text-zinc-800 dark:text-zinc-200">{extensionCount} / {maxExtensions}</span></p>
+                  <p className="flex justify-between"><span>Total Bids Placed:</span> <span className="font-bold text-slate-800">{bidRows.length}</span></p>
+                  <p className="flex justify-between"><span>Auto Extensions Triggered:</span> <span className="font-bold text-slate-800">{extensionCount} / {maxExtensions}</span></p>
                 </div>
               ) : (() => {
                 const canBid = (participant as any)?.canBid !== false;
@@ -1042,7 +1042,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                         <button
                           type="button"
                           onClick={() => handleQuickFill(minNextBid)}
-                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/40 p-2.5 text-center text-[10px] font-black text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-xs"
+                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-center text-[10px] font-black text-emerald-800 hover:bg-emerald-100 transition shadow-xs"
                         >
                           Fill Next Max Bid: {formatCurrency(minNextBid)}
                         </button>
@@ -1050,7 +1050,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                           <button
                             type="button"
                             onClick={() => handleQuickFill(minNextBid - decrement)}
-                            className="rounded-xl border border-blue-200 bg-blue-50/60 dark:bg-blue-950/40 p-2.5 text-center text-[10px] font-black text-blue-800 dark:text-blue-300 hover:bg-blue-100 transition shadow-xs"
+                            className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5 text-center text-[10px] font-black text-blue-800 hover:bg-blue-100 transition shadow-xs"
                           >
                             Drop by 2× Min: {formatCurrency(minNextBid - decrement)}
                           </button>
@@ -1059,11 +1059,11 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                     )}
 
                     <div className="space-y-1.5">
-                      <label htmlFor="bid-amount-input" className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
+                      <label htmlFor="bid-amount-input" className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
                         Your Commercial Offer (INR)
                       </label>
                       <div className="relative">
-                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-400 font-bold text-sm">
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400 font-bold text-sm">
                           ₹
                         </span>
                         <input
@@ -1077,7 +1077,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                           step="0.01"
                           required
                           placeholder={minNextBid > 0 ? `Max permitted: ${minNextBid}` : 'Enter downward amount'}
-                          className="h-11 w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800 pl-8 pr-3.5 text-sm font-bold font-mono text-zinc-900 dark:text-zinc-100 outline-none transition focus:bg-white dark:focus:bg-zinc-900 focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                          className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3.5 text-sm font-bold font-mono text-slate-900 outline-none transition focus:bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
                           disabled={!live || bid.isPending}
                           aria-label="Bid amount in Indian Rupees"
                         />
@@ -1085,16 +1085,16 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                     </div>
 
                     {/* Terms acceptance checkbox */}
-                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/60 p-3 transition hover:bg-zinc-100/50">
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 transition hover:bg-slate-100/50">
                       <input
                         type="checkbox"
                         checked={acceptedTerms}
                         onChange={e => setAcceptedTerms(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-500/40"
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500/40"
                         disabled={!live || bid.isPending}
                         aria-label="Accept reverse auction terms and commercial supply rules"
                       />
-                      <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 leading-normal select-none">
+                      <span className="text-[11px] font-semibold text-slate-600 leading-normal select-none">
                         I accept the reverse auction terms, decrement rules, and confirm our capacity to fulfill at this price.
                       </span>
                     </label>
@@ -1109,8 +1109,8 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
                     {/* Confirmation Dialog Modal */}
                     {showConfirmModal && (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50/90 dark:bg-amber-950/50 p-4 text-xs font-semibold text-zinc-800 dark:text-zinc-200 space-y-3 shadow-md animate-in fade-in">
-                        <p className="font-black text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-4 text-xs font-semibold text-slate-800 space-y-3 shadow-md animate-in fade-in">
+                        <p className="font-black text-slate-900 flex items-center gap-1.5">
                           <AlertTriangle className="h-4 w-4 text-amber-600" />
                           Confirm Binding Downward Offer
                         </p>
@@ -1133,7 +1133,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                             type="button" 
                             variant="outline" 
                             onClick={() => setShowConfirmModal(false)} 
-                            className="border-zinc-200 bg-white text-zinc-700 rounded-lg"
+                            className="border-slate-200 bg-white text-slate-700 rounded-lg"
                           >
                             Cancel
                           </Button>
@@ -1147,22 +1147,22 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           </Card>
 
           {/* Compliance & Audit Information */}
-          <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+          <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden">
             <CardContent className="p-6 space-y-4">
-              <div className="flex items-center gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-3">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+              <div className="flex items-center gap-3 border-b border-slate-200/80 pb-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
                   <ShieldCheck className="h-4.5 w-4.5" />
                 </span>
-                <h2 className="text-xs font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+                <h2 className="text-xs font-black uppercase tracking-wider text-slate-900">
                   Compliance & Audit Verification
                 </h2>
               </div>
 
-              <div className="space-y-2.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              <div className="space-y-2.5 text-xs font-semibold text-slate-500">
                 <div className="flex justify-between"><span>Server Validation:</span> <span className="text-emerald-600 font-black">Active (UTC NTP Synced)</span></div>
-                <div className="flex justify-between"><span>Audit Log Event ID:</span> <span className="text-zinc-800 dark:text-zinc-200 font-mono">AUD-RA-{id}</span></div>
-                <div className="flex justify-between"><span>Extension Trigger:</span> <span className="text-zinc-800 dark:text-zinc-200">{auction.autoExtensionEnabled ? `Last ${auction.autoExtensionWindowMinutes || 0} min` : 'Disabled'}</span></div>
-                <div className="flex justify-between"><span>Extension By:</span> <span className="text-zinc-800 dark:text-zinc-200">{auction.autoExtensionEnabled ? `+${auction.autoExtensionByMinutes || 0} min` : 'Disabled'}</span></div>
+                <div className="flex justify-between"><span>Audit Log Event ID:</span> <span className="text-slate-800 font-mono">AUD-RA-{id}</span></div>
+                <div className="flex justify-between"><span>Extension Trigger:</span> <span className="text-slate-800">{auction.autoExtensionEnabled ? `Last ${auction.autoExtensionWindowMinutes || 0} min` : 'Disabled'}</span></div>
+                <div className="flex justify-between"><span>Extension By:</span> <span className="text-slate-800">{auction.autoExtensionEnabled ? `+${auction.autoExtensionByMinutes || 0} min` : 'Disabled'}</span></div>
               </div>
             </CardContent>
           </Card>
@@ -1170,17 +1170,17 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       </div>
 
       {/* Rules Summary Card */}
-      <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden">
+      <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden">
         <CardContent className="p-6 space-y-4">
-          <div className="flex items-center gap-3 border-b border-zinc-200/80 dark:border-zinc-800 pb-4">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
+          <div className="flex items-center gap-3 border-b border-slate-200/80 pb-4">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
               <Gavel className="h-4.5 w-4.5" />
             </span>
             <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-zinc-900 dark:text-zinc-100">
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-900">
                 Reverse Auction Rules & Parameters
               </h2>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-semibold mt-0.5">
+              <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
                 Verified commercial parameters and operational constraints governing this event.
               </p>
             </div>
@@ -1216,18 +1216,18 @@ function StatsCard({
   color: 'emerald' | 'amber' | 'blue' | 'cyan' | 'violet' 
 }) {
   const colorMap = {
-    emerald: 'text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200/60 dark:border-emerald-800/60',
-    amber: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200/60 dark:border-amber-800/60',
-    blue: 'text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border-blue-200/60 dark:border-blue-800/60',
-    cyan: 'text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200/60 dark:border-cyan-800/60',
-    violet: 'text-violet-700 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40 border-violet-200/60 dark:border-violet-800/60',
+    emerald: 'text-emerald-700 bg-emerald-50 border-emerald-200/60',
+    amber: 'text-amber-700 bg-amber-50 border-amber-200/60',
+    blue: 'text-blue-700 bg-blue-50 border-blue-200/60',
+    cyan: 'text-cyan-700 bg-cyan-50 border-cyan-200/60',
+    violet: 'text-violet-700 bg-violet-50 border-violet-200/60',
   };
 
   return (
-    <Card className="border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm rounded-2xl overflow-hidden transition hover:border-zinc-300 dark:hover:border-zinc-700 duration-200">
+    <Card className="border-slate-200/80 bg-white shadow-sm rounded-2xl overflow-hidden transition hover:border-slate-300 duration-200">
       <CardContent className="p-5 flex flex-col justify-between h-full space-y-2">
         <div className="flex justify-between items-start gap-2">
-          <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
           <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border shadow-2xs", colorMap[color])}>
             <Icon className="h-4 w-4" />
           </span>
@@ -1237,7 +1237,7 @@ function StatsCard({
             {value}
           </p>
           {subtitle && (
-            <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 mt-1 truncate" title={subtitle}>
+            <p className="text-[11px] font-medium text-slate-500 mt-1 truncate" title={subtitle}>
               {subtitle}
             </p>
           )}
@@ -1249,9 +1249,9 @@ function StatsCard({
 
 function BidSpec({ label, value, color }: { label: string; value: string; color?: 'red' }) {
   return (
-    <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-3">
-      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
-      <p className={cn("mt-1 text-xs font-mono font-extrabold", color === 'red' ? 'text-red-600 dark:text-red-400' : 'text-zinc-800 dark:text-zinc-200')}>
+    <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3">
+      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className={cn("mt-1 text-xs font-mono font-extrabold", color === 'red' ? 'text-red-600' : 'text-slate-800')}>
         {value}
       </p>
     </div>
@@ -1260,9 +1260,9 @@ function BidSpec({ label, value, color }: { label: string; value: string; color?
 
 function RuleItem({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
-    <div className={cn("rounded-xl border border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/80 dark:bg-zinc-800/50 p-3.5", className)}>
-      <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{label}</p>
-      <p className="mt-1.5 text-xs font-bold text-zinc-800 dark:text-zinc-200 leading-normal">{value}</p>
+    <div className={cn("rounded-xl border border-slate-200/80 bg-slate-50/80 p-3.5", className)}>
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+      <p className="mt-1.5 text-xs font-bold text-slate-800 leading-normal">{value}</p>
     </div>
   );
 }
@@ -1272,28 +1272,28 @@ function CustomChartTooltip({ active, payload }: any) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (
-      <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 p-3.5 shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
-        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
-          <span className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Bid #{data.index}</span>
+      <div className="rounded-xl border border-slate-200 bg-white/95 p-3.5 shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Bid #{data.index}</span>
           <span className={cn(
             "px-1.5 py-0.5 rounded text-[9px] font-extrabold",
-            data.rank === 1 ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-zinc-100 text-zinc-700"
+            data.rank === 1 ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-slate-100 text-slate-700"
           )}>
             {data.rank === 1 ? '🥇 L1' : data.rank ? `L${data.rank}` : 'Valid'}
           </span>
         </div>
-        <div className="text-base font-black font-mono text-zinc-900 dark:text-zinc-100">
+        <div className="text-base font-black font-mono text-slate-900">
           {formatCurrency(data.amount)}
         </div>
         <div className="flex items-center justify-between text-[11px] pt-1">
-          <span className="text-zinc-500 dark:text-zinc-400">Bidder:</span>
-          <span className={cn("font-bold", data.isMyBid ? "text-blue-600 dark:text-blue-400 font-extrabold" : "text-zinc-700 dark:text-zinc-300")}>
+          <span className="text-slate-500">Bidder:</span>
+          <span className={cn("font-bold", data.isMyBid ? "text-blue-600 font-extrabold" : "text-slate-700")}>
             {data.isMyBid ? 'You (Your Organization)' : data.label}
           </span>
         </div>
-        <div className="flex items-center justify-between text-[10px] text-zinc-400 dark:text-zinc-500 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
           <span>Time</span>
-          <span className="font-semibold text-zinc-600 dark:text-zinc-300">{data.fullTime || data.time}</span>
+          <span className="font-semibold text-slate-600">{data.fullTime || data.time}</span>
         </div>
       </div>
     );

@@ -457,6 +457,28 @@ export function TechnicalEvaluationModal({
 
   const docs: any[] = rawDocs.filter((d: any) => Boolean(d));
 
+  // Two-packet seal: Filter out financial quotes / detailed price breakups during Stage 1
+  const filteredDocs: any[] = docs.filter((doc: any) => {
+    if (isSinglePacket || isFinancialStageOpened || isStage2Active) {
+      return true;
+    }
+    const category = String(doc.documentCategory || doc.category || doc.type || "").toUpperCase();
+    const name = String(doc.documentName || doc.name || doc.fileName || "").toLowerCase();
+    const isFinancialDoc =
+      category === "FINANCIAL_QUOTE" ||
+      category === "COMMERCIAL_BID" ||
+      category === "PRICE_SCHEDULE" ||
+      category === "FINANCIAL" ||
+      name.includes("price breakup") ||
+      name.includes("price schedule") ||
+      name.includes("commercial") ||
+      name.includes("financial quote") ||
+      name.includes("detailed price") ||
+      name.includes("boc") ||
+      name.includes("cost schedule");
+    return !isFinancialDoc;
+  });
+
   const handleViewAttachment = async (doc: any, docName: string) => {
     const rawUrl =
       doc.url || doc.fileUrl || doc.signedUrl || doc.documentUrl || "";
@@ -1097,21 +1119,29 @@ export function TechnicalEvaluationModal({
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                   <FileText className="h-4 w-4 text-blue-600" />
                   Technical Documents &amp; Compliance Attachments (
-                  {docs.length})
+                  {filteredDocs.length})
                 </label>
-                <span className="text-[11px] text-slate-400">
-                  Review attached sheets before deciding
-                </span>
+                <div className="flex items-center gap-2">
+                  {docs.length > filteredDocs.length && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                      <Lock className="h-2.5 w-2.5" />
+                      Stage 2 Price Breakup Sealed
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400">
+                    Review attached sheets before deciding
+                  </span>
+                </div>
               </div>
 
-              {docs.length === 0 ? (
+              {filteredDocs.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3.5 text-center text-xs text-slate-400 font-medium">
-                  No separate document files uploaded by supplier. Review
+                  No separate technical document files uploaded by supplier. Review
                   specifications on file.
                 </div>
               ) : (
-                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${docs.length > 6 ? "max-h-48 overflow-y-auto pr-1" : ""}`}>
-                  {docs.map((doc: any, idx: number) => {
+                <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${filteredDocs.length > 6 ? "max-h-48 overflow-y-auto pr-1" : ""}`}>
+                  {filteredDocs.map((doc: any, idx: number) => {
                     const docName =
                       doc.documentName ||
                       doc.name ||

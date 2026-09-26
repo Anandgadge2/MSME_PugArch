@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target
+  ShieldCheck, AlertCircle, Target, Lock
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -690,6 +690,7 @@ export default function BidResultsPage() {
       setBid(data);
       const normalizedResults = (data.results || []).map((r: any, idx: number) => {
         const rawTech = String(
+          r.rawParticipation?.technicalStatus ||
           r.technicalStatus ||
           r.status ||
           r.submissionStatus ||
@@ -713,7 +714,7 @@ export default function BidResultsPage() {
 
         return {
           ...r,
-          technicalStatus: r.technicalStatus === 'Qualified' || r.technicalStatus === 'Disqualified' ? r.technicalStatus : techStatus,
+          technicalStatus: techStatus,
           resultStatus: isItemAwarded
             ? 'Awarded'
             : (r.resultStatus && r.resultStatus !== 'Awarded'
@@ -878,7 +879,14 @@ export default function BidResultsPage() {
       headerClassName: 'text-right',
       cell: (row) => (
         <span className="font-black text-slate-900 text-xs">
-          {row.totalPrice ? money(row.totalPrice) : 'Pending'}
+          {row.totalPrice != null && Number(row.totalPrice) > 0 ? (
+            money(row.totalPrice)
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+              <Lock className="h-2.5 w-2.5" />
+              Sealed (Stage 2)
+            </span>
+          )}
         </span>
       )
     },
@@ -1333,6 +1341,101 @@ export default function BidResultsPage() {
                 className="w-full sm:w-auto inline-flex h-10 items-center justify-center rounded-xl bg-[#0b2447] hover:bg-[#12335f] px-6 text-xs font-black text-white transition shadow-sm"
               >
                 Return to Procurement Overview
+              </Link>
+            </div>
+          </div>
+        </main>
+      </PageShell>
+    );
+  }
+
+  const finOpeningRaw =
+    (bid as any).financialOpeningDate ||
+    (bid as any).schedule?.financialOpeningDate ||
+    (bid as any).technicalPacket?.schedule?.financialOpeningDate ||
+    (bid as any).technicalPacket?.financialOpeningDate ||
+    (bid as any).payload?.dates?.financialOpeningDate ||
+    (bid as any).payload?.schedule?.financialOpeningDate;
+
+  const isFinancialOpeningPending = (() => {
+    if (!isTwoPacketMode) return false;
+    const rawStatus = String(bid?.status || '').toUpperCase();
+    if (['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED'].includes(rawStatus)) {
+      return false;
+    }
+    if (finOpeningRaw) {
+      const d = new Date(finOpeningRaw);
+      if (!isNaN(d.getTime())) {
+        return d.getTime() > Date.now();
+      }
+    }
+    return false;
+  })();
+
+  if (isFinancialOpeningPending) {
+    const formattedFinDate = finOpeningRaw
+      ? formatDateTime(finOpeningRaw)
+      : 'the scheduled financial opening time';
+    const totalResponses = ranking.length;
+    const qualifiedCount = techEvaluationStats.qualified;
+
+    return (
+      <PageShell>
+        <main className="mx-auto w-full max-w-4xl px-4 py-10 space-y-6">
+          <ProcurementHero
+            title="Stage 2 Financial Opening"
+            subtitle={`${bid.id} • ${bid.title || 'Procurement'}`}
+            action={
+              <Link
+                href={`/bids/${bid.id}`}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50 transition shadow-2xs"
+              >
+                Back to Bid Details
+              </Link>
+            }
+          />
+
+          <div className="rounded-3xl border border-amber-200 bg-gradient-to-b from-amber-50/70 via-white to-white p-6 sm:p-10 text-center shadow-sm space-y-6">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-600 text-white shadow-lg shadow-amber-600/25">
+              <Lock className="h-8 w-8" />
+            </div>
+
+            <div className="max-w-xl mx-auto space-y-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-200 px-3 py-1 text-xs font-black text-amber-800">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                Financial Packets Sealed
+              </span>
+              <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                Stage 2 Commercial Opening Pending
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                Under two-packet procurement governance, financial quotes and price rankings remain strictly sealed and encrypted until the scheduled financial opening date and time.
+              </p>
+            </div>
+
+            <div className="mx-auto max-w-lg grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-1">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase">Financial Opening Time</span>
+                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-amber-600" />
+                  {formattedFinDate}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs space-y-1">
+                <span className="text-[10.5px] font-bold text-slate-400 uppercase">Technical Scrutiny Status</span>
+                <p className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  {qualifiedCount} Qualified / {totalResponses} Submissions
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link
+                href={`/bids/${bid.id}`}
+                className="w-full sm:w-auto inline-flex h-10 items-center justify-center rounded-xl bg-[#0b2447] hover:bg-[#12335f] px-6 text-xs font-black text-white transition shadow-sm"
+              >
+                Return to Proposals & Evaluation
               </Link>
             </div>
           </div>
