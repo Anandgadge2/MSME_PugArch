@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Plus,
   Save,
+  Pencil,
   History,
   Loader2,
   X,
@@ -240,6 +241,8 @@ type RateContractConfig = {
   contractDocument: {
     fileAssetId: number | null;
     fileName: string;
+    fileSize?: number | null;
+    uploadedAt?: string | null;
   };
 };
 
@@ -295,6 +298,9 @@ type Draft = {
     milestones: Array<{ id: string; label: string; percentage: string; trigger: string }>;
     penaltyClause: string;
     location: string;
+    sowFileAssetId?: number | null;
+    sowFileName?: string;
+    sowFileUrl?: string;
   };
   boqTable: BOQRow[];
   boqFileAssetId: number | null;
@@ -757,6 +763,8 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   contractDocument: {
     fileAssetId: null,
     fileName: '',
+    fileSize: null,
+    uploadedAt: null,
   },
 });
 
@@ -898,7 +906,9 @@ const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ valu
   ],
   RFP: [
     { value: 'Service', label: 'Service Contract' },
-    { value: 'Works', label: 'Works Contract' }
+    { value: 'Product', label: 'Product / Custom Goods' },
+    { value: 'Works', label: 'Works Contract' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
   ],
   OPEN_TENDER: [
     { value: 'Product', label: 'Product / Goods' },
@@ -1029,6 +1039,9 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     milestones: [],
     penaltyClause: '',
     location: '',
+    sowFileAssetId: null,
+    sowFileName: '',
+    sowFileUrl: '',
   },
   boqTable: [],
   boqFileAssetId: null,
@@ -1517,9 +1530,20 @@ export default function CreateProcurementPage() {
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (d.basics.whatAreYouBuying === 'Service') {
       const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
+      const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
       list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
-      list.push({ label: 'Service Contract SOW is required (min 10 chars)', ok: d.serviceDetails.scopeOfWork.trim().length >= 10, severity: 'error', stepIdx: 3 });
-      list.push({ label: 'Service Deliverables list is required (min 5 chars)', ok: d.serviceDetails.deliverables.trim().length >= 5, severity: 'error', stepIdx: 3 });
+      list.push({
+        label: hasSowDoc ? 'Service Scope of Work (SOW Document Attached)' : 'Service Contract SOW is required (min 10 chars or upload SOW document)',
+        ok: hasSowDoc || d.serviceDetails.scopeOfWork.trim().length >= 10,
+        severity: 'error',
+        stepIdx: 3
+      });
+      list.push({
+        label: hasSowDoc ? 'Key Deliverables & Milestones (Covered in SOW Document)' : 'Service Deliverables list is required (min 3 chars or upload SOW document)',
+        ok: hasSowDoc || d.serviceDetails.deliverables.trim().length >= 3,
+        severity: 'error',
+        stepIdx: 3
+      });
       list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
       list.push({ label: 'Add at least one service line with quantity > 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else {
@@ -1647,8 +1671,9 @@ export default function CreateProcurementPage() {
       } else if (d.basics.whatAreYouBuying === 'Service') {
         const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
         if (!title) return false;
-        if (d.serviceDetails.scopeOfWork.trim().length < 10) return false;
-        if (d.serviceDetails.deliverables.trim().length < 5) return false;
+        const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
+        if (!hasSowDoc && d.serviceDetails.scopeOfWork.trim().length < 10) return false;
+        if (!hasSowDoc && d.serviceDetails.deliverables.trim().length < 3) return false;
         if (!d.serviceDetails.duration.trim()) return false;
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) return false;
@@ -1849,12 +1874,13 @@ export default function CreateProcurementPage() {
         if (!d.serviceDetails.serviceTitle?.trim()) {
           d.serviceDetails.serviceTitle = effectiveTitle;
         }
-        if (d.serviceDetails.scopeOfWork.trim().length < 10) {
-          toast.error('Scope of Work is required (min 10 chars).');
+        const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
+        if (!hasSowDoc && d.serviceDetails.scopeOfWork.trim().length < 10) {
+          toast.error('Scope of Work is required (min 10 chars) or upload an SOW document.');
           return false;
         }
-        if (d.serviceDetails.deliverables.trim().length < 5) {
-          toast.error('Service deliverables list is required.');
+        if (!hasSowDoc && d.serviceDetails.deliverables.trim().length < 3) {
+          toast.error('Service deliverables list is required or upload an SOW document.');
           return false;
         }
         if (!d.serviceDetails.duration.trim()) {
@@ -4929,6 +4955,56 @@ function ItemsDetailsForm({
     }
   }, [whatBuying, draft.basics.title, draft.serviceDetails.serviceTitle]);
 
+  const [uploadingSow, setUploadingSow] = useState(false);
+
+  const handleSOWUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingSow(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'procurement_draft');
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData;
+      const fileId = Number(resData.fileId || asset.id || 0);
+
+      updateDraft(c => ({
+        ...c,
+        serviceDetails: {
+          ...c.serviceDetails,
+          sowFileAssetId: fileId,
+          sowFileName: asset.originalName || file.name,
+          sowFileUrl: asset.url || `/api/files/${fileId}/view`,
+        }
+      }));
+      toast.success(`Scope of Work (SOW) document "${file.name}" uploaded successfully`);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to upload SOW document');
+    } finally {
+      setUploadingSow(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveSOW = () => {
+    updateDraft(c => ({
+      ...c,
+      serviceDetails: {
+        ...c.serviceDetails,
+        sowFileAssetId: null,
+        sowFileName: '',
+        sowFileUrl: '',
+      }
+    }));
+    toast.info('SOW document removed');
+  };
+
   const handleBOQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -5074,10 +5150,10 @@ function ItemsDetailsForm({
     {
       key: 'type',
       header: 'Type',
-      width: 'w-[7%]',
+      width: 'w-[7%] min-w-[85px]',
       cell: (item: any) => (
         <span className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
+          "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider whitespace-nowrap shadow-3xs",
           item.itemType === 'Service'
             ? "border border-purple-200 bg-purple-50 text-purple-700"
             : "border border-blue-200 bg-blue-50 text-blue-700"
@@ -5089,22 +5165,22 @@ function ItemsDetailsForm({
     {
       key: 'name',
       header: 'Item / Service Name',
-      width: 'w-[18%]',
+      width: 'w-[16%] min-w-[170px]',
       cell: (item: any) => (
-        <div className="font-black text-slate-900 text-xs  max-w-full" title={item.name}>
-          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+        <div className="font-bold text-slate-900 text-xs leading-snug break-words line-clamp-2 max-w-full" title={item.name}>
+          {item.name || <span className="text-rose-500 italic font-normal">Unnamed Item</span>}
         </div>
       )
     },
     {
       key: 'specifications',
       header: 'Specifications / Scope',
-      width: 'w-[18%]',
+      width: 'w-[15%] min-w-[160px]',
       cellClassName: 'text-slate-600 font-medium',
       cell: (item: any) => {
         const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
         return (
-          <span className="line-clamp-2 text-xs" title={descText || undefined}>
+          <span className="line-clamp-2 text-xs leading-relaxed text-slate-600 break-words" title={descText || undefined}>
             {descText ? descText : <span className="text-slate-400 italic">No description</span>}
           </span>
         );
@@ -5113,27 +5189,27 @@ function ItemsDetailsForm({
     {
       key: 'quantity',
       header: 'Qty & UOM',
-      width: 'w-[9%]',
+      width: 'w-[7%] min-w-[85px]',
       align: 'center',
       cell: (item: any) => (
-        <div className="truncate">
-          <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
-          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
+        <div className="whitespace-nowrap text-center">
+          <span className="font-extrabold text-slate-900 text-xs">{item.quantity}</span>{' '}
+          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit || 'NOS'}</span>
         </div>
       )
     },
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-[10%]',
+      width: 'w-[10%] min-w-[110px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
       cell: (item: any) => {
         const rate = Number(item.unitPrice || 0);
         const gst = Number(item.gst ?? 18);
         return rate > 0 ? (
-          <div className="text-right">
-            <div className="font-extrabold text-slate-900">₹{rate.toLocaleString('en-IN')}</div>
+          <div className="text-right whitespace-nowrap">
+            <div className="font-extrabold text-slate-900 text-xs">₹{rate.toLocaleString('en-IN')}</div>
             <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
           </div>
         ) : (
@@ -5144,7 +5220,7 @@ function ItemsDetailsForm({
     {
       key: 'total',
       header: 'Line Total (Incl. GST)',
-      width: 'w-[11%]',
+      width: 'w-[11%] min-w-[125px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
       cell: (item: any) => {
@@ -5154,8 +5230,8 @@ function ItemsDetailsForm({
         const base = qty * rate;
         const total = base * (1 + gst / 100);
         return total > 0 ? (
-          <div className="text-right">
-            <div className="font-black text-[#12335f]">₹{Math.round(total).toLocaleString('en-IN')}</div>
+          <div className="text-right whitespace-nowrap">
+            <div className="font-black text-[#12335f] text-xs">₹{Math.round(total).toLocaleString('en-IN')}</div>
             <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
           </div>
         ) : (
@@ -5166,21 +5242,21 @@ function ItemsDetailsForm({
     {
       key: 'hsn',
       header: 'HSN / SAC',
-      width: 'w-[7%]',
+      width: 'w-[6%] min-w-[80px]',
       align: 'center',
-      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
       cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
     },
     {
       key: 'brand',
       header: 'Brand & Policy',
-      width: 'w-[11%]',
+      width: 'w-[9%] min-w-[105px]',
       cell: (item: any) => (
         <div className="min-w-0">
           <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
             {item.brand_preference || 'Any Brand'}
           </div>
-          <div className="mt-0.5">
+          <div className="mt-0.5 whitespace-nowrap">
             {item.brand_flexible === 'No' ? (
               <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
                 Lock
@@ -5197,21 +5273,22 @@ function ItemsDetailsForm({
     {
       key: 'documents',
       header: 'Documents & Specs',
-      width: 'w-[11%]',
+      width: 'w-[12%] min-w-[130px]',
       cell: (item: any) => {
         const attachmentsList = item.attachments || [];
         const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
         const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
 
         return hasDocs ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
               title="Click to view all uploaded documents"
+              aria-label={`View ${docCount} documents for ${item.name || 'item'}`}
             >
-              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
+              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
               <span>
                 {docCount} file{docCount === 1 ? '' : 's'}
               </span>
@@ -5221,18 +5298,20 @@ function ItemsDetailsForm({
               onClick={() => setQuickDocItem(item)}
               className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
               title="Add more documents"
+              aria-label={`Add more documents for ${item.name || 'item'}`}
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-3 w-3" aria-hidden="true" />
             </button>
           </div>
         ) : (
           <button
             type="button"
             onClick={() => setQuickDocItem(item)}
-            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
             title="Attach specification or drawing"
+            aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
           >
-            <FilePlus className="h-3 w-3 text-slate-400" />
+            <FilePlus className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
             <span>+ Attach Doc</span>
           </button>
         );
@@ -5241,36 +5320,40 @@ function ItemsDetailsForm({
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-[10%]',
+      width: 'w-[10%] min-w-[115px]',
       align: 'right',
       cell: (item: any) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap shrink-0">
           <button
             type="button"
             onClick={() => {
               setSelectedItemForEdit(item);
               setShowItemDrawer(true);
             }}
-            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
+            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
             title="Edit specifications"
+            aria-label={`Edit ${item.name || 'line item'}`}
           >
-            Edit
+            <Pencil className="h-3 w-3" aria-hidden="true" />
+            <span>Edit</span>
           </button>
           <button
             type="button"
             onClick={() => handleDuplicateItem(item)}
             className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Duplicate line item"
+            aria-label={`Duplicate ${item.name || 'line item'}`}
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
           <button
             type="button"
             onClick={() => handleRemoveItem(item.id)}
             className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
             title="Delete line item"
+            aria-label={`Delete ${item.name || 'line item'}`}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         </div>
       )
@@ -5360,96 +5443,277 @@ function ItemsDetailsForm({
   }
 
   // Service Details Panel (when Service is selected)
+  const hasSowDoc = Boolean(draft.serviceDetails.sowFileAssetId || draft.serviceDetails.sowFileName);
+
   const serviceDetailsPanel = whatBuying === 'Service' ? (
-    <div className="space-y-4 rounded-2xl p-3 sm:p-5 border border-purple-200/80 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full">
-      <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+    <div className="space-y-4 rounded-2xl p-3.5 sm:p-5 border border-purple-200/90 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full shadow-3xs">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-purple-100 pb-3 gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8.5 w-8.5 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
-            <Wrench className="h-4 w-4" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-700 shadow-3xs">
+            <Wrench className="h-4.5 w-4.5" aria-hidden="true" />
           </div>
           <div>
-            <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms</h4>
-            <p className="text-[10px] text-purple-700 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms & SOW</h4>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                Enterprise Sourcing Standard
+              </span>
+            </div>
+            <p className="text-[11px] text-purple-700/90 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
           </div>
         </div>
       </div>
 
+      {/* SOW Document Upload Bar (SAP Ariba / GeM fast-track pattern) */}
+      <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="space-y-0.5 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                Scope of Work (SOW) / RFP Dossier Document
+              </span>
+              <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                Fast-Track SOW
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">
+              Have a pre-drafted RFP dossier or SOW specification? Upload your document (PDF, Word, Excel) to satisfy scope requirements without retyping.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <input
+              type="file"
+              id="sow-document-upload"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+              onChange={handleSOWUpload}
+              className="sr-only"
+              disabled={uploadingSow}
+              aria-label="Upload Scope of Work Document"
+            />
+            <label
+              htmlFor="sow-document-upload"
+              className={cn(
+                "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-xs font-bold text-purple-900 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-purple-400",
+                uploadingSow && "opacity-50 pointer-events-none"
+              )}
+            >
+              {uploadingSow ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5 text-purple-600" aria-hidden="true" />
+                  <span>Uploading SOW...</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4 mr-1.5 text-purple-600" aria-hidden="true" />
+                  <span>{draft.serviceDetails.sowFileName ? 'Replace SOW File' : 'Upload SOW Document'}</span>
+                </>
+              )}
+            </label>
+          </div>
+        </div>
+
+        {draft.serviceDetails.sowFileName && (
+          <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl animate-fadeIn">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
+            <span className="truncate">Attached SOW: <strong>{draft.serviceDetails.sowFileName}</strong></span>
+            <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold shrink-0">Scope Satisfied</span>
+            {draft.serviceDetails.sowFileAssetId && (
+              <button
+                type="button"
+                onClick={() => handlePreviewDoc({ fileAssetId: draft.serviceDetails.sowFileAssetId, fileName: draft.serviceDetails.sowFileName }, 'Scope of Work')}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:underline ml-2 shrink-0 cursor-pointer"
+                title="Preview uploaded SOW file"
+              >
+                <Eye className="h-3.5 w-3.5" aria-hidden="true" /> Preview
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleRemoveSOW}
+              className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0 cursor-pointer"
+              aria-label="Remove SOW Document"
+            >
+              Remove
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
         <Field label="Service Contract Title" required className="sm:col-span-2">
-          <input
-            value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
-            onChange={e => updateService('serviceTitle', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
-          />
+          <div className="space-y-1">
+            <input
+              value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
+              onChange={e => updateService('serviceTitle', e.target.value)}
+              className={inputClass}
+              placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
+            />
+            <p className="text-[10px] text-slate-400 font-medium">Defaults to procurement title. Customize if needed.</p>
+          </div>
         </Field>
 
-        <Field label="Scope of Work (SOW)" required className="sm:col-span-2">
-          <textarea
-            value={draft.serviceDetails.scopeOfWork}
-            onChange={e => updateService('scopeOfWork', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Detailed description of the service scope, technical responsibilities, and coverage..."
-          />
+        <Field
+          label={hasSowDoc ? "Scope of Work (SOW) Executive Summary" : "Scope of Work (SOW)"}
+          required={!hasSowDoc}
+          className="sm:col-span-2"
+        >
+          <div className="space-y-1">
+            <textarea
+              value={draft.serviceDetails.scopeOfWork}
+              onChange={e => updateService('scopeOfWork', e.target.value)}
+              rows={3}
+              className={textareaClass}
+              placeholder={hasSowDoc ? "Optional brief executive summary (full scope is governed by your attached SOW document)..." : "Detailed description of the service scope, technical responsibilities, and coverage..."}
+            />
+            <p className="text-[10px] text-slate-500 font-medium">
+              {hasSowDoc
+                ? "Full SOW document is attached above. You may leave this blank or provide an executive summary."
+                : "Describe technical responsibilities and operational boundaries (min 10 characters, or upload SOW document above)."}
+            </p>
+          </div>
         </Field>
 
-        <Field label="Key Deliverables & Milestones" required>
-          <textarea
-            value={draft.serviceDetails.deliverables}
-            onChange={e => updateService('deliverables', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="e.g. Monthly uptime reports, quarterly preventive maintenance, SLA log..."
-          />
+        <Field label="Key Deliverables & Milestones" required={!hasSowDoc}>
+          <div className="space-y-1.5">
+            <textarea
+              value={draft.serviceDetails.deliverables}
+              onChange={e => updateService('deliverables', e.target.value)}
+              rows={3}
+              className={textareaClass}
+              placeholder={hasSowDoc ? "e.g. Monthly uptime reports, SLA review (or see attached SOW)..." : "e.g. Monthly uptime reports, quarterly preventive maintenance, SLA log..."}
+            />
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+              {[
+                'Phase-wise milestones & sign-off',
+                'Monthly SLA & uptime reports',
+                'Final acceptance & warranty support'
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => {
+                    const cur = draft.serviceDetails.deliverables.trim();
+                    updateService('deliverables', cur ? `${cur}\n• ${preset}` : `• ${preset}`);
+                  }}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                >
+                  + {preset}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
 
         <Field label="Exclusions / Boundaries">
-          <textarea
-            value={draft.serviceDetails.exclusions}
-            onChange={e => updateService('exclusions', e.target.value)}
-            rows={3}
-            className={textareaClass}
-            placeholder="Consumables or equipment outside service contract scope..."
-          />
+          <div className="space-y-1.5">
+            <textarea
+              value={draft.serviceDetails.exclusions}
+              onChange={e => updateService('exclusions', e.target.value)}
+              rows={3}
+              className={textareaClass}
+              placeholder="Consumables or equipment outside service contract scope..."
+            />
+            <p className="text-[10px] text-slate-400 font-medium">Specify activities and materials strictly excluded from vendor scope.</p>
+          </div>
         </Field>
 
         <Field label="SLA Response & Resolution Time">
-          <input
-            value={draft.serviceDetails.slaResponseTime}
-            onChange={e => updateService('slaResponseTime', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 2 hrs response, 8 hrs resolution"
-          />
+          <div className="space-y-1.5">
+            <input
+              value={draft.serviceDetails.slaResponseTime}
+              onChange={e => updateService('slaResponseTime', e.target.value)}
+              className={inputClass}
+              placeholder="e.g. 2 hrs response, 8 hrs resolution"
+            />
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+              {[
+                '2 hrs Response / 8 hrs Resolution',
+                '4 hrs Response / 24 hrs Resolution',
+                'Next Business Day (NBD)'
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => updateService('slaResponseTime', preset)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
 
         <Field label="Contract Duration" required>
-          <input
-            value={draft.serviceDetails.duration}
-            onChange={e => updateService('duration', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 1 Year (12 Months), 6 Months"
-          />
+          <div className="space-y-1.5">
+            <input
+              value={draft.serviceDetails.duration}
+              onChange={e => updateService('duration', e.target.value)}
+              className={inputClass}
+              placeholder="e.g. 1 Year (12 Months), 6 Months"
+            />
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+              {['6 Months', '1 Year (12 Months)', '2 Years (24 Months)', '3 Years (36 Months)'].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => updateService('duration', preset)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
 
-        <Field label="Required Manpower Count">
-          <input
-            type="number"
-            min={0}
-            value={draft.serviceDetails.manpowerRequired}
-            onChange={e => updateService('manpowerRequired', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 3"
-          />
+        <Field label="On-site Manpower / Team Size (Optional)">
+          <div className="space-y-1">
+            <input
+              type="number"
+              min={0}
+              value={draft.serviceDetails.manpowerRequired}
+              onChange={e => updateService('manpowerRequired', e.target.value)}
+              className={inputClass}
+              placeholder="e.g. 0 (leave 0 if deliverable-based)"
+            />
+            <p className="text-[10px] text-slate-500 font-medium">
+              Only for dedicated on-site personnel or staffing. Outcome-based and AMC services can leave this as 0.
+            </p>
+          </div>
         </Field>
 
         <Field label="Late Delivery / Downtime Penalty Terms">
-          <input
-            value={draft.serviceDetails.penaltyClause}
-            onChange={e => updateService('penaltyClause', e.target.value)}
-            className={inputClass}
-            placeholder="e.g. 0.5% per week of delay up to max 10%"
-          />
+          <div className="space-y-1.5">
+            <input
+              value={draft.serviceDetails.penaltyClause}
+              onChange={e => updateService('penaltyClause', e.target.value)}
+              className={inputClass}
+              placeholder="e.g. 0.5% per week of delay up to max 10%"
+            />
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+              {[
+                '0.5% per week delay (max 10%)',
+                '1% per day SLA downtime penalty',
+                'Standard LD per GCC / PO'
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => updateService('penaltyClause', preset)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
       </div>
     </div>
@@ -5567,8 +5831,8 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth="w-full min-w-0"
-        scrollWrapperClassName="overflow-x-hidden"
+        minWidth="min-w-[1180px]"
+        scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
@@ -6193,6 +6457,9 @@ function ScheduleStepForm({
   };
 
   const [uploadingRateContractDoc, setUploadingRateContractDoc] = useState(false);
+  const [isDragOverRateContractDoc, setIsDragOverRateContractDoc] = useState(false);
+  const rateContractFileInputRef = useRef<HTMLInputElement>(null);
+  const rateContractReplaceInputRef = useRef<HTMLInputElement>(null);
 
   const handleRateContractDocUpload = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
@@ -6224,12 +6491,20 @@ function ScheduleStepForm({
       updateRateContract('contractDocument', {
         fileAssetId: fileId || null,
         fileName: asset.originalName || asset.fileName || file.name,
+        fileSize: asset.size || file.size,
+        uploadedAt: asset.createdAt || new Date().toISOString(),
       });
       toast.success('Rate contract document uploaded successfully');
     } catch (err: any) {
       toast.error(err.message || 'Failed to upload document');
     } finally {
       setUploadingRateContractDoc(false);
+      if (rateContractFileInputRef.current) {
+        rateContractFileInputRef.current.value = '';
+      }
+      if (rateContractReplaceInputRef.current) {
+        rateContractReplaceInputRef.current.value = '';
+      }
     }
   };
 
@@ -6237,7 +6512,15 @@ function ScheduleStepForm({
     updateRateContract('contractDocument', {
       fileAssetId: null,
       fileName: '',
+      fileSize: null,
+      uploadedAt: null,
     });
+    if (rateContractFileInputRef.current) {
+      rateContractFileInputRef.current.value = '';
+    }
+    if (rateContractReplaceInputRef.current) {
+      rateContractReplaceInputRef.current.value = '';
+    }
     toast.success('Rate contract document removed');
   };
 
@@ -6648,12 +6931,24 @@ function ScheduleStepForm({
                     <FileText className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 truncate" title={draft.rateContractConfig.contractDocument.fileName}>
-                      {draft.rateContractConfig.contractDocument.fileName}
-                    </p>
-                    <p className="text-[10px] font-semibold text-slate-500">
-                      Rate Contract Reference Document
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-bold text-slate-900 truncate max-w-[280px] sm:max-w-md" title={draft.rateContractConfig.contractDocument.fileName}>
+                        {draft.rateContractConfig.contractDocument.fileName}
+                      </p>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-700 shrink-0">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        Uploaded
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] font-semibold text-slate-500">
+                      <span>Rate Contract Reference Document</span>
+                      {draft.rateContractConfig.contractDocument.fileSize ? (
+                        <>
+                          <span>•</span>
+                          <span>{formatFileSize(draft.rateContractConfig.contractDocument.fileSize)}</span>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -6687,22 +6982,29 @@ function ScheduleStepForm({
                       </a>
                     </>
                   )}
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                      className="hidden"
-                      onChange={e => {
-                        const file = e.target.files?.[0];
-                        if (file) handleRateContractDocUpload(file);
-                      }}
-                      disabled={uploadingRateContractDoc}
-                    />
-                    <span className="inline-flex h-8 items-center px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200">
-                      {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                      Replace
-                    </span>
-                  </label>
+                  <input
+                    ref={rateContractReplaceInputRef}
+                    id="rate-contract-doc-replace-input"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleRateContractDocUpload(file);
+                    }}
+                    disabled={uploadingRateContractDoc}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => rateContractReplaceInputRef.current?.click()}
+                    disabled={uploadingRateContractDoc}
+                    className="h-8 px-2.5 text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200"
+                  >
+                    {uploadingRateContractDoc ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Replace
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -6717,33 +7019,60 @@ function ScheduleStepForm({
               </div>
             ) : (
               <div className="relative">
-                <label
+                <input
+                  ref={rateContractFileInputRef}
+                  id="rate-contract-doc-file-input"
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (file) handleRateContractDocUpload(file);
+                  }}
+                  disabled={uploadingRateContractDoc}
+                />
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload contract agreement and reference document"
+                  onClick={() => rateContractFileInputRef.current?.click()}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      rateContractFileInputRef.current?.click();
+                    }
+                  }}
                   onDragOver={e => {
                     e.preventDefault();
                     e.stopPropagation();
+                    setIsDragOverRateContractDoc(true);
+                  }}
+                  onDragLeave={e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDragOverRateContractDoc(false);
                   }}
                   onDrop={e => {
                     e.preventDefault();
                     e.stopPropagation();
+                    setIsDragOverRateContractDoc(false);
                     const file = e.dataTransfer.files?.[0];
                     if (file) handleRateContractDocUpload(file);
                   }}
                   className={cn(
-                    "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-250 bg-slate-50/60 p-5 text-center cursor-pointer transition-all duration-200 hover:border-[#0b2447] hover:bg-blue-50/20 group",
-                    uploadingRateContractDoc && "opacity-50 pointer-events-none"
+                    "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-5 text-center cursor-pointer transition-all duration-200 select-none group focus:outline-none focus:ring-2 focus:ring-[#0b2447] focus:ring-offset-2",
+                    isDragOverRateContractDoc
+                      ? "border-[#0b2447] bg-blue-50/80 ring-2 ring-[#0b2447]/20 scale-[0.99]"
+                      : "border-slate-300 bg-slate-50/60 hover:border-[#0b2447] hover:bg-blue-50/20",
+                    uploadingRateContractDoc && "opacity-60 pointer-events-none"
                   )}
                 >
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0];
-                      if (file) handleRateContractDocUpload(file);
-                    }}
-                    disabled={uploadingRateContractDoc}
-                  />
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:scale-110 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30 transition-all duration-200">
+                  <div className={cn(
+                    "flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 group-hover:scale-110",
+                    uploadingRateContractDoc
+                      ? "bg-blue-100 text-[#0b2447]"
+                      : "bg-white text-slate-500 shadow-sm ring-1 ring-slate-200 group-hover:text-[#0b2447] group-hover:ring-[#0b2447]/30"
+                  )}>
                     {uploadingRateContractDoc ? (
                       <Loader2 className="h-5 w-5 animate-spin text-[#0b2447]" />
                     ) : (
@@ -6752,13 +7081,19 @@ function ScheduleStepForm({
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-800">
-                      {uploadingRateContractDoc ? 'Uploading contract document...' : 'Click to browse or drag & drop contract document'}
+                      {uploadingRateContractDoc ? (
+                        <span className="text-[#0b2447]">Uploading contract document...</span>
+                      ) : (
+                        <>
+                          <span className="text-[#0b2447] underline underline-offset-2 font-bold hover:text-blue-900">Browse</span> or drag & drop contract document
+                        </>
+                      )}
                     </p>
                     <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
                       Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG (Max 10MB)
                     </p>
                   </div>
-                </label>
+                </div>
               </div>
             )}
           </div>
@@ -7717,6 +8052,16 @@ function PreviewPublishForm({
         docsCount={draft.requiredDocs.length}
       />
 
+      {draft.basics.whatAreYouBuying === 'Service' && draft.serviceDetails.sowFileName && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-purple-200 bg-purple-50/70 p-3 text-xs font-semibold text-purple-950">
+          <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+          <span>Attached Master SOW Document: <strong>{draft.serviceDetails.sowFileName}</strong></span>
+          <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
+            SOW Attached
+          </span>
+        </div>
+      )}
+
       <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-4">
         <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide border-b border-slate-100 pb-2">Readiness & Validation Summary</h4>
         
@@ -8021,7 +8366,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     bidStartDate: draft.schedule.submissionStartDate || new Date().toISOString(),
     bidClosingDate: draft.schedule.submissionDate || draft.basics.requiredByDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
     performanceSecurityAmount: draft.terms.securityDeposit || 0,
-    scopeOfWork: draft.serviceDetails.scopeOfWork || draft.basics.justification || '',
+    scopeOfWork: draft.serviceDetails.scopeOfWork || (draft.serviceDetails.sowFileName ? `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}` : '') || draft.basics.justification || '',
     deliveryLocation,
     deliveryAddress: deliveryLocation,
   };
@@ -8096,7 +8441,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractSubCategory: draft.rateContractConfig.contractSubCategory || '',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
-      fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, '')
+      fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, ''),
+      fileSize: draft.rateContractConfig.contractDocument.fileSize || null,
+      uploadedAt: draft.rateContractConfig.contractDocument.uploadedAt || null,
     } : null,
     selectedSuppliers: draft.rateContractConfig.selectedSuppliers.length
       ? draft.rateContractConfig.selectedSuppliers
@@ -8174,7 +8521,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     boqFileAssetId: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: draft.basics.whatAreYouBuying === 'Services'
+    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service'
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
