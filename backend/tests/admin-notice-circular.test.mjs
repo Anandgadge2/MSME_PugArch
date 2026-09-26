@@ -72,4 +72,12 @@ test('Admin Notice Circular & Mass Broadcast Suite', async (t) => {
     assert.match(modalCode, /\/api\/admin\/notices\/broadcast/, 'Must post to broadcast endpoint');
     assert.match(modalCode, /Show Live Pop-up & Email Preview/, 'Must include live preview mode');
   });
+
+  await t.test('7. Navbar.tsx provides header Broadcast Notice button and modal for both admin and master_admin roles', () => {
+    const navbarCode = readFrontend('src/components/layout/Navbar.tsx');
+    assert.match(navbarCode, /import AdminNoticeCircularModal from '\.\.\/\.\.\/features\/masterAdmin\/components\/AdminNoticeCircularModal'/, 'Navbar must import AdminNoticeCircularModal');
+    assert.match(navbarCode, /user\?\.role === 'admin' \|\| user\?\.role === 'master_admin'/, 'Navbar must verify admin or master_admin role');
+    assert.match(navbarCode, /Broadcast Notice/, 'Navbar must render Broadcast Notice header button');
+    assert.match(navbarCode, /<AdminNoticeCircularModal[\s\S]*?open=\{isNoticeModalOpen\}/, 'Navbar must mount AdminNoticeCircularModal in Header');
+  });
 });

@@ -57,8 +57,10 @@ import {
   Globe,
   RotateCcw,
   Layers,
+  Send,
   Trash2
 } from 'lucide-react';
+import AdminNoticeCircularModal from '../../features/masterAdmin/components/AdminNoticeCircularModal';
 import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
 import { isShgUser, getSellerPortalPath } from '../../lib/shg';
@@ -834,6 +836,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [activateConsent1, setActivateConsent1] = useState(false);
   const [activateConsent2, setActivateConsent2] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
 
   const handleProfileMouseEnter = () => {
     if (profileTimeoutRef.current) {
@@ -1180,6 +1183,16 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
+          {(user?.role === 'admin' || user?.role === 'master_admin') && (
+            <button
+              onClick={() => setIsNoticeModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 text-white hover:bg-blue-800 text-xs font-bold transition shadow-xs"
+              title="Broadcast Notice / Circular to Users"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Broadcast Notice</span>
+            </button>
+          )}
           <div className="relative" ref={notificationRef}>
             <button
               suppressHydrationWarning
@@ -1633,6 +1646,12 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           </div>
         </div>,
         document.body
+      )}
+      {(user?.role === 'admin' || user?.role === 'master_admin') && (
+        <AdminNoticeCircularModal
+          open={isNoticeModalOpen}
+          onClose={() => setIsNoticeModalOpen(false)}
+        />
       )}
     </header>
   );
