@@ -9,6 +9,7 @@ import { hashPassword } from '../services/password.service.js';
 import { randomToken } from '../utils/crypto.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
 import { sendAdminWelcomeEmail } from '../services/mail.service.js';
+import { buildGovernmentGradeEmailHtml } from '../services/email-template.builder.js';
 
 import { createOrUpdatePendingOrganization } from '../services/onboarding-organization.service.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
@@ -3837,7 +3838,32 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'registration-otp',
       name: 'Registration OTP',
       subject: 'Welcome to {{portalName}}! Verification Code',
-      htmlBody: '<html><body><h1>Welcome to {{portalName}}!</h1><p>Use the following verification code to complete your registration:</p><h2 style="font-size: 28px; letter-spacing: 5px; color: #12335f; font-family: monospace;">{{otp}}</h2><p>This code is valid for 10 minutes.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'REGISTRATION VERIFICATION',
+        noticeRef: 'JSG-REG/OTP',
+        badgeVariant: 'primary',
+        heading: 'Account Registration Verification Code',
+        summary: 'Welcome to {{portalName}}. Use the single-use authorization code below to complete your registration and activate your portal profile.',
+        detailsTable: [
+          {
+            label: 'One-Time Verification Code (OTP)',
+            value: '<span style="font-family: Consolas, Monaco, monospace; font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #0b2545; background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 6px; display: inline-block;">{{otp}}</span>'
+          },
+          { label: 'Validity Window', value: '10 Minutes (Single Use Only)', isHighlight: true, color: '#b45309' },
+          { label: 'Portal Gateway', value: '{{portalName}}' }
+        ],
+        stepInstructions: {
+          title: 'Registration Verification Steps',
+          steps: [
+            'Enter the 6-digit verification code above into the registration confirmation prompt.',
+            'Complete your Aadhaar / DigiLocker verification in the next step.',
+            'Upon completion, your profile will be submitted to the District Nodal Officer for approval.'
+          ]
+        },
+        securityAdvisory: 'Statutory Anti-Fraud Notice: Authorized government staff will never solicit your verification code. Do not share this code.'
+      }),
       textBody: 'Welcome to {{portalName}}! Use the following verification code to complete your registration: {{otp}}. This code is valid for 10 minutes.',
       isActive: true,
       variables: ['portalName', 'otp'],
@@ -3849,7 +3875,23 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'forgot-password-otp',
       name: 'Forgot Password OTP',
       subject: '[SECURE AUTH] Password reset code',
-      htmlBody: '<html><body><h1>Password Reset Request</h1><p>Use the following code to reset your password:</p><h2 style="font-size: 28px; letter-spacing: 5px; color: #12335f; font-family: monospace;">{{otp}}</h2><p>This code is valid for 10 minutes.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: 'JSG SMILE Procurement Portal',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'PASSWORD RECOVERY VERIFICATION',
+        noticeRef: 'JSG-AUTH/RESET',
+        badgeVariant: 'warning',
+        heading: 'Password Reset Authorization Code',
+        summary: 'A password recovery request has been initiated for your account. Enter the verification code below to authorize setting a new password.',
+        detailsTable: [
+          {
+            label: 'Password Reset OTP',
+            value: '<span style="font-family: Consolas, Monaco, monospace; font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #0b2545; background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 6px; display: inline-block;">{{otp}}</span>'
+          },
+          { label: 'Validity Window', value: '10 Minutes (Single Use Only)', isHighlight: true, color: '#b45309' }
+        ],
+        securityAdvisory: 'Security Notice: If you did not request a password reset, your account credentials may be compromised. Please notify the support desk immediately.'
+      }),
       textBody: 'Password Reset Request: Use the following code to reset your password: {{otp}}. This code is valid for 10 minutes.',
       isActive: true,
       variables: ['otp'],
@@ -3861,7 +3903,23 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'login-otp',
       name: '2FA Login OTP',
       subject: '[SECURE AUTH] Two-factor login code',
-      htmlBody: '<html><body><h1>Two-Factor Login Code</h1><p>Use the following verification code to sign in:</p><h2 style="font-size: 28px; letter-spacing: 5px; color: #12335f; font-family: monospace;">{{otp}}</h2><p>This code is valid for 10 minutes.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: 'JSG SMILE Procurement Portal',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'TWO-FACTOR AUTHENTICATION',
+        noticeRef: 'JSG-2FA/LOGIN',
+        badgeVariant: 'primary',
+        heading: 'Two-Factor Login Verification',
+        summary: 'A sign-in attempt requires two-factor authentication. Use the authorization code below to complete sign-in.',
+        detailsTable: [
+          {
+            label: 'Two-Factor Login Code (OTP)',
+            value: '<span style="font-family: Consolas, Monaco, monospace; font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #0b2545; background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 6px; display: inline-block;">{{otp}}</span>'
+          },
+          { label: 'Validity Window', value: '10 Minutes (Single Use Only)', isHighlight: true, color: '#b45309' }
+        ],
+        securityAdvisory: 'Statutory Anti-Fraud Notice: Never share your login OTP with anyone.'
+      }),
       textBody: 'Two-Factor Login Code: Use the following verification code to sign in: {{otp}}. This code is valid for 10 minutes.',
       isActive: true,
       variables: ['otp'],
@@ -3873,7 +3931,23 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'common-otp',
       name: 'Common Verification OTP',
       subject: '[JsgSmile Portal] Secure Verification',
-      htmlBody: '<html><body><h1>Secure Verification</h1><p>Use the following verification code to continue:</p><h2 style="font-size: 28px; letter-spacing: 5px; color: #12335f; font-family: monospace;">{{otp}}</h2><p>This code is valid for 10 minutes.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: 'JSG SMILE Procurement Portal',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'SECURITY VERIFICATION',
+        noticeRef: 'JSG-AUTH/VERIFY',
+        badgeVariant: 'primary',
+        heading: 'Secure Verification Authorization',
+        summary: 'A security authorization request has been initiated for your session. Use the verification code below to proceed.',
+        detailsTable: [
+          {
+            label: 'Authorization Code (OTP)',
+            value: '<span style="font-family: Consolas, Monaco, monospace; font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #0b2545; background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 6px; display: inline-block;">{{otp}}</span>'
+          },
+          { label: 'Validity Window', value: '10 Minutes (Single Use Only)', isHighlight: true, color: '#b45309' }
+        ],
+        securityAdvisory: 'Security Notice: Never share this authorization code with anyone.'
+      }),
       textBody: 'Secure Verification: Use the following verification code to continue: {{otp}}. This code is valid for 10 minutes.',
       isActive: true,
       variables: ['otp'],
@@ -3885,7 +3959,26 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'user-registration',
       name: 'User registration',
       subject: 'Welcome to {{portalName}}!',
-      htmlBody: '<html><body><h1>Welcome to {{portalName}}, {{userName}}!</h1><p>Your account has been created successfully.</p><p><a href="{{loginUrl}}">Log in here</a></p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        recipientName: '{{userName}}',
+        recipientEmail: '{{userEmail}}',
+        noticeType: 'USER ONBOARDING CONFIRMATION',
+        noticeRef: 'JSG-USER/WELCOME',
+        badgeVariant: 'success',
+        heading: 'Account Successfully Registered',
+        summary: 'Welcome {{userName}}, your official user account has been successfully created on {{portalName}}. You may now log in to the procurement portal.',
+        detailsTable: [
+          { label: 'Registered Name', value: '{{userName}}' },
+          { label: 'Registered Email', value: '{{userEmail}}', isCode: true },
+          { label: 'Portal Gateway', value: '{{portalName}}' }
+        ],
+        actionButton: {
+          label: 'Login to Portal',
+          url: '{{loginUrl}}'
+        }
+      }),
       textBody: 'Welcome to {{portalName}}, {{userName}}! Your account has been created successfully. Log in here: {{loginUrl}}',
       isActive: true,
       variables: ['userName', 'userEmail', 'portalName', 'loginUrl'],
@@ -3897,7 +3990,25 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'organization-approval',
       name: 'Organization approval',
       subject: 'Your organization on {{portalName}} has been approved',
-      htmlBody: '<html><body><h1>Hello {{userName}}!</h1><p>Your organization <strong>{{organizationName}}</strong> has been approved for access on {{portalName}}.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        recipientName: '{{userName}}',
+        noticeType: 'ENTERPRISE ONBOARDING APPROVAL',
+        noticeRef: 'JSG-ORG/APPROVED',
+        badgeVariant: 'success',
+        heading: 'Enterprise Onboarding Approved',
+        summary: 'Your enterprise {{organizationName}} has been formally verified and approved for commercial procurement access on {{portalName}}.',
+        detailsTable: [
+          { label: 'Authorized Representative', value: '{{userName}}' },
+          { label: 'Enterprise Name', value: '{{organizationName}}', isHighlight: true },
+          { label: 'Status', value: 'APPROVED / ACTIVE', color: '#166534', isHighlight: true }
+        ],
+        actionButton: {
+          label: 'Open Procurement Dashboard',
+          url: '{{loginUrl}}'
+        }
+      }),
       textBody: 'Hello {{userName}}! Your organization {{organizationName}} has been approved for access on {{portalName}}.',
       isActive: true,
       variables: ['userName', 'organizationName', 'portalName'],
@@ -3909,7 +4020,24 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'bid-published',
       name: 'Bid published',
       subject: 'New Tender/RFQ published: {{tenderTitle}}',
-      htmlBody: '<html><body><h1>A new requirement has been published</h1><p>Title: {{tenderTitle}}</p><p>Estimated Value: {{amount}} {{currency}}</p><p>Due Date: {{dueDate}}</p><p><a href="{{actionUrl}}">View Details</a></p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'PUBLIC TENDER / RFQ NOTICE',
+        noticeRef: 'JSG-TND/NOTICE',
+        badgeVariant: 'primary',
+        heading: 'New Tender Opportunity Published',
+        summary: 'A new requirement {{tenderTitle}} has been officially published on {{portalName}} matching your registered vendor classification.',
+        detailsTable: [
+          { label: 'Tender / RFQ Title', value: '{{tenderTitle}}', isHighlight: true },
+          { label: 'Estimated Value', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' },
+          { label: 'Submission Deadline', value: '{{dueDate}}', color: '#b45309', isHighlight: true }
+        ],
+        actionButton: {
+          label: 'View Tender & Submit Quotation',
+          url: '{{actionUrl}}'
+        }
+      }),
       textBody: 'A new requirement has been published: {{tenderTitle}}. Estimated Value: {{amount}} {{currency}}. Due Date: {{dueDate}}.',
       isActive: true,
       variables: ['tenderTitle', 'amount', 'currency', 'dueDate', 'actionUrl'],
@@ -3921,7 +4049,20 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'seller-participated',
       name: 'Seller participated',
       subject: 'Bid submitted successfully for {{tenderTitle}}',
-      htmlBody: '<html><body><h1>Thank you for participating!</h1><p>Your bid (Ref: {{bidReference}}) for tender/RFQ <strong>{{tenderTitle}}</strong> has been submitted successfully.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'BID SUBMISSION ACKNOWLEDGMENT',
+        noticeRef: '{{bidReference}}',
+        badgeVariant: 'success',
+        heading: 'Quotation Successfully Submitted',
+        summary: 'Your commercial quotation for requirement {{tenderTitle}} has been securely submitted and timestamped.',
+        detailsTable: [
+          { label: 'Bid Reference ID', value: '{{bidReference}}', isCode: true },
+          { label: 'Tender / RFQ Title', value: '{{tenderTitle}}', isHighlight: true },
+          { label: 'Submission Status', value: 'RECORDED & SEALED', color: '#166534', isHighlight: true }
+        ]
+      }),
       textBody: 'Thank you for participating! Your bid (Ref: {{bidReference}}) for tender/RFQ {{tenderTitle}} has been submitted successfully.',
       isActive: true,
       variables: ['tenderTitle', 'bidReference'],
@@ -3933,7 +4074,23 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'technical-clarification',
       name: 'Technical clarification',
       subject: 'Action Required: Technical Clarification for {{tenderTitle}}',
-      htmlBody: '<html><body><h1>Technical clarification request</h1><p>The procurement officer has requested clarification regarding your bid for <strong>{{tenderTitle}}</strong>.</p><p><a href="{{actionUrl}}">Respond to request</a></p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'ACTION REQUIRED: CLARIFICATION',
+        noticeRef: 'JSG-TND/CLARIFY',
+        badgeVariant: 'warning',
+        heading: 'Technical Clarification Requested',
+        summary: 'The procurement committee has requested official clarification regarding your quotation for {{tenderTitle}}.',
+        detailsTable: [
+          { label: 'Tender Title', value: '{{tenderTitle}}', isHighlight: true },
+          { label: 'Action Required', value: 'Submit Clarification Response', color: '#b45309', isHighlight: true }
+        ],
+        actionButton: {
+          label: 'Respond to Clarification Request',
+          url: '{{actionUrl}}'
+        }
+      }),
       textBody: 'Technical clarification request: The procurement officer has requested clarification regarding your bid for {{tenderTitle}}. Respond here: {{actionUrl}}',
       isActive: true,
       variables: ['tenderTitle', 'actionUrl'],
@@ -3945,7 +4102,20 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'bid-awarded',
       name: 'Bid awarded',
       subject: 'Congratulations! Bid awarded for {{tenderTitle}}',
-      htmlBody: '<html><body><h1>Bid Award Notification</h1><p>We are pleased to inform you that your bid for <strong>{{tenderTitle}}</strong> has been awarded to your organization.</p><p>Award Amount: {{amount}} {{currency}}</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'COMMERCIAL AWARD NOTIFICATION',
+        noticeRef: 'JSG-TND/AWARD',
+        badgeVariant: 'success',
+        heading: 'Contract Awarded',
+        summary: 'Congratulations! Your quotation for {{tenderTitle}} has been accepted and awarded to your organization.',
+        detailsTable: [
+          { label: 'Tender Title', value: '{{tenderTitle}}', isHighlight: true },
+          { label: 'Awarded Value', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' },
+          { label: 'Award Status', value: 'AWARDED / PENDING PO', color: '#166534', isHighlight: true }
+        ]
+      }),
       textBody: 'Congratulations! Your bid for {{tenderTitle}} has been awarded. Award Amount: {{amount}} {{currency}}.',
       isActive: true,
       variables: ['tenderTitle', 'amount', 'currency'],
@@ -3957,7 +4127,23 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'po-generated',
       name: 'PO generated',
       subject: 'Purchase Order Generated: {{orderNumber}}',
-      htmlBody: '<html><body><h1>Purchase Order Issued</h1><p>Purchase Order <strong>{{orderNumber}}</strong> has been generated for your award.</p><p>Total Value: {{amount}} {{currency}}</p><p><a href="{{actionUrl}}">View Purchase Order</a></p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'PURCHASE ORDER ISSUED',
+        noticeRef: '{{orderNumber}}',
+        badgeVariant: 'success',
+        heading: 'Official Purchase Order Generated',
+        summary: 'Purchase Order {{orderNumber}} has been generated and issued for your awarded tender.',
+        detailsTable: [
+          { label: 'Purchase Order No.', value: '{{orderNumber}}', isCode: true },
+          { label: 'Total PO Value', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' }
+        ],
+        actionButton: {
+          label: 'View Purchase Order in Portal',
+          url: '{{actionUrl}}'
+        }
+      }),
       textBody: 'Purchase Order Issued: Purchase Order {{orderNumber}} has been generated. Total Value: {{amount}} {{currency}}.',
       isActive: true,
       variables: ['orderNumber', 'amount', 'currency', 'actionUrl'],
@@ -3969,7 +4155,20 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'payment-initiated',
       name: 'Payment initiated',
       subject: 'Payment Initiated: {{amount}} {{currency}}',
-      htmlBody: '<html><body><h1>Payment Processing</h1><p>A payment of <strong>{{amount}} {{currency}}</strong> has been initiated against invoice <strong>{{invoiceNumber}}</strong>.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'PAYMENT DISBURSEMENT INITIATED',
+        noticeRef: 'JSG-PAY/INIT',
+        badgeVariant: 'info',
+        heading: 'Payment Disbursement Processing',
+        summary: 'An electronic payment remittance of {{amount}} {{currency}} has been initiated against invoice {{invoiceNumber}}.',
+        detailsTable: [
+          { label: 'Invoice Number', value: '{{invoiceNumber}}', isCode: true },
+          { label: 'Disbursement Amount', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' },
+          { label: 'Processing Status', value: 'IN TRANSIT / ESCROW RELEASE', color: '#1e40af', isHighlight: true }
+        ]
+      }),
       textBody: 'Payment Processing: A payment of {{amount}} {{currency}} has been initiated against invoice {{invoiceNumber}}.',
       isActive: true,
       variables: ['amount', 'currency', 'invoiceNumber'],
@@ -3981,7 +4180,19 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       slug: 'settlement-completed',
       name: 'Settlement completed',
       subject: 'Payment Settled Successfully',
-      htmlBody: '<html><body><h1>Settlement Complete</h1><p>The payment of <strong>{{amount}} {{currency}}</strong> has been successfully settled and deposited into your account.</p></body></html>',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'PAYMENT SETTLEMENT COMPLETE',
+        noticeRef: 'JSG-PAY/SETTLED',
+        badgeVariant: 'success',
+        heading: 'Payment Settled Successfully',
+        summary: 'The payment amount of {{amount}} {{currency}} has been successfully settled and deposited into your registered nodal bank account.',
+        detailsTable: [
+          { label: 'Settled Amount', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' },
+          { label: 'Settlement Status', value: 'CREDITED / COMPLETED', color: '#166534', isHighlight: true }
+        ]
+      }),
       textBody: 'Payment Settled: The payment of {{amount}} {{currency}} has been successfully settled.',
       isActive: true,
       variables: ['amount', 'currency'],

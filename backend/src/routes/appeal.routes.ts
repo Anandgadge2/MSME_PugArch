@@ -192,13 +192,40 @@ router.post(
         type: 'appeal_resolved',
         priority: verdict === 'APPROVED' ? 'high' : 'urgent',
         redirectUrl: '/dashboard',
-        emailSubject: `Suspension Appeal ${verdict === 'APPROVED' ? 'Approved' : 'Rejected'} — MSME Portal`,
+        emailSubject: `[OFFICIAL VERDICT] Suspension Appeal ${verdict === 'APPROVED' ? 'Approved — Access Restored' : 'Rejected'} — ${org.organizationName}`,
         emailHtml: `
-          <p>Dear ${member.name || 'User'},</p>
-          <p>Your organization's appeal regarding platform suspension has been <strong>${verdict}</strong> by administration.</p>
-          ${verdict === 'APPROVED'
-            ? '<p style="color: #166534; font-weight: bold;">Your organization is now reinstated with active status.</p>'
-            : `<p style="color: #991b1b;"><strong>Admin Remarks:</strong> ${adminRemarks}</p>`}
+          <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+            An official administrative determination has been recorded regarding the suspension appeal submitted by <strong>${org.organizationName}</strong>.
+          </p>
+          <div style="background-color: ${verdict === 'APPROVED' ? '#f0fdf4' : '#fef2f2'}; border: 1px solid ${verdict === 'APPROVED' ? '#bbf7d0' : '#fecaca'}; border-left: 4px solid ${verdict === 'APPROVED' ? '#16a34a' : '#dc2626'}; border-radius: 6px; padding: 14px 18px; margin: 18px 0;">
+            <table style="width: 100%; font-size: 13px; color: #334155; line-height: 1.8;">
+              <tr>
+                <td style="width: 38%; font-weight: 600; color: #64748b;">Enterprise Name:</td>
+                <td><strong>${org.organizationName}</strong></td>
+              </tr>
+              <tr>
+                <td style="font-weight: 600; color: #64748b;">Official Determination:</td>
+                <td style="font-weight: 800; color: ${verdict === 'APPROVED' ? '#166534' : '#991b1b'};">
+                  ${verdict === 'APPROVED' ? 'APPEAL APPROVED — PRIVILEGES RESTORED' : 'APPEAL REJECTED'}
+                </td>
+              </tr>
+              <tr>
+                <td style="font-weight: 600; color: #64748b;">Administrative Remarks:</td>
+                <td>${adminRemarks || 'N/A'}</td>
+              </tr>
+              <tr>
+                <td style="font-weight: 600; color: #64748b;">Portal Access State:</td>
+                <td style="font-weight: 700; color: ${verdict === 'APPROVED' ? '#166534' : '#dc2626'};">
+                  ${verdict === 'APPROVED' ? 'Active / Unrestricted' : 'Suspended / Restricted'}
+                </td>
+              </tr>
+            </table>
+          </div>
+          <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+            ${verdict === 'APPROVED' 
+              ? 'Your organization may resume participating in tenders, submitting quotations, and executing contracts immediately.' 
+              : 'If you wish to submit further statutory documentation, you may contact the District MSME Facilitation Cell.'}
+          </p>
         `
       }).catch(err => console.warn('[AppealNotifyError]', err));
     }

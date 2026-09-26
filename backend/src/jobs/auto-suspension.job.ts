@@ -39,6 +39,7 @@ export const processAutoSuspensions = async () => {
           organizationName: true,
           isBlacklisted: true,
           district: true,
+          gstin: true,
           users: { select: { id: true, email: true, name: true } }
         }
       });
@@ -83,11 +84,37 @@ export const processAutoSuspensions = async () => {
           type: 'organization_suspended',
           priority: 'urgent',
           redirectUrl: '/dashboard',
-          emailSubject: 'CRITICAL: Organization Account Suspended — MSME Portal',
+          emailSubject: `[ACTION REQUIRED] Organization Account Suspended — ${org.organizationName}`,
           emailHtml: `
-            <p>Dear ${u.name || 'User'},</p>
-            <p>Your organization <strong>${org.organizationName}</strong> has been suspended on the MSME Portal due to repeated critical dispute resolutions (${disputeCount} critical disputes recorded).</p>
-            <p>Your account now has restricted access. You may submit an official clarification or appeal via your Dashboard.</p>
+            <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+              This is an official statutory notice that compliance monitoring has suspended access privileges for <strong>${org.organizationName}</strong> on the JSG SMILE Procurement Portal.
+            </p>
+            <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 14px 18px; margin: 18px 0;">
+              <strong style="color: #991b1b; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 6px;">
+                Compliance Suspension Particulars
+              </strong>
+              <table style="width: 100%; font-size: 13px; color: #334155; line-height: 1.8;">
+                <tr>
+                  <td style="width: 40%; font-weight: 600; color: #64748b;">Organization Name:</td>
+                  <td><strong>${org.organizationName}</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">GSTIN / Identifier:</td>
+                  <td>${org.gstin || 'Not Provided'}</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">Statutory Trigger:</td>
+                  <td style="color: #dc2626; font-weight: 700;">${disputeCount} Critical / Unresolved Disputes</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">Account Status:</td>
+                  <td style="color: #dc2626; font-weight: 800;">SUSPENDED (RESTRICTED ACCESS)</td>
+                </tr>
+              </table>
+            </div>
+            <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+              Under district portal governance regulations, all active bidding, quotations, and contract creation have been paused. You are entitled to submit a formal appeal and clarification directly via your Portal Dashboard.
+            </p>
           `
         }).catch(err => console.warn('[AutoSuspensionOrgNotifyError]', err));
       }
@@ -116,12 +143,31 @@ export const processAutoSuspensions = async () => {
           type: 'auto_suspension_triggered',
           priority: 'high',
           redirectUrl: '/admin/organizations?status=SUSPENDED',
-          emailSubject: `[System Alert] Auto-Suspension Triggered: ${org.organizationName}`,
+          emailSubject: `[System Compliance Alert] Auto-Suspension Triggered: ${org.organizationName}`,
           emailHtml: `
-            <p>Dear ${admin.name || 'Admin'},</p>
-            <p>System automated compliance monitoring has suspended organization <strong>${org.organizationName}</strong> (District: ${org.district || 'Unassigned'}).</p>
-            <p><strong>Trigger:</strong> ${disputeCount} critical / urgent disputes resolved against this organization.</p>
-            <p>Review the organization details in the Platform Administration Desk.</p>
+            <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+              Automated compliance surveillance has flagged and suspended an organization profile within your administrative jurisdiction.
+            </p>
+            <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #d97706; border-radius: 6px; padding: 14px 18px; margin: 18px 0;">
+              <table style="width: 100%; font-size: 13px; color: #334155; line-height: 1.8;">
+                <tr>
+                  <td style="width: 40%; font-weight: 600; color: #64748b;">Suspended Entity:</td>
+                  <td><strong>${org.organizationName}</strong></td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">District Jurisdiction:</td>
+                  <td>${org.district || 'Unassigned / District Wide'}</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">Dispute Threshold:</td>
+                  <td style="color: #b45309; font-weight: 700;">${disputeCount} Critical / Urgent Disputes</td>
+                </tr>
+                <tr>
+                  <td style="font-weight: 600; color: #64748b;">Recommended Action:</td>
+                  <td>Review organization dossier in the Collectorate Administration Desk.</td>
+                </tr>
+              </table>
+            </div>
           `
         }).catch(err => console.warn('[AutoSuspensionAdminNotifyError]', err));
       }

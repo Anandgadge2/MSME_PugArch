@@ -28,7 +28,7 @@ import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { ensureOrgMembership } from '../services/org-membership.service.js';
 import { getTransporter, sendSubUserInvitationEmail } from '../services/mail.service.js';
-import { env } from '../config/env.js';
+import { env, getPublicPortalUrl } from '../config/env.js';
 import { hashPassword, validatePasswordStrength } from '../services/password.service.js';
 import { issueCookieAuth } from '../services/auth-cookie.service.js';
 import { toSafeUser } from '../utils/routeHelpers.js';
@@ -1107,7 +1107,7 @@ router.post(
         });
 
         const roleName = customRole?.name || fallbackRole.replace(/_/g, ' ');
-        const loginUrl = `${env.FRONTEND_URL || 'https://msme-pugarch-frontend.vercel.app'}/login`;
+        const loginUrl = `${getPublicPortalUrl().replace(/\/+$/, '')}/login`;
 
         await sendSubUserInvitationEmail(body.email, {
             name: body.name || targetUser.name,
@@ -1209,7 +1209,7 @@ router.post(
         });
 
         const roleName = invite.customRole?.name || String(invite.orgRole).replace(/_/g, ' ');
-        const loginUrl = `${env.FRONTEND_URL || 'https://msme-pugarch-frontend.vercel.app'}/login`;
+        const loginUrl = `${getPublicPortalUrl().replace(/\/+$/, '')}/login`;
 
         await sendSubUserInvitationEmail(invite.email, {
             name: targetUser?.name || 'Team Member',
