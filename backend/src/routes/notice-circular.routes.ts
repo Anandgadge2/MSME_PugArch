@@ -122,7 +122,7 @@ router.post('/admin/notices/broadcast', ...adminOnly, wrap(async (req, res) => {
     });
   }
 
-  const generatedRef = body.referenceNumber || `JSG/CIRCULAR/${new Date().getFullYear()}/${Date.now().toString().slice(-6)}`;
+  const generatedRef = body.referenceNumber || `JSGSMILE/CIRCULAR/${new Date().getFullYear()}/${Date.now().toString().slice(-6)}`;
   const portalUrl = getPublicPortalUrl();
   const directActionUrl = body.actionUrl ? ensurePublicUrl(body.actionUrl) : portalUrl;
 

@@ -1447,13 +1447,14 @@ export default function MasterAdminPage() {
         await masterAdminApi.updateEmailSettings(values);
         void loadEmail();
       }
-      if (editor.type === 'emailTemplate' && emailTemplateCompanyId) {
+      if (editor.type === 'emailTemplate') {
+        const payload = { ...values, companyId: emailTemplateCompanyId || values.companyId };
         if (editor.mode === 'create') {
-          await masterAdminApi.createEmailTemplate(values);
+          await masterAdminApi.createEmailTemplate(payload);
         } else {
-          await masterAdminApi.updateEmailTemplate(editor.record.id, values);
+          await masterAdminApi.updateEmailTemplate(editor.record.id, payload);
         }
-        void loadEmailTemplates(emailTemplateCompanyId);
+        if (emailTemplateCompanyId) void loadEmailTemplates(emailTemplateCompanyId);
       }
       toast.success(`${labelize(editor.type)} saved`);
       setEditor(null);
@@ -4135,19 +4136,23 @@ function EntityEditor({
   const compilePreviewHtml = (html: string) => {
     if (!html) return '';
     let preview = html;
+    const basePortalUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost'))
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://msme-pugarch-frontend.vercel.app');
+
     const mockVars: Record<string, string> = {
-      userName: 'John Doe',
-      userEmail: 'johndoe@example.com',
-      organizationName: 'Acme Corporates Ltd',
-      portalName: 'JsgSmile Portal',
-      companyName: 'JsgSmile MSME Portal',
-      actionUrl: 'https://jsgsmile.portal/dashboard/procurement',
-      supportEmail: 'support@jsgsmile.org',
-      loginUrl: 'https://jsgsmile.portal/login',
+      userName: 'Sri Alok Sharma',
+      userEmail: 'alok.sharma@example.gov.in',
+      organizationName: 'Jharsuguda Engineering Works MSME',
+      portalName: 'JSG SMILE Procurement Portal',
+      companyName: 'Collectorate Jharsuguda',
+      actionUrl: `${basePortalUrl}/dashboard/procurement`,
+      supportEmail: 'nodal-msme@jharsuguda.odisha.gov.in',
+      loginUrl: `${basePortalUrl}/login`,
       invoiceNumber: 'INV-2026-0042',
       orderNumber: 'PO-2026-9812',
       tenderTitle: 'Procurement of High-Grade Steel Cables',
-      bidReference: 'BID-STL-88',
+      bidReference: 'JSG-TND/2026/09/88',
       amount: '4,50,000',
       currency: 'INR',
       dueDate: '15th July 2026',

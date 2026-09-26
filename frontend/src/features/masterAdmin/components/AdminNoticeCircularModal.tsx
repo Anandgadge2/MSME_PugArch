@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Send,
   Users,
+  Store,
+  HeartHandshake,
   Building2,
   Mail,
-  MessageSquare,
   ShieldAlert,
   AlertTriangle,
   Info,
@@ -15,9 +17,8 @@ import {
   FileText,
   Eye,
   Loader2,
-  Sparkles,
   Link as LinkIcon,
-  ChevronRight
+  Radio
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -41,6 +42,7 @@ interface Props {
 }
 
 export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [counts, setCounts] = useState<RecipientCounts>({ all: 0, sellers: 0, shg: 0, buyers: 0 });
   const [countsLoading, setCountsLoading] = useState(false);
 
@@ -61,7 +63,21 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
 
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Initialize auto-generated reference number
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Lock body scroll when open
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  // Initialize auto-generated reference number and fetch live recipient counts
   useEffect(() => {
     if (open) {
       const year = new Date().getFullYear();
@@ -74,11 +90,18 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
   const fetchCounts = async () => {
     setCountsLoading(true);
     try {
-      const res = await getApi<RecipientCounts>('/api/admin/notices/recipient-counts');
-      const data = (res as any)?.data !== undefined ? (res as any).data : res;
-      if (data) setCounts(data);
-    } catch {
-      // Non-blocking
+      const res = await getApi<any>('/api/admin/notices/recipient-counts');
+      const data = res?.data !== undefined ? res.data : res;
+      if (data && typeof data.all === 'number') {
+        setCounts({
+          all: Number(data.all || 0),
+          sellers: Number(data.sellers || 0),
+          shg: Number(data.shg || 0),
+          buyers: Number(data.buyers || 0)
+        });
+      }
+    } catch (err) {
+      console.warn('[AdminNotice] Could not fetch recipient counts:', err);
     } finally {
       setCountsLoading(false);
     }
@@ -101,14 +124,14 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
   const getAudienceLabel = () => {
     switch (audience) {
       case 'SELLERS_ONLY':
-        return 'Sellers & Suppliers Only';
+        return 'Sellers Only';
       case 'SHG_ONLY':
-        return 'Self-Help Groups (SHG) Only';
+        return 'SHGs Only';
       case 'BUYERS_ONLY':
-        return 'Procurement Buyers & Depts';
+        return 'Buyers Only';
       case 'ALL_USERS':
       default:
-        return 'All Registered Users';
+        return 'All Users';
     }
   };
 
@@ -151,7 +174,6 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
         description: `Dispatched circular to ${recipientCount} active recipients across ${selectedChannels.join(', ')}.`
       });
 
-      // Clear state and close
       setTitle('');
       setMessage('');
       setActionUrl('');
@@ -167,49 +189,57 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
     }
   };
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  const audienceOptions: Array<{ key: AudienceKey; label: string; count: number; desc: string }> = [
+  const audienceOptions: Array<{ key: AudienceKey; label: string; count: number; desc: string; icon: any }> = [
     {
       key: 'ALL_USERS',
       label: 'All Users',
       count: counts.all,
-      desc: 'Sellers, SHGs, Buyers & Admins'
+      desc: 'Sellers, SHGs, Buyers & Admins',
+      icon: Users
     },
     {
       key: 'SELLERS_ONLY',
       label: 'Sellers Only',
       count: counts.sellers,
-      desc: 'MSME Sellers & Suppliers'
+      desc: 'MSME Sellers & Suppliers',
+      icon: Store
     },
     {
       key: 'SHG_ONLY',
-      label: 'SHG Clusters Only',
+      label: 'SHGs Only',
       count: counts.shg,
-      desc: 'Women & Artisan SHGs'
+      desc: 'Women & Artisan SHGs',
+      icon: HeartHandshake
     },
     {
       key: 'BUYERS_ONLY',
       label: 'Buyers Only',
       count: counts.buyers,
-      desc: 'Govt Depts & Buyers'
+      desc: 'Govt Depts & Buyers',
+      icon: Building2
     }
   ];
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-950/75 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="broadcast-modal-title"
+      onClick={e => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
     >
-      <FocusTrap active={open}>
+      <FocusTrap active={open} onEscape={onClose} autoFocus={false} className="w-full flex justify-center max-w-3xl">
         <div
           ref={modalRef}
-          className="relative flex h-full max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200"
+          onClick={e => e.stopPropagation()}
+          className="relative flex flex-col w-full max-h-[88vh] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden text-slate-900 animate-in zoom-in-95 duration-200"
         >
-          {/* Modal Header */}
-          <div className="flex items-center justify-between border-b border-slate-200/90 px-6 py-4 bg-[#0c2340] text-white">
+          {/* 1. Modal Fixed Header (Pinned at Top) */}
+          <div className="shrink-0 flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-[#0c2340] text-white">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-xs">
                 <FileText className="h-5 w-5" />
@@ -224,6 +254,7 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
               disabled={submitting}
               className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
@@ -233,51 +264,71 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
             </button>
           </div>
 
-          {/* Modal Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* 1. Target Audience Selector */}
-            <div className="space-y-2.5">
+          {/* 2. Scrollable Body Content */}
+          <div className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-5">
+            {/* Section A: Target Audience Selector */}
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   1. Target Audience Selection *
                 </label>
-                <span className="text-xs font-semibold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                  Targeting: {getActiveAudienceCount()} verified accounts
+                <span className="text-[11px] font-bold text-blue-800 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 inline-flex items-center gap-1">
+                  {countsLoading ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                      <span>Checking accounts...</span>
+                    </>
+                  ) : (
+                    <span>Targeting: {getActiveAudienceCount()} active accounts</span>
+                  )}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {audienceOptions.map(opt => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setAudience(opt.key)}
-                    className={cn(
-                      'flex flex-col text-left p-3 rounded-xl border transition-all relative',
-                      audience === opt.key
-                        ? 'border-blue-600 bg-blue-50/70 shadow-xs ring-1 ring-blue-600'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
-                    )}
-                  >
-                    <span className="text-xs font-bold text-slate-900 leading-tight">{opt.label}</span>
-                    <span className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">{opt.desc}</span>
-                    <span className="mt-2 text-xs font-black text-blue-700">
-                      {countsLoading ? '...' : `${opt.count} Users`}
-                    </span>
-                  </button>
-                ))}
+                {audienceOptions.map(opt => {
+                  const Icon = opt.icon;
+                  const isSelected = audience === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setAudience(opt.key)}
+                      className={cn(
+                        'flex flex-col text-left p-3 rounded-xl border transition-all relative group',
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/70 shadow-xs ring-2 ring-blue-500/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50'
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <Icon className={cn('h-4 w-4', isSelected ? 'text-blue-700' : 'text-slate-500')} />
+                        <span
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            isSelected ? 'bg-blue-600 ring-2 ring-blue-200' : 'bg-transparent border border-slate-300'
+                          )}
+                        />
+                      </div>
+                      <span className="text-xs font-bold text-slate-900 leading-tight">{opt.label}</span>
+                      <span className="text-[10px] text-slate-500 line-clamp-1">{opt.desc}</span>
+                      <span className="mt-2 text-xs font-black text-blue-700">
+                        {countsLoading ? '...' : `${opt.count} Users`}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* 2. Dispatch Channels & Priority */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/80 p-4 rounded-xl border border-slate-200/80">
+            {/* Section B: Dispatch Channels & Priority */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/90 p-4 rounded-xl border border-slate-200">
               {/* Channels */}
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-slate-700 block">
                   2. Dispatch Channels *
                 </label>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-800">
+                <div className="space-y-2 bg-white p-3 rounded-lg border border-slate-200/80">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 hover:text-blue-900">
                     <input
                       type="checkbox"
                       checked={channels.in_app}
@@ -286,7 +337,7 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                     />
                     <span>Center Screen Pop-up Modal (In-App)</span>
                   </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-800">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 hover:text-blue-900">
                     <input
                       type="checkbox"
                       checked={channels.email}
@@ -295,14 +346,14 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                     />
                     <span>Government-Grade HTML Email</span>
                   </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-slate-800">
+                  <label className="flex items-center gap-2.5 cursor-pointer text-xs font-semibold text-slate-800 hover:text-blue-900">
                     <input
                       type="checkbox"
                       checked={channels.sms}
                       onChange={e => setChannels(c => ({ ...c, sms: e.target.checked }))}
                       className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
                     />
-                    <span>SMS Alert Message (Urgent)</span>
+                    <span>SMS Alert Message (Urgent Directive)</span>
                   </label>
                 </div>
               </div>
@@ -320,7 +371,7 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                       'px-3 py-2 text-xs font-bold rounded-lg border text-center transition-all',
                       priority === 'medium'
                         ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                     )}
                   >
                     Normal
@@ -332,7 +383,7 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                       'px-3 py-2 text-xs font-bold rounded-lg border text-center transition-all',
                       priority === 'high'
                         ? 'border-amber-600 bg-amber-500 text-slate-950 font-black shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                     )}
                   >
                     Important
@@ -344,21 +395,21 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                       'px-3 py-2 text-xs font-bold rounded-lg border text-center transition-all',
                       priority === 'urgent'
                         ? 'border-rose-600 bg-rose-600 text-white shadow-xs'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
                     )}
                   >
                     Urgent
                   </button>
                 </div>
-                <p className="text-[10px] text-slate-500">
-                  {priority === 'urgent' && 'Urgent notices highlight with emergency red badges and audio alert.'}
-                  {priority === 'high' && 'High priority notices appear with warning amber badges.'}
-                  {priority === 'medium' && 'Normal notices appear with standard administrative navy styling.'}
-                </p>
+                <div className="text-[11px] text-slate-500 leading-tight">
+                  {priority === 'urgent' && 'Emergency Red: Highlights with emergency badges and audio notice.'}
+                  {priority === 'high' && 'Warning Amber: Displays with high-priority notice indicators.'}
+                  {priority === 'medium' && 'Official Navy: Standard government administrative circular badge.'}
+                </div>
               </div>
             </div>
 
-            {/* 3. Notice Reference and Title */}
+            {/* Section C: Notice Reference & Subject */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label htmlFor="notice-ref" className="text-xs font-bold text-slate-700 block mb-1">
@@ -369,8 +420,8 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                   type="text"
                   value={refNumber}
                   onChange={e => setRefNumber(e.target.value)}
-                  className="w-full text-xs font-mono rounded-lg border border-slate-200 px-3 py-2 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="JSG/CIRCULAR/2026/09/..."
+                  className="w-full text-xs font-mono font-bold text-slate-800 rounded-lg border border-slate-300 px-3 py-2 bg-slate-50/70 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="JSG/CIRCULAR/2026/..."
                 />
               </div>
 
@@ -384,14 +435,14 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                   value={title}
                   onChange={e => setTitle(e.target.value)}
                   maxLength={180}
-                  className="w-full text-xs font-medium rounded-lg border border-slate-200 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full text-xs font-semibold text-slate-900 rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="e.g. Revised MSME Procurement Policy & Catalog Upload Deadline"
                   required
                 />
               </div>
             </div>
 
-            {/* 4. Detailed Message Directive */}
+            {/* Section D: Message Directive */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label htmlFor="notice-message" className="text-xs font-bold text-slate-700">
@@ -405,31 +456,31 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                 onChange={e => setMessage(e.target.value)}
                 rows={5}
                 maxLength={4000}
-                className="w-full text-xs rounded-lg border border-slate-200 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans leading-relaxed"
+                className="w-full text-xs text-slate-800 rounded-lg border border-slate-300 p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans leading-relaxed"
                 placeholder="Type the complete official directive, instructions, guidelines, and compliance requirements here..."
                 required
               />
             </div>
 
-            {/* 5. Optional Portal Resource Link */}
+            {/* Section E: Optional Portal Resource Link */}
             <div>
               <label htmlFor="notice-link" className="text-xs font-bold text-slate-700 block mb-1">
                 Optional Direct Portal Link (Resource / Policy Page)
               </label>
-              <div className="flex items-center rounded-lg border border-slate-200 px-3 py-1.5 focus-within:ring-2 focus-within:ring-blue-500">
+              <div className="flex items-center rounded-lg border border-slate-300 px-3 py-1.5 focus-within:ring-2 focus-within:ring-blue-500 bg-white">
                 <LinkIcon className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
                 <input
                   id="notice-link"
                   type="text"
                   value={actionUrl}
                   onChange={e => setActionUrl(e.target.value)}
-                  className="w-full text-xs border-0 p-0 focus:outline-none focus:ring-0"
+                  className="w-full text-xs border-0 p-0 focus:outline-none focus:ring-0 text-slate-800"
                   placeholder="e.g. /seller/catalogue or /procurement or https://..."
                 />
               </div>
             </div>
 
-            {/* 6. Live Preview Drawer Toggle */}
+            {/* Section F: Live Preview Drawer Toggle */}
             <div className="pt-2 border-t border-slate-200">
               <button
                 type="button"
@@ -444,27 +495,50 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                 <div className="mt-3 p-4 bg-slate-900 text-white rounded-xl shadow-inner space-y-3">
                   <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-2">
                     <span className="font-mono">{refNumber || 'JSG/CIRCULAR/...'}</span>
-                    <span className="uppercase text-amber-400 font-bold">{priority} PRIORITY</span>
+                    <span
+                      className={cn(
+                        'uppercase font-bold px-2 py-0.5 rounded text-[10px]',
+                        priority === 'urgent'
+                          ? 'bg-rose-500/20 text-rose-300'
+                          : priority === 'high'
+                          ? 'bg-amber-500/20 text-amber-300'
+                          : 'bg-blue-500/20 text-blue-300'
+                      )}
+                    >
+                      {priority} PRIORITY
+                    </span>
                   </div>
                   <h3 className="text-sm font-bold text-white">{title || 'Notice Subject Preview'}</h3>
                   <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
                     {message || 'The full message directive will appear here in the centered user screen pop-up and official HTML email.'}
                   </p>
                   <div className="pt-2 text-[10px] text-slate-400 italic">
-                    Audience: {getAudienceLabel()} ({getActiveAudienceCount()} users)
+                    Audience: {getAudienceLabel()} ({getActiveAudienceCount()} verified accounts)
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Modal Footer */}
-          <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
-              Broadcasting to <strong className="text-slate-800">{getActiveAudienceCount()}</strong> recipients
-            </p>
-            <div className="flex items-center gap-2">
+          {/* 3. Modal Fixed Footer (Pinned at Bottom) */}
+          <div className="shrink-0 px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-600 flex items-center gap-1.5">
+              <span>Broadcasting to:</span>
+              {countsLoading ? (
+                <span className="inline-flex items-center gap-1 text-slate-500 font-semibold">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                  <span>Checking accounts...</span>
+                </span>
+              ) : (
+                <strong className="text-slate-900 font-bold bg-slate-200/80 px-2 py-0.5 rounded-full text-xs">
+                  {getActiveAudienceCount()} {getAudienceLabel()}
+                </strong>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 onClick={onClose}
@@ -474,6 +548,7 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
                 Cancel
               </Button>
               <Button
+                type="button"
                 variant="primary"
                 size="sm"
                 onClick={handleBroadcast}
@@ -498,4 +573,6 @@ export default function AdminNoticeCircularModal({ open, onClose, onSuccess }: P
       </FocusTrap>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 }

@@ -4230,11 +4230,25 @@ router.get('/master-admin/email-templates', ...masterOnly, wrap(async (req, res)
   jsonOk(res, { templates, availableVariables: DEFAULT_TEMPLATE_VARIABLES });
 }));
 
-router.post('/master-admin/companies/:companyId/email-templates', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
-  const companyId = Number(req.params.companyId);
-  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
-  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
-  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
+const persistTemplates = async (templates: EmailTemplate[], companyId?: number | null) => {
+  // Always persist to GlobalSetting so the entire portal and master-admin UI stay synchronized
+  await (prisma as any).globalSetting.upsert({
+    where: { key: 'email-templates' },
+    update: { value: templates as any },
+    create: { key: 'email-templates', value: templates as any }
+  });
+
+  // If companyId is provided, also sync to CompanySetting for tenant-level retention
+  if (companyId && Number.isFinite(companyId) && companyId > 0) {
+    await (prisma as any).companySetting.upsert({
+      where: { companyId_key: { companyId, key: 'email-templates' } },
+      update: { value: templates as any },
+      create: { companyId, key: 'email-templates', value: templates as any }
+    }).catch(() => null);
+  }
+};
+
+const handleCreateTemplate = async (req: any, res: any, targetCompanyId?: number | null) => {
   const reason = ensureReason(res, req.body, 'create email template');
   if (!reason) return;
   const name = textOrNull(req.body?.name);
@@ -4246,7 +4260,7 @@ router.post('/master-admin/companies/:companyId/email-templates', ...masterOnly,
 
   const templates = await getOrInitializeTemplates();
   const slug = textOrNull(req.body?.slug) || slugify(name);
-  if (templates.some(t => t.slug === slug)) return jsonError(res, 409, `A template with slug "${slug}" already exists for this company.`, 'DUPLICATE_ERROR');
+  if (templates.some(t => t.slug === slug)) return jsonError(res, 409, `A template with slug "${slug}" already exists.`, 'DUPLICATE_ERROR');
 
   const now = new Date().toISOString();
   const newTemplate: EmailTemplate = {
@@ -4262,22 +4276,18 @@ router.post('/master-admin/companies/:companyId/email-templates', ...masterOnly,
     updatedAt: now
   };
   templates.push(newTemplate);
-  await (prisma as any).companySetting.upsert({
-    where: { companyId_key: { companyId, key: 'email-templates' } },
-    update: { value: templates },
-    create: { companyId, key: 'email-templates', value: templates }
+  await persistTemplates(templates, targetCompanyId);
+  await createAuditLog(req, {
+    action: 'email.template.create',
+    entityType: 'email_template',
+    entityId: targetCompanyId || 1,
+    metadata: { reason, templateId: newTemplate.id, slug, name }
   });
-  await createAuditLog(req, { action: 'email.template.create', entityType: 'email_template', entityId: companyId, metadata: { reason, templateId: newTemplate.id, slug, name } });
   jsonOk(res, newTemplate, 'Email template created successfully.', 201);
-}));
+};
 
-router.put('/master-admin/companies/:companyId/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
-  const companyId = Number(req.params.companyId);
-  const templateId = req.params.templateId;
-  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
+const handleUpdateTemplate = async (req: any, res: any, templateId: string, targetCompanyId?: number | null) => {
   if (!templateId) return jsonError(res, 400, 'Template ID is required.', 'VALIDATION_ERROR');
-  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
-  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
   const reason = ensureReason(res, req.body, 'update email template');
   if (!reason) return;
 
@@ -4303,21 +4313,18 @@ router.put('/master-admin/companies/:companyId/email-templates/:templateId', ...
     variables: Array.isArray(req.body?.variables) ? req.body.variables.filter((v: unknown) => typeof v === 'string') : existing.variables,
     updatedAt: new Date().toISOString()
   };
-  await (prisma as any).companySetting.update({
-    where: { companyId_key: { companyId, key: 'email-templates' } },
-    data: { value: templates }
+  await persistTemplates(templates, targetCompanyId);
+  await createAuditLog(req, {
+    action: 'email.template.update',
+    entityType: 'email_template',
+    entityId: targetCompanyId || 1,
+    metadata: { reason, templateId, slug, name }
   });
-  await createAuditLog(req, { action: 'email.template.update', entityType: 'email_template', entityId: companyId, metadata: { reason, templateId, slug, name } });
   jsonOk(res, templates[idx], 'Email template updated successfully.');
-}));
+};
 
-router.delete('/master-admin/companies/:companyId/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
-  const companyId = Number(req.params.companyId);
-  const templateId = req.params.templateId;
-  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
+const handleDeleteTemplate = async (req: any, res: any, templateId: string, targetCompanyId?: number | null) => {
   if (!templateId) return jsonError(res, 400, 'Template ID is required.', 'VALIDATION_ERROR');
-  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
-  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
   const reason = ensureReason(res, req.body, 'deactivate email template');
   if (!reason) return;
 
@@ -4326,12 +4333,55 @@ router.delete('/master-admin/companies/:companyId/email-templates/:templateId', 
   if (idx === -1) return jsonError(res, 404, 'Template not found.', 'NOT_FOUND');
 
   templates[idx] = { ...templates[idx], isActive: false, updatedAt: new Date().toISOString() };
-  await (prisma as any).companySetting.update({
-    where: { companyId_key: { companyId, key: 'email-templates' } },
-    data: { value: templates }
+  await persistTemplates(templates, targetCompanyId);
+  await createAuditLog(req, {
+    action: 'email.template.deactivate',
+    entityType: 'email_template',
+    entityId: targetCompanyId || 1,
+    metadata: { reason, templateId, slug: templates[idx].slug }
   });
-  await createAuditLog(req, { action: 'email.template.deactivate', entityType: 'email_template', entityId: companyId, metadata: { reason, templateId, slug: templates[idx].slug } });
   jsonOk(res, templates[idx], 'Email template deactivated.');
+};
+
+// Direct master-admin routes (matching frontend masterAdminApi)
+router.post('/master-admin/email-templates', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = req.body?.companyId ? Number(req.body.companyId) : null;
+  await handleCreateTemplate(req, res, companyId);
+}));
+
+router.put('/master-admin/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = req.body?.companyId ? Number(req.body.companyId) : null;
+  await handleUpdateTemplate(req, res, req.params.templateId, companyId);
+}));
+
+router.delete('/master-admin/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = req.body?.companyId ? Number(req.body.companyId) : null;
+  await handleDeleteTemplate(req, res, req.params.templateId, companyId);
+}));
+
+// Company-scoped routes for backward compatibility
+router.post('/master-admin/companies/:companyId/email-templates', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = Number(req.params.companyId);
+  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
+  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
+  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
+  await handleCreateTemplate(req, res, companyId);
+}));
+
+router.put('/master-admin/companies/:companyId/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = Number(req.params.companyId);
+  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
+  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
+  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
+  await handleUpdateTemplate(req, res, req.params.templateId, companyId);
+}));
+
+router.delete('/master-admin/companies/:companyId/email-templates/:templateId', ...masterOnly, requirePermission(PERMISSIONS.CONTENT_UPDATE), wrap(async (req, res) => {
+  const companyId = Number(req.params.companyId);
+  if (!Number.isFinite(companyId) || companyId <= 0) return jsonError(res, 400, 'Invalid company ID.', 'VALIDATION_ERROR');
+  const company = await (prisma as any).company.findUnique({ where: { id: companyId }, select: { id: true } });
+  if (!company) return jsonError(res, 404, 'Company not found.', 'NOT_FOUND');
+  await handleDeleteTemplate(req, res, req.params.templateId, companyId);
 }));
 
 router.get('/master-admin/portal-settings', ...masterOnly, wrap(async (_req, res) => {
