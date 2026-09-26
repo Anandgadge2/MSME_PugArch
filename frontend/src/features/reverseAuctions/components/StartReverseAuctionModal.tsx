@@ -106,8 +106,18 @@ export default function StartReverseAuctionModal({
   const [extensionWindow, setExtensionWindow] = useState<number>(auctionDefaults?.extensionTriggerMinutes ?? 3);
   const [extensionMinutes, setExtensionMinutes] = useState<number>(auctionDefaults?.extensionDurationMinutes ?? 3);
   const [maxExtensions, setMaxExtensions] = useState<number>(auctionDefaults?.maximumExtensions ?? 5);
-
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -437,6 +447,7 @@ export default function StartReverseAuctionModal({
                     <button
                       key={mins}
                       type="button"
+                      aria-pressed={durationMinutes === mins}
                       onClick={() => setDurationMinutes(mins)}
                       className={`py-2 rounded-xl text-xs font-black transition ${
                         durationMinutes === mins
@@ -458,10 +469,11 @@ export default function StartReverseAuctionModal({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                  <label htmlFor="modal-min-decrement" className="block text-xs font-bold text-slate-700 mb-1">
                     Minimum Bid Decrement (₹)
                   </label>
                   <input
+                    id="modal-min-decrement"
                     type="number"
                     min="1"
                     step="1"

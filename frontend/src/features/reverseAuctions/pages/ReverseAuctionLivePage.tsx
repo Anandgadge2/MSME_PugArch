@@ -568,8 +568,14 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             )}
 
             {auction.autoExtensionEnabled && (
-              <span className="rounded-xl border border-blue-200 bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-400">
-                Auto-Extension: {extensionCount} / {maxExtensions}
+              <span className={cn(
+                "rounded-xl border px-2.5 py-1 text-[10px] font-bold transition flex items-center gap-1.5",
+                extensionCount > 0 
+                  ? "border-amber-300 bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 shadow-xs" 
+                  : "border-blue-200 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400"
+              )}>
+                {extensionCount > 0 && <Sparkles className="h-3 w-3 text-amber-600 dark:text-amber-400" aria-hidden="true" />}
+                Auto-Extended: {extensionCount} / {maxExtensions}
               </span>
             )}
           </div>
@@ -588,7 +594,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
               Remaining Bidding Window
             </p>
-            <div className={cn(
+            <div 
+              role="timer"
+              aria-live="off"
+              className={cn(
               "mt-1 text-2xl sm:text-3xl font-mono font-extrabold tracking-wider drop-shadow-xs",
               isNearEnding 
                 ? "text-red-600 animate-pulse drop-shadow-[0_0_12px_rgba(239,68,68,0.35)]" 
@@ -1224,7 +1233,7 @@ function StatsCard({
           </span>
         </div>
         <div>
-          <p title={value} className={cn("text-xl font-mono font-extrabold tracking-tight truncate", colorMap[color].split(' ')[0])}>
+          <p title={value} role="status" aria-live="polite" className={cn("text-xl font-mono font-extrabold tracking-tight truncate", colorMap[color].split(' ')[0])}>
             {value}
           </p>
           {subtitle && (

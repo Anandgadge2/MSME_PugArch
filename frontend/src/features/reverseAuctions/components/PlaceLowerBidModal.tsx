@@ -41,6 +41,17 @@ export default function PlaceLowerBidModal({
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleAmountChange = (val: string) => {
@@ -182,7 +193,11 @@ export default function PlaceLowerBidModal({
 
         {/* Error message */}
         {errorMsg && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700 flex items-start gap-2">
+          <div
+            id="place-bid-modal-error"
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs font-bold text-red-700 flex items-start gap-2"
+          >
             <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
             <span>{errorMsg}</span>
           </div>
@@ -190,7 +205,10 @@ export default function PlaceLowerBidModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+            <label
+              htmlFor="place-bid-amount-input"
+              className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5"
+            >
               Enter Your Commercial Offer (INR) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -198,6 +216,7 @@ export default function PlaceLowerBidModal({
                 ₹
               </span>
               <input
+                id="place-bid-amount-input"
                 type="number"
                 min="1"
                 step="0.01"
@@ -208,6 +227,8 @@ export default function PlaceLowerBidModal({
                 className="h-12 w-full rounded-2xl border border-slate-200 pl-8 pr-4 text-sm font-black text-slate-900 outline-none focus:border-red-500 focus:ring-2 focus:ring-red-500/20 transition"
                 required
                 disabled={submitting}
+                aria-invalid={Boolean(errorMsg)}
+                aria-describedby={errorMsg ? 'place-bid-modal-error' : undefined}
               />
             </div>
           </div>

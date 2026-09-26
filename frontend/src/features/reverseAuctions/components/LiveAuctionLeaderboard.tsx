@@ -304,12 +304,14 @@ export default function LiveAuctionLeaderboard({
         <div className="flex flex-wrap items-center gap-3">
           {isLive && (
             <div className="flex items-center gap-2 rounded-2xl bg-red-50/80 border border-red-200 px-4 py-2">
-              <Clock className="h-4 w-4 text-red-600 animate-pulse" />
+              <Clock className="h-4 w-4 text-red-600 animate-pulse" aria-hidden="true" />
               <div className="text-right">
                 <span className="block text-[9px] font-black uppercase tracking-widest text-red-600">
                   Time Remaining
                 </span>
-                <span className="font-mono text-base font-black text-red-700">{timeLeft}</span>
+                <span className="font-mono text-base font-black text-red-700" role="timer" aria-live="off">
+                  {timeLeft}
+                </span>
               </div>
             </div>
           )}
@@ -356,7 +358,7 @@ export default function LiveAuctionLeaderboard({
           <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1">
             <Trophy className="h-3.5 w-3.5 text-emerald-600" /> Current L1 (Lowest)
           </span>
-          <p className="text-xl font-black text-emerald-950">
+          <p className="text-xl font-black text-emerald-950" role="status" aria-live="polite">
             ₹{currentLowest.toLocaleString('en-IN')}
           </p>
           <p className="text-[10px] font-semibold text-emerald-700">
@@ -368,7 +370,7 @@ export default function LiveAuctionLeaderboard({
           <span className="text-[10px] font-black uppercase tracking-wider text-blue-800 flex items-center gap-1">
             <TrendingDown className="h-3.5 w-3.5 text-blue-600" /> Total Savings Generated
           </span>
-          <p className="text-xl font-black text-blue-950">
+          <p className="text-xl font-black text-blue-950" role="status" aria-live="polite">
             ₹{savings.toLocaleString('en-IN')}
           </p>
           <p className="text-[10px] font-semibold text-blue-700">
