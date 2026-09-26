@@ -73,10 +73,10 @@ export default function ProcurementReportPage() {
                                 {/* Procurement Lifecycle & Tender Spend */}
                                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                                     <Card className="shadow-sm border-slate-200">
-                                        <CardContent className="p-5">
+                                        <CardContent className="p-5 min-w-0">
                                             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-4">Procurement Lifecycle / Volume</h3>
-                                            <div className="h-72 w-full">
-                                                <ResponsiveContainer width="100%" height="100%">
+                                            <div className="h-72 w-full min-w-0">
+                                                <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                                     <BarChart data={[
                                                         { name: 'Requirements', value: data.requirements },
                                                         { name: 'Quote Requests', value: data.quoteRequests },
@@ -95,11 +95,11 @@ export default function ProcurementReportPage() {
                                         </CardContent>
                                     </Card>
                                     <Card className="shadow-sm border-slate-200">
-                                        <CardContent className="p-5">
+                                        <CardContent className="p-5 min-w-0">
                                             <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-900 mb-4">Tender Lifecycle / Spend</h3>
                                             {methodWise.data?.tenderComparison ? (
-                                                <div className="h-72 w-full">
-                                                    <ResponsiveContainer width="100%" height="100%">
+                                                <div className="h-72 w-full min-w-0">
+                                                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                                                         <BarChart data={methodWise.data.tenderComparison}>
                                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                                                             <XAxis dataKey="label" tick={{fontSize: 10, fontWeight: 600, fill: '#64748b'}} axisLine={false} tickLine={false} />

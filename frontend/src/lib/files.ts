@@ -104,8 +104,18 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
         };
       }
-    } catch {
-      // Fallback below
+
+      if (res.status === 404) {
+        const errJson = await res.json().catch(() => null);
+        if (errJson?.code === 'FILE_NOT_FOUND_ON_DISK' || errJson?.message?.includes('Stored file content not found')) {
+          throw new Error('Document file is not present on storage. Please request the supplier to re-upload it.');
+        }
+      }
+    } catch (err: any) {
+      if (err?.message?.includes('not present on storage')) {
+        throw err;
+      }
+      // Fallback below for other network issues
     }
 
     // Try signed URL endpoint if view endpoint failed

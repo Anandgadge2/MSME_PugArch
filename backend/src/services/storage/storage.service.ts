@@ -863,20 +863,28 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
   if (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://')) {
     try {
-      const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(1500) });
+      const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(3000) });
       if (response.ok) {
-        return {
-          ...signed,
-          buffer: Buffer.from(await response.arrayBuffer()),
-          contentType: signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream'
-        };
+        const buffer = Buffer.from(await response.arrayBuffer());
+        return cacheAndReturn(buffer, signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream');
       }
-    } catch {}
+      // If GCS signed URL returned 404, the object definitely does not exist in storage
+      if (response.status === 404) {
+        throw new ApiError(404, 'Stored file content not found on server disk or storage', 'FILE_NOT_FOUND_ON_DISK');
+      }
+    } catch (fetchErr: any) {
+      if (fetchErr instanceof ApiError) throw fetchErr;
+    }
   }
 
-  // Fallback: If asset is on GCP, try reading stream directly via authenticated GCS client with timeout
+  // Fallback: If asset is on GCP, verify existence first to fail-fast instead of timing out
   if (assetObj?.storageProvider === 'gcp' || assetObj?.storageProviderEnum === 'GCP' || assetObj?.bucket) {
     try {
+      const exists = await gcpStorageProvider.fileExists(assetObj.key);
+      if (!exists) {
+        throw new ApiError(404, 'Stored file content not found on server disk or storage', 'FILE_NOT_FOUND_ON_DISK');
+      }
+
       const readGcpStream = async () => {
         const gcpStream = gcpStorageProvider.createReadStream(assetObj.key);
         const chunks: Buffer[] = [];
@@ -888,17 +896,15 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
       const buffer = await Promise.race([
         readGcpStream(),
-        new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('GCS read timeout')), 1500))
+        new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('GCS read timeout')), 3000))
       ]);
 
       if (buffer && buffer.length > 0) {
-        return {
-          ...signed,
-          buffer,
-          contentType: assetObj.mimeType || 'application/octet-stream'
-        };
+        return cacheAndReturn(buffer, assetObj.mimeType || 'application/octet-stream');
       }
-    } catch {}
+    } catch (gcpErr: any) {
+      if (gcpErr instanceof ApiError) throw gcpErr;
+    }
   }
 
   throw new ApiError(404, 'Stored file content not found on server disk or storage', 'FILE_NOT_FOUND_ON_DISK');
