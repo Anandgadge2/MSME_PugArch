@@ -35,6 +35,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 
 import { cn } from '../../../lib/utils';
+import { printHtmlContent } from '../../../utils/printUtils';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Pagination } from '../../shared/Pagination';
@@ -1075,9 +1076,6 @@ function PaymentDetail({
   };
 
   const handleDownloadReceipt = () => {
-    const printWindow = window.open('', '_blank', 'width=900,height=1100');
-    if (!printWindow) return;
-
     const formattedStatus = status.toUpperCase();
     const formattedDate = formatDate(receiptDate);
 
@@ -1199,17 +1197,11 @@ function PaymentDetail({
             <p>Valid for tax filing, financial reconciliation, audit review, and escrow settlement verification.</p>
           </div>
 
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
         </body>
       </html>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+    printHtmlContent(html);
   };
 
   return (

@@ -33,6 +33,7 @@ import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset } from '../../../lib/files';
 import { cn } from '../../../lib/utils';
+import { printHtmlContent } from '../../../utils/printUtils';
 
 export type PaymentReceiptTab = 'receipt' | 'timeline';
 
@@ -129,7 +130,8 @@ export function PaymentReceiptViewModal({
   onUploadSlip
 }: PaymentReceiptViewModalProps) {
   const { user } = useAuth();
-  const isAdminOrSeller = user?.role === 'admin' || user?.role === 'seller' || user?.role === 'master_admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
+  const isSellerOrFinancier = !isAdmin && (user?.role === 'seller' || (user?.role as string) === 'financier');
 
   const [activeTab, setActiveTab] = useState<PaymentReceiptTab>(initialTab);
   const [fetchedPayment, setFetchedPayment] = useState<any | null>(initialPayment || null);
@@ -491,11 +493,6 @@ export function PaymentReceiptViewModal({
   };
 
   const handlePrintOfficialReceipt = () => {
-    const printWindow = window.open('', '_blank', 'width=900,height=1100');
-    if (!printWindow) {
-      toast.error('Please allow popups to print official payment receipt');
-      return;
-    }
 
     const ref = activePayment?.referenceId || resolvedProof?.transactionReference || `PAY-REC-${Date.now()}`;
     const amountVal = resolvedProof?.amount || activePayment?.amount || 0;
@@ -636,17 +633,11 @@ export function PaymentReceiptViewModal({
             <div class="watermark">Digital Verification Hash: MSME-${ref}-${Date.now().toString(36).toUpperCase()}</div>
           </div>
 
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
         </body>
       </html>
     `;
 
-    printWindow.document.write(html);
-    printWindow.document.close();
+    printHtmlContent(html);
   };
 
   const timelineEvents = buildPaymentTimeline(activePayment || {
@@ -1062,7 +1053,7 @@ export function PaymentReceiptViewModal({
                           : 'A bank transfer slip or payment advice can be attached for auditing.'}
                       </p>
                     </div>
-                    {onUploadSlip && activePayment && (
+                    {!isAdmin && onUploadSlip && activePayment && (
                       <Button
                         type="button"
                         variant="outline"
@@ -1277,8 +1268,8 @@ export function PaymentReceiptViewModal({
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Admin / Seller Verification Buttons */}
-            {isAdminOrSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
+            {/* Seller / Financier Verification Buttons (Admin is strictly View-Only) */}
+            {isSellerOrFinancier && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
               <>
                 <Button
                   type="button"
