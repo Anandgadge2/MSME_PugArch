@@ -1211,10 +1211,10 @@ export default function PurchaseOrders() {
     const config: DocumentConfig = {
       documentTitle: 'PURCHASE ORDER',
       documentNumber: order.poNumber || `PO-${order.id}`,
-      dateStr: formatTimestamp(new Date()),
+      dateStr: formatTimestamp(order.createdAt || new Date()),
       status: readableStatus(order.status),
-      issuerName: sellerOrg !== 'N/A' ? sellerOrg : (buyerOrgName !== 'N/A' ? buyerOrgName : 'Enterprise Procurement'),
-      issuerSubtitle: 'Authorized Vendor & MSME Supplier',
+      issuerName: buyerOrgName !== 'N/A' ? buyerOrgName : (sellerOrg !== 'N/A' ? sellerOrg : 'Enterprise Procurement'),
+      issuerSubtitle: 'Official Purchase Order Document',
       issuerLogo: effectiveSellerLogo || effectiveBuyerLogo,
       sellerSignatureUrl: effectiveSellerSignature,
       sellerStampUrl: effectiveSellerStamp,

@@ -21,6 +21,7 @@ type SafeProfile = {
   dob?: Date | null;
   gender?: string;
   email?: string;
+  mobile?: string;
   address?: unknown;
   ageVerified?: boolean | null;
   digilockerId?: string;
@@ -30,7 +31,7 @@ type SafeProfile = {
 };
 
 const requiredConfig = () => {
-  const scopes = env.MERIPEHCHAAN_SCOPES || 'openid profile email';
+  const scopes = env.MERIPEHCHAAN_SCOPES || 'openid profile email phone';
   const needsIdTokenVerification = scopes.split(/\s+/).includes('openid');
 
   const missing = [
@@ -66,6 +67,9 @@ const requiredConfig = () => {
     frontendUrl: env.FRONTEND_URL!,
     scopes,
     acr: env.MERIPEHCHAAN_ACR,
+    serviceName: String(env.DIGILOCKER_SERVICE_NAME || 'JsgSmile MSME Portal').trim().slice(0, 50),
+    purposeOnboarding: String(env.DIGILOCKER_PURPOSE_ONBOARDING || 'User Onboarding KYC Verification').trim().slice(0, 50),
+    purposePreReg: String(env.DIGILOCKER_PURPOSE_PREREG || 'Pre-Registration KYC Verification').trim().slice(0, 50),
     ttlMinutes: env.AADHAAR_KYC_SESSION_TTL_MINUTES || 10,
     needsIdTokenVerification,
   };
@@ -199,11 +203,15 @@ const extractSafeProfile = (userinfo: any, idTokenPayload: any): SafeProfile => 
   const source = { ...(idTokenPayload || {}), ...(userinfo || {}) };
   const rawAadhaarStr = firstString(source, ['aadhaar_number', 'aadhaar', 'masked_aadhaar', 'aadhaar_last4', 'aadhaar_last_4', 'uid']);
   const aadhaarLast4 = rawAadhaarStr ? rawAadhaarStr.replace(/\D/g, '').slice(-4) : undefined;
+  const rawMobile = firstString(source, ['mobile', 'phone_number', 'mobile_number', 'phone', 'phone_no', 'registered_mobile']);
+  const cleanMobile = rawMobile ? rawMobile.replace(/\D/g, '').slice(-10) : undefined;
+  const verifiedMobile = cleanMobile && cleanMobile.length === 10 ? cleanMobile : undefined;
   return {
     name: firstString(source, ['name', 'full_name', 'fullname', 'verified_name']),
     dob: parseDate(source.birthdate || source.dob || source.date_of_birth),
     gender: firstString(source, ['gender']),
     email: firstString(source, ['email', 'verified_email']),
+    mobile: verifiedMobile,
     address: source.address && typeof source.address === 'object' ? source.address : undefined,
     ageVerified: typeof source.age_verified === 'boolean' ? source.age_verified : typeof source.ageVerified === 'boolean' ? source.ageVerified : null,
     digilockerId: firstString(source, ['digilocker_id', 'digilockerId', 'digilockerid']),
@@ -505,12 +513,20 @@ const verifyIdToken = async (idToken: string | undefined, config: ReturnType<typ
   }
 };
 
+const sanitizePurpose = (val: string | undefined, defaultVal: string): string => {
+  const raw = String(val || defaultVal || 'KYC Verification').trim();
+  // DigiLocker strict rule: only letters, numbers, spaces, and underscores allowed
+  const sanitized = raw.replace(/[^A-Za-z0-9_ ]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 50);
+  return sanitized || 'KYC Verification';
+};
+
 export const aadhaarKycService = {
   redirectUrl,
 
-  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string, frontendOrigin?: string) {
+  async start(user: AuthenticatedUser, meta: RequestMeta, redirectPath?: string, frontendOrigin?: string, customPurpose?: string) {
     const config = requiredConfig();
     const organizationId = getOrgId(user);
+    const purpose = sanitizePurpose(customPurpose, config.purposeOnboarding);
 
     const existing = await prisma.userKycVerification.findUnique({
       where: { userId_provider_verificationType: { userId: user.id, provider: PROVIDER, verificationType: VERIFICATION_TYPE } }
@@ -571,6 +587,8 @@ export const aadhaarKycService = {
     authUrl.searchParams.set('scope', config.scopes);
     authUrl.searchParams.set('code_challenge', challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    authUrl.searchParams.set('service_name', config.serviceName);
+    authUrl.searchParams.set('purpose', purpose);
     if (config.acr) authUrl.searchParams.set('acr', config.acr);
 
     return authUrl.toString();
@@ -766,8 +784,9 @@ export const aadhaarKycService = {
     return this.status(user);
   },
 
-  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string }, meta: RequestMeta) {
+  async preRegisterStart(payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string; purpose?: string }, meta: RequestMeta) {
     const config = requiredConfig();
+    const purpose = sanitizePurpose(payload.purpose, config.purposePreReg);
     
     const stateData = {
       path: payload.redirectPath || DEFAULT_RETURN_PATH,
@@ -807,6 +826,8 @@ export const aadhaarKycService = {
     authUrl.searchParams.set('scope', config.scopes);
     authUrl.searchParams.set('code_challenge', challenge);
     authUrl.searchParams.set('code_challenge_method', 'S256');
+    authUrl.searchParams.set('service_name', config.serviceName);
+    authUrl.searchParams.set('purpose', purpose);
     if (config.acr) authUrl.searchParams.set('acr', config.acr);
 
     return { authorizationUrl: authUrl.toString(), kycSessionToken };
@@ -817,6 +838,7 @@ export const aadhaarKycService = {
     const state = typeof query.state === 'string' ? query.state : '';
     const code = typeof query.code === 'string' ? query.code : '';
     const providerError = typeof query.error === 'string' ? query.error : '';
+    const providerErrorDescription = typeof query.error_description === 'string' ? query.error_description : '';
 
     const session = state
       ? await prisma.preRegistrationKycSession.findUnique({ where: { state } })
@@ -827,13 +849,15 @@ export const aadhaarKycService = {
     const origin = stateInfo.origin;
 
     if (providerError) {
+      logger.warn({ providerError, providerErrorDescription, query }, '[Aadhaar KYC] MeriPehchaan OAuth error in preRegisterCallback');
       if (session) {
         await prisma.preRegistrationKycSession.update({
           where: { id: session.id },
-          data: { status: 'FAILED' }
+          data: { status: `FAILED: ${providerError}${providerErrorDescription ? ` (${providerErrorDescription})` : ''}`.slice(0, 190) }
         });
       }
-      return redirectUrl('failed', 'Verification was declined or failed.', redirectPath, origin);
+      const failureReason = providerErrorDescription || providerError || 'Verification was declined or failed.';
+      return redirectUrl('failed', failureReason, redirectPath, origin);
     }
 
     if (!state || !code || !session || session.used || session.expiresAt <= new Date()) {
@@ -892,6 +916,7 @@ export const aadhaarKycService = {
           idTokenVerified,
           verifiedAt: new Date(),
           aadhaarLast4: profile.aadhaarLast4 || session.aadhaarLast4,
+          verifiedMobile: profile.mobile || undefined,
         }
       });
 
@@ -936,6 +961,7 @@ export const aadhaarKycService = {
       verifiedGender: session.verifiedGender,
       referenceKey: session.referenceKey,
       aadhaarLast4: session.aadhaarLast4,
+      verifiedMobile: session.verifiedMobile,
       isValid,
       used: session.used,
       expiresAt: session.expiresAt

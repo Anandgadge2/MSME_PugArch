@@ -1,4 +1,4 @@
-import { env } from './src/config/env.js';
+import { env, getPublicPortalUrl } from './src/config/env.js';
 import https from 'https';
 import { pathToFileURL } from 'url';
 import fs from 'fs';
@@ -6671,8 +6671,10 @@ app.post('/api/public/grievances', async (req, res) => {
             <strong>Next Steps:</strong> A designated Nodal Officer will examine the facts and record findings. You will receive an official email resolution directly at this address once administrative action is taken.
           </p>
         </div>
-        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">
-          You can also track the real-time status of your complaint on the portal using Reference ID <strong>${ticketNumber}</strong>.
+        <p style="font-size: 13px; color: #475569; margin-top: 20px;">
+          You can track the real-time status of your complaint on the portal using Reference ID <strong>${ticketNumber}</strong> at:
+          <br/>
+          <a href="${getPublicPortalUrl().replace(/\/+$/, '')}/disputes" style="color: #1e40af; font-weight: 700; text-decoration: underline;">${getPublicPortalUrl().replace(/\/+$/, '')}/disputes</a>
         </p>
       </div>
     `;

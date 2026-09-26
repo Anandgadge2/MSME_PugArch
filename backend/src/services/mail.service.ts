@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
-import { env } from '../config/env.js';
+import { env, getPublicPortalUrl } from '../config/env.js';
 import prisma from '../lib/prisma.js';
+import { buildGovernmentGradeEmailHtml } from './email-template.builder.js';
 
 const db = prisma as any;
 
@@ -192,17 +193,53 @@ export const sendOtpEmail = async (
       finalSubject = compiled.subject;
       finalHtml = compiled.html;
     } else {
-      // Hardcoded fallback template matching the old style
-      finalHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
-          <div style="background:#12335f;color:white;padding:18px;text-align:center;font-weight:700;">${portalName} Secure Verification</div>
-          <div style="padding:28px;color:#1e293b;">
-            <p>Use this verification code to continue:</p>
-            <div style="font-size:32px;letter-spacing:10px;font-weight:800;text-align:center;margin:24px 0;color:#12335f;">${otp}</div>
-            <p style="font-size:12px;color:#64748b;">This code expires in 10 minutes. If you did not request it, ignore this message and contact support.</p>
-          </div>
-        </div>
-      `;
+      const cleanPurpose = subjectDefault.replace(/\[.*?\]\s*/g, '').trim() || 'Authentication / Security Verification';
+      finalSubject = `[SECURE AUTH] One-Time Password (OTP) - ${portalName}`;
+      finalHtml = buildGovernmentGradeEmailHtml({
+        portalName,
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        recipientName: user?.name || 'Authorized User',
+        recipientEmail: email,
+        noticeType: 'AUTHENTICATION VERIFICATION CODE',
+        noticeRef: `JSG-AUTH/OTP/${Date.now().toString().slice(-6)}`,
+        badgeVariant: 'primary',
+        heading: 'One-Time Verification Code (OTP)',
+        summary: `A security verification request has been initiated for your account on the official MSME Procurement Portal (${portalName}). Use the authorization credentials detailed below to proceed.`,
+        detailsTable: [
+          {
+            label: 'One-Time Password (OTP)',
+            value: `<span style="font-family: Consolas, Monaco, monospace; font-size: 26px; font-weight: 800; letter-spacing: 8px; color: #0b2545; background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 14px; border-radius: 6px; display: inline-block;">${otp}</span>`
+          },
+          {
+            label: 'Validity Duration',
+            value: 'Valid for 10 Minutes (Single Use Only)',
+            isHighlight: true,
+            color: '#b45309'
+          },
+          {
+            label: 'Associated Email ID',
+            value: email,
+            isCode: true
+          },
+          {
+            label: 'Verification Purpose',
+            value: cleanPurpose
+          }
+        ],
+        stepInstructions: {
+          title: 'Verification Instructions',
+          steps: [
+            'Enter the 6-digit verification code above into the portal prompt window.',
+            'Ensure you do not refresh or close your browser tab until authentication completes.',
+            'If this code expires, you may request a new OTP from the portal interface.'
+          ]
+        },
+        actionButton: {
+          label: 'Access JSG SMILE Portal',
+          url: getPublicPortalUrl()
+        },
+        securityAdvisory: 'Statutory Security Notice: District Administration officials, helpdesk staff, and procurement officers will NEVER ask for your OTP, password, or digital certificate PIN. If you did not initiate this authentication request, please change your password and report the incident immediately to the portal security desk.'
+      });
     }
 
     const transporter = await getTransporterForCompany(companyId);
@@ -243,100 +280,75 @@ export interface SendAdminWelcomeEmailParams {
 export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams): Promise<boolean> => {
   const { email, name, role, userId, temporaryPassword, isReset = false } = params;
   try {
-    const rawPortalUrl = env.FRONTEND_URL || process.env.PRODUCTION_URL || process.env.PUBLIC_URL || process.env.APP_URL || process.env.PORTAL_URL || 'https://msme-pugarch-frontend.vercel.app';
-    const portalUrl = rawPortalUrl.trim().replace(/\/+$/, '');
+    const portalUrl = getPublicPortalUrl().replace(/\/+$/, '');
     const loginUrl = `${portalUrl}/login`;
     const resetUrl = `${portalUrl}/forgot-password`;
-    const portalName = 'JSG SMILE Portal';
+    const portalName = 'JSG SMILE Procurement Portal';
     const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
     const fromName = 'JSG SMILE District Administration';
 
     const roleTitle = String(role || 'ADMIN').toUpperCase().replace(/_/g, ' ');
     const subject = isReset 
-      ? `[${portalName}] Your Password Has Been Reset`
-      : `[${portalName}] Welcome - Your Admin Account Credentials`;
+      ? `[${portalName}] Official Notice: Administrative Password Reset`
+      : `[${portalName}] Official Provisioning: Administrator Account Credentials`;
 
-    const html = `
-      <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
-        <!-- Tricolor Accent Top Bar -->
-        <div style="height: 4px; background: linear-gradient(to right, #f59e0b, #ffffff, #10b981);"></div>
-        
-        <!-- Header Banner -->
-        <div style="background-color: #07172e; color: #ffffff; padding: 28px 24px; text-align: center;">
-          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #ffffff; text-transform: uppercase;">
-            ${portalName}
-          </h1>
-          <p style="margin: 6px 0 0 0; font-size: 12px; color: #94a3b8; letter-spacing: 0.5px;">
-            Jharsuguda Synergy for MSME & Industry Linkage Ecosystem
-          </p>
-        </div>
-
-        <!-- Content Body -->
-        <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
-          <h2 style="margin-top: 0; font-size: 18px; color: #0f172a; font-weight: 700;">
-            Hello ${name || 'Administrator'},
-          </h2>
-
-          <p style="font-size: 14px; color: #334155;">
-            ${isReset 
-              ? 'Your account password has been reset by the Master Administrator. You can log in using your updated temporary credentials below:'
-              : 'Your administrator account has been successfully created on the JSG SMILE Portal. Below are your official access credentials:'}
-          </p>
-
-          <!-- Credentials Card -->
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #12335f; border-radius: 8px; padding: 20px; margin: 24px 0;">
-            <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">
-                  <a href="${loginUrl}" style="color: #2563eb; text-decoration: underline;">${loginUrl}</a>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Account Email:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
-              </tr>
-              ${userId ? `
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">System User ID:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${userId}</td>
-              </tr>` : ''}
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleTitle}</td>
-              </tr>
-              ${temporaryPassword ? `
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
-                <td style="padding: 6px 0; color: #d97706; font-family: monospace; font-size: 15px; font-weight: 800; background-color: #fef3c7; padding: 4px 8px; border-radius: 4px; display: inline-block;">
-                  ${temporaryPassword}
-                </td>
-              </tr>` : ''}
-            </table>
-          </div>
-
-          <!-- Action Button -->
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 32px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
-              Login to JSG SMILE Portal &rarr;
-            </a>
-          </div>
-
-          <!-- Security Instructions -->
-          <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; padding: 16px; margin-top: 24px; font-size: 13px; color: #92400e;">
-            <strong>Security Advisory:</strong> For security reasons, please change your password upon your first login. You can reset or update your password anytime at:
-            <br />
-            <a href="${resetUrl}" style="color: #b45309; font-weight: 700; text-decoration: underline; word-break: break-all;">${resetUrl}</a>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
-          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
-          <div>Official MSME Linkage Gateway &bull; Confidential Administrative Access</div>
-        </div>
-      </div>
-    `;
+    const html = buildGovernmentGradeEmailHtml({
+      portalName,
+      departmentName: 'Government of Odisha • District Administration Jharsuguda',
+      recipientName: name || 'Designated Administrator',
+      recipientEmail: email,
+      noticeType: isReset ? 'PASSWORD RESET NOTIFICATION' : 'ADMINISTRATIVE ACCESS PROVISIONING',
+      noticeRef: `JSG-ADM/CRED/${Date.now().toString().slice(-6)}`,
+      badgeVariant: 'primary',
+      heading: isReset ? 'Administrator Password Reset Authorization' : 'Welcome to JSG SMILE Administrative Desk',
+      summary: isReset
+        ? 'Your administrative account password on the JSG SMILE Procurement Portal has been reset by Master Administration. You may now authenticate using the provisional credentials detailed below.'
+        : 'An official administrative account has been provisioned for you on the JSG SMILE Portal (Jharsuguda Synergy for MSME & Industry Linkage Ecosystem). Below are your official access credentials and security instructions.',
+      detailsTable: [
+        {
+          label: 'Official Portal URL',
+          value: `<a href="${loginUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${loginUrl}</a>`
+        },
+        {
+          label: 'Authorized Email ID',
+          value: email,
+          isCode: true
+        },
+        ...(userId ? [{
+          label: 'System User Identifier',
+          value: userId,
+          isCode: true
+        }] : []),
+        {
+          label: 'Assigned Authority Role',
+          value: roleTitle,
+          isHighlight: true,
+          color: '#0f172a'
+        },
+        ...(temporaryPassword ? [{
+          label: 'Temporary Access Pass',
+          value: `<span style="font-family: Consolas, Monaco, monospace; font-size: 16px; font-weight: 800; color: #b45309; background-color: #fef3c7; border: 1px dashed #f59e0b; padding: 4px 10px; border-radius: 4px; display: inline-block;">${temporaryPassword}</span>`
+        }] : [])
+      ],
+      stepInstructions: {
+        title: 'Mandatory Security & Activation Checklist',
+        steps: [
+          'Navigate to the official portal login interface using the secure button below.',
+          'Authenticate using your registered email address and the temporary password provided above.',
+          'Upon first login, the security gateway will require you to establish a new, strong permanent password.',
+          'Verify your assigned district administrative privileges on the control dashboard.'
+        ]
+      },
+      actionButton: {
+        label: 'Access Administrative Portal',
+        url: loginUrl
+      },
+      secondaryActionButton: {
+        label: 'Password Recovery Desk',
+        url: resetUrl
+      },
+      securityAdvisory: 'Statutory Administrative Advisory: Never disclose administrative passwords or 2FA credentials. For security auditing, all administrative sessions and state transitions are logged with immutable cryptographic audit trails.'
+    });
 
     const transporter = getTransporter();
     const info = await transporter.sendMail({
@@ -364,13 +376,15 @@ export const sendSubUserInvitationEmail = async (
     organizationName: string;
     roleName: string;
     tempPassword: string;
-    loginUrl: string;
+    loginUrl?: string;
   }
 ): Promise<boolean> => {
-  const { name, organizationName, roleName, tempPassword, loginUrl } = data;
-  const fromName = 'JsgSmile Portal Admin';
+  const { name, organizationName, roleName, tempPassword } = data;
+  const portalUrl = getPublicPortalUrl().replace(/\/+$/, '');
+  const loginUrl = `${portalUrl}/login`;
+  const fromName = 'JSG SMILE Procurement Administration';
   const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.odisha.gov.in';
-  const subject = `Login Credentials — Sub-User Account for ${organizationName} on JsgSmile Portal`;
+  const subject = `[JSG SMILE] Account Activation Credentials — Sub-User for ${organizationName}`;
 
   console.log(`\n========================================`);
   console.log(`[SUB-USER INVITE GENERATED]`);
@@ -382,74 +396,57 @@ export const sendSubUserInvitationEmail = async (
   console.log(`========================================\n`);
 
   try {
-    const html = `
-      <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 20px auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background-color: #ffffff; box-shadow: 0 4px 16px rgba(0,0,0,0.05);">
-        <!-- Header -->
-        <div style="background: linear-gradient(135deg, #12335f 0%, #1e4b8a 100%); color: #ffffff; padding: 28px 24px; text-align: center;">
-          <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">JSG SMILE Procurement Portal</h1>
-          <p style="margin: 6px 0 0; font-size: 12px; opacity: 0.85; text-transform: uppercase; letter-spacing: 1px;">Organization Sub-User Access</p>
-        </div>
-
-        <!-- Body -->
-        <div style="padding: 32px 28px; color: #1e293b;">
-          <h2 style="margin: 0 0 16px; font-size: 18px; color: #0f172a;">Hello ${name || 'User'},</h2>
-          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px;">
-            A sub-user account has been created for you under <strong>${organizationName}</strong> with the role of <strong>${roleName}</strong> on the official MSME Procurement Gateway.
-          </p>
-
-          <!-- Credential Card -->
-          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin: 24px 0;">
-            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #12335f; margin-bottom: 12px;">Your Login Credentials</div>
-            <table style="width: 100%; font-size: 14px; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600; width: 140px;">Portal Login URL:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;"><a href="${loginUrl}" style="color: #12335f; text-decoration: underline;">${loginUrl}</a></td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Email ID:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-family: monospace; font-size: 14px; font-weight: 700;">${email}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Assigned Role:</td>
-                <td style="padding: 6px 0; color: #0f172a; font-weight: 700;">${roleName}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-weight: 600;">Temporary Pass:</td>
-                <td style="padding: 6px 0;">
-                  <span style="color: #d97706; font-family: monospace; font-size: 16px; font-weight: 800; background-color: #fef3c7; padding: 4px 10px; border-radius: 6px; border: 1px dashed #f59e0b; display: inline-block;">
-                    ${tempPassword}
-                  </span>
-                </td>
-              </tr>
-            </table>
-          </div>
-
-          <!-- Step by Step instructions -->
-          <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 16px 20px; margin: 20px 0; font-size: 13px; color: #1e40af;">
-            <strong style="display: block; margin-bottom: 6px;">Next Steps for First-Time Login:</strong>
-            <ol style="margin: 0; padding-left: 20px; line-height: 1.6;">
-              <li>Click the login button below and enter your temporary password.</li>
-              <li>You will be prompted to set your new permanent password.</li>
-              <li>Verify your mobile number via a one-time password (OTP).</li>
-              <li>Start accessing your organization's procurement dashboard!</li>
-            </ol>
-          </div>
-
-          <!-- Action Button -->
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${loginUrl}" style="background-color: #12335f; color: #ffffff; padding: 14px 36px; border-radius: 8px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(18,51,95,0.25);">
-              Login & Activate Account &rarr;
-            </a>
-          </div>
-        </div>
-
-        <!-- Footer -->
-        <div style="background-color: #f1f5f9; padding: 16px 24px; text-align: center; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5;">
-          <div>Government of Odisha &bull; District Administration Jharsuguda</div>
-          <div>Official MSME Linkage Gateway &bull; Confidential Sub-User Access</div>
-        </div>
-      </div>
-    `;
+    const html = buildGovernmentGradeEmailHtml({
+      portalName: 'JSG SMILE Procurement Portal',
+      departmentName: 'Government of Odisha • District Administration Jharsuguda',
+      recipientName: name || 'Authorized Team Member',
+      recipientEmail: email,
+      noticeType: 'SUB-USER ACCOUNT PROVISIONING',
+      noticeRef: `JSG-ORG/INV/${Date.now().toString().slice(-6)}`,
+      badgeVariant: 'primary',
+      heading: 'Sub-User Procurement Account Provisioned',
+      summary: `An official sub-user account has been provisioned for you under ${organizationName} on the JSG SMILE Procurement Gateway. You have been delegated administrative access with the role of ${roleName}.`,
+      detailsTable: [
+        {
+          label: 'Affiliated Enterprise',
+          value: organizationName,
+          isHighlight: true
+        },
+        {
+          label: 'Assigned Enterprise Role',
+          value: roleName,
+          isHighlight: true,
+          color: '#1e40af'
+        },
+        {
+          label: 'Registered Login Email',
+          value: email,
+          isCode: true
+        },
+        {
+          label: 'Provisional Password',
+          value: `<span style="font-family: Consolas, Monaco, monospace; font-size: 16px; font-weight: 800; color: #b45309; background-color: #fef3c7; border: 1px dashed #f59e0b; padding: 4px 10px; border-radius: 4px; display: inline-block;">${tempPassword}</span>`
+        },
+        {
+          label: 'Portal Access URL',
+          value: `<a href="${loginUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${loginUrl}</a>`
+        }
+      ],
+      stepInstructions: {
+        title: 'First-Time Login & Activation Instructions',
+        steps: [
+          'Click the Login & Activate button below to navigate to the secure login gateway.',
+          'Authenticate using your registered email ID and the provisional password shown above.',
+          'Set your personal permanent password and complete mobile number verification via OTP.',
+          'Once verified, access your organization dashboard to participate in tenders, RFQs, and purchase orders.'
+        ]
+      },
+      actionButton: {
+        label: 'Login & Activate Account',
+        url: loginUrl
+      },
+      securityAdvisory: 'Statutory Security Advisory: Your sub-user credentials grant direct access to create, submit, or manage official commercial orders and bids. Do not share your login credentials with unauthorized personnel.'
+    });
 
     const transporter = getTransporter();
     await transporter.sendMail({

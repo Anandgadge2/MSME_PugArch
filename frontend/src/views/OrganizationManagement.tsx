@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,6 +38,7 @@ import { useResponsiveViewMode } from '../features/shared/hooks';
 import { formatDateTime } from '../features/shared/format';
 import { cn } from '../lib/utils';
 import { DataTable, ColumnDef } from '../components/ui/data-table';
+import { AppealQueue } from '../features/shared/AppealQueue';
 
 interface Organization {
   id: number;
@@ -84,6 +85,19 @@ export default function OrganizationManagement() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(10);
   const [viewMode, setViewMode] = useResponsiveViewMode();
+
+  const { data: pendingAppealsData } = useQuery({
+    queryKey: ['admin-appeals', 'pending-count'],
+    queryFn: async () => {
+      const res = await api.fetch('/api/admin/organizations/appeals?status=PENDING', { ...authHeaders });
+      if (!res.ok) return [];
+      const json = await res.json();
+      return json.data || [];
+    },
+    enabled: !!token,
+    staleTime: 30_000
+  });
+  const pendingAppealCount = Array.isArray(pendingAppealsData) ? pendingAppealsData.length : 0;
 
   // Detail dialogs
   const [detailOrg, setDetailOrg] = useState<Organization | null>(null);
@@ -358,23 +372,28 @@ export default function OrganizationManagement() {
   };
 
   const handleSaveBlacklist = async (isBlacklisting: boolean) => {
-    if (!selectedOrg) return;
+    if (!selectedOrg || savingAction) return;
+    if (isBlacklisting && blacklistReason.trim().length < 5) {
+      toast.error('Suspension reason must be at least 5 characters.');
+      return;
+    }
     setSavingAction(true);
     try {
       const res = await api.put(`/api/admin/organizations/${selectedOrg.id}`, {
         isBlacklisted: isBlacklisting,
-        blacklistReason: isBlacklisting ? blacklistReason : ''
+        blacklistReason: isBlacklisting ? blacklistReason.trim() : ''
       }, authHeaders);
       if (res.ok) {
         toast.success(isBlacklisting ? 'Organization access restricted.' : 'Organization access restriction cleared.');
         queryClient.invalidateQueries({ queryKey: ['organizations'] });
         setIsBlacklistModalOpen(false);
       } else {
-        toast.error('Failed to change restriction status.');
+        const errJson = await res.json().catch(() => null);
+        toast.error(errJson?.message || 'Failed to change restriction status.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Restriction toggling request error.');
+      toast.error(err?.message || 'Restriction toggling request error.');
     } finally {
       setSavingAction(false);
     }
@@ -520,14 +539,17 @@ export default function OrganizationManagement() {
       width: 'w-16',
       align: 'right',
       cell: (org) => (
-        <button
-          id={`org-action-btn-${org.id}`}
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0c2340]/20 shadow-sm"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
+        <OrgActionsDropdown
+          org={org}
+          isOpen={openActionMenuId === org.id}
+          onToggle={() => setOpenActionMenuId(openActionMenuId === org.id ? null : org.id)}
+          onClose={() => setOpenActionMenuId(null)}
+          onOpenDetails={setDetailOrg}
+          onOpenFeatures={handleOpenFeatureModal}
+          onOpenVerify={handleOpenVerifyModal}
+          onOpenBlacklist={handleOpenBlacklistModal}
+          onOpenLifecycle={handleOpenLifecycleModal}
+        />
       ),
     },
   ];
@@ -598,6 +620,16 @@ export default function OrganizationManagement() {
           active={statusFilter === 'SUSPENDED'}
           onClick={() => setStatusFilter('SUSPENDED')}
         />
+        <KpiCard
+          label="Appeals Pending"
+          value={pendingAppealCount}
+          subtext="Awaiting determination"
+          icon={ShieldAlert}
+          tone="purple"
+          loading={loading}
+          active={statusFilter === 'APPEALS'}
+          onClick={() => setStatusFilter('APPEALS')}
+        />
       </div>
 
       {/* Search & Filter Controls */}
@@ -621,8 +653,8 @@ export default function OrganizationManagement() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 w-full lg:flex-1">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1 hidden sm:block">Verification:</span>
-          {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED'].map((status) => (
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-1 hidden sm:block">Filter:</span>
+          {['all', 'PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'APPEALS'].map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -631,7 +663,7 @@ export default function OrganizationManagement() {
                 : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                 }`}
             >
-              {status}
+              {status === 'APPEALS' ? `Appeals ${pendingAppealCount > 0 ? `(${pendingAppealCount})` : ''}` : status}
             </button>
           ))}
         </div>
@@ -641,7 +673,9 @@ export default function OrganizationManagement() {
         </div>
       </div>
       {/* Main Stakeholders Content */}
-      {viewMode === 'list' ? (
+      {statusFilter === 'APPEALS' ? (
+        <AppealQueue authHeaders={authHeaders.headers} districtScoped />
+      ) : viewMode === 'list' ? (
         <DataTable<Organization>
           data={sortedOrgs}
           columns={orgColumns}
@@ -698,14 +732,18 @@ export default function OrganizationManagement() {
                       {org.verificationStatus}
                     </span>
                   </div>
-                  <button
-                    id={`org-grid-btn-${org.id}`}
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setOpenActionMenuId(openActionMenuId === org.id ? null : org.id); }}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/50 hover:text-slate-900 transition-colors focus:outline-none"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
+                  <OrgActionsDropdown
+                    org={org}
+                    isOpen={openActionMenuId === org.id}
+                    onToggle={() => setOpenActionMenuId(openActionMenuId === org.id ? null : org.id)}
+                    onClose={() => setOpenActionMenuId(null)}
+                    onOpenDetails={setDetailOrg}
+                    onOpenFeatures={handleOpenFeatureModal}
+                    onOpenVerify={handleOpenVerifyModal}
+                    onOpenBlacklist={handleOpenBlacklistModal}
+                    onOpenLifecycle={handleOpenLifecycleModal}
+                    triggerClassName="h-7 w-7 border-0 shadow-none hover:bg-slate-200/50"
+                  />
                 </div>
 
                 {/* Body */}
@@ -930,9 +968,11 @@ export default function OrganizationManagement() {
           <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white">
               <h3 className="font-extrabold text-lg flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-400" /> Platform Restriction Desk
+                <AlertTriangle className="h-5 w-5 text-red-400" /> Platform Suspension &amp; Restriction Desk
               </h3>
-              <p className="text-xs text-slate-300 mt-1">Manage portal wide restrictions for {selectedOrg.organizationName}.</p>
+              <p className="text-xs text-slate-300 mt-1">
+                Manage portal-wide restrictions for {selectedOrg.organizationName}. The organization will be notified and can submit up to 2 appeals.
+              </p>
             </div>
 
             <div className="p-6 space-y-4">
@@ -940,16 +980,21 @@ export default function OrganizationManagement() {
                 <div>
                   <p className="text-xs text-slate-600 leading-relaxed bg-amber-50 border border-amber-200 p-3 rounded-lg flex gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                    This stakeholder is currently blacklisted from direct system interactions. Clearing this restriction restores standard operational rights.
+                    This stakeholder is currently suspended/blacklisted from direct system interactions. Clearing this restriction restores standard operational rights.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for restriction</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-400">Reason for suspension / restriction</label>
+                    <span className={`text-[11px] font-semibold ${blacklistReason.trim().length >= 5 ? 'text-slate-400' : 'text-amber-600'}`}>
+                      {blacklistReason.trim().length < 5 ? `Min 5 characters (${blacklistReason.trim().length}/5)` : `${blacklistReason.trim().length} chars`}
+                    </span>
+                  </div>
                   <textarea
                     value={blacklistReason}
                     onChange={(e) => setBlacklistReason(e.target.value)}
-                    placeholder="Enter compliance breach or reason for blacklist restriction..."
+                    placeholder="Enter compliance breach, dispute violations, or reason for suspension (min 5 characters)..."
                     rows={4}
                     className="w-full p-3 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-red-150 focus:border-red-500 bg-slate-50/50 focus:bg-white transition-all resize-none"
                   />
@@ -972,16 +1017,16 @@ export default function OrganizationManagement() {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider gap-2 px-4 shadow-sm"
                 >
                   {savingAction ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  Clear Restriction
+                  Lift Suspension
                 </Button>
               ) : (
                 <Button
                   onClick={() => handleSaveBlacklist(true)}
-                  disabled={savingAction || !blacklistReason.trim()}
+                  disabled={savingAction || blacklistReason.trim().length < 5}
                   className="bg-red-650 hover:bg-red-750 text-white text-xs font-bold uppercase tracking-wider gap-2 px-4 shadow-sm"
                 >
                   {savingAction ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                  Apply Restriction
+                  Apply Suspension
                 </Button>
               )}
             </div>
@@ -1337,20 +1382,6 @@ export default function OrganizationManagement() {
           </div>
         </div>
       )}
-
-      {/* Action Menu Portal */}
-      {openActionMenuId && orgs.find(o => o.id === openActionMenuId) && (
-        <OrganizationActionsMenu
-          org={orgs.find(o => o.id === openActionMenuId)!}
-          buttonId={viewMode === 'list' ? `org-action-btn-${openActionMenuId}` : `org-grid-btn-${openActionMenuId}`}
-          onClose={() => setOpenActionMenuId(null)}
-          onOpenFeatures={handleOpenFeatureModal}
-          onOpenVerify={handleOpenVerifyModal}
-          onOpenBlacklist={handleOpenBlacklistModal}
-          onOpenLifecycle={handleOpenLifecycleModal}
-          onOpenDetails={setDetailOrg}
-        />
-      )}
     </div>
   );
 }
@@ -1473,178 +1504,281 @@ function ScopeListPanel({
   );
 }
 
-function OrganizationActionsMenu({
+interface OrgActionsDropdownProps {
+  org: Organization;
+  isOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onOpenDetails: (org: Organization) => void;
+  onOpenFeatures: (org: Organization) => void;
+  onOpenVerify: (org: Organization) => void;
+  onOpenBlacklist: (org: Organization) => void;
+  onOpenLifecycle: (org: Organization, action: 'close' | 'archive' | 'restore' | 'allow-gst-reuse' | 'revoke-gst-reuse') => void;
+  triggerClassName?: string;
+}
+
+function OrgActionsDropdown({
   org,
-  buttonId,
+  isOpen,
+  onToggle,
   onClose,
+  onOpenDetails,
   onOpenFeatures,
   onOpenVerify,
   onOpenBlacklist,
   onOpenLifecycle,
-  onOpenDetails
-}: any) {
+  triggerClassName
+}: OrgActionsDropdownProps) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<any>({ visibility: 'hidden', position: 'fixed', top: 0, left: 0, zIndex: 99999 });
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    const menuWidth = 192; // w-48
+    const menuEstimatedHeight = 280;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
+
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    if (left + menuWidth > window.innerWidth - 8) {
+      left = window.innerWidth - menuWidth - 8;
+    }
+
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, []);
 
   useEffect(() => {
-    const btn = document.getElementById(buttonId);
-    const menu = menuRef.current;
-    if (!btn || !menu) return;
-
-    const updatePosition = () => {
-      const btnRect = btn.getBoundingClientRect();
-      const menuRect = menu.getBoundingClientRect();
-
-      let top = btnRect.bottom + 6;
-      let left = btnRect.right - menuRect.width;
-
-      if (top + menuRect.height > window.innerHeight) {
-        top = btnRect.top - menuRect.height - 6;
-      }
-      if (top < 0) top = 6;
-      if (left < 0) left = 6;
-
-      setStyle({
-        position: 'fixed',
-        top: `${top}px`,
-        left: `${left}px`,
-        zIndex: 99999,
-        visibility: 'visible'
-      });
-    };
-
+    if (!isOpen) return;
     updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
 
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          onClose();
+          return;
+        }
+      }
+      updatePosition();
     };
-  }, [buttonId]);
 
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node;
-      // Do not close if clicking the button itself
-      const btn = document.getElementById(buttonId);
-      if (btn && btn.contains(target)) return;
-      if (menuRef.current && !menuRef.current.contains(target)) {
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
         onClose();
       }
     };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
     };
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('keydown', handleEscape);
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
     return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('scroll', handleScroll, { capture: true });
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [buttonId, onClose]);
+  }, [isOpen, updatePosition, onClose]);
 
-  if (typeof document === 'undefined') return null;
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
 
-  return createPortal(
-    <div 
-      ref={menuRef}
-      style={style} 
-      onClick={e => e.stopPropagation()} 
-      className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
-    >
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() => { onClose(); onOpenDetails(org); }}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
+        aria-label={`Actions for organization ${org.organizationName}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            onClose();
+          } else {
+            updatePosition();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0c2340]/20 shadow-sm cursor-pointer",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900",
+          triggerClassName
+        )}
+        title="Actions"
       >
-        <Eye className="h-3.5 w-3.5 text-slate-500" />
-        <span>Details</span>
+        <MoreVertical className="h-4 w-4" aria-hidden="true" />
       </button>
 
-      <button
-        type="button"
-        onClick={() => { onClose(); onOpenFeatures(org); }}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#0c2340] hover:bg-[#0c2340]/5 transition-colors text-left"
-      >
-        <Sliders className="h-3.5 w-3.5 text-[#c5a556]" />
-        <span>Features</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => { onClose(); onOpenVerify(org); }}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-      >
-        <Check className="h-3.5 w-3.5 text-emerald-600" />
-        <span>Verify</span>
-      </button>
-
-      <div className="h-px bg-slate-100 my-1 mx-2" />
-
-      <button
-        type="button"
-        onClick={() => { onClose(); onOpenBlacklist(org); }}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-red-700 hover:bg-red-50 transition-colors text-left"
-      >
-        <Ban className="h-3.5 w-3.5 text-red-600" />
-        <span>{org.isBlacklisted ? "Unrestrict" : "Restrict"}</span>
-      </button>
-
-      {org.verificationStatus !== 'CLOSED' && org.verificationStatus !== 'ARCHIVED' && (
-        <>
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right',
+          }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onKeyDown={handleMenuKeyDown}
+          className="w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for organization ${org.organizationName}`}
+        >
           <button
             type="button"
-            onClick={() => { onClose(); onOpenLifecycle(org, 'close'); }}
+            role="menuitem"
+            onClick={() => { onClose(); onOpenDetails(org); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-slate-700 hover:bg-slate-100 transition-colors text-left"
+          >
+            <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
+            <span>Details</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { onClose(); onOpenFeatures(org); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-[#0c2340] hover:bg-[#0c2340]/5 transition-colors text-left"
+          >
+            <Sliders className="h-3.5 w-3.5 text-[#c5a556]" aria-hidden="true" />
+            <span>Features</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { onClose(); onOpenVerify(org); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+          >
+            <Check className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+            <span>Verify</span>
+          </button>
+
+          <div className="h-px bg-slate-100 my-1 mx-2" role="separator" />
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { onClose(); onOpenBlacklist(org); }}
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-red-700 hover:bg-red-50 transition-colors text-left"
           >
-            <XCircle className="h-3.5 w-3.5 text-red-600" />
-            <span>Close</span>
+            <Ban className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
+            <span>{org.isBlacklisted ? "Unrestrict" : "Restrict"}</span>
           </button>
-          <button
-            type="button"
-            onClick={() => { onClose(); onOpenLifecycle(org, 'archive'); }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
-          >
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-            <span>Archive</span>
-          </button>
-        </>
-      )}
 
-      {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
-        <button
-          type="button"
-          onClick={() => { onClose(); onOpenLifecycle(org, 'restore'); }}
-          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
-        >
-          <RefreshCw className="h-3.5 w-3.5 text-emerald-600" />
-          <span>Restore</span>
-        </button>
-      )}
+          {org.verificationStatus !== 'CLOSED' && org.verificationStatus !== 'ARCHIVED' && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { onClose(); onOpenLifecycle(org, 'close'); }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-red-700 hover:bg-red-50 transition-colors text-left"
+              >
+                <XCircle className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
+                <span>Close</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { onClose(); onOpenLifecycle(org, 'archive'); }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                <span>Archive</span>
+              </button>
+            </>
+          )}
 
-      {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
-        org.gstReuseAllowed ? (
-          <button
-            type="button"
-            onClick={() => { onClose(); onOpenLifecycle(org, 'revoke-gst-reuse'); }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
-          >
-            <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-            <span>Revoke GST</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => { onClose(); onOpenLifecycle(org, 'allow-gst-reuse'); }}
-            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
-          >
-            <Check className="h-3.5 w-3.5 text-blue-600" />
-            <span>Allow GST</span>
-          </button>
-        )
+          {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => { onClose(); onOpenLifecycle(org, 'restore'); }}
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left"
+            >
+              <RefreshCw className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+              <span>Restore</span>
+            </button>
+          )}
+
+          {(org.verificationStatus === 'CLOSED' || org.verificationStatus === 'ARCHIVED') && (
+            org.gstReuseAllowed ? (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { onClose(); onOpenLifecycle(org, 'revoke-gst-reuse'); }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" aria-hidden="true" />
+                <span>Revoke GST</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { onClose(); onOpenLifecycle(org, 'allow-gst-reuse'); }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+              >
+                <Check className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+                <span>Allow GST</span>
+              </button>
+            )
+          )}
+        </div>,
+        document.body
       )}
-    </div>,
-    document.body
+    </div>
   );
 }

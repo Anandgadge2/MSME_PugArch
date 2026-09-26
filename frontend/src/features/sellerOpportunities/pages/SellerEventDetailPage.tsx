@@ -238,6 +238,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       submitButtonLabel={isSubmitted ? 'Proposal Submitted' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
       onViewQuotationClick={isSubmitted ? () => router.push(`/bids/${bid.id}/participate`) : undefined}
+      rawBid={bid}
     />
   );
 }

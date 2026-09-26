@@ -3876,6 +3876,7 @@ export interface ProcurementDetailUnifiedViewProps {
   publishedDate?: string;
   submissionStartDate?: string;
   closingDate?: string;
+  endDate?: Date | string | null;
   clarificationDate?: string;
   technicalDate?: string;
   presentationDate?: string;
@@ -4981,6 +4982,14 @@ export function ProcurementDetailUnifiedView(
     !isTwoStageReverseAuction,
   );
 
+  const corrigendumCount = Number(
+    (props.rawBid?.technicalPacket as any)?.corrigendumCount ||
+    (props.rawBid as any)?.corrigendumCount ||
+    (props.payload as any)?.corrigendumCount ||
+    (payload as any)?.corrigendumCount ||
+    0
+  );
+
   const documents = props.documents || [];
   const requiredDocuments = firstPresent(
     props.requiredDocuments,
@@ -5394,6 +5403,9 @@ export function ProcurementDetailUnifiedView(
   })();
 
   const closingDateValue = firstPresent(
+    props.rawBid?.endDate,
+    props.endDate,
+    schedule.submissionClosingDate,
     schedule.submissionDate,
     schedule.submissionDeadline,
     schedule.submissionEndDate,
@@ -8899,6 +8911,12 @@ export function ProcurementDetailUnifiedView(
               <div className="min-w-0 flex-1 space-y-1.5 sm:space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge status={effectiveStatusLabel} />
+                  {corrigendumCount > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
+                      <CalendarDays className="h-3 w-3 text-amber-600" aria-hidden="true" />
+                      Corrigendum ({corrigendumCount} {corrigendumCount === 1 ? "Extension" : "Extensions"})
+                    </span>
+                  )}
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
                       <Layers className="h-3 w-3" aria-hidden="true" />

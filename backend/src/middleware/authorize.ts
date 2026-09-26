@@ -137,6 +137,33 @@ export const getCurrentCompany = async (req: Request) => {
   return null;
 };
 
+export const normalizeDistrictList = (scopeIds: (string | null | undefined)[]): string[] => {
+  const result = new Set<string>();
+  for (const s of scopeIds) {
+    if (!s) continue;
+    const trimmed = String(s).trim();
+    if (!trimmed) continue;
+    result.add(trimmed);
+    const lower = trimmed.toLowerCase();
+    if (lower === '1' || lower === 'jharsuguda') {
+      result.add('1');
+      result.add('Jharsuguda');
+      result.add('jharsuguda');
+    }
+  }
+  return Array.from(result);
+};
+
+export const matchesDistrictScope = (scopeId: string | null | undefined, orgDistrict: string | null | undefined): boolean => {
+  if (!scopeId || !orgDistrict) return false;
+  const s = String(scopeId).trim().toLowerCase();
+  const d = String(orgDistrict).trim().toLowerCase();
+  if (s === '*' || s === 'all') return true;
+  if (s === d) return true;
+  if ((s === '1' || s === 'jharsuguda') && (d === '1' || d === 'jharsuguda')) return true;
+  return false;
+};
+
 export const canAccessOrganization = async (req: Request, organizationId: number) => {
   if (!req.user) return false;
   if (isMasterAdmin(req.user)) return true;
@@ -150,7 +177,7 @@ export const canAccessOrganization = async (req: Request, organizationId: number
   // same district. Missing scope fails closed instead of granting every
   // legacy admin platform-wide access.
   if (req.user.role !== 'admin' || !organization.district) return false;
-  const districtAssignment = await prisma.userRole.findFirst({
+  const directMatch = await prisma.userRole.findFirst({
     where: {
       userId: req.user.id,
       isActive: true,
@@ -160,7 +187,18 @@ export const canAccessOrganization = async (req: Request, organizationId: number
     },
     select: { id: true }
   });
-  return Boolean(districtAssignment);
+  if (directMatch) return true;
+
+  const districtAssignments = await prisma.userRole.findMany({
+    where: {
+      userId: req.user.id,
+      isActive: true,
+      scopeType: 'DISTRICT',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+    },
+    select: { scopeId: true }
+  });
+  return districtAssignments.some(da => matchesDistrictScope(da.scopeId, organization.district));
 };
 
 export const createAuditLog = (req: Request, payload: {

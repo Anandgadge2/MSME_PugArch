@@ -2016,7 +2016,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                               keyExtractor={(office: any, idx) => office.id || idx}
                               showSrNo={true}
                               srNoHeader="Sr. No."
-                              minWidth="min-w-[600px]"
+                              minWidth="sm:min-w-[600px] w-full"
                               sortKey={officeSortKey}
                               sortDirection="asc"
                               onSort={(field) => setOfficeSortKey(field as any)}
@@ -2024,9 +2024,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                               emptyDescription="Add your office locations for order fulfillment."
                             />
                             {formData.offices.length > 0 && (
-                              <div className="flex justify-between items-center px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
-                                <span className="text-sm text-gray-600">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
-                                <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-xs">ADD NEW OFFICE</button>
+                              <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
+                                <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-xs min-h-[44px] sm:min-h-0 flex items-center justify-center px-2">ADD NEW OFFICE</button>
                               </div>
                             )}
                           </div>
@@ -2245,7 +2245,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             keyExtractor={(bank: any, idx) => bank.id || idx}
                             showSrNo={true}
                             srNoHeader="Sr. No."
-                            minWidth="min-w-[640px]"
+                            minWidth="sm:min-w-[640px] w-full"
                             sortKey={bankSortKey}
                             sortDirection="asc"
                             onSort={(field) => setBankSortKey(field as any)}

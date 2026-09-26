@@ -3989,11 +3989,26 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
         'Approved sections:\n' + approvedList.join('\n');
 
       emailHtml = `
-        <p>Congratulations! All sections of your onboarding application have been reviewed and <strong>approved</strong>.</p>
-        <p>Your application is now <strong>approved for procurement access</strong>. You can begin participating in procurement activities on the portal.</p>
-        <h3>Approved sections:</h3>
-        <ul>${sections.map(s => `<li>${sectionLabels[s] || s}: Approved</li>`).join('')}</ul>
-        <p>Please log in to the portal to access your dashboard.</p>
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #16a34a; border-radius: 6px; padding: 16px 18px; margin-bottom: 18px;">
+          <h3 style="margin: 0 0 8px 0; color: #14532d; font-size: 16px;">Formal Application Approval Notice</h3>
+          <p style="margin: 0; color: #166534; font-size: 13px; line-height: 1.6;">
+            All statutory verification sections of your onboarding dossier have been examined and approved by the District Facilitation Cell. Your enterprise is now formally accredited for commercial procurement.
+          </p>
+        </div>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 18px; margin-bottom: 18px;">
+          <strong style="color: #334155; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Approved Dossier Sections:</strong>
+          <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+            ${sections.map(s => `
+              <tr style="border-bottom: 1px solid #f1f5f9;">
+                <td style="padding: 6px 0; color: #475569;">${sectionLabels[s] || s}</td>
+                <td style="padding: 6px 0; text-align: right; color: #16a34a; font-weight: 700;">✓ Approved</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+        <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+          You can immediately access your dashboard to view active public tenders, participate in reverse auctions, and issue bids.
+        </p>
       `;
     } else {
       message = `Updates to your profile sections:\n` + changes.join('\n');
@@ -4001,12 +4016,27 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
         message += `\n\nSections requiring attention:\n` + rejectedDetails.join('\n');
       }
 
-      emailHtml = `<p>There have been updates to your onboarding application sections.</p>`;
-      emailHtml += `<h3>Status Changes:</h3><ul>` + changes.map(c => `<li>${c}</li>`).join('') + `</ul>`;
-      if (rejectedDetails.length > 0) {
-        emailHtml += `<h3>Sections requiring attention:</h3><ul>` + rejectedDetails.map(r => `<li>${r}</li>`).join('') + `</ul>`;
-      }
-      emailHtml += `<p>Please log in to the portal to view details and make any necessary corrections.</p>`;
+      emailHtml = `
+        <p style="font-size: 14px; line-height: 1.6; color: #334155;">
+          The District Nodal Officer has reviewed your onboarding application and recorded updates on your submitted sections:
+        </p>
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 14px 18px; margin: 16px 0;">
+          <strong style="color: #334155; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Status Modifications:</strong>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #334155; line-height: 1.6;">
+            ${changes.map(c => `<li>${c}</li>`).join('')}
+          </ul>
+        </div>
+        ${rejectedDetails.length > 0 ? `
+        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 6px; padding: 14px 18px; margin: 16px 0;">
+          <strong style="color: #991b1b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">⚠️ Sections Requiring Clarification / Correction:</strong>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #991b1b; line-height: 1.6;">
+            ${rejectedDetails.map(r => `<li>${r}</li>`).join('')}
+          </ul>
+        </div>` : ''}
+        <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+          Please log into your onboarding portal to review the officer feedback and re-submit the required documentation.
+        </p>
+      `;
     }
 
     notificationService.notifyWithEmail(id, {
@@ -11106,15 +11136,65 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   // Tenant isolation: non-master admins can only update organizations from their own company
 
 
+  if (req.user?.role === 'admin') {
+    const { canAccessOrganization } = await import('../middleware/authorize.js');
+    const canAccess = await canAccessOrganization(req, id);
+    if (!canAccess) {
+      throw new ApiError(403, 'You can only manage organizations within your assigned district.', 'DISTRICT_ACCESS_DENIED');
+    }
+  }
+
   const body = parse(z.object({
     verificationStatus: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'SUSPENDED']).optional(),
     isBlacklisted: z.boolean().optional(),
     blacklistReason: z.string().trim().max(1000).optional()
-  }).partial(), req.body);
+  }).refine((data) => {
+    if (data.isBlacklisted === true) {
+      return typeof data.blacklistReason === 'string' && data.blacklistReason.trim().length >= 5;
+    }
+    return true;
+  }, {
+    message: 'Blacklist reason must be at least 5 characters.',
+    path: ['blacklistReason']
+  }), req.body);
+
+  if (body.isBlacklisted === true && existingOrg.isBlacklisted) {
+    throw new ApiError(400, 'Organization is already suspended.', 'ALREADY_SUSPENDED');
+  }
+
+  const updateData: any = { ...body };
+  if (body.isBlacklisted !== undefined) {
+    if (body.isBlacklisted) {
+      updateData.verificationStatus = 'SUSPENDED';
+      updateData.blacklistedAt = new Date();
+      updateData.blacklistedByUserId = req.user.id;
+      updateData.suspensionType = 'MANUAL';
+      updateData.appealStatus = 'NONE';
+      updateData.appealMessage = null;
+      updateData.appealDocumentUrl = null;
+      updateData.appealSubmittedAt = null;
+      updateData.appealReviewedAt = null;
+      updateData.appealReviewedByUserId = null;
+      updateData.appealRejectionReason = null;
+    } else {
+      if (existingOrg.verificationStatus === 'SUSPENDED') {
+        updateData.verificationStatus = 'VERIFIED';
+      }
+      updateData.blacklistReason = null;
+      updateData.blacklistedAt = null;
+      updateData.blacklistedByUserId = null;
+      updateData.suspensionType = null;
+      if (existingOrg.appealStatus === 'PENDING') {
+        updateData.appealStatus = 'APPROVED';
+        updateData.appealReviewedAt = new Date();
+        updateData.appealReviewedByUserId = req.user.id;
+      }
+    }
+  }
 
   const org = await db.organization.update({
     where: { id },
-    data: body,
+    data: updateData,
     include: {
       buyerProfiles: { select: { organizationName: true, nameAsInPan: true } },
       sellerProfiles: { select: { businessName: true, nameAsInPan: true } },
@@ -11124,20 +11204,21 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   await auditWrite(req, 'organization.updated', 'organization', id, body);
 
   // Notify org users about status changes
-  if (body.verificationStatus || body.isBlacklisted !== undefined) {
+  if (updateData.verificationStatus || body.isBlacklisted !== undefined) {
     const orgUsers = await db.user.findMany({ where: { organizationId: id }, select: { id: true } });
     const { notificationService } = await import('../services/notification.service.js');
+    const finalStatus = updateData.verificationStatus || existingOrg.verificationStatus;
     for (const u of orgUsers) {
       await notificationService.notifyWithEmail(u.id, {
         title: 'Organization Status Updated',
         message: body.isBlacklisted
           ? `Your organization has been restricted. Reason: ${body.blacklistReason || 'Policy violation'}`
-          : `Your organization verification status is now: ${body.verificationStatus}`,
+          : `Your organization verification status is now: ${finalStatus}`,
         type: 'organization_status_updated',
         priority: body.isBlacklisted ? 'urgent' : 'high',
         redirectUrl: '/dashboard',
         emailSubject: 'Organization Status Update — MSME Procurement Portal',
-        emailHtml: `<p>Your organization's status has been updated.</p><p><strong>Status:</strong> ${body.verificationStatus || (body.isBlacklisted ? 'RESTRICTED' : 'Updated')}</p>${body.blacklistReason ? `<p><strong>Reason:</strong> ${body.blacklistReason}</p>` : ''}`
+        emailHtml: `<p>Your organization's status has been updated.</p><p><strong>Status:</strong> ${finalStatus}</p>${body.blacklistReason ? `<p><strong>Reason:</strong> ${body.blacklistReason}</p>` : ''}`
       });
     }
   }

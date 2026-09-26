@@ -64,6 +64,18 @@ export interface DocumentConfig {
   buyerSignatureUrl?: string | null;
   buyerStampUrl?: string | null;
 
+  /**
+   * Controls the signatory block layout:
+   * - 'bilateral' (default): Buyer + Seller signature blocks
+   * - 'single': One "Authorized Officer" block (for MIS, admin reports)
+   * - 'none': No signature block (for tabular reports, data exports)
+   */
+  signatoryMode?: 'bilateral' | 'single' | 'none';
+  /** Title for single-signatory mode (e.g. "Reporting Officer") */
+  singleSignatoryTitle?: string;
+  /** Name for single-signatory mode */
+  singleSignatoryName?: string;
+
   signatures?: {
     sellerTitle?: string;
     sellerName?: string;
@@ -81,6 +93,58 @@ const SECONDARY_COLOR: [number, number, number] = [30, 64, 114];
 const ACCENT_COLOR: [number, number, number] = [230, 235, 241];
 const TEXT_DARK: [number, number, number] = [15, 23, 42];
 const TEXT_MUTED: [number, number, number] = [100, 116, 139];
+
+/**
+ * Renders an image into a bounding box while preserving its native aspect ratio.
+ * The image is scaled to fit within maxW × maxH and aligned within that box.
+ */
+export function drawFitImage(
+  doc: jsPDF,
+  dataUrl: string,
+  x: number,
+  y: number,
+  maxW: number,
+  maxH: number,
+  align: 'left' | 'center' | 'right' = 'left'
+): void {
+  try {
+    const format = dataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
+    // Decode image to get natural dimensions
+    const img = new Image();
+    img.src = dataUrl;
+    const natW = img.naturalWidth || img.width || maxW;
+    const natH = img.naturalHeight || img.height || maxH;
+
+    // Calculate scale to fit within bounding box
+    const scale = Math.min(maxW / natW, maxH / natH, 1);
+    const renderW = natW * scale;
+    const renderH = natH * scale;
+
+    // Align within bounding box
+    let drawX = x;
+    if (align === 'center') drawX = x + (maxW - renderW) / 2;
+    else if (align === 'right') drawX = x + maxW - renderW;
+    const drawY = y + (maxH - renderH) / 2; // vertically center
+
+    doc.addImage(dataUrl, format, drawX, drawY, renderW, renderH);
+  } catch (err) {
+    console.warn('drawFitImage: unable to render image:', err);
+  }
+}
+
+/**
+ * Outputs a generated PDF document — either download or print.
+ * Ensures print and download produce identical vector PDF output.
+ */
+export function outputPdf(doc: jsPDF, filename: string, mode: 'download' | 'print'): void {
+  const safeName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  if (mode === 'print') {
+    doc.autoPrint();
+    window.open(doc.output('bloburl'), '_blank');
+  } else {
+    doc.save(safeName);
+  }
+}
 
 /**
  * Safely converts an image URL or SVG to a base64 PNG data URL via HTML Canvas.
@@ -263,12 +327,7 @@ export class PdfEngine {
     const startX = logoToUse ? 45 : 14;
 
     if (logoToUse) {
-      try {
-        const format = logoToUse.includes('image/jpeg') ? 'JPEG' : 'PNG';
-        this.doc.addImage(logoToUse, format, 14, 5, 26, 26);
-      } catch (err) {
-        console.warn('Unable to embed header logo in PDF:', err);
-      }
+      drawFitImage(this.doc, logoToUse, 14, 5, 28, 26, 'left');
     }
 
     const issuerTitle = fallbackStr(config.issuerName, 'ENTERPRISE PROCUREMENT').toUpperCase();
@@ -339,15 +398,10 @@ export class PdfEngine {
         if (data.section === 'body') {
           const party = parties[data.column.index];
           if (party && party.resolvedLogoDataUrl) {
-            try {
-              const format = party.resolvedLogoDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
-              const logoSize = 13;
-              const xPos = data.cell.x + data.cell.width - logoSize - 3;
-              const yPos = data.cell.y + 3;
-              this.doc.addImage(party.resolvedLogoDataUrl, format, xPos, yPos, logoSize, logoSize);
-            } catch (err) {
-              console.warn('Unable to render party logo in table cell:', err);
-            }
+            const maxLogoSize = 15;
+            const xPos = data.cell.x + data.cell.width - maxLogoSize - 3;
+            const yPos = data.cell.y + 3;
+            drawFitImage(this.doc, party.resolvedLogoDataUrl, xPos, yPos, maxLogoSize, maxLogoSize, 'right');
           }
         }
       }
@@ -532,8 +586,12 @@ export class PdfEngine {
     buyerSigDataUrl: string | null,
     buyerStampDataUrl: string | null
   ) {
+    const mode = config.signatoryMode || 'bilateral';
+    if (mode === 'none') return;
+
+    const blockHeight = 40;
     let y = this.cursorY + 12;
-    if (y + 36 > this.pageHeight - 20) {
+    if (y + blockHeight > this.pageHeight - 20) {
       this.doc.addPage();
       y = 20;
     }
@@ -542,59 +600,73 @@ export class PdfEngine {
     this.doc.setFontSize(9);
     this.doc.setTextColor(...TEXT_DARK);
 
+    if (mode === 'single') {
+      // Single authority signatory (centered) — for MIS, admin reports
+      const title = config.singleSignatoryTitle || 'Authorized Officer';
+      const name = config.singleSignatoryName || '';
+      const centerX = this.pageWidth / 2;
+
+      this.doc.text(`For ${fallbackStr(title, 'Authorized Officer')}`, centerX, y, { align: 'center' });
+
+      // Stamp (centered)
+      const stampUrl = sellerStampDataUrl || buyerStampDataUrl;
+      if (stampUrl) {
+        drawFitImage(this.doc, stampUrl, centerX - 13, y + 3, 26, 20, 'center');
+      }
+      // Signature (centered, below stamp)
+      const sigUrl = sellerSigDataUrl || buyerSigDataUrl;
+      if (sigUrl) {
+        const sigY = stampUrl ? y + 18 : y + 4;
+        drawFitImage(this.doc, sigUrl, centerX - 15, sigY, 30, 14, 'center');
+      }
+
+      this.doc.setFont('helvetica', 'normal');
+      this.doc.setFontSize(8);
+      this.doc.setTextColor(...TEXT_MUTED);
+      if (name) {
+        this.doc.text(name, centerX, y + 30, { align: 'center' });
+      }
+      this.doc.text('Authorized Signatory', centerX, y + 35, { align: 'center' });
+
+      this.cursorY = y + 40;
+      return;
+    }
+
+    // Bilateral mode (default) — Buyer on left, Seller on right
     const buyerName = config.parties && config.parties[0]?.name ? config.parties[0].name : 'Buyer';
     const sellerName = config.parties && config.parties[1]?.name ? config.parties[1].name : (config.parties && config.parties[0]?.name ? config.parties[0].name : 'Seller');
 
     // Left Signatory (Buyer)
     this.doc.text(`For ${fallbackStr(buyerName, 'Buyer')}`, 20, y);
-
     // Right Signatory (Seller)
     this.doc.text(`For ${fallbackStr(sellerName, 'Seller')}`, this.pageWidth - 20, y, { align: 'right' });
 
-    // Render Buyer Stamp & Signature if present
+    // Buyer Stamp & Signature (left side — stamp first, signature below)
     if (buyerStampDataUrl) {
-      try {
-        const format = buyerStampDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
-        this.doc.addImage(buyerStampDataUrl, format, 20, y + 2, 22, 22);
-      } catch (e) {
-        console.warn('Unable to render buyer stamp:', e);
-      }
+      drawFitImage(this.doc, buyerStampDataUrl, 20, y + 3, 25, 20, 'left');
     }
     if (buyerSigDataUrl) {
-      try {
-        const format = buyerSigDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
-        this.doc.addImage(buyerSigDataUrl, format, buyerStampDataUrl ? 32 : 20, y + 6, 26, 14);
-      } catch (e) {
-        console.warn('Unable to render buyer signature:', e);
-      }
+      const sigY = buyerStampDataUrl ? y + 18 : y + 4;
+      drawFitImage(this.doc, buyerSigDataUrl, 20, sigY, 30, 14, 'left');
     }
 
-    // Render Seller Stamp & Signature if present
-    const rightBoxX = this.pageWidth - 65;
+    // Seller Stamp & Signature (right side — stamp first, signature below)
+    const rightBoxX = this.pageWidth - 55;
     if (sellerStampDataUrl) {
-      try {
-        const format = sellerStampDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
-        this.doc.addImage(sellerStampDataUrl, format, rightBoxX, y + 2, 22, 22);
-      } catch (e) {
-        console.warn('Unable to render seller stamp:', e);
-      }
+      drawFitImage(this.doc, sellerStampDataUrl, rightBoxX, y + 3, 25, 20, 'right');
     }
     if (sellerSigDataUrl) {
-      try {
-        const format = sellerSigDataUrl.includes('image/jpeg') ? 'JPEG' : 'PNG';
-        this.doc.addImage(sellerSigDataUrl, format, this.pageWidth - 46, y + 6, 26, 14);
-      } catch (e) {
-        console.warn('Unable to render seller signature:', e);
-      }
+      const sigY = sellerStampDataUrl ? y + 18 : y + 4;
+      drawFitImage(this.doc, sellerSigDataUrl, rightBoxX, sigY, 30, 14, 'right');
     }
 
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8);
     this.doc.setTextColor(...TEXT_MUTED);
-    this.doc.text('Authorized Signatory', 20, y + 26);
-    this.doc.text('Authorized Signatory', this.pageWidth - 20, y + 26, { align: 'right' });
+    this.doc.text('Authorized Signatory', 20, y + 35);
+    this.doc.text('Authorized Signatory', this.pageWidth - 20, y + 35, { align: 'right' });
 
-    this.cursorY = y + 32;
+    this.cursorY = y + 40;
   }
 
   private drawFooter() {
@@ -607,14 +679,15 @@ export class PdfEngine {
       this.doc.setDrawColor(200, 200, 200);
       this.doc.line(14, this.pageHeight - 12, this.pageWidth - 14, this.pageHeight - 12);
       
-      this.doc.text('Enterprise Procurement & Supply Chain ERP', 14, this.pageHeight - 8);
+      const footerText = (this as any)._footerNote || 'Enterprise Procurement & Supply Chain ERP';
+      this.doc.text(footerText, 14, this.pageHeight - 8);
       this.doc.text(`Page ${i} of ${pageCount}`, this.pageWidth - 14, this.pageHeight - 8, { align: 'right' });
     }
   }
 
   public async generate(config: DocumentConfig): Promise<jsPDF> {
     (this as any)._currentCurrency = config.currency || 'INR';
-
+    (this as any)._footerNote = config.footerNote || (config.issuerName ? `${config.issuerName} · Official Document` : 'Enterprise Procurement & Supply Chain ERP');
     const sellerSigUrl = config.sellerSignatureUrl || config.signatures?.sellerSignatureUrl;
     const sellerStampUrl = config.sellerStampUrl || config.signatures?.sellerStampUrl;
     const buyerSigUrl = config.buyerSignatureUrl || config.signatures?.buyerSignatureUrl;

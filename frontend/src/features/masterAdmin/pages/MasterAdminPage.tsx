@@ -29,6 +29,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
@@ -61,6 +62,8 @@ import { SortableHeader, type SortDirection } from '../../shared/SortableHeader'
 import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { masterAdminApi } from '../masterAdminApi';
+import { AppealQueue } from '../../shared/AppealQueue';
+import AdminNoticeCircularModal from '../components/AdminNoticeCircularModal';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
 type TabId = 'overview' | 'organizations' | 'branding' | 'users' | 'procurement' | 'marketplace' | 'payments' | 'features' | 'exports' | 'email' | 'audit' | 'settings' | 'security';
@@ -439,6 +442,7 @@ export default function MasterAdminPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [overview, setOverview] = useState<any>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
@@ -497,6 +501,7 @@ export default function MasterAdminPage() {
     reports: true
   });
   const [error, setError] = useState<Record<string, string | null>>({});
+  const [orgSubTab, setOrgSubTab] = useState<'directory' | 'appeals'>('directory');
   const [filters, setFilters] = useState<Record<FilterId, Record<string, string>>>({
     overview: {},
     organizations: { search: '', status: '', organizationType: '' },
@@ -1442,13 +1447,14 @@ export default function MasterAdminPage() {
         await masterAdminApi.updateEmailSettings(values);
         void loadEmail();
       }
-      if (editor.type === 'emailTemplate' && emailTemplateCompanyId) {
+      if (editor.type === 'emailTemplate') {
+        const payload = { ...values, companyId: emailTemplateCompanyId || values.companyId };
         if (editor.mode === 'create') {
-          await masterAdminApi.createEmailTemplate(values);
+          await masterAdminApi.createEmailTemplate(payload);
         } else {
-          await masterAdminApi.updateEmailTemplate(editor.record.id, values);
+          await masterAdminApi.updateEmailTemplate(editor.record.id, payload);
         }
-        void loadEmailTemplates(emailTemplateCompanyId);
+        if (emailTemplateCompanyId) void loadEmailTemplates(emailTemplateCompanyId);
       }
       toast.success(`${labelize(editor.type)} saved`);
       setEditor(null);
@@ -1501,6 +1507,14 @@ export default function MasterAdminPage() {
                   </Button>
                 ))}
               </div>
+              <Button
+                type="button"
+                onClick={() => setIsNoticeModalOpen(true)}
+                className="h-10 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-800 px-4 text-xs font-black text-white shadow-md shadow-blue-900/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Broadcast Notice
+              </Button>
               <Button
                 type="button"
                 onClick={refreshActive}
@@ -1611,65 +1625,105 @@ export default function MasterAdminPage() {
 
         {activeTab === 'organizations' && (
           <section className="space-y-4">
-            <Toolbar
-              tab="organizations"
-              filters={filters.organizations}
-              updateFilter={updateFilter}
-              resetFilters={resetFilters}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              selects={[
-                ['status', 'All statuses', ['VERIFIED', 'PENDING', 'UNDER_REVIEW', 'REJECTED', 'SUSPENDED']],
-                ['organizationType', 'All organization types', ['Buyer', 'Seller', 'MSME', 'Large Industry', 'Government', 'Private', 'PSU', 'Service Provider']]
-              ]}
-            />
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Organization
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Desk View:</span>
+                <div className="inline-flex rounded-lg bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setOrgSubTab('directory')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                      orgSubTab === 'directory'
+                        ? 'bg-[#0c2340] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Organizations Directory
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrgSubTab('appeals')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${
+                      orgSubTab === 'appeals'
+                        ? 'bg-[#0c2340] text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Suspension Appeals Desk
+                  </button>
+                </div>
+              </div>
+
+              {orgSubTab === 'directory' && (
+                <Button type="button" className="h-9 rounded-md bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b]" onClick={() => setEditor({ type: 'organization', mode: 'create' })}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Organization
+                </Button>
+              )}
             </div>
-            <div>
-              <PaginatedTable
-                title="Registered Organizations (Sellers & Buyers)"
-                icon={Building2}
-                rows={organizations.items}
-                total={organizations.total}
-                page={pages.organizations.page}
-                pageSize={pages.organizations.pageSize}
-                loading={loading.organizations}
-                error={error.organizations}
-                columns={[
-                  ['organizationName', 'Organization'],
-                  ['organizationType', 'Type'],
-                  ['verificationStatus', 'Verification'],
-                  ['state', 'State', (row: any) => {
-                    const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
-                    return formatCell(val);
-                  }],
-                  ['updatedAt', 'Updated']
-                ]}
-                sort={sorts.organizations}
-                onSort={field => onSort('organizations', field)}
-                onPageChange={page => setPageState('organizations', page)}
-                onPageSizeChange={size => setPageSizeState('organizations', size)}
-                viewMode={viewMode}
-                actions={row => (
-                  <OrganizationActions
-                    org={row}
-                    onEdit={() => setEditor({ type: 'organization', mode: 'edit', record: row })}
-                    onActivate={() => openAction({ entity: 'organization', action: row.verificationStatus === 'VERIFIED' && !row.isBlacklisted ? 'inactivate' : 'reactivate', id: row.id, label: row.organizationName || 'organization' })}
-                    onSuspend={() => openAction({ entity: 'organization', action: 'suspend', id: row.id, label: row.organizationName || 'organization' })}
-                    onArchive={() => openAction({ entity: 'organization', action: 'archive', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onClose={() => openAction({ entity: 'organization', action: 'close', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onRestore={() => openAction({ entity: 'organization', action: 'restore', id: row.id, label: row.organizationName || 'organization' })}
-                    onAllowGstReuse={() => openAction({ entity: 'organization', action: 'allowGstReuse', id: row.id, label: row.organizationName || 'organization' })}
-                    onRevokeGstReuse={() => openAction({ entity: 'organization', action: 'revokeGstReuse', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                    onCascadeDelete={() => openAction({ entity: 'organization', action: 'cascadeDelete', id: row.id, label: row.organizationName || 'organization', danger: true })}
-                  />
-                )}
+
+            {orgSubTab === 'appeals' ? (
+              <AppealQueue
+                authHeaders={{ Authorization: token ? `Bearer ${token}` : '' }}
+                title="Global Suspension Appeals Desk (Master Admin Override)"
               />
-            </div>
+            ) : (
+              <>
+                <Toolbar
+                  tab="organizations"
+                  filters={filters.organizations}
+                  updateFilter={updateFilter}
+                  resetFilters={resetFilters}
+                  viewMode={viewMode}
+                  setViewMode={setViewMode}
+                  selects={[
+                    ['status', 'All statuses', ['VERIFIED', 'PENDING', 'UNDER_REVIEW', 'REJECTED', 'SUSPENDED']],
+                    ['organizationType', 'All organization types', ['Buyer', 'Seller', 'MSME', 'Large Industry', 'Government', 'Private', 'PSU', 'Service Provider']]
+                  ]}
+                />
+                <div>
+                  <PaginatedTable
+                    title="Registered Organizations (Sellers & Buyers)"
+                    icon={Building2}
+                    rows={organizations.items}
+                    total={organizations.total}
+                    page={pages.organizations.page}
+                    pageSize={pages.organizations.pageSize}
+                    loading={loading.organizations}
+                    error={error.organizations}
+                    columns={[
+                      ['organizationName', 'Organization'],
+                      ['organizationType', 'Type'],
+                      ['verificationStatus', 'Verification'],
+                      ['state', 'State', (row: any) => {
+                        const val = row.state || row.sellerProfiles?.[0]?.state || row.sellerProfiles?.[0]?.offices?.[0]?.state || row.buyerProfiles?.[0]?.state || row.users?.[0]?.registrationDetails?.state || row.users?.[0]?.registrationDetails?.gstDetails?.state;
+                        return formatCell(val);
+                      }],
+                      ['updatedAt', 'Updated']
+                    ]}
+                    sort={sorts.organizations}
+                    onSort={field => onSort('organizations', field)}
+                    onPageChange={page => setPageState('organizations', page)}
+                    onPageSizeChange={size => setPageSizeState('organizations', size)}
+                    viewMode={viewMode}
+                    actions={row => (
+                      <OrganizationActions
+                        org={row}
+                        onEdit={() => setEditor({ type: 'organization', mode: 'edit', record: row })}
+                        onActivate={() => openAction({ entity: 'organization', action: row.verificationStatus === 'VERIFIED' && !row.isBlacklisted ? 'inactivate' : 'reactivate', id: row.id, label: row.organizationName || 'organization' })}
+                        onSuspend={() => openAction({ entity: 'organization', action: 'suspend', id: row.id, label: row.organizationName || 'organization' })}
+                        onArchive={() => openAction({ entity: 'organization', action: 'archive', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onClose={() => openAction({ entity: 'organization', action: 'close', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onRestore={() => openAction({ entity: 'organization', action: 'restore', id: row.id, label: row.organizationName || 'organization' })}
+                        onAllowGstReuse={() => openAction({ entity: 'organization', action: 'allowGstReuse', id: row.id, label: row.organizationName || 'organization' })}
+                        onRevokeGstReuse={() => openAction({ entity: 'organization', action: 'revokeGstReuse', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                        onCascadeDelete={() => openAction({ entity: 'organization', action: 'cascadeDelete', id: row.id, label: row.organizationName || 'organization', danger: true })}
+                      />
+                    )}
+                  />
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -2366,6 +2420,10 @@ export default function MasterAdminPage() {
                       <Mail className="mr-2 h-4 w-4" />
                       Send Test Email
                     </Button>
+                    <Button type="button" className="h-9 rounded-md bg-blue-700 text-xs font-black text-white hover:bg-blue-800 shadow-sm" onClick={() => setIsNoticeModalOpen(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      Circulate Notice / Email
+                    </Button>
                   </div>
                 </div>
               </Panel>
@@ -2630,6 +2688,11 @@ export default function MasterAdminPage() {
             emailTemplateAvailableVars={emailTemplateAvailableVars}
           />
         )}
+        <AdminNoticeCircularModal
+          open={isNoticeModalOpen}
+          onClose={() => setIsNoticeModalOpen(false)}
+          onSuccess={refreshActive}
+        />
       </div>
     </div>
   );
@@ -4073,19 +4136,23 @@ function EntityEditor({
   const compilePreviewHtml = (html: string) => {
     if (!html) return '';
     let preview = html;
+    const basePortalUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost'))
+      ? window.location.origin
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://msme-pugarch-frontend.vercel.app');
+
     const mockVars: Record<string, string> = {
-      userName: 'John Doe',
-      userEmail: 'johndoe@example.com',
-      organizationName: 'Acme Corporates Ltd',
-      portalName: 'JsgSmile Portal',
-      companyName: 'JsgSmile MSME Portal',
-      actionUrl: 'https://jsgsmile.portal/dashboard/procurement',
-      supportEmail: 'support@jsgsmile.org',
-      loginUrl: 'https://jsgsmile.portal/login',
+      userName: 'Sri Alok Sharma',
+      userEmail: 'alok.sharma@example.gov.in',
+      organizationName: 'Jharsuguda Engineering Works MSME',
+      portalName: 'JSG SMILE Procurement Portal',
+      companyName: 'Collectorate Jharsuguda',
+      actionUrl: `${basePortalUrl}/dashboard/procurement`,
+      supportEmail: 'nodal-msme@jharsuguda.odisha.gov.in',
+      loginUrl: `${basePortalUrl}/login`,
       invoiceNumber: 'INV-2026-0042',
       orderNumber: 'PO-2026-9812',
       tenderTitle: 'Procurement of High-Grade Steel Cables',
-      bidReference: 'BID-STL-88',
+      bidReference: 'JSG-TND/2026/09/88',
       amount: '4,50,000',
       currency: 'INR',
       dueDate: '15th July 2026',

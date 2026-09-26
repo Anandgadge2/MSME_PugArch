@@ -10,7 +10,7 @@ import { ACCOUNT_TYPE_IDS, DEFAULT_DYNAMIC_ROLE_TEMPLATES, RBAC_PERMISSION_CATAL
 import { assertCanAssignRole, assertCanManageRole, ensureAssignablePermissions, getActivePermissionCodes, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
 import { hashPassword } from '../services/password.service.js';
 import { sendSubUserInvitationEmail } from '../services/mail.service.js';
-import { env } from '../config/env.js';
+import { env, getPublicPortalUrl } from '../config/env.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
 import { generateSecureTemporaryPassword } from '../utils/crypto.js';
 
@@ -498,7 +498,7 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
   const roleName = assignedRoles.map((r: any) => r.name).join(', ') || 'Team Member';
 
   // Send invitation email with credentials
-  const loginUrl = `${env.FRONTEND_URL || 'https://msme-pugarch-frontend.vercel.app'}/login`;
+  const loginUrl = `${getPublicPortalUrl().replace(/\/+$/, '')}/login`;
   await sendSubUserInvitationEmail(body.email.toLowerCase().trim(), {
     name: body.name || targetUser.name,
     organizationName: org?.organizationName || 'Your Organization',

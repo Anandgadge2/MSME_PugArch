@@ -62,6 +62,12 @@ export interface DataTableProps<T> {
   caption?: string;
   footer?: React.ReactNode;
   containerFooter?: React.ReactNode;
+  /**
+   * Layout presentation on mobile screens (< sm breakpoint).
+   * 'cards' (default): renders fluid, accessible cards with clear field-value pairs and dedicated action bar.
+   * 'scroll': renders standard table with horizontal overflow scrolling.
+   */
+  mobileLayout?: 'cards' | 'scroll';
 }
 
 export function DataTable<T>({
@@ -97,11 +103,34 @@ export function DataTable<T>({
   caption,
   footer,
   containerFooter,
+  mobileLayout = 'cards',
 }: DataTableProps<T>) {
   const safePageSize = Math.max(1, pageSize || 10);
   const safePage = Math.max(1, page || 1);
   const startIndex = (safePage - 1) * safePageSize;
   const resolvedTotal = total !== undefined ? total : data.length;
+
+  // Separate sortable columns for mobile sort selector
+  const sortableColumns = useMemo(
+    () => columns.filter((col) => col.sortable),
+    [columns]
+  );
+
+  // Group action columns vs standard content columns for card view
+  const { contentColumns, actionColumns } = useMemo(() => {
+    const content: ColumnDef<T>[] = [];
+    const action: ColumnDef<T>[] = [];
+    for (const col of columns) {
+      const keyLower = col.key.toLowerCase();
+      const headerStr = typeof col.header === 'string' ? col.header.toLowerCase() : '';
+      if (keyLower === 'action' || keyLower === 'actions' || headerStr.includes('action')) {
+        action.push(col);
+      } else {
+        content.push(col);
+      }
+    }
+    return { contentColumns: content, actionColumns: action };
+  }, [columns]);
 
   // Check whether footer should be rendered inside <tfoot> (as <tr> elements)
   // or outside <table> as a container-level footer (e.g. action buttons, summary cards).
@@ -155,7 +184,128 @@ export function DataTable<T>({
         className
       )}
     >
-      <div className={cn("overflow-x-auto w-full max-w-full", scrollWrapperClassName)}>
+      {/* 1. Mobile Card View (< sm screens, when mobileLayout === 'cards') */}
+      {mobileLayout === 'cards' && (
+        <div className="block sm:hidden divide-y divide-slate-100 bg-white">
+          {/* Mobile Sort Selector Toolbar */}
+          {sortableColumns.length > 0 && onSort && (
+            <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-200 text-xs">
+              <label htmlFor="mobile-table-sort" className="font-extrabold text-[10px] uppercase tracking-wider text-slate-500">
+                Sort by:
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  id="mobile-table-sort"
+                  value={sortKey || ''}
+                  onChange={(e) => onSort(e.target.value)}
+                  className="h-9 min-h-[36px] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]"
+                >
+                  {sortableColumns.map((col) => (
+                    <option key={col.sortKey || col.key} value={col.sortKey || col.key}>
+                      {typeof col.header === 'string' ? col.header : col.key}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => sortKey && onSort(sortKey)}
+                  className="h-9 w-9 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition active:scale-95"
+                  title="Toggle sort direction"
+                  aria-label={`Sorted ${sortDirection === 'asc' ? 'ascending' : 'descending'}. Toggle sort direction.`}
+                >
+                  <span className="text-sm font-black">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Cards List */}
+          <div className="divide-y divide-slate-100">
+            {data.map((item, index) => {
+              const rowIndex = startIndex + index + 1;
+              const rowKey = keyExtractor(item, index);
+              const customRowClass =
+                typeof rowClassName === 'function'
+                  ? rowClassName(item, index)
+                  : rowClassName;
+
+              return (
+                <div
+                  key={rowKey}
+                  onClick={() => onRowClick?.(item, index)}
+                  onKeyDown={(e) => {
+                    if (onRowClick && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      onRowClick(item, index);
+                    }
+                  }}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  className={cn(
+                    "p-4 transition-colors hover:bg-slate-50/75 active:bg-slate-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-inset space-y-2.5",
+                    onRowClick && "cursor-pointer",
+                    customRowClass
+                  )}
+                >
+                  {/* Top Bar with Row Index / Sr No */}
+                  {showSrNo && (
+                    <div className="flex items-center justify-between pb-1.5 border-b border-slate-100/80">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        {srNoHeader}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        #{String(rowIndex).padStart(2, '0')}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Field-Value Rows */}
+                  <div className="space-y-2">
+                    {contentColumns.map((col) => {
+                      const headerText = typeof col.header === 'string' ? col.header : col.key;
+                      return (
+                        <div key={col.key} className="flex items-start justify-between gap-3 text-xs">
+                          <span className="font-black text-[10px] uppercase tracking-wider text-slate-400 shrink-0 mt-0.5 max-w-[42%] break-words">
+                            {headerText}
+                          </span>
+                          <div
+                            className={cn(
+                              "flex-1 min-w-0 text-right font-semibold text-slate-800 break-words",
+                              col.cellClassName
+                            )}
+                          >
+                            {col.cell(item, index, startIndex)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Actions Row (if any action column exists) */}
+                  {actionColumns.length > 0 && (
+                    <div className="pt-2.5 mt-1 border-t border-slate-100 flex items-center justify-end gap-3">
+                      {actionColumns.map((col) => (
+                        <div key={col.key} className="w-full flex items-center justify-end">
+                          {col.cell(item, index, startIndex)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Desktop Table View (>= sm screens or when mobileLayout === 'scroll') */}
+      <div
+        className={cn(
+          "w-full max-w-full overflow-x-auto",
+          mobileLayout === 'cards' ? "hidden sm:block" : "block",
+          scrollWrapperClassName
+        )}
+      >
         <table
           className={cn(
             "w-full border-collapse text-left text-xs table-fixed",

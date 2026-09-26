@@ -173,6 +173,11 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
 
       // Items Rows
       items.forEach((item, idx) => {
+        // Page overflow protection: add new page if item row would go past safe zone
+        if (currentY + 22 > 842.89 - 140) {
+          doc.addPage();
+          currentY = 36;
+        }
         const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
         doc.rect(pageMargin, currentY, contentWidth, 22).fill(rowBg);
         doc.rect(pageMargin, currentY, contentWidth, 22).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
@@ -219,10 +224,14 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
       // Bank Details (Left side bottom)
       doc.rect(pageMargin, currentY, contentWidth - summaryWidth - 12, 85).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
       doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('PAYMENT & BANK DETAILS', pageMargin + 10, currentY + 8);
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(`Bank Name: State Bank of India`, pageMargin + 10, currentY + 22);
-      doc.text(`Account Name: ${sellerName}`, pageMargin + 10, currentY + 34);
-      doc.text(`Account No: 39820194812`, pageMargin + 10, currentY + 46);
-      doc.text(`IFSC Code: SBIN0001892`, pageMargin + 10, currentY + 58);
+      const bankName = sellerReg.bankDetails?.bankName || sellerReg.bankName || 'N/A';
+      const accountName = sellerReg.bankDetails?.accountHolderName || sellerReg.accountHolderName || sellerName;
+      const accountNo = sellerReg.bankDetails?.accountNumber || sellerReg.accountNumber || 'N/A';
+      const ifscCode = sellerReg.bankDetails?.ifscCode || sellerReg.ifscCode || 'N/A';
+      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(`Bank Name: ${bankName}`, pageMargin + 10, currentY + 22);
+      doc.text(`Account Name: ${accountName}`, pageMargin + 10, currentY + 34);
+      doc.text(`Account No: ${accountNo}`, pageMargin + 10, currentY + 46);
+      doc.text(`IFSC Code: ${ifscCode}`, pageMargin + 10, currentY + 58);
       doc.fillColor('#059669').fontSize(7.5).font('Helvetica-Bold').text('Status: GST Tax Invoice Created & Verified', pageMargin + 10, currentY + 70);
 
       currentY += 100;
@@ -465,6 +474,11 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
 
       // Items Rows
       items.forEach((item, idx) => {
+        // Page overflow protection: add new page if item row would go past safe zone
+        if (currentY + 22 > 842.89 - 140) {
+          doc.addPage();
+          currentY = 36;
+        }
         const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
         doc.rect(pageMargin, currentY, contentWidth, 22).fill(rowBg);
         doc.rect(pageMargin, currentY, contentWidth, 22).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
@@ -848,15 +862,15 @@ export async function generatePaymentReceiptPdfBuffer(input: PaymentReceiptPdfIn
       // Left: Payer / Buyer
       doc.roundedRect(pageMargin, currentY, halfW, 58, 6).fillAndStroke('#f8fafc', '#cbd5e1');
       doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Bold').text('PAYER / BUYER', pageMargin + 12, currentY + 10);
-      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payerName || 'Snehal Kolhe', pageMargin + 12, currentY + 24, { width: halfW - 24 });
-      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payerEmail || 'buyer@msme-portal.in', pageMargin + 12, currentY + 38, { width: halfW - 24 });
+      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payerName || 'N/A', pageMargin + 12, currentY + 24, { width: halfW - 24 });
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payerEmail || 'N/A', pageMargin + 12, currentY + 38, { width: halfW - 24 });
 
       // Right: Payee / Seller
       const rightX = pageMargin + halfW + 12;
       doc.roundedRect(rightX, currentY, halfW, 58, 6).fillAndStroke('#f8fafc', '#cbd5e1');
       doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Bold').text('PAYEE / SELLER', rightX + 12, currentY + 10);
-      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payeeName || 'Sandhya Kolhe', rightX + 12, currentY + 24, { width: halfW - 24 });
-      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payeeEmail || 'seller@msme-portal.in', rightX + 12, currentY + 38, { width: halfW - 24 });
+      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(input.payeeName || 'N/A', rightX + 12, currentY + 24, { width: halfW - 24 });
+      doc.fillColor('#64748b').fontSize(8).font('Helvetica').text(input.payeeEmail || 'N/A', rightX + 12, currentY + 38, { width: halfW - 24 });
 
       currentY += 72;
 

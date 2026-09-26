@@ -174,6 +174,10 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
     if (!existing) throw new ApiError(404, 'Buyer profile not found');
 
     // Check if sensitive fields changed
+    if (body.organizationName !== undefined && body.organizationName !== existing.organizationName) {
+      throw new ApiError(400, 'Organization trade name updates are not allowed via showcase profile API. Please use the OTP verification endpoint.', 'ORGANIZATION_NAME_IMMUTABLE');
+    }
+
     const isSensitiveChanged = 
       (body.gstNumber !== undefined && body.gstNumber !== existing.gstNumber && body.gstNumber !== existing.gst) ||
       (body.registrationNumber !== undefined && body.registrationNumber !== existing.registrationNumber && body.registrationNumber !== existing.cin) ||
@@ -196,8 +200,8 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       await consumeOtp('buyer_profile_update', user.email);
     }
 
-    // Strip otp from body before updating
-    const { otp, ...updateData } = body as any;
+    // Strip otp and organizationName from body before updating
+    const { otp, organizationName, ...updateData } = body as any;
 
     const updated = await db.buyerProfile.update({
       where: { userId: userId(req) },
@@ -209,7 +213,7 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       }
     });
 
-    // Sync to OrganizationProfile & Organization if organization exists
+    // Sync to OrganizationProfile if organization exists
     const orgId = req.user?.organizationId || existing.organizationId;
     if (orgId) {
       if (body.logoUrl !== undefined || body.bannerUrl !== undefined) {
@@ -220,15 +224,6 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
           where: { organizationId: orgId },
           update: profileUpdate,
           create: { organizationId: orgId, ...profileUpdate }
-        });
-      }
-      const orgDataUpdate: any = {};
-      if (body.organizationName) orgDataUpdate.organizationName = body.organizationName;
-      if (body.organizationType) orgDataUpdate.organizationType = body.organizationType;
-      if (Object.keys(orgDataUpdate).length > 0) {
-        await db.organization.update({
-          where: { id: orgId },
-          data: orgDataUpdate
         });
       }
 

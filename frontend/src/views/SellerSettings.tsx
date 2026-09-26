@@ -16,6 +16,7 @@ import { isShgUser } from '../lib/shg';
 import { ConsentManagementCard } from '../components/compliance/ConsentManagementCard';
 import { FocusTrap } from '../components/ui/FocusTrap';
 import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
+import { RequestGstUpdateModal } from '../features/shared/RequestGstUpdateModal';
 
 export default function SellerSettings() {
   const { user, refreshUser, logout } = useAuth();
@@ -36,6 +37,7 @@ export default function SellerSettings() {
   const [profileData, setProfileData] = useState<any>(cachedProfile);
   const [isFetching, setIsFetching] = useState(!cachedProfile);
   const [isEditOrgNameOpen, setIsEditOrgNameOpen] = useState(false);
+  const [isGstModalOpen, setIsGstModalOpen] = useState(false);
 
   const resolvedOrgType = profileData?.organizationType || profileData?.organizationTypeEnum || (user as any)?.organization?.organizationType || (user as any)?.registrationDetails?.businessType || 'Proprietorship';
   const currentBusinessName = profileData?.businessName || (user as any)?.organization?.organizationName || (user as any)?.registrationDetails?.businessName || (user as any)?.registrationDetails?.tradeName || '';
@@ -796,13 +798,23 @@ export default function SellerSettings() {
                     </div>
 
                     <div className="p-4 rounded-xl border border-gray-200 bg-white shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Tax Identifiers</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-600 uppercase tracking-tight">Tax Identifiers</span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setIsGstModalOpen(true)}
+                          className="h-7 text-[10px] font-bold uppercase tracking-wider border-slate-200 text-[#0c2340] hover:bg-slate-50"
+                        >
+                          Update GST
+                        </Button>
+                      </div>
                       <div className="text-sm font-bold text-gray-800 pt-1 flex items-center gap-3">
                         <span>PAN: {profileData?.pan || user?.sellerProfile?.pan || 'Verified'}</span>
                         {profileData?.gstin && <span>• GSTIN: {profileData.gstin}</span>}
                       </div>
                       <p className="text-[11px] text-gray-500">
-                        Tax identification linked to this account.
+                        Tax identification linked to this account. Submit an amendment request to migrate GSTIN.
                       </p>
                     </div>
                   </div>
@@ -1139,13 +1151,13 @@ export default function SellerSettings() {
 
       {isCloseModalOpen && (
         <div 
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="close-account-title"
         >
           <FocusTrap onEscape={() => setIsCloseModalOpen(false)} className="w-full max-w-md">
-            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-t-2xl sm:rounded-xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-6 animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
               <div className="flex items-center gap-3 text-red-600">
                 <div className="bg-red-50 p-2 rounded-full">
                   <AlertTriangle className="h-6 w-6" />
@@ -1157,7 +1169,7 @@ export default function SellerSettings() {
                 This action is permanent and irreversible. Your account will be <span className="font-bold text-red-600">permanently deleted</span> and you will <span className="font-bold text-red-600">not be able to retrieve this account</span> or any associated data.
               </p>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-2">
                 <Button 
                   onClick={() => setIsCloseModalOpen(false)} 
                   disabled={isLoading}
@@ -1203,6 +1215,14 @@ export default function SellerSettings() {
           setProfileData((prev: any) => ({ ...prev, businessName: newName }));
           await refreshUser();
         }}
+      />
+      <RequestGstUpdateModal
+        isOpen={isGstModalOpen}
+        onClose={() => setIsGstModalOpen(false)}
+        currentGstin={profileData?.gstin || user?.sellerProfile?.gst}
+        panNumber={profileData?.pan || user?.sellerProfile?.pan}
+        authHeaders={{ Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('token') || '' : ''}` }}
+        onSuccess={() => refreshUser()}
       />
     </div>
   );

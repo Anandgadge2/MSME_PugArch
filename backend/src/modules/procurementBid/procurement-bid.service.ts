@@ -32,8 +32,8 @@ const bidTransitions: Record<string, string[]> = {
   PUBLISHED: ['OPEN', 'OPEN_FOR_BIDDING', 'CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   OPEN_FOR_BIDDING: ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
-  CLOSED: ['UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
-  EXPIRED: ['UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
+  CLOSED: ['OPEN', 'OPEN_FOR_BIDDING', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
+  EXPIRED: ['OPEN', 'OPEN_FOR_BIDDING', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   TECHNICAL_EVALUATION: ['TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION', 'CANCELLED'],
   TECHNICAL_EVALUATION_COMPLETED: ['FINANCIAL_EVALUATION', 'UNDER_EVALUATION', 'CANCELLED'],
   FINANCIAL_EVALUATION: ['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'UNDER_EVALUATION', 'CANCELLED'],
@@ -804,9 +804,9 @@ export const refreshBidStatus = async (bid: any) => {
   const time = now();
 
   const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
-  const deadlineCandidate = firstPresent(
-    bid.endDate,
+  const deadlineCandidate = bid.endDate || firstPresent(
     bid.bidClosingDate,
+    sched?.submissionClosingDate,
     sched?.submissionDate,
     sched?.submissionDeadline,
     sched?.submissionEndDate,
@@ -1573,7 +1573,9 @@ export const assertSellerVerified = async (actor: Actor) => {
     include: { sellerProfile: true, organization: true }
   });
   assertActiveAccount(user, 'Seller');
-  if (user?.organization?.isBlacklisted) throw new ApiError(403, 'Seller organization is blocked for procurement participation.', 'SELLER_NOT_VERIFIED');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Seller organization is blocked for procurement participation.', 'SELLER_NOT_VERIFIED');
+  }
   const profileVerified = user?.isDualRole
     ? user?.sellerProfile?.verificationStatusEnum === 'VERIFIED'
     : user?.sellerProfile?.verificationStatusEnum === 'VERIFIED' || user?.sellerProfile?.panVerified || user?.sellerProfile?.isUdyamCertified;
@@ -1591,7 +1593,9 @@ export const assertBuyerVerified = async (actor: Actor) => {
     include: { buyerProfile: true, organization: true }
   });
   assertActiveAccount(user, 'Buyer');
-  if (user?.organization?.isBlacklisted) throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   const orgVerified = user?.organization ? verifiedOrganizationStatuses.includes(String(user.organization.verificationStatus)) : false;
   const profileVerified = user?.buyerProfile?.verificationStatusEnum === 'VERIFIED' || user?.buyerProfile?.verificationStatus === 'VERIFIED';
   const legacyApproved = user?.isDualRole ? false : sellerVerifiedStatuses.includes(String(user?.onboardingStatus));
@@ -1832,6 +1836,9 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
   if (req.user!.role !== 'buyer') throw new ApiError(403, 'Buyer access required', 'FORBIDDEN_ROLE');
   const user = await db.user.findUnique({ where: { id: req.user!.id }, include: { buyerProfile: true, organization: true } });
   assertActiveAccount(user, 'Buyer');
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   const bid = await db.procurementBid.create({
     data: {
       bidNumber: await nextBidNumber(),
@@ -1880,6 +1887,10 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
 export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, { participations: true });
   assertBuyerOwner(req.user!, bid);
+  const user = await db.user.findUnique({ where: { id: req.user!.id }, include: { organization: true } });
+  if (user?.organization?.isBlacklisted || user?.organization?.verificationStatus === 'SUSPENDED') {
+    throw new ApiError(403, 'Buyer organization is blocked for procurement publishing.', 'BUYER_NOT_VERIFIED');
+  }
   
   const isPublished = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(String(bid.status).toUpperCase());
   
@@ -2090,27 +2101,38 @@ export const extendBidSchedule = async (
   }
 
   // Sync technicalPacket JSON payload if present
-  let updatedTechnicalPacket = bid.technicalPacket as any;
-  if (updatedTechnicalPacket && typeof updatedTechnicalPacket === 'object') {
-    const schedule = updatedTechnicalPacket.schedule || {};
-    const basics = updatedTechnicalPacket.basics || {};
-    updatedTechnicalPacket = {
-      ...updatedTechnicalPacket,
-      schedule: {
-        ...schedule,
-        submissionClosingDate: newClosingDate.toISOString(),
-        ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
-        ...(newFinDate ? { financialOpeningDate: newFinDate.toISOString() } : {}),
-        ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
-      },
-      basics: {
-        ...basics,
-        ...(newRequiredByDate ? { requiredByDate: newRequiredByDate.toISOString() } : {}),
-      }
-    };
-  }
+  let updatedTechnicalPacket = (bid.technicalPacket && typeof bid.technicalPacket === 'object')
+    ? { ...(bid.technicalPacket as any) }
+    : {};
 
-  const shouldReactivate = ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'].includes(status);
+  const currentCount = Number(updatedTechnicalPacket.corrigendumCount || 0);
+  const schedule = updatedTechnicalPacket.schedule || {};
+  const basics = updatedTechnicalPacket.basics || {};
+
+  updatedTechnicalPacket = {
+    ...updatedTechnicalPacket,
+    corrigendumCount: currentCount + 1,
+    submissionDeadline: newClosingDate.toISOString(),
+    bidClosingDate: newClosingDate.toISOString(),
+    schedule: {
+      ...schedule,
+      // Sync ALL deadline key variants so firstPresent() and downstream parsers never read stale values
+      submissionClosingDate: newClosingDate.toISOString(),
+      submissionDate: newClosingDate.toISOString(),
+      submissionDeadline: newClosingDate.toISOString(),
+      submissionEndDate: newClosingDate.toISOString(),
+      bidClosingDate: newClosingDate.toISOString(),
+      ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
+      ...(newFinDate ? { financialOpeningDate: newFinDate.toISOString() } : {}),
+      ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
+    },
+    basics: {
+      ...basics,
+      ...(newRequiredByDate ? { requiredByDate: newRequiredByDate.toISOString() } : {}),
+    }
+  };
+
+  const shouldReactivate = ['CLOSED', 'EXPIRED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'OPEN_FOR_BIDDING', 'PUBLISHED'].includes(status);
 
   const updated = await db.procurementBid.update({
     where: { id: bid.id },
@@ -2120,11 +2142,12 @@ export const extendBidSchedule = async (
       ...(newTechDate ? { technicalOpeningDate: newTechDate } : {}),
       ...(newFinDate ? { financialOpeningDate: newFinDate } : {}),
       ...(newValidityDate ? { bidValidityDate: newValidityDate } : {}),
-      ...(updatedTechnicalPacket ? { technicalPacket: updatedTechnicalPacket } : {})
+      technicalPacket: updatedTechnicalPacket
     }
   });
 
   const changeSummary = {
+    corrigendumCount: updatedTechnicalPacket.corrigendumCount,
     oldDates: {
       endDate: bid.endDate,
       technicalOpeningDate: bid.technicalOpeningDate,
@@ -2148,11 +2171,14 @@ export const extendBidSchedule = async (
   const participations = await db.procurementBidParticipation.findMany({
     where: { bidId: bid.id }
   });
+  const notifiedSellerIds = new Set<number>();
   for (const p of participations) {
+    if (notifiedSellerIds.has(p.sellerId)) continue;
+    notifiedSellerIds.add(p.sellerId);
     try {
       await notificationService.notifyUser(p.sellerId, {
         title: 'Submission Deadline Extended (Corrigendum)',
-        message: `The submission deadline for "${bid.title}" has been extended to ${newClosingDate.toLocaleString()}. Reason: ${body.reason}`,
+        message: `The submission deadline for "${bid.title}" has been extended to ${newClosingDate.toLocaleString()}. Your existing submission remains valid. You may revise your quotation before the new deadline. Reason: ${body.reason}`,
         type: 'tender.deadline_extended',
         redirectUrl: `/seller/procurement/events/${bid.id}`
       }, ['in_app', 'email']);

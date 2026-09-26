@@ -132,6 +132,7 @@ const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotat
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
 const SellerAwardPoAlertPopup = lazy(() => import('./features/notifications/SellerAwardPoAlertPopup'));
+const TargetedNoticePopup = lazy(() => import('./features/notifications/TargetedNoticePopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -864,6 +865,48 @@ export default function App({
     if (pathname === '/dashboard' && isCurrentShg) return <Redirect to="/shg/dashboard" />;
     if (pathname === '/dashboard') return <Dashboard />;
     if (pathname === '/shg/dashboard' && shgRouteOk) return <Dashboard />;
+
+    // Intercept direct navigation to restricted operational actions for suspended stakeholders
+    const isOrgSuspended = Boolean(
+      (user.organization?.isBlacklisted ||
+       user.organization?.verificationStatus === 'SUSPENDED' ||
+       user.accountStatus === 'BLOCKED') &&
+      user.role !== 'admin' &&
+      user.role !== 'master_admin'
+    );
+
+    if (isOrgSuspended) {
+      const allowedSuspendedPrefixes = [
+        '/payments',
+        '/escrow',
+        '/orders',
+        '/purchase-orders',
+        '/seller/purchase-orders',
+        '/seller/orders',
+        '/buyer/orders',
+        '/buyer/purchase-orders',
+        '/buyer/invoices',
+        '/seller/invoices',
+        '/buyer/payments',
+        '/buyer/escrow',
+        '/disputes',
+        '/seller/disputes',
+        '/buyer/disputes',
+        '/admin/disputes',
+        '/profile',
+        '/notifications',
+        '/settings',
+        '/help',
+        '/orders/tracking',
+        '/tracking',
+        '/delivery',
+        '/buyer/tracking'
+      ];
+      const isAllowed = allowedSuspendedPrefixes.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/')) || isPublicRoute(pathname);
+      if (!isAllowed) {
+        return <Redirect to="/dashboard" />;
+      }
+    }
     if (pathname === '/shg/onboarding' && shgRouteOk) return <ShgOnboarding section="onboarding" />;
     if (pathname === '/shg/profile' && shgRouteOk) return <ShgOnboarding section="profile" />;
     if (pathname === '/shg/members' && shgRouteOk) return <ShgOnboarding section="members" />;
@@ -1243,6 +1286,9 @@ export default function App({
             )}
             {user && (user.role === 'seller' || user.role === 'shg') && (
               <SellerAwardPoAlertPopup />
+            )}
+            {user && (
+              <TargetedNoticePopup />
             )}
           </Suspense>
         )}

@@ -350,7 +350,10 @@ export default function MISReports() {
           'Statutory Note: Mandated tracking under MSMED Act 2006 Section 15 requires buyer settlements <= 45 days.',
           'Local Content Policy: Priority linkage given to registered MSMEs and Women SHGs in Jharsuguda District.',
         ],
-        footerNote: 'CONFIDENTIAL • FOR INTERNAL ADMINISTRATIVE AND STATUTORY REVIEW ONLY'
+        footerNote: 'CONFIDENTIAL • FOR INTERNAL ADMINISTRATIVE AND STATUTORY REVIEW ONLY',
+        signatoryMode: 'single' as const,
+        singleSignatoryTitle: 'District Industries Centre (DIC)',
+        singleSignatoryName: 'Monitoring & Compliance Officer',
       };
 
       const doc = await engine.generate(docConfig);

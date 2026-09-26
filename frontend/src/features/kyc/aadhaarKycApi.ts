@@ -14,14 +14,16 @@ export type AadhaarKycStatus = {
   maskedAadhaar?: string;
   firstName?: string;
   lastName?: string;
+  mobile?: string;
+  verifiedMobile?: string;
 };
 
 export const aadhaarKycApi = {
   status: (token?: string) => getApi<AadhaarKycStatus>(token ? `/api/kyc/aadhaar/status?token=${encodeURIComponent(token)}` : '/api/kyc/aadhaar/status', true),
   reset: () => postApi<AadhaarKycStatus>('/api/kyc/aadhaar/reset', {}),
-  startUrl: (payload?: { redirectPath?: string; frontendOrigin?: string }) => postApi<{ authorizationUrl: string }>('/api/kyc/aadhaar/start-url', payload || {}),
+  startUrl: (payload?: { redirectPath?: string; frontendOrigin?: string; purpose?: string }) => postApi<{ authorizationUrl: string }>('/api/kyc/aadhaar/start-url', payload || {}),
   
-  preRegisterStart: (payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string }) => 
+  preRegisterStart: (payload: { consent: boolean; mobile: string; aadhaarNumber?: string; vid?: string; redirectPath?: string; frontendOrigin?: string; purpose?: string }) => 
     postApi<{ authorizationUrl: string; kycSessionToken: string }>('/api/kyc/aadhaar/pre-register/start', payload),
   preRegisterStatus: (token: string) => 
     getApi<AadhaarKycStatus>(`/api/kyc/aadhaar/pre-register/status?token=${encodeURIComponent(token)}`, true),

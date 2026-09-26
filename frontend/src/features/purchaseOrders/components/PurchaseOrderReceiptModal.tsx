@@ -504,8 +504,8 @@ export function PurchaseOrderReceiptModal({
   const effectiveBuyerSignature = buyerSignature || (isViewingBuyer ? (currentUserReg.signatureUrl || liveBranding.signatureUrl || lsSig) : null);
   const effectiveBuyerStamp = buyerStamp || (isViewingBuyer ? (currentUserReg.stampUrl || liveBranding.stampUrl || lsStamp) : null);
 
-  const topLogo = effectiveSellerLogo || effectiveBuyerLogo;
-  const topOrgName = sellerOrg !== 'N/A' ? sellerOrg : (buyerOrg !== 'N/A' ? buyerOrg : 'Enterprise Procurement');
+  const topLogo = effectiveBuyerLogo || effectiveSellerLogo;
+  const topOrgName = buyerOrg !== 'N/A' ? buyerOrg : (sellerOrg !== 'N/A' ? sellerOrg : 'Enterprise Procurement');
 
   // Resolve media URLs to ensure local dev proxy & CORS compatibility
   const resolvedTopLogo = resolveMediaUrl(topLogo);
@@ -589,7 +589,7 @@ export function PurchaseOrderReceiptModal({
         dateStr: poDate,
         status: readableStatus(order.status),
         issuerName: topOrgName,
-        issuerSubtitle: 'Authorized Vendor & MSME Supplier',
+        issuerSubtitle: 'Official Purchase Order Document',
         issuerLogo: topLogo,
         sellerSignatureUrl: effectiveSellerSignature,
         sellerStampUrl: effectiveSellerStamp,
@@ -954,7 +954,7 @@ export function PurchaseOrderReceiptModal({
                         <h2 className="text-base font-black text-slate-950 uppercase tracking-tight font-sans">
                           {topOrgName}
                         </h2>
-                        <p className="text-[10px] text-slate-500 font-medium">Authorized Vendor & MSME Supplier</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Official Purchase Order Document</p>
                       </div>
                     </div>
                     <div className="text-right">

@@ -39,47 +39,6 @@ interface RegistrationDetailsFlowProps {
   prereqSelectedDocuments?: string[];
 }
 
-const cooperativeOrganisationTypes = [
-  'Proprietorship',
-  'Partnership Firm',
-  'Company (Pvt Ltd / Ltd)',
-  'LLP',
-  'MSME',
-  'Startup'
-];
-
-const districtOrganisationOverrides: Record<string, string[]> = {
-  'MAHARASHTRA:Mumbai': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Mumbai City': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Mumbai Suburban': [
-    'GS Mahanagar Co-operative Bank Ltd.',
-    'Janakalyan Sahakari Bank Ltd.',
-    'Maharashtra Rajya Machhimar Sahakari Sangh Ltd.',
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Pune': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Latur': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ],
-  'MAHARASHTRA:Nagpur': [
-    'Maharashtra Rajya Sahakari Dudh Mahasangh Maryadit'
-  ]
-};
-
-const getDistrictOrganisations = (state: string, district: string) =>
-  state && district ? districtOrganisationOverrides[`${state}:${district}`] || [] : [];
 
 const buyerDocOptions = [
   { id: 'panCard', label: 'PAN Card of Organization' },
@@ -501,7 +460,6 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     formData.officeZoneName
   );
   const districtOptions = formData.state ? indiaStatesDistricts[formData.state] || [] : [];
-  getDistrictOrganisations(formData.state, formData.district);
   const missingPrimaryBuyerFields = [
     !formData.state && 'State',
     !formData.district && 'District',
@@ -724,16 +682,27 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
             setIsAadhaarVerified(Boolean(verified));
             if (verified) {
+              const verifiedMobile = status.mobile || status.verifiedMobile;
+              const currentEnteredMobile = (formData.mobile || '').replace(/\D/g, '').slice(-10);
+
               if (currentSubStep === 2) {
                 toast.success('Aadhaar verification successful');
               }
-              setFormData(prev => ({
-                ...prev,
-                kycSessionToken: token,
-                aadhaarNumber: status.maskedAadhaar || prev.aadhaarNumber || 'XXXX XXXX 5417',
-                personalName: prev.personalName || status.firstName || '',
-                personalLastName: prev.personalLastName || status.lastName || '',
-              }));
+              setFormData(prev => {
+                const finalMobile = (verifiedMobile && verifiedMobile.length === 10) ? verifiedMobile : prev.mobile;
+                return {
+                  ...prev,
+                  kycSessionToken: token,
+                  aadhaarNumber: status.maskedAadhaar || prev.aadhaarNumber || 'XXXX XXXX 5417',
+                  personalName: prev.personalName || status.firstName || '',
+                  personalLastName: prev.personalLastName || status.lastName || '',
+                  mobile: finalMobile,
+                };
+              });
+
+              if (verifiedMobile && currentEnteredMobile && verifiedMobile !== currentEnteredMobile) {
+                toast.info(`Mobile number synchronized with your DigiLocker verified mobile (${verifiedMobile}).`);
+              }
             } else {
               statusFetchedRef.current = false;
               sessionStorage.removeItem('preRegisterKycSessionToken');
@@ -1244,21 +1213,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
                   {isPrimaryBuyer ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                      {/* <div className="space-y-2">
-                        <label className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
-                          Business / Organisation Type * <Info className="h-3.5 w-3.5 text-slate-400" />
+                      <div className="space-y-2">
+                        <label htmlFor="reg-flow-buyer-org-type" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
+                          Business / Organisation Type <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
-                        <Select
-                          value={formData.organisationType}
-                          onChange={(e) => setFormData({ ...formData, organisationType: e.target.value })}
-                          className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
-                        >
-                          <option value="">Select Type</option>
-                          {cooperativeOrganisationTypes.map((type) => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </Select>
-                      </div> */}
+                        <Input
+                          id="reg-flow-buyer-org-type"
+                          readOnly
+                          value={businessType || 'Not specified'}
+                          className="h-10 rounded border-slate-300 bg-slate-100 text-[13px] text-slate-700 font-medium cursor-not-allowed"
+                          aria-label="Selected Business or Organisation Type"
+                        />
+                      </div>
 
                       <div className="space-y-2">
                         <label htmlFor="reg-flow-buyer-state" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">

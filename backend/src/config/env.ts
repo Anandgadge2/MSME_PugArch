@@ -92,7 +92,17 @@ const envSchema = z.object({
   BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(12),
   FAILED_LOGIN_LOCK_THRESHOLD: z.coerce.number().int().min(3).max(20).default(5),
   FAILED_LOGIN_LOCK_MINUTES: z.coerce.number().int().min(5).max(1440).default(30),
-  FRONTEND_URL: withFallback(['PRODUCTION_URL', 'PUBLIC_URL', 'APP_URL', 'PORTAL_URL', 'NEXT_PUBLIC_APP_URL'], z.string().optional()),
+  FRONTEND_URL: withFallback([
+    'NEXT_PUBLIC_PORTAL_URL',
+    'NEXT_PUBLIC_APP_URL',
+    'NEXT_PUBLIC_FRONTEND_URL',
+    'NEXT_PUBLIC_URL',
+    'NEXT_PUBLIC_SITE_URL',
+    'PRODUCTION_URL',
+    'PUBLIC_URL',
+    'APP_URL',
+    'PORTAL_URL'
+  ], z.string().optional()),
   CORS_ALLOW_VERCEL_PREVIEWS: envBoolean(false),
   REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().optional(),
@@ -156,6 +166,9 @@ const envSchema = z.object({
   MERIPEHCHAAN_REDIRECT_URI: optionalUrl(),
   MERIPEHCHAAN_SCOPES: z.string().default('openid profile email'),
   MERIPEHCHAAN_ACR: optionalString(),
+  DIGILOCKER_SERVICE_NAME: withFallback(['MERIPEHCHAAN_SERVICE_NAME'], z.string().trim().max(50).default('JsgSmile MSME Portal')),
+  DIGILOCKER_PURPOSE_ONBOARDING: withFallback(['MERIPEHCHAAN_PURPOSE_ONBOARDING'], z.string().trim().max(50).default('User Onboarding KYC Verification')),
+  DIGILOCKER_PURPOSE_PREREG: withFallback(['MERIPEHCHAAN_PURPOSE_PREREG'], z.string().trim().max(50).default('Pre Registration KYC Verification')),
   AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60)
 });
 const parsed = envSchema.safeParse(process.env);
@@ -299,3 +312,41 @@ const kycConfigReport = () => {
 };
 
 kycConfigReport();
+
+/**
+ * Resolves the official, public-facing portal frontend URL.
+ * Strictly guarantees that links sent to external email recipients NEVER point to 'localhost' or '127.0.0.1',
+ * falling back to the live production deployment URL: 'https://msme-pugarch-frontend.vercel.app'.
+ */
+export const getPublicPortalUrl = (): string => {
+  const isLocalHost = (u: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(u.trim());
+  
+  // Check candidate variables in order of priority
+  const candidates = [
+    process.env.NEXT_PUBLIC_PORTAL_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NEXT_PUBLIC_FRONTEND_URL,
+    process.env.NEXT_PUBLIC_SITE_URL,
+    process.env.NEXT_PUBLIC_URL,
+    process.env.PRODUCTION_URL,
+    process.env.PUBLIC_URL,
+    process.env.PORTAL_URL,
+    process.env.APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+    env?.FRONTEND_URL,
+    process.env.FRONTEND_URL
+  ];
+
+  for (const c of candidates) {
+    if (c && typeof c === 'string' && c.trim()) {
+      const trimmed = c.trim().replace(/\/+$/, '');
+      if (!isLocalHost(trimmed)) {
+        return trimmed.startsWith('http://') || trimmed.startsWith('https://') ? trimmed : `https://${trimmed}`;
+      }
+    }
+  }
+
+  // Live production default
+  return 'https://msme-pugarch-frontend.vercel.app';
+};

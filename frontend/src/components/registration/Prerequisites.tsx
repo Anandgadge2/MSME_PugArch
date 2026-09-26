@@ -75,6 +75,8 @@ const shgAdditionalOptionalDocs: Record<string, string[]> = {
 };
 
 const buyerBusinessTypes = [
+  { value: 'Government Department / Ministry', label: 'Government Department / Ministry' },
+  { value: 'Public Sector Undertaking (PSU)', label: 'Public Sector Undertaking (PSU)' },
   { value: 'Proprietorship', label: 'Proprietorship' },
   { value: 'Partnership Firm', label: 'Partnership Firm' },
   { value: 'Company (Pvt Ltd / Ltd)', label: 'Company (Pvt Ltd / Ltd)' },
@@ -93,9 +95,9 @@ const getBuyerRequiredDocs = (selectedType: string) => [
   ...buyerBaseRequiredDocs,
   {
     id: 'active-email',
-    content: selectedType === 'Primary User (Co-operative)' ? (
+    content: (selectedType.includes('Government') || selectedType.includes('PSU')) ? (
       <>
-        Active Email Id:- Use E-mail ID, Company/ organisation E-mail ID to verify the OTP.
+        Active Official Email Id:- Official Government / PSU E-mail ID (e.g. .gov.in, .nic.in, or corporate PSU domain) to verify the OTP.
       </>
     ) : (
       <>
