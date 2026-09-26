@@ -223,7 +223,12 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
 };
 
 export const optionalAuthenticate = async (req: Request, res: Response, next: NextFunction) => {
-  const token = getAccessTokenFromRequest(req);
+  const authHeader = req.headers.authorization || '';
+  const [scheme, headerToken] = authHeader.split(' ');
+  const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
+  const token = canUseHeaderToken
+    ? headerToken
+    : getNotificationStreamToken(req) || getAccessTokenFromRequest(req);
   if (!token) return next();
 
   try {

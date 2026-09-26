@@ -44,6 +44,7 @@ import { recordLoginEvent } from './src/modules/auth/login-event.service.js';
 import { assertEmailOtpVerified, consumeEmailOtp, consumeOtp, generateOtp, storeEmailOtp, storeOtp, verifyEmailOtp, verifyOtp } from './src/services/otp.service.js';
 import { sendOtpEmail } from './src/services/mail.service.js';
 import { notificationService } from './src/services/notification.service.js';
+import { realtimeEmitter } from './src/services/realtime.service.js';
 import { GstService } from './src/services/gstService.js';
 import { hashPassword, validatePasswordStrength, verifyPassword } from './src/services/password.service.js';
 import { issueAuthResponse, signAccessToken, verifyAccessToken, verifyRefreshToken } from './src/services/token.service.js';
@@ -434,8 +435,16 @@ const validateBuyerOnboardingPayload = (rawData: any, mobile: unknown) => {
 };
 const notificationClients = new Map<number, Set<Response>>();
 const localActionBudget = new Map<string, { count: number; resetAt: number }>();
+const recentEmittedNotifs = new Set<string>();
 
 const emitNotification = (userId: number, notification: any) => {
+  const notifId = notification?.id ? String(notification.id) : null;
+  if (notifId) {
+    const key = `${userId}:${notifId}`;
+    if (recentEmittedNotifs.has(key)) return;
+    recentEmittedNotifs.add(key);
+    setTimeout(() => recentEmittedNotifs.delete(key), 8000);
+  }
   const clients = notificationClients.get(userId);
   if (!clients) return;
   for (const client of clients) {
@@ -452,6 +461,14 @@ const emitNotification = (userId: number, notification: any) => {
   }
   if (clients.size === 0) notificationClients.delete(userId);
 };
+
+realtimeEmitter.on('notification', ({ userId, notification }: { userId: number; notification: any }) => {
+  try {
+    emitNotification(userId, notification);
+  } catch (err) {
+    logger.warn({ err, userId }, 'Error in realtimeEmitter notification listener');
+  }
+});
 
 const sanitizePortalText = (value: unknown, maxLength = 2000, preserveNewlines = true) => {
   if (preserveNewlines) {

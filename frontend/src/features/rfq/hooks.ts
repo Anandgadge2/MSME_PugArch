@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     createQuoteRequest,
@@ -98,14 +99,27 @@ const CLARIFICATION_KEY = ['quote-request-clarifications'] as const;
 // BuyerRequirement (requirementId flow). `kind` picks the endpoint family.
 export type ClarificationKind = 'quote-request' | 'requirement';
 
-export const useClarifications = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') =>
-    useQuery({
+export const useClarifications = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') => {
+    const qc = useQueryClient();
+
+    useEffect(() => {
+        const handleNotifUpdate = () => {
+            void qc.invalidateQueries({ queryKey: CLARIFICATION_KEY });
+        };
+        window.addEventListener('notifications:updated', handleNotifUpdate);
+        return () => window.removeEventListener('notifications:updated', handleNotifUpdate);
+    }, [qc]);
+
+    return useQuery({
         queryKey: [...CLARIFICATION_KEY, kind, id || '0'] as const,
         queryFn: () => (kind === 'requirement'
             ? fetchRequirementClarifications(id as any)
             : fetchClarifications(id as any)),
-        enabled: Boolean(id) && String(id).trim().length > 0
+        enabled: Boolean(id) && String(id).trim().length > 0,
+        refetchInterval: 4000,
+        refetchIntervalInBackground: false
     });
+};
 
 export const useAskClarification = (id: number | string | undefined, kind: ClarificationKind = 'quote-request') => {
     const qc = useQueryClient();
@@ -123,7 +137,7 @@ export const useAskClarification = (id: number | string | undefined, kind: Clari
                     return [...list, item];
                 });
             }
-            void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] });
+            void qc.invalidateQueries({ queryKey: CLARIFICATION_KEY });
         }
     });
 };
@@ -143,7 +157,7 @@ export const useReplyClarification = (id: number | string | undefined, kind: Cla
                     return list.map(c => (c.id === item.id ? { ...c, ...item } : c));
                 });
             }
-            void qc.invalidateQueries({ queryKey: [...CLARIFICATION_KEY, kind, id || '0'] });
+            void qc.invalidateQueries({ queryKey: CLARIFICATION_KEY });
         }
     });
 };

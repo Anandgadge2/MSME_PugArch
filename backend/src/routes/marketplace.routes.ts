@@ -13,6 +13,8 @@ import { formatRequirementNumber, getCanonicalLookupVariants } from '../utils/re
 import { getNextCanonicalSequence } from '../services/sequence.service.js';
 import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
+import { notificationService } from '../services/notification.service.js';
+import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -41,14 +43,18 @@ const stableCacheHash = (value: unknown) => sha256(JSON.stringify(value));
 
 const optionalAuthenticate = async (req: AuthRequest, _res: Response, next: NextFunction) => {
     const authHeader = req.headers.authorization || '';
-    const [scheme, token] = authHeader.split(' ');
-    if (scheme !== 'Bearer' || !token) return next();
+    const [scheme, headerToken] = authHeader.split(' ');
+    const canUseHeaderToken = scheme === 'Bearer' && headerToken && !['null', 'undefined', 'cookie-session'].includes(headerToken);
+    const token = canUseHeaderToken
+        ? headerToken
+        : getAccessTokenFromRequest(req);
+    if (!token) return next();
 
     try {
         const decoded = verifyAccessToken(token);
         const user = await prisma.user.findUnique({
             where: { id: Number(decoded.id) },
-            select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true, }
+            select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
         });
         if (user && user.accountStatus === 'ACTIVE' && user.role === decoded.role && user.sessionVersion === Number(decoded.sessionVersion)) {
             req.user = {
@@ -57,7 +63,6 @@ const optionalAuthenticate = async (req: AuthRequest, _res: Response, next: Next
                 sessionVersion: user.sessionVersion,
                 permissions: [],
                 organizationId: user.organizationId,
-                
                 enabledFeatures: []
             };
         }
@@ -4061,9 +4066,14 @@ const requirementClarificationReplyBody = z.object({
     response: z.string().trim().min(1).max(3000)
 });
 
-const isRequirementOwner = (req: AuthRequest, requirement: any) =>
-    requirement.createdById === Number(req.user?.id) ||
-    (req.user?.organizationId && requirement.buyerOrganizationId === req.user.organizationId);
+const isRequirementOwner = (req: AuthRequest, requirement: any) => {
+    const userId = Number(req.user?.id);
+    if (!userId) return false;
+    if (requirement.createdById === userId || (requirement as any).buyerId === userId) return true;
+    const orgId = req.user?.organizationId;
+    if (orgId && (requirement.buyerOrganizationId === orgId || requirement.organizationId === orgId)) return true;
+    return false;
+};
 
 const findRequirementRecord = async (idParam: string | number) => {
     const rawToken = String(idParam || '').trim();
@@ -4077,11 +4087,11 @@ const findRequirementRecord = async (idParam: string | number) => {
         const [req, bid] = await Promise.all([
             db.buyerRequirement.findUnique({
                 where: { id: numId },
-                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true }
+                select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true, referenceNumber: true }
             }).catch(() => null),
             db.procurementBid.findUnique({
                 where: { id: numId },
-                select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
+                select: { id: true, bidNumber: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, allowClarification: true }
             }).catch(() => null)
         ]);
 
@@ -4089,6 +4099,7 @@ const findRequirementRecord = async (idParam: string | number) => {
             const sched = (req.payload as any)?.schedule;
             return {
                 ...req,
+                referenceNumber: req.referenceNumber || `RFQ-${new Date(req.createdAt || Date.now()).getFullYear()}-${String(req.id).padStart(5, '0')}`,
                 submissionStartDate: sched?.submissionStartDate || sched?.startDate || req.startDate || null,
                 allowClarification: sched?.clarificationAllowed !== false && (req as any).allowClarification !== false
             };
@@ -4098,9 +4109,12 @@ const findRequirementRecord = async (idParam: string | number) => {
             return {
                 id: bid.id,
                 title: bid.title,
+                referenceNumber: bid.bidNumber,
+                bidNumber: bid.bidNumber,
                 lastDate: bid.endDate,
                 status: bid.status,
                 createdById: bid.buyerId,
+                buyerId: bid.buyerId,
                 buyerOrganizationId: bid.buyerOrganizationId,
                 submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || bid.startDate || null,
                 allowClarification: (bid as any).allowClarification !== false,
@@ -4110,13 +4124,15 @@ const findRequirementRecord = async (idParam: string | number) => {
 
         const legacy = await db.requirement.findUnique({
             where: { id: numId },
-            select: { id: true, title: true, createdById: true, payload: true }
+            select: { id: true, requirementNumber: true, title: true, createdById: true, payload: true }
         }).catch(() => null);
         if (legacy) {
             const sched = (legacy.payload as any)?.schedule;
             return {
                 id: legacy.id,
                 title: legacy.title,
+                referenceNumber: legacy.requirementNumber,
+                requirementNumber: legacy.requirementNumber,
                 lastDate: sched?.submissionDate || sched?.submissionDeadline || null,
                 status: 'PUBLISHED',
                 createdById: legacy.createdById,
@@ -4135,19 +4151,19 @@ const findRequirementRecord = async (idParam: string | number) => {
             where: {
                 OR: tokenVariants.map(t => ({ referenceNumber: t }))
             },
-            select: { id: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true, payload: true, startDate: true }
+            select: { id: true, referenceNumber: true, title: true, lastDate: true, status: true, createdById: true, buyerOrganizationId: true, payload: true, startDate: true }
         }).catch(() => null),
         db.procurementBid.findFirst({
             where: {
                 OR: tokenVariants.map(t => ({ bidNumber: t }))
             },
-            select: { id: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, allowClarification: true }
+            select: { id: true, bidNumber: true, title: true, endDate: true, status: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, allowClarification: true }
         }).catch(() => null),
         db.requirement.findFirst({
             where: {
                 OR: tokenVariants.map(t => ({ requirementNumber: t }))
             },
-            select: { id: true, title: true, createdById: true, payload: true }
+            select: { id: true, requirementNumber: true, title: true, createdById: true, payload: true }
         }).catch(() => null)
     ]);
 
@@ -4155,6 +4171,7 @@ const findRequirementRecord = async (idParam: string | number) => {
         const sched = (modernBuyerReq.payload as any)?.schedule;
         return {
             ...modernBuyerReq,
+            referenceNumber: modernBuyerReq.referenceNumber || `RFQ-${new Date(modernBuyerReq.createdAt || Date.now()).getFullYear()}-${String(modernBuyerReq.id).padStart(5, '0')}`,
             submissionStartDate: sched?.submissionStartDate || sched?.startDate || modernBuyerReq.startDate || null,
             allowClarification: sched?.clarificationAllowed !== false && (modernBuyerReq as any).allowClarification !== false
         };
@@ -4165,9 +4182,12 @@ const findRequirementRecord = async (idParam: string | number) => {
         return {
             id: bid.id,
             title: bid.title,
+            referenceNumber: bid.bidNumber,
+            bidNumber: bid.bidNumber,
             lastDate: bid.endDate,
             status: bid.status,
             createdById: bid.buyerId,
+            buyerId: bid.buyerId,
             buyerOrganizationId: bid.buyerOrganizationId,
             submissionStartDate: sched?.submissionStartDate || sched?.startDate || (bid.technicalPacket as any)?.tender?.bidStartDate || null,
             allowClarification: bid.allowClarification !== false,
@@ -4179,6 +4199,8 @@ const findRequirementRecord = async (idParam: string | number) => {
         return {
             id: legacyMatch.id,
             title: legacyMatch.title,
+            referenceNumber: legacyMatch.requirementNumber,
+            requirementNumber: legacyMatch.requirementNumber,
             lastDate: sched?.submissionDate || sched?.submissionDeadline || null,
             status: 'PUBLISHED',
             createdById: legacyMatch.createdById,
@@ -4244,6 +4266,20 @@ router.post('/marketplace/requirements/:id/clarifications', authenticate, async 
             }
         });
 
+        const targetBuyerId = requirement.createdById || (requirement as any).buyerId;
+        if (targetBuyerId && targetBuyerId !== Number(req.user?.id)) {
+            const refNumber = requirement.referenceNumber || (requirement as any).bidNumber || requirement.requirementNumber || String(requirement.id);
+            const refTitle = requirement.title || refNumber;
+            const preview = body.question.length > 100 ? `${body.question.substring(0, 97)}...` : body.question;
+            void notificationService.notifyWithEmail(targetBuyerId, {
+                title: 'New RFQ Clarification Question',
+                message: `Seller submitted a question regarding "${refTitle}": "${preview}"`,
+                type: 'quote_request_clarification',
+                priority: 'medium',
+                redirectUrl: `/bids/${refNumber}?type=RFQ`
+            }).catch(() => null);
+        }
+
         res.status(201);
         return ok(res, clarification);
     } catch (error) {
@@ -4278,6 +4314,20 @@ router.post('/marketplace/requirements/:id/clarifications/:clarId/reply', authen
                 answeredAt: new Date()
             }
         });
+
+        const sellerTargetId = existing.askedById;
+        if (sellerTargetId && sellerTargetId !== Number(req.user?.id)) {
+            const refNumber = requirement.referenceNumber || (requirement as any).bidNumber || requirement.requirementNumber || String(requirement.id);
+            const refTitle = requirement.title || refNumber;
+            const preview = body.response.length > 100 ? `${body.response.substring(0, 97)}...` : body.response;
+            void notificationService.notifyWithEmail(sellerTargetId, {
+                title: 'Clarification Answered',
+                message: `Buyer answered your clarification for "${refTitle}": "${preview}"`,
+                type: 'quote_request_clarification',
+                priority: 'medium',
+                redirectUrl: `/seller/procurement/rfq/${refNumber}`
+            }).catch(() => null);
+        }
 
         return ok(res, updated);
     } catch (error) {

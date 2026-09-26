@@ -1,8 +1,11 @@
+import { EventEmitter } from 'node:events';
 import type { Redis } from 'ioredis';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { isRedisReady, redis } from '../config/redis.js';
 import { redisKeys } from '../constants/redis-keys.js';
+
+export const realtimeEmitter = new EventEmitter();
 
 type RealtimeNotification = {
   id?: number;
@@ -26,8 +29,14 @@ export const publishRealtimeEvent = async (channel: string, payload: unknown) =>
   return true;
 };
 
-export const publishNotificationEvent = async (userId: number, notification: RealtimeNotification) =>
-  publishRealtimeEvent(redisKeys.notificationsUser(userId), notification);
+export const publishNotificationEvent = async (userId: number, notification: RealtimeNotification) => {
+  try {
+    realtimeEmitter.emit('notification', { userId, notification });
+  } catch (err) {
+    logger.warn({ err, userId }, 'Local realtimeEmitter emit failed');
+  }
+  return publishRealtimeEvent(redisKeys.notificationsUser(userId), notification);
+};
 
 export const subscribeRealtimeChannel = async (channel: string, handler: (payload: unknown) => void) => {
   if (!redis || !isRedisReady()) return false;

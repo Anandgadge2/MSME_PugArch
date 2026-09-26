@@ -7340,16 +7340,21 @@ router.post('/quote-requests/:id/clarifications', authenticate, asyncRoute(async
     });
   }
 
-  const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
-  if (targetId) {
+  const isFromBuyer = userId(req) === quote.buyerId;
+  const targetId = isFromBuyer ? quote.sellerId : quote.buyerId;
+  if (targetId && targetId !== userId(req)) {
+    const refNum = quote.requirementNumber || String(quote.id);
+    const redirectUrl = isFromBuyer
+      ? `/seller/procurement/rfq/${refNum}`
+      : `/bids/${refNum}?type=RFQ`;
     // Non-blocking background notification for fast HTTP response
     setImmediate(() => {
       notifySafe(
         targetId,
-        userId(req) === quote.buyerId ? 'Clarification Reply' : 'New Clarification Question',
+        isFromBuyer ? 'Clarification Update' : 'New Clarification Question',
         `Regarding "${quote.subject}": ${body.question.substring(0, 100)}${body.question.length > 100 ? '...' : ''}`,
         'quote_request_clarification',
-        `/quotations`
+        redirectUrl
       );
     });
   }
@@ -7376,11 +7381,13 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
   }
 
   let updated: any;
+  let askingUserId: number | null = null;
   const clar1 = await db.quoteRequestClarification.findFirst({
     where: { id: clarId, quoteRequestId: quote.id }
   }).catch(() => null);
 
   if (clar1) {
+    askingUserId = clar1.askedById;
     updated = await db.quoteRequestClarification.update({
       where: { id: clar1.id },
       data: {
@@ -7395,6 +7402,7 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
     }).catch(() => null);
 
     if (clar2) {
+      askingUserId = clar2.askedById;
       updated = await db.requirementClarification.update({
         where: { id: clar2.id },
         data: {
@@ -7410,6 +7418,7 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
 
       if (!clar3) throw new ApiError(404, 'Clarification question not found', 'NOT_FOUND');
 
+      askingUserId = clar3.sellerId || clar3.requestedById || null;
       updated = await db.procurementBidClarification.update({
         where: { id: clar3.id },
         data: {
@@ -7422,8 +7431,12 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
     }
   }
 
-  const targetId = userId(req) === quote.buyerId ? quote.sellerId : quote.buyerId;
-  if (targetId) {
+  const targetId = userId(req) === quote.buyerId ? (askingUserId || quote.sellerId) : quote.buyerId;
+  if (targetId && targetId !== userId(req)) {
+    const refNum = quote.requirementNumber || String(quote.id);
+    const redirectUrl = userId(req) === quote.buyerId
+      ? `/seller/procurement/rfq/${refNum}`
+      : `/bids/${refNum}?type=RFQ`;
     // Non-blocking background notification for fast HTTP response
     setImmediate(() => {
       notifySafe(
@@ -7431,7 +7444,7 @@ router.post('/quote-requests/:id/clarifications/:clarId/reply', authenticate, as
         'Clarification Answered',
         `Buyer answered your question regarding "${quote.subject}"`,
         'quote_request_clarification',
-        `/quotations`
+        redirectUrl
       );
     });
   }
