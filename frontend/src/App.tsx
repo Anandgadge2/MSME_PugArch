@@ -132,6 +132,7 @@ const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotat
 const InviteLoginPopup = lazy(() => import('./features/notifications/InviteLoginPopup'));
 const AdminCategoryAlertPopup = lazy(() => import('./features/notifications/AdminCategoryAlertPopup'));
 const SellerAwardPoAlertPopup = lazy(() => import('./features/notifications/SellerAwardPoAlertPopup'));
+const TargetedNoticePopup = lazy(() => import('./features/notifications/TargetedNoticePopup'));
 const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages/BuyerRequirementListPage'));
 
 import Sidebar, { Header } from './components/layout/Navbar';
@@ -1285,6 +1286,9 @@ export default function App({
             )}
             {user && (user.role === 'seller' || user.role === 'shg') && (
               <SellerAwardPoAlertPopup />
+            )}
+            {user && (
+              <TargetedNoticePopup />
             )}
           </Suspense>
         )}

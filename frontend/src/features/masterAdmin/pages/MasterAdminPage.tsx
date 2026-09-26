@@ -29,6 +29,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Send,
   ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
@@ -62,6 +63,7 @@ import { useResponsiveViewMode, type ViewMode } from '../../shared/hooks';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { masterAdminApi } from '../masterAdminApi';
 import { AppealQueue } from '../../shared/AppealQueue';
+import AdminNoticeCircularModal from '../components/AdminNoticeCircularModal';
 
 type ApiPage<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: Record<string, number> };
 type TabId = 'overview' | 'organizations' | 'branding' | 'users' | 'procurement' | 'marketplace' | 'payments' | 'features' | 'exports' | 'email' | 'audit' | 'settings' | 'security';
@@ -440,6 +442,7 @@ export default function MasterAdminPage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabId>('overview');
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
   const [overview, setOverview] = useState<any>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
   const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
@@ -1505,6 +1508,14 @@ export default function MasterAdminPage() {
               </div>
               <Button
                 type="button"
+                onClick={() => setIsNoticeModalOpen(true)}
+                className="h-10 rounded-xl bg-gradient-to-r from-blue-700 to-indigo-800 px-4 text-xs font-black text-white shadow-md shadow-blue-900/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Broadcast Notice
+              </Button>
+              <Button
+                type="button"
                 onClick={refreshActive}
                 disabled={overviewLoading && activeTab === 'overview'}
                 className="h-10 rounded-xl bg-gradient-to-r from-[#12335f] to-indigo-900 px-4 text-xs font-black text-white shadow-md shadow-[#12335f]/25 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:opacity-70"
@@ -2408,6 +2419,10 @@ export default function MasterAdminPage() {
                       <Mail className="mr-2 h-4 w-4" />
                       Send Test Email
                     </Button>
+                    <Button type="button" className="h-9 rounded-md bg-blue-700 text-xs font-black text-white hover:bg-blue-800 shadow-sm" onClick={() => setIsNoticeModalOpen(true)}>
+                      <Send className="mr-2 h-4 w-4" />
+                      Circulate Notice / Email
+                    </Button>
                   </div>
                 </div>
               </Panel>
@@ -2672,6 +2687,11 @@ export default function MasterAdminPage() {
             emailTemplateAvailableVars={emailTemplateAvailableVars}
           />
         )}
+        <AdminNoticeCircularModal
+          open={isNoticeModalOpen}
+          onClose={() => setIsNoticeModalOpen(false)}
+          onSuccess={refreshActive}
+        />
       </div>
     </div>
   );
