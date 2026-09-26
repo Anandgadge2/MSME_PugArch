@@ -2091,16 +2091,15 @@ export default function CreateProcurementPage() {
       {/* Accent Header Line */}
       <div className="h-1.5 w-full bg-[#12335f]" />
 
-      <div className="mx-auto max-w-[1560px] px-4 py-6 lg:px-6">
+      <div className="mx-auto max-w-[1560px] px-3 sm:px-4 py-3 sm:py-4 lg:px-6">
         
         {/* Step Header Row */}
-        <div className="mb-6 flex flex-col gap-4 rounded-[24px] bg-white/95 p-4 shadow-[0_12px_36px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/70 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mb-4 flex flex-col gap-3 rounded-2xl bg-white/95 p-3.5 sm:p-4 shadow-[0_8px_30px_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-wider">
-      
               <MethodBadge method={draft.type} />
             </div>
-            <h1 className="text-lg font-black text-slate-900 tracking-tight mt-1 truncate">
+            <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight mt-1 truncate">
               {draft.basics.title || 'Draft Sourcing Event'}
             </h1>
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
@@ -2108,12 +2107,12 @@ export default function CreateProcurementPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={() => saveDraftLocally()} disabled={savingDraft} className="h-9 font-bold text-slate-700">
-              {savingDraft ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+            <Button variant="outline" size="sm" onClick={() => saveDraftLocally()} disabled={savingDraft} className="h-8.5 font-bold text-slate-700 shadow-3xs">
+              {savingDraft ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Save className="h-3.5 w-3.5 mr-1.5" />}
               Save Draft
             </Button>
-            <Button variant="outline" size="sm" onClick={() => router.push(PROCUREMENT_DRAFTS_ROUTE)} className="h-9 font-bold text-slate-700">
-              <History className="h-4 w-4 mr-1.5" /> Drafts History
+            <Button variant="outline" size="sm" onClick={() => router.push(PROCUREMENT_DRAFTS_ROUTE)} className="h-8.5 font-bold text-slate-700 shadow-3xs">
+              <History className="h-3.5 w-3.5 mr-1.5" /> Drafts History
             </Button>
           </div>
         </div>
@@ -2332,7 +2331,7 @@ export default function CreateProcurementPage() {
             )}
 
             {/* Sticky Actions control bar */}
-            <div className="pt-4 pb-2">
+            <div className="sticky bottom-0 z-30 pt-3 pb-1 -mx-2 px-2 bg-gradient-to-t from-slate-100 via-slate-100/90 to-transparent backdrop-blur-xs">
               <StickyActionBar
                 onBack={goBack}
                 onSaveDraft={() => saveDraftLocally()}
@@ -5024,49 +5023,60 @@ function ItemsDetailsForm({
     {
       key: 'type',
       header: 'Type',
-      width: 'w-[7%]',
-      cell: (item: any) => (
-        <span className={cn(
-          "inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
-          item.itemType === 'Service'
-            ? "border border-purple-200 bg-purple-50 text-purple-700"
-            : "border border-blue-200 bg-blue-50 text-blue-700"
-        )}>
-          {item.itemType || 'Product'}
-        </span>
-      )
+      width: 'w-[9%] min-w-[92px]',
+      align: 'center',
+      cell: (item: any) => {
+        const isService = item.itemType === 'Service';
+        return (
+          <div className="flex items-center justify-center">
+            <span className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider shadow-3xs whitespace-nowrap",
+              isService
+                ? "border border-purple-200 bg-purple-50 text-purple-700"
+                : "border border-blue-200 bg-blue-50 text-blue-700"
+            )}>
+              {isService ? <Wrench className="h-2.5 w-2.5 shrink-0" /> : <Package className="h-2.5 w-2.5 shrink-0" />}
+              {item.itemType || 'Product'}
+            </span>
+          </div>
+        );
+      }
     },
     {
       key: 'name',
       header: 'Item / Service Name',
-      width: 'w-[18%]',
+      width: 'w-[16%] min-w-[155px]',
       cell: (item: any) => (
-        <div className="font-black text-slate-900 text-xs  max-w-full" title={item.name}>
-          {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+        <div className="min-w-0 pr-2">
+          <div className="font-extrabold text-slate-900 text-xs truncate max-w-full" title={item.name}>
+            {item.name || <span className="text-rose-500 italic">Unnamed Item</span>}
+          </div>
         </div>
       )
     },
     {
       key: 'specifications',
       header: 'Specifications / Scope',
-      width: 'w-[18%]',
+      width: 'w-[17%] min-w-[165px]',
       cellClassName: 'text-slate-600 font-medium',
       cell: (item: any) => {
         const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
         return (
-          <span className="line-clamp-2 text-xs" title={descText || undefined}>
-            {descText ? descText : <span className="text-slate-400 italic">No description</span>}
-          </span>
+          <div className="pr-2">
+            <span className="line-clamp-2 text-xs leading-relaxed" title={descText || undefined}>
+              {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+            </span>
+          </div>
         );
       }
     },
     {
       key: 'quantity',
       header: 'Qty & UOM',
-      width: 'w-[9%]',
+      width: 'w-[8%] min-w-[80px]',
       align: 'center',
       cell: (item: any) => (
-        <div className="truncate">
+        <div className="truncate text-center">
           <span className="font-extrabold text-slate-900">{item.quantity}</span>{' '}
           <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit}</span>
         </div>
@@ -5075,7 +5085,7 @@ function ItemsDetailsForm({
     {
       key: 'rate',
       header: 'Est. Unit Rate',
-      width: 'w-[10%]',
+      width: 'w-[10%] min-w-[95px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
       cell: (item: any) => {
@@ -5094,7 +5104,7 @@ function ItemsDetailsForm({
     {
       key: 'total',
       header: 'Line Total (Incl. GST)',
-      width: 'w-[11%]',
+      width: 'w-[11%] min-w-[110px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
       cell: (item: any) => {
@@ -5116,28 +5126,28 @@ function ItemsDetailsForm({
     {
       key: 'hsn',
       header: 'HSN / SAC',
-      width: 'w-[7%]',
+      width: 'w-[7%] min-w-[75px]',
       align: 'center',
-      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate',
+      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
       cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
     },
     {
       key: 'brand',
       header: 'Brand & Policy',
-      width: 'w-[11%]',
+      width: 'w-[10%] min-w-[95px]',
       cell: (item: any) => (
-        <div className="min-w-0">
+        <div className="min-w-0 flex flex-col gap-1">
           <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
-            {item.brand_preference || 'Any Brand'}
+            {item.brand_preference || <span className="text-slate-400 font-normal italic">Any Brand</span>}
           </div>
-          <div className="mt-0.5">
+          <div>
             {item.brand_flexible === 'No' ? (
-              <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                Lock
+              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-amber-800 bg-amber-50 border border-amber-200/90 px-1.5 py-0.5 rounded shadow-3xs">
+                <Lock className="h-2.5 w-2.5 text-amber-600" /> Lock
               </span>
             ) : (
-              <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                Flexible
+              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-1.5 py-0.5 rounded shadow-3xs">
+                <Check className="h-2.5 w-2.5 text-emerald-600" /> Flexible
               </span>
             )}
           </div>
@@ -5147,18 +5157,18 @@ function ItemsDetailsForm({
     {
       key: 'documents',
       header: 'Documents & Specs',
-      width: 'w-[11%]',
+      width: 'w-[10%] min-w-[100px]',
       cell: (item: any) => {
         const attachmentsList = item.attachments || [];
         const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
         const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
 
         return hasDocs ? (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 flex-nowrap">
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap"
               title="Click to view all uploaded documents"
             >
               <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" />
@@ -5179,7 +5189,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => setQuickDocItem(item)}
-            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer"
+            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer whitespace-nowrap"
             title="Attach specification or drawing"
           >
             <FilePlus className="h-3 w-3 text-slate-400" />
@@ -5191,17 +5201,17 @@ function ItemsDetailsForm({
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-[10%]',
+      width: 'w-[12%] min-w-[110px]',
       align: 'right',
       cell: (item: any) => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1 flex-nowrap">
           <button
             type="button"
             onClick={() => {
               setSelectedItemForEdit(item);
               setShowItemDrawer(true);
             }}
-            className="inline-flex h-7 items-center rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
+            className="inline-flex h-7 items-center rounded-md border border-slate-200 bg-white px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-blue-50 hover:border-blue-200 transition-colors cursor-pointer shrink-0 shadow-3xs"
             title="Edit specifications"
           >
             Edit
@@ -5209,7 +5219,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleDuplicateItem(item)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Duplicate line item"
           >
             <Copy className="h-3.5 w-3.5" />
@@ -5217,7 +5227,7 @@ function ItemsDetailsForm({
           <button
             type="button"
             onClick={() => handleRemoveItem(item.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
             title="Delete line item"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -5358,6 +5368,11 @@ function ItemsDetailsForm({
   ) : null;
 
   // 2. Item / Service Schedule Mode
+  const totals = computeProcurementTotals(draft.items);
+  const totalQty = getTotalProcurementQty(draft);
+  const qtyOk = totalQty > 0;
+  const isSynced = Math.round(totals.grossValue) === draft.basics.estimatedValue;
+
   return (
     <div className="space-y-5 w-full min-w-0 max-w-full">
       {serviceDetailsPanel}
@@ -5447,21 +5462,31 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      {/* Helpful Hint Cards */}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-[#12335f] shrink-0 mt-0.5" />
-          <span>Click <strong>Add Product</strong> or <strong>Add Service</strong> to configure specs, unit rate, and GST.</span>
+      {/* Helpful Hint Cards / Tips Strip */}
+      {draft.items.length === 0 ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5 shadow-3xs">
+            <Info className="h-4 w-4 text-[#12335f] shrink-0 mt-0.5" />
+            <span>Click <strong>Add Product</strong> or <strong>Add Service</strong> to configure specs, unit rate, and GST.</span>
+          </div>
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs font-semibold text-emerald-900 flex items-start gap-2.5 shadow-3xs">
+            <Paperclip className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+            <span>Attach CAD drawings, datasheets, or spec PDFs directly from the table or inside the item modal.</span>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 text-xs font-semibold text-slate-700 flex items-start gap-2.5 shadow-3xs">
+            <FileSpreadsheet className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
+            <span>Bulk import items from CSV templates or pull pre-selected catalogue items from your cart.</span>
+          </div>
         </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-900 flex items-start gap-2.5">
-          <Paperclip className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
-          <span>Attach CAD drawings, datasheets, or spec PDFs directly from the table or inside the item modal.</span>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-100/80 bg-blue-50/40 px-3.5 py-2 text-[11px] font-semibold text-slate-600">
+          <div className="flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+            <span>Tip: Click <strong>Edit</strong> to configure technical specs & drawings, or click <strong>+ Attach Doc</strong> to upload datasheets directly.</span>
+          </div>
+          <span className="text-[10px] font-black uppercase text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded tracking-wider">Schedule Active</span>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs font-semibold text-slate-700 flex items-start gap-2.5">
-          <FileSpreadsheet className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
-          <span>Bulk import items from CSV templates or pull pre-selected catalogue items from your cart.</span>
-        </div>
-      </div>
+      )}
 
       {/* Modern Schedule Table */}
       <DataTable
@@ -5469,48 +5494,44 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth="w-full min-w-0"
-        scrollWrapperClassName="overflow-x-hidden"
+        minWidth="min-w-[1080px]"
+        scrollWrapperClassName="overflow-x-auto rounded-xl border border-slate-200/80 shadow-xs"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle="No items or services added yet"
         emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
         footer={
-          <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
+          <div className="border-t border-slate-100 bg-slate-50/80 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
             <div className="flex items-center gap-2 shrink-0 flex-nowrap">
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
                 onClick={() => handleAddNewItem('Product')}
-                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
+                className="h-8 px-3 text-xs font-bold border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-3xs shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
+                <Plus className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" /> Add Product Line
               </Button>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 onClick={() => handleAddNewItem('Service')}
-                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
+                className="h-8 px-3 text-xs font-bold border-purple-200 bg-white text-purple-700 hover:bg-purple-50 shadow-3xs shrink-0 whitespace-nowrap"
               >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+                <Plus className="h-3.5 w-3.5 mr-1 text-purple-600" aria-hidden="true" /> Add Service Line
               </Button>
             </div>
-            <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
-              {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
-            </span>
+            <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
+              <span>{draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled</span>
+              <span className="text-slate-300">•</span>
+              <span className="font-bold text-slate-700">{totalQty.toLocaleString('en-IN')} Total Units</span>
+            </div>
           </div>
         }
       />
 
       {/* Summary Metrics Bar with Full Financial Breakdown */}
-      {(() => {
-        const totals = computeProcurementTotals(draft.items);
-        const totalQty = getTotalProcurementQty(draft);
-        const qtyOk = totalQty > 0;
-        const isSynced = Math.round(totals.grossValue) === draft.basics.estimatedValue;
-
-        return (
-          <div className="space-y-3">
+      <div className="space-y-3">
             <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
@@ -5595,8 +5616,6 @@ function ItemsDetailsForm({
               </p>
             )}
           </div>
-        );
-      })()}
 
       {/* Add / Edit Full Modal Dialog */}
       <ItemDrawerOrModal
