@@ -87,6 +87,10 @@ const nextConfig: NextConfig = {
             source: "/proxy/:path*",
             destination: `${backendUrl}/:path*`,
           },
+          {
+            source: "/api/:path*",
+            destination: `${backendUrl}/api/:path*`,
+          },
         ],
         afterFiles: [],
         fallback: [],

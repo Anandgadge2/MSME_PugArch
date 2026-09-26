@@ -25,6 +25,7 @@ import { PaymentReceiptUploadModal } from '../../payments/components/PaymentRece
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { useAuth } from '../../../hooks/useAuth';
 import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
+import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
@@ -397,6 +398,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [invoiceStampUrl, setInvoiceStampUrl] = useState<string | null>(null);
   const [invoiceSignatureUrl, setInvoiceSignatureUrl] = useState<string | null>(null);
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
+  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -410,9 +412,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const loadBranding = async () => {
       try {
         const res = await getApi<any>('/api/user/invoice-branding', true);
-        if (res?.logoUrl) setInvoiceLogoUrl(res.logoUrl);
-        if (res?.stampUrl) setInvoiceStampUrl(res.stampUrl);
-        if (res?.signatureUrl) setInvoiceSignatureUrl(res.signatureUrl);
+        const brandingData = res?.data || res;
+        if (brandingData?.logoUrl) setInvoiceLogoUrl(brandingData.logoUrl);
+        if (brandingData?.stampUrl) setInvoiceStampUrl(brandingData.stampUrl);
+        if (brandingData?.signatureUrl) setInvoiceSignatureUrl(brandingData.signatureUrl);
       } catch {
         // use fallback
       }
@@ -1952,13 +1955,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </Button>
                         )}
 
-                        {/* Stamp & Signature Redirect Button */}
+                        {/* Stamp & Signature Button */}
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={handleStampSignatureRedirect}
-                          aria-label="Manage official seal and signature in settings"
-                          title="Manage official seal and signature in settings"
+                          onClick={() => setIsBrandingModalOpen(true)}
+                          aria-label="Manage official seal, logo and signature"
+                          title="Manage official seal, logo and signature"
                           className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                         >
                           <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
@@ -2040,10 +2043,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                             otherTaxAmount={invData.otherTaxAmount}
                             totalAmount={invData.totalAmount}
                             bankDetails={invData.bankDetails}
-                            logoUrl={invoiceLogoUrl}
-                            stampUrl={invoiceStampUrl}
-                            signatureUrl={invoiceSignatureUrl}
-                            onOpenUploadBranding={handleStampSignatureRedirect}
+                            logoUrl={invoiceLogoUrl || invData.seller.logoUrl}
+                            stampUrl={invoiceStampUrl || invData.seller.stampUrl}
+                            signatureUrl={invoiceSignatureUrl || invData.seller.signatureUrl}
+                            onOpenUploadBranding={() => setIsBrandingModalOpen(true)}
                           />
                         );
                       })()}
@@ -2195,6 +2198,20 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           </div>
         </div>
       )}
+
+      {/* In-Place Signature, Stamp & Logo Upload Modal */}
+      <SignatureStampUploadModal
+        isOpen={isBrandingModalOpen}
+        onClose={() => setIsBrandingModalOpen(false)}
+        initialLogo={invoiceLogoUrl}
+        initialStamp={invoiceStampUrl}
+        initialSignature={invoiceSignatureUrl}
+        onSaved={(branding) => {
+          if (branding.logoUrl !== undefined) setInvoiceLogoUrl(branding.logoUrl);
+          if (branding.stampUrl !== undefined) setInvoiceStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setInvoiceSignatureUrl(branding.signatureUrl);
+        }}
+      />
 
       {/* Official Payment Checkout Modal */}
       {checkoutInvoice && (

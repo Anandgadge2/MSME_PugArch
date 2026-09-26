@@ -52,8 +52,18 @@ export default function SellerSettings() {
     return cachedProfile?.logoUrl || (user as any)?.organization?.profile?.logoUrl || null;
   });
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-  const [stampUrl, setStampUrl] = useState<string | null>(null);
-  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [stampUrl, setStampUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('msme_invoice_stamp') || null;
+    }
+    return null;
+  });
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('msme_invoice_signature') || null;
+    }
+    return null;
+  });
   const [isBrandingLoading, setIsBrandingLoading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
   const [isBannerLoading, setIsBannerLoading] = useState(false);
@@ -127,10 +137,11 @@ export default function SellerSettings() {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
           });
           if (invRes.ok) {
-            const invData = await invRes.json();
-            if (invData.stampUrl) setStampUrl(invData.stampUrl);
-            if (invData.signatureUrl) setSignatureUrl(invData.signatureUrl);
-            if (invData.logoUrl) setLogoUrl(prev => prev || invData.logoUrl);
+            const rawInv = await invRes.json();
+            const invData = rawInv?.data || rawInv;
+            if (invData?.stampUrl) setStampUrl(invData.stampUrl);
+            if (invData?.signatureUrl) setSignatureUrl(invData.signatureUrl);
+            if (invData?.logoUrl) setLogoUrl(prev => prev || invData.logoUrl);
           } else if (typeof window !== 'undefined') {
             const lsStamp = localStorage.getItem('msme_invoice_stamp');
             const lsSig = localStorage.getItem('msme_invoice_signature');
@@ -980,12 +991,22 @@ export default function SellerSettings() {
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="h-16 w-28 rounded-xl border border-slate-200 bg-white shadow-xs p-1 flex items-center justify-center overflow-hidden">
                         {stampUrl || signatureUrl ? (
-                          <div className="relative h-full w-full flex items-center justify-center">
+                          <div className="relative h-full w-full flex items-center justify-center overflow-hidden">
                             {stampUrl && (
-                              <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Stamp" className="h-full w-auto object-contain opacity-90" />
+                              <img
+                                src={resolveMediaUrl(stampUrl) || stampUrl}
+                                alt="Stamp"
+                                style={{ maxHeight: '52px', maxWidth: '52px', objectFit: 'contain' }}
+                                className="object-contain opacity-90 shrink-0"
+                              />
                             )}
                             {signatureUrl && (
-                              <img src={resolveMediaUrl(signatureUrl) || signatureUrl} alt="Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
+                              <img
+                                src={resolveMediaUrl(signatureUrl) || signatureUrl}
+                                alt="Signature"
+                                style={{ maxHeight: '36px', maxWidth: '100px', objectFit: 'contain' }}
+                                className={stampUrl ? "absolute object-contain mix-blend-multiply" : "object-contain mix-blend-multiply"}
+                              />
                             )}
                           </div>
                         ) : (

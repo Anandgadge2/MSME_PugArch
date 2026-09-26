@@ -45,13 +45,13 @@ export function SignatureStampUploadModal({
     let resolvedSig = initialSignature ?? null;
 
     if (!resolvedLogo && typeof window !== 'undefined') {
-      resolvedLogo = localStorage.getItem('msme_invoice_logo') || null;
+      resolvedLogo = localStorage.getItem('msme_invoice_logo') || localStorage.getItem('seller_invoice_logo') || null;
     }
     if (!resolvedStamp && typeof window !== 'undefined') {
-      resolvedStamp = localStorage.getItem('msme_invoice_stamp') || null;
+      resolvedStamp = localStorage.getItem('msme_invoice_stamp') || localStorage.getItem('seller_invoice_stamp') || null;
     }
     if (!resolvedSig && typeof window !== 'undefined') {
-      resolvedSig = localStorage.getItem('msme_invoice_signature') || null;
+      resolvedSig = localStorage.getItem('msme_invoice_signature') || localStorage.getItem('seller_invoice_signature') || null;
     }
 
     setLogoUrl(resolvedLogo);
@@ -69,7 +69,8 @@ export function SignatureStampUploadModal({
           headers: { Authorization: `Bearer ${token}` }
         });
         if (invRes.ok) {
-          const invData = await invRes.json();
+          const rawInv = await invRes.json();
+          const invData = rawInv?.data || rawInv;
           if (!isSubscribed) return;
           if (invData?.logoUrl) {
             setLogoUrl(prev => prev || invData.logoUrl);
@@ -438,13 +439,19 @@ export function SignatureStampUploadModal({
               </div>
               <div className="relative flex items-center justify-center p-2 rounded-lg border border-slate-200 min-w-[140px] h-[75px] bg-slate-50">
                 {stampUrl && (
-                  <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Stamp preview" className="h-16 w-16 object-contain" />
+                  <img
+                    src={resolveMediaUrl(stampUrl) || stampUrl}
+                    alt="Stamp preview"
+                    style={{ maxHeight: '58px', maxWidth: '58px', objectFit: 'contain' }}
+                    className="object-contain opacity-90 shrink-0"
+                  />
                 )}
                 {signatureUrl && (
                   <img
                     src={resolveMediaUrl(signatureUrl) || signatureUrl}
                     alt="Signature preview"
-                    className={stampUrl ? "absolute h-10 w-auto object-contain mix-blend-multiply" : "h-10 w-auto object-contain"}
+                    style={{ maxHeight: '38px', maxWidth: '120px', objectFit: 'contain' }}
+                    className={stampUrl ? "absolute object-contain mix-blend-multiply" : "object-contain mix-blend-multiply"}
                   />
                 )}
                 {!stampUrl && !signatureUrl && (

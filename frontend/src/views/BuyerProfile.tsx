@@ -203,7 +203,8 @@ export default function BuyerProfile() {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       });
       if (res.ok) {
-        const data = await res.json();
+        const rawData = await res.json();
+        const data = rawData?.data || rawData;
         if (data.stampUrl) setStampUrl(data.stampUrl);
         if (data.signatureUrl) setSignatureUrl(data.signatureUrl);
         if (data.logoUrl) {

@@ -3439,6 +3439,7 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
         complianceViolations: { select: { id: true, type: true, severity: true, status: true } },
         buyerProfile: {
           select: {
+            id: true,
             organizationName: true,
             businessType: true,
             organizationType: true,
@@ -3448,21 +3449,43 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
             cin: true,
             state: true,
             city: true,
+            pincode: true,
+            registeredAddress: true,
+            corporateAddress: true,
             mobile: true,
+            alternateMobile: true,
+            email: true,
+            representativeName: true,
+            designation: true,
+            department: true,
+            procurementCategories: true,
+            annualBudget: true,
+            documents: true,
             organization: true
           }
         },
         sellerProfile: {
           select: {
+            id: true,
             businessName: true,
             organizationType: true,
             pan: true,
             msmeCategory: true,
+            msmeType: true,
+            vendorType: true,
+            turnoverMax3Yrs: true,
+            productCategories: true,
             mobile: true,
             isUdyamCertified: true,
+            documents: true,
+            offices: { orderBy: [{ isMandatory: 'desc' }, { id: 'asc' }] },
+            bankAccounts: true,
+            sellerDocuments: { include: { fileAsset: true } },
+            certifications: { include: { fileAsset: true } },
             organization: true
           }
-        }
+        },
+        organization: true
       },
       orderBy: { updatedAt: 'desc' },
       ...window
@@ -3532,7 +3555,36 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
   };
 
   for (const u of users) {
-    const profile = ['seller', 'shg'].includes(u.role) ? u.sellerProfile : u.buyerProfile;
+    const rawProfile = ['seller', 'shg'].includes(u.role) ? u.sellerProfile : u.buyerProfile;
+    let enrichedDocs = rawProfile?.documents ? enrichDocuments(u.id, rawProfile.documents) : rawProfile?.documents;
+
+    if (['seller', 'shg'].includes(u.role) && u.sellerProfile?.sellerDocuments) {
+      const docsObj = typeof enrichedDocs === 'object' && enrichedDocs ? { ...(enrichedDocs as Record<string, any>) } : {};
+      for (const sd of u.sellerProfile.sellerDocuments) {
+        if (sd.fileAsset) {
+          const docTypeUpper = (sd.documentType || '').toUpperCase();
+          let k = 'uploaded_files';
+          if (docTypeUpper.includes('PAN')) k = 'pan';
+          else if (docTypeUpper.includes('GST')) k = 'gstCert';
+          else if (docTypeUpper.includes('UDYAM') || docTypeUpper.includes('MSME')) k = 'udyamCert';
+          else if (docTypeUpper.includes('PASSBOOK') || docTypeUpper.includes('CHEQUE') || docTypeUpper.includes('BANK')) k = 'bankPassbook';
+          else if (docTypeUpper.includes('INCORPORATION')) k = 'regCert';
+          else if (docTypeUpper.includes('ADDRESS')) k = 'addressProof';
+          else if (docTypeUpper.includes('AUTH') || docTypeUpper.includes('LETTER')) k = 'authLetter';
+          else k = sd.documentType || 'uploaded_files';
+
+          docsObj[k] = {
+            fileId: sd.fileAsset.id,
+            url: `/api/files/${sd.fileAsset.id}/view`,
+            originalName: sd.fileAsset.originalName,
+            mimeType: sd.fileAsset.mimeType,
+            uploadedAt: sd.uploadedAt || sd.createdAt
+          };
+        }
+      }
+      enrichedDocs = docsObj;
+    }
+
     const item = {
       _id: String(u.id),
       id: u.id,
@@ -3541,11 +3593,12 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       role: u.role,
       onboardingStatus: u.onboardingStatus,
       registrationDetails: u.registrationDetails,
+      organization: u.organization,
       createdAt: u.createdAt,
       sectionStatus: u.sectionStatus,
       adminFeedback: u.adminFeedback,
       complianceViolations: u.complianceViolations,
-      profile: profile ? { ...profile, documents: enrichDocuments(u.id, profile.documents) } : profile
+      profile: rawProfile ? { ...rawProfile, documents: enrichedDocs } : rawProfile
     };
     if (['seller', 'shg'].includes(u.role)) sellers.push(item);
     else buyers.push(item);
@@ -10588,6 +10641,89 @@ router.get('/admin/reports/procurement', authenticate, authorizeAdmin, asyncRout
   ok(res, { requirements, tenders, directPurchases, quoteRequests, purchaseOrders, rateContracts, activeRateContracts, expiredRateContracts });
 }));
 
+router.get('/admin/reports/procurement/method-wise', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const [tenderStats, dpStats, rfqStats, poStats] = await Promise.all([
+    db.tender.aggregate({
+      _count: { id: true },
+      _sum: { budget: true }
+    }),
+    db.directPurchase.aggregate({
+      _count: { id: true },
+      _sum: { totalAmount: true }
+    }),
+    db.quoteRequest.aggregate({
+      _count: { id: true },
+      _sum: { estimatedValue: true }
+    }),
+    db.purchaseOrder.aggregate({
+      _count: { id: true },
+      _sum: { amount: true }
+    })
+  ]);
+
+  const tenderCount = tenderStats._count.id || 0;
+  const tenderSpend = Number(tenderStats._sum.budget || 0);
+
+  const dpCount = dpStats._count.id || 0;
+  const dpSpend = Number(dpStats._sum.totalAmount || 0);
+
+  const rfqCount = rfqStats._count.id || 0;
+  const rfqSpend = Number(rfqStats._sum.estimatedValue || 0);
+
+  const poCount = poStats._count.id || 0;
+  const poSpend = Number(poStats._sum.amount || 0);
+
+  ok(res, {
+    counts: [
+      { method: 'TENDER', label: 'Open Tender', broadMethod: 'Competitive', count: tenderCount, isException: false },
+      { method: 'DIRECT_PURCHASE', label: 'Direct Purchase', broadMethod: 'Direct', count: dpCount, isException: false },
+      { method: 'QUOTE_REQUEST', label: 'Request for Quotation (RFQ)', broadMethod: 'Competitive', count: rfqCount, isException: false },
+      { method: 'PURCHASE_ORDER', label: 'Purchase Order', broadMethod: 'Fulfilment', count: poCount, isException: false }
+    ],
+    spend: [
+      { method: 'TENDER', label: 'Open Tender', totalSpend: tenderSpend, isException: false },
+      { method: 'DIRECT_PURCHASE', label: 'Direct Purchase', totalSpend: dpSpend, isException: false },
+      { method: 'QUOTE_REQUEST', label: 'Request for Quotation (RFQ)', totalSpend: rfqSpend, isException: false },
+      { method: 'PURCHASE_ORDER', label: 'Purchase Order', totalSpend: poSpend, isException: false }
+    ],
+    tenderComparison: [
+      { method: 'TENDER', label: 'Open Tender', count: tenderCount, totalSpend: tenderSpend },
+      { method: 'DIRECT_PURCHASE', label: 'Direct Purchase', count: dpCount, totalSpend: dpSpend },
+      { method: 'QUOTE_REQUEST', label: 'RFQ', count: rfqCount, totalSpend: rfqSpend },
+      { method: 'PURCHASE_ORDER', label: 'Purchase Order', count: poCount, totalSpend: poSpend }
+    ]
+  });
+}));
+
+router.get('/admin/reports/procurement/exceptions', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
+  const directPurchases = await db.directPurchase.findMany({
+    take: 50,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      purchaseNumber: true,
+      totalAmount: true,
+      justification: true,
+      department: true,
+      status: true,
+      createdAt: true
+    }
+  });
+
+  const exceptions = directPurchases.map(dp => ({
+    id: dp.id,
+    referenceNumber: dp.purchaseNumber,
+    method: 'DIRECT_PURCHASE',
+    amount: Number(dp.totalAmount || 0),
+    exceptionReason: dp.justification || 'Direct Purchase Single Source',
+    department: dp.department || 'General',
+    status: dp.status,
+    date: dp.createdAt
+  }));
+
+  ok(res, exceptions);
+}));
+
 router.get('/admin/reports/payments', authenticate, authorizeAdmin, asyncRoute(async (_req, res) => {
   const [invoices, payments, escrows, milestones] = await Promise.all([
     db.invoice.count(),
@@ -11974,6 +12110,7 @@ const resolveBrandingAssetUrl = async (url: string | null | undefined): Promise<
   if (!url || typeof url !== 'string') return null;
   const trimmed = url.trim();
   if (!trimmed) return null;
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
   if (trimmed.startsWith('/api/files/')) return trimmed;
   if (trimmed.startsWith('/org-logos/') || trimmed.startsWith('/banners/') || trimmed.startsWith('/products/')) return trimmed;
 
@@ -12007,12 +12144,26 @@ const resolveBrandingAssetUrl = async (url: string | null | undefined): Promise<
   return trimmed;
 };
 
-router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg'), asyncRoute(async (req, res) => {
-  const orgId = await ensureUserOrganizationId(req);
+router.get('/seller/settings/branding', authenticate, authorize('seller', 'shg', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
+  let orgId = req.user?.organizationId;
+  const targetSellerId = req.query.sellerId ? Number(req.query.sellerId) : undefined;
+  const targetOrgId = req.query.organizationId ? Number(req.query.organizationId) : undefined;
+  const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
 
-  const profile = await db.organizationProfile.findUnique({
+  if (isAdmin && targetOrgId) {
+    orgId = targetOrgId;
+  } else if (isAdmin && targetSellerId) {
+    const sUser = await db.user.findUnique({ where: { id: targetSellerId }, select: { organizationId: true } });
+    if (sUser?.organizationId) orgId = sUser.organizationId;
+  } else if (!orgId && isAdmin) {
+    return ok(res, { logoUrl: null, bannerUrl: null });
+  } else if (!orgId) {
+    orgId = await ensureUserOrganizationId(req);
+  }
+
+  const profile = orgId ? await db.organizationProfile.findUnique({
     where: { organizationId: orgId }
-  });
+  }) : null;
 
   const logoUrl = await resolveBrandingAssetUrl(profile?.logoUrl);
   const bannerUrl = await resolveBrandingAssetUrl(profile?.bannerUrl);

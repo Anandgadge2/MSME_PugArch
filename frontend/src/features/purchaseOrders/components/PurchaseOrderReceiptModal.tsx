@@ -239,11 +239,12 @@ export function PurchaseOrderReceiptModal({
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
-          const data = await res.json();
+          const raw = await res.json();
+          const data = raw?.data || raw;
           setLiveBranding({
-            logoUrl: data.logoUrl || null,
-            stampUrl: data.stampUrl || null,
-            signatureUrl: data.signatureUrl || null
+            logoUrl: data?.logoUrl || null,
+            stampUrl: data?.stampUrl || null,
+            signatureUrl: data?.signatureUrl || null
           });
         }
       } catch {
@@ -1129,12 +1130,22 @@ export function PurchaseOrderReceiptModal({
                 <div className="grid grid-cols-2 gap-4 mt-2 pt-2 border-t border-slate-300">
                   <div className="text-left text-xs">
                     <span className="font-bold text-slate-800">For {buyerOrg !== 'N/A' ? buyerOrg : 'Buyer'}:</span>
-                    <div className="h-12 flex items-center gap-2 mt-0.5 relative">
+                    <div className="h-14 max-h-14 flex items-center gap-2 mt-0.5 relative overflow-hidden">
                       {resolvedBuyerStamp && (
-                        <img src={resolvedBuyerStamp} alt="Buyer Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                        <img
+                          src={resolvedBuyerStamp}
+                          alt="Buyer Stamp"
+                          style={{ maxHeight: '48px', maxWidth: '48px', objectFit: 'contain' }}
+                          className="h-11 w-11 object-contain mix-blend-multiply shrink-0"
+                        />
                       )}
                       {resolvedBuyerSignature && (
-                        <img src={resolvedBuyerSignature} alt="Buyer Signature" className="h-9 w-auto object-contain mix-blend-multiply" />
+                        <img
+                          src={resolvedBuyerSignature}
+                          alt="Buyer Signature"
+                          style={{ maxHeight: '38px', maxWidth: '130px', objectFit: 'contain' }}
+                          className="h-9 w-auto max-w-[130px] object-contain mix-blend-multiply shrink"
+                        />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Buyer)</span>
@@ -1142,12 +1153,22 @@ export function PurchaseOrderReceiptModal({
 
                   <div className="text-right text-xs">
                     <span className="font-bold text-slate-800">For {sellerOrg !== 'N/A' ? sellerOrg : 'Supplier'}:</span>
-                    <div className="h-12 flex items-center justify-end gap-2 mt-0.5 relative">
+                    <div className="h-14 max-h-14 flex items-center justify-end gap-2 mt-0.5 relative overflow-hidden">
                       {resolvedSellerStamp && (
-                        <img src={resolvedSellerStamp} alt="Supplier Stamp" className="h-10 w-10 object-contain mix-blend-multiply shrink-0" />
+                        <img
+                          src={resolvedSellerStamp}
+                          alt="Supplier Stamp"
+                          style={{ maxHeight: '48px', maxWidth: '48px', objectFit: 'contain' }}
+                          className="h-11 w-11 object-contain mix-blend-multiply shrink-0"
+                        />
                       )}
                       {resolvedSellerSignature && (
-                        <img src={resolvedSellerSignature} alt="Supplier Signature" className="h-9 w-auto object-contain mix-blend-multiply" />
+                        <img
+                          src={resolvedSellerSignature}
+                          alt="Supplier Signature"
+                          style={{ maxHeight: '38px', maxWidth: '130px', objectFit: 'contain' }}
+                          className="h-9 w-auto max-w-[130px] object-contain mix-blend-multiply shrink"
+                        />
                       )}
                     </div>
                     <span className="text-[10px] text-slate-500 font-semibold block">Authorized Signatory (Supplier)</span>

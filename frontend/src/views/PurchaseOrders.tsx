@@ -2527,16 +2527,26 @@ export default function PurchaseOrders() {
                             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Buyer Authorization</span>
                             <p className="text-xs font-bold text-slate-900 truncate">For {buyerOrgDisplay}</p>
                           </div>
-                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70">
+                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70 overflow-hidden">
                             {bStamp ? (
-                              <img src={bStamp} alt="Buyer Stamp" className="h-8 w-8 object-contain mix-blend-multiply shrink-0" />
+                              <img
+                                src={bStamp}
+                                alt="Buyer Stamp"
+                                style={{ maxHeight: '32px', maxWidth: '32px', objectFit: 'contain' }}
+                                className="h-8 w-8 object-contain mix-blend-multiply shrink-0"
+                              />
                             ) : (
                               <div className="h-8 w-8 rounded border border-dashed border-slate-300 flex items-center justify-center text-[7px] font-bold text-slate-400 shrink-0 uppercase">
                                 Stamp
                               </div>
                             )}
                             {bSig ? (
-                              <img src={bSig} alt="Buyer Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                              <img
+                                src={bSig}
+                                alt="Buyer Signature"
+                                style={{ maxHeight: '32px', maxWidth: '100px', objectFit: 'contain' }}
+                                className="h-8 w-auto max-w-[100px] object-contain mix-blend-multiply shrink"
+                              />
                             ) : (
                               <span className="text-[10px] font-medium text-slate-400 italic">Signature on file</span>
                             )}
@@ -2550,16 +2560,26 @@ export default function PurchaseOrders() {
                             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Supplier Authorization</span>
                             <p className="text-xs font-bold text-slate-900 truncate">For {sellerOrgDisplay}</p>
                           </div>
-                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70">
+                          <div className="flex items-center gap-3 h-12 bg-white p-2 rounded-lg border border-slate-200/70 overflow-hidden">
                             {sStamp ? (
-                              <img src={sStamp} alt="Seller Stamp" className="h-8 w-8 object-contain mix-blend-multiply shrink-0" />
+                              <img
+                                src={sStamp}
+                                alt="Seller Stamp"
+                                style={{ maxHeight: '32px', maxWidth: '32px', objectFit: 'contain' }}
+                                className="h-8 w-8 object-contain mix-blend-multiply shrink-0"
+                              />
                             ) : (
                               <div className="h-8 w-8 rounded border border-dashed border-slate-300 flex items-center justify-center text-[7px] font-bold text-slate-400 shrink-0 uppercase">
                                 Stamp
                               </div>
                             )}
                             {sSig ? (
-                              <img src={sSig} alt="Seller Signature" className="h-8 w-auto object-contain mix-blend-multiply" />
+                              <img
+                                src={sSig}
+                                alt="Seller Signature"
+                                style={{ maxHeight: '32px', maxWidth: '100px', objectFit: 'contain' }}
+                                className="h-8 w-auto max-w-[100px] object-contain mix-blend-multiply shrink"
+                              />
                             ) : (
                               <span className="text-[10px] font-medium text-slate-400 italic">Signature on file</span>
                             )}

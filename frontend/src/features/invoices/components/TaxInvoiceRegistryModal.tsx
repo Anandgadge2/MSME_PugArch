@@ -25,6 +25,7 @@ import { cn } from '../../../lib/utils';
 import { formatDate } from '../../shared/format';
 import { getApi, postApi } from '../../shared/apiClient';
 import { TaxInvoiceCard } from './TaxInvoiceCard';
+import { SignatureStampUploadModal } from './SignatureStampUploadModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 
 export interface TaxInvoiceRegistryModalProps {
@@ -51,6 +52,7 @@ export function TaxInvoiceRegistryModal({
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
+  const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
 
   // Approve invoice handler
   const handleApproveInvoice = async () => {
@@ -81,14 +83,8 @@ export function TaxInvoiceRegistryModal({
   const [stampUrl, setStampUrl] = useState<string | null>(null);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
 
-  const handleStampSignatureRedirect = () => {
-    if (user?.role === 'buyer') {
-      router.push('/buyer/profile?section=showcase_profile&tab=branding');
-    } else if (user?.role === 'shg') {
-      router.push('/shg/settings?section=branding');
-    } else {
-      router.push('/seller/settings?section=branding');
-    }
+  const handleOpenBranding = () => {
+    setIsBrandingModalOpen(true);
   };
 
   // Load branding from canonical user invoice-branding endpoint
@@ -105,9 +101,10 @@ export function TaxInvoiceRegistryModal({
     }
 
     void getApi<any>('/api/user/invoice-branding', true).then((res: any) => {
-      if (res?.logoUrl) setLogoUrl(res.logoUrl);
-      if (res?.stampUrl) setStampUrl(res.stampUrl);
-      if (res?.signatureUrl) setSignatureUrl(res.signatureUrl);
+      const data = res?.data || res;
+      if (data?.logoUrl) setLogoUrl(data.logoUrl);
+      if (data?.stampUrl) setStampUrl(data.stampUrl);
+      if (data?.signatureUrl) setSignatureUrl(data.signatureUrl);
     }).catch(() => {
       // non-blocking
     });
@@ -652,9 +649,9 @@ export function TaxInvoiceRegistryModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={handleStampSignatureRedirect}
-                    aria-label="Manage official seal and signature in settings"
-                    title="Manage official seal and signature in settings"
+                    onClick={handleOpenBranding}
+                    aria-label="Manage official seal, logo and signature"
+                    title="Manage official seal, logo and signature"
                     className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                   >
                     <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
@@ -741,13 +738,46 @@ export function TaxInvoiceRegistryModal({
                   logoUrl={invoiceData.seller.logoUrl}
                   stampUrl={invoiceData.seller.stampUrl}
                   signatureUrl={invoiceData.seller.signatureUrl}
-                  onOpenUploadBranding={handleStampSignatureRedirect}
+                  onOpenUploadBranding={handleOpenBranding}
                 />
               </div>
             </>
           )}
         </div>
       </div>
+
+      {/* In-Place Stamp, Signature & Logo Upload Modal */}
+      <SignatureStampUploadModal
+        isOpen={isBrandingModalOpen}
+        onClose={() => setIsBrandingModalOpen(false)}
+        initialLogo={invoiceData.seller.logoUrl || logoUrl}
+        initialStamp={invoiceData.seller.stampUrl || stampUrl}
+        initialSignature={invoiceData.seller.signatureUrl || signatureUrl}
+        onSaved={(branding) => {
+          if (branding.logoUrl !== undefined) setLogoUrl(branding.logoUrl);
+          if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
+          if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
+          if (invoice) {
+            setInvoice((prev: any) => {
+              if (!prev) return prev;
+              const prevSeller = prev.seller || {};
+              const prevReg = (prevSeller.registrationDetails as any) || {};
+              return {
+                ...prev,
+                seller: {
+                  ...prevSeller,
+                  registrationDetails: {
+                    ...prevReg,
+                    ...(branding.logoUrl !== undefined && { logoUrl: branding.logoUrl }),
+                    ...(branding.stampUrl !== undefined && { stampUrl: branding.stampUrl }),
+                    ...(branding.signatureUrl !== undefined && { signatureUrl: branding.signatureUrl }),
+                  }
+                }
+              };
+            });
+          }
+        }}
+      />
     </div>
   );
 }

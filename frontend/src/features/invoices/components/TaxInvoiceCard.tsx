@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatCurrency, formatDate } from '../../shared/format';
+import { resolveMediaUrl } from '../../../lib/api';
 
 export interface TaxInvoiceCardProps {
   copyType: string;
@@ -78,6 +79,13 @@ export function TaxInvoiceCard({
   signatureUrl = null,
   onOpenUploadBranding
 }: TaxInvoiceCardProps) {
+  const [logoError, setLogoError] = useState(false);
+  const [stampError, setStampError] = useState(false);
+  const [sigError, setSigError] = useState(false);
+
+  const resolvedLogo = resolveMediaUrl(logoUrl);
+  const resolvedStamp = resolveMediaUrl(stampUrl);
+  const resolvedSignature = resolveMediaUrl(signatureUrl);
   const displayItems = items.length > 0 ? items : [
     {
       srNo: 1,
@@ -117,21 +125,22 @@ export function TaxInvoiceCard({
         {/* Right: Company Logo & CIN */}
         <div className="flex flex-col items-start md:items-end justify-between h-full space-y-2">
           <div className="group relative flex items-center justify-end">
-            {logoUrl ? (
+            {resolvedLogo && !logoError ? (
               <div className="h-16 w-52 max-w-[220px] flex items-center justify-end">
                 <img
-                  src={logoUrl}
+                  src={resolvedLogo}
                   alt={`${seller.name || 'Company'} Logo`}
                   className="max-h-16 max-w-full object-contain cursor-pointer transition-transform hover:scale-105"
                   onClick={onOpenUploadBranding}
-                  title="Click to change logo"
+                  onError={() => setLogoError(true)}
+                  title="Click to configure logo"
                 />
               </div>
             ) : (
               <div 
                 onClick={onOpenUploadBranding}
                 className="cursor-pointer border border-dashed border-slate-300 hover:border-[#12335f] bg-slate-50 hover:bg-slate-100/80 px-3.5 py-2 rounded-lg flex items-center gap-2 transition"
-                title="Click to upload company logo"
+                title="Click to configure company logo"
               >
                 <div className="h-7 w-7 rounded bg-[#12335f]/10 text-[#12335f] flex items-center justify-center font-black text-sm">
                   {(seller.name || 'C').charAt(0).toUpperCase()}
@@ -362,24 +371,28 @@ export function TaxInvoiceCard({
 
           <div
             onClick={onOpenUploadBranding}
-            className="group relative my-auto flex items-center justify-center min-h-[64px] min-w-[140px] px-3 py-1 rounded-xl hover:bg-slate-50 transition cursor-pointer border border-dashed border-transparent hover:border-slate-300"
+            className="group relative my-auto flex items-center justify-center min-h-[64px] min-w-[140px] px-3 py-1 rounded-xl hover:bg-slate-50 transition cursor-pointer border border-dashed border-transparent hover:border-slate-300 overflow-hidden"
             title="Click to configure stamp and signature"
           >
-            {stampUrl && (
+            {resolvedStamp && !stampError && (
               <img
-                src={stampUrl}
+                src={resolvedStamp}
                 alt="Authorized Stamp"
-                className="h-16 w-16 object-contain transition-transform group-hover:scale-105"
+                style={{ maxHeight: '56px', maxWidth: '56px', objectFit: 'contain' }}
+                className="h-14 w-14 object-contain transition-transform group-hover:scale-105 shrink-0"
+                onError={() => setStampError(true)}
               />
             )}
-            {signatureUrl && (
+            {resolvedSignature && !sigError && (
               <img
-                src={signatureUrl}
+                src={resolvedSignature}
                 alt="Authorized Signature"
-                className={stampUrl ? "absolute h-10 w-auto object-contain mix-blend-multiply" : "h-10 w-auto object-contain"}
+                style={{ maxHeight: '38px', maxWidth: '120px', objectFit: 'contain' }}
+                className={resolvedStamp && !stampError ? "absolute h-9.5 max-h-9.5 w-auto max-w-[120px] object-contain mix-blend-multiply" : "h-9.5 max-h-9.5 w-auto max-w-[120px] object-contain"}
+                onError={() => setSigError(true)}
               />
             )}
-            {!stampUrl && !signatureUrl && (
+            {(!resolvedStamp || stampError) && (!resolvedSignature || sigError) && (
               <div className="text-center py-2 text-slate-400 group-hover:text-slate-600 transition">
                 <span className="text-[10px] font-bold block">+ Optional Stamp / Sign</span>
                 <span className="text-[8px] text-slate-400">Click to upload or leave blank</span>
@@ -387,7 +400,7 @@ export function TaxInvoiceCard({
             )}
             <div className="absolute inset-0 bg-slate-950/0 group-hover:bg-slate-950/5 rounded-xl transition flex items-center justify-center">
               <span className="opacity-0 group-hover:opacity-100 text-[9px] font-black uppercase tracking-wider bg-white/95 px-2 py-0.5 rounded shadow-sm text-[#12335f] transition">
-                {stampUrl || signatureUrl ? 'Change Stamp / Sign' : 'Upload Stamp / Sign'}
+                {(resolvedStamp && !stampError) || (resolvedSignature && !sigError) ? 'Change Stamp / Sign' : 'Upload Stamp / Sign'}
               </span>
             </div>
           </div>
