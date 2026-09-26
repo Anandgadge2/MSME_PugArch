@@ -4985,6 +4985,8 @@ export function ProcurementDetailUnifiedView(
   const corrigendumCount = Number(
     (props.rawBid?.technicalPacket as any)?.corrigendumCount ||
     (props.rawBid as any)?.corrigendumCount ||
+    (props.payload as any)?.corrigendumCount ||
+    (payload as any)?.corrigendumCount ||
     0
   );
 
