@@ -588,6 +588,7 @@ const allowedFileEntityTypes = new Set([
   'catalogue_service',
   'procurement_checkout',
   'procurement_draft',
+  'rate_contract_document',
   'payment',
   'payment_proof',
   'receipt',
@@ -645,7 +646,9 @@ const canAttachFileToEntity = async (
     context.entityType === 'payment' ||
     context.entityType === 'payment_proof' ||
     context.entityType === 'receipt' ||
-    context.entityType === 'offline_payment'
+    context.entityType === 'offline_payment' ||
+    context.entityType === 'procurement_draft' ||
+    context.entityType === 'rate_contract_document'
   ) return true;
   if (context.entityType === 'tender') return checkOwnership('tender', context.entityId, user);
   if (context.entityType === 'bid') return checkOwnership('bid', context.entityId, user);
