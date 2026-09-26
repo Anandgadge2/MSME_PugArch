@@ -317,9 +317,10 @@ export class PdfEngine {
   }
 
   private drawHeader(config: DocumentConfig, resolvedLogoDataUrl: string | null) {
-    // Top colored banner band
+    // Dynamic banner height to fit multiline organization titles safely
+    const bannerHeight = 38;
     this.doc.setFillColor(...PRIMARY_COLOR);
-    this.doc.rect(0, 0, this.pageWidth, 36, 'F');
+    this.doc.rect(0, 0, this.pageWidth, bannerHeight, 'F');
     
     // Header Left: Dynamic Organization Branding
     this.doc.setTextColor(255, 255, 255);
@@ -327,37 +328,57 @@ export class PdfEngine {
     const startX = logoToUse ? 45 : 14;
 
     if (logoToUse) {
-      drawFitImage(this.doc, logoToUse, 14, 5, 28, 26, 'left');
+      drawFitImage(this.doc, logoToUse, 14, 5, 28, 28, 'left');
     }
+
+    const rightMargin = 14;
+    const rightColWidth = 85;
+    const leftAvailableWidth = this.pageWidth - startX - rightColWidth - 8;
 
     const issuerTitle = fallbackStr(config.issuerName, 'ENTERPRISE PROCUREMENT').toUpperCase();
     const issuerSub = fallbackStr(config.issuerSubtitle, 'Official Commercial Document');
 
     this.doc.setFont('helvetica', 'bold');
-    this.doc.setFontSize(12);
-    const titleLines = this.doc.splitTextToSize(issuerTitle, this.pageWidth - startX - 75);
-    this.doc.text(titleLines[0] || issuerTitle, startX, 14);
-
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.setFontSize(8.5);
-    const subLines = this.doc.splitTextToSize(issuerSub, this.pageWidth - startX - 75);
-    this.doc.text(subLines[0] || issuerSub, startX, 20);
-
-    // Document Title & Metadata - Right Column
     this.doc.setFontSize(11);
-    this.doc.setFont('helvetica', 'bold');
-    this.doc.text(config.documentTitle.toUpperCase(), this.pageWidth - 14, 14, { align: 'right' });
-    
-    this.doc.setFontSize(8.5);
-    this.doc.setFont('helvetica', 'normal');
-    this.doc.text(`No: ${sanitizePdfText(config.documentNumber)}`, this.pageWidth - 14, 20, { align: 'right' });
-    this.doc.text(`Date: ${sanitizePdfText(config.dateStr)}`, this.pageWidth - 14, 25, { align: 'right' });
-    
-    if (config.status) {
-      this.doc.text(`Status: ${sanitizePdfText(config.status)}`, this.pageWidth - 14, 30, { align: 'right' });
+    const titleLines = this.doc.splitTextToSize(issuerTitle, leftAvailableWidth);
+    let leftY = 12;
+    if (titleLines.length > 1) {
+      this.doc.text(titleLines[0], startX, leftY);
+      leftY += 5;
+      this.doc.text(titleLines[1], startX, leftY);
+      leftY += 5;
+    } else {
+      this.doc.text(titleLines[0] || issuerTitle, startX, leftY);
+      leftY += 6;
     }
 
-    this.cursorY = 44;
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.setFontSize(8);
+    const subLines = this.doc.splitTextToSize(issuerSub, leftAvailableWidth);
+    this.doc.text(subLines[0] || issuerSub, startX, leftY);
+
+    // Document Title & Metadata - Right Column
+    this.doc.setFontSize(10.5);
+    this.doc.setFont('helvetica', 'bold');
+    const docTitleLines = this.doc.splitTextToSize(config.documentTitle.toUpperCase(), rightColWidth);
+    let rightY = 12;
+    docTitleLines.slice(0, 2).forEach((line: string) => {
+      this.doc.text(line, this.pageWidth - rightMargin, rightY, { align: 'right' });
+      rightY += 4.5;
+    });
+
+    this.doc.setFontSize(8);
+    this.doc.setFont('helvetica', 'normal');
+    this.doc.text(`No: ${sanitizePdfText(config.documentNumber)}`, this.pageWidth - rightMargin, rightY, { align: 'right' });
+    rightY += 4;
+    this.doc.text(`Date: ${sanitizePdfText(config.dateStr)}`, this.pageWidth - rightMargin, rightY, { align: 'right' });
+    
+    if (config.status) {
+      rightY += 4;
+      this.doc.text(`Status: ${sanitizePdfText(config.status)}`, this.pageWidth - rightMargin, rightY, { align: 'right' });
+    }
+
+    this.cursorY = bannerHeight + 6;
   }
 
   private drawParties(parties: DocumentParty[]) {
@@ -366,22 +387,33 @@ export class PdfEngine {
     const head: string[] = parties.map(p => sanitizePdfText(p.title));
     const body: string[][] = [parties.map(p => {
       const lines: string[] = [];
-      lines.push(fallbackStr(p.name, 'N/A'));
-      lines.push(`Address: ${fallbackStr(p.address, 'N/A')}`);
-      lines.push(`Email: ${fallbackStr(p.email, 'N/A')}`);
-      lines.push(`Phone: ${fallbackStr(p.phone, 'N/A')}`);
-      if (p.gstin && p.gstin !== 'N/A') {
-        lines.push(`GSTIN: ${maskGSTIN(p.gstin)}`);
-      } else {
-        lines.push(`GSTIN: N/A`);
+      if (p.name && p.name !== 'N/A' && p.name !== '—') {
+        lines.push(p.name);
       }
-      if (p.pan && p.pan !== 'N/A') {
+      if (p.address && p.address !== 'N/A' && p.address !== '—') {
+        lines.push(`Address: ${p.address}`);
+      }
+      if (p.email && p.email !== 'N/A' && p.email !== '—') {
+        lines.push(`Email: ${p.email}`);
+      }
+      if (p.phone && p.phone !== 'N/A' && p.phone !== '—') {
+        lines.push(`Phone: ${p.phone}`);
+      }
+      if (p.gstin && p.gstin !== 'N/A' && p.gstin !== '—') {
+        lines.push(`GSTIN: ${maskGSTIN(p.gstin)}`);
+      }
+      if (p.pan && p.pan !== 'N/A' && p.pan !== '—') {
         lines.push(`PAN: ${maskPAN(p.pan)}`);
       }
       if (p.details && p.details.length > 0) {
         p.details.forEach(d => {
-          if (d) lines.push(sanitizePdfText(d));
+          if (d && !d.endsWith(': N/A') && !d.endsWith(': —') && d !== 'N/A' && d !== '—') {
+            lines.push(sanitizePdfText(d));
+          }
         });
+      }
+      if (lines.length === 0) {
+        lines.push('As per procurement terms & specifications');
       }
       return lines.join('\n');
     })];
@@ -601,20 +633,21 @@ export class PdfEngine {
     this.doc.setTextColor(...TEXT_DARK);
 
     if (mode === 'single') {
-      // Single authority signatory (centered) — for MIS, admin reports
-      const title = config.singleSignatoryTitle || 'Authorized Officer';
-      const name = config.singleSignatoryName || '';
+      // Single authority signatory (centered) — for MIS, admin reports, and tender notices
+      const title = config.singleSignatoryTitle || config.signatures?.buyerTitle || (config.parties && config.parties[0]?.name ? config.parties[0].name : 'Procuring Authority');
+      const name = config.singleSignatoryName || config.signatures?.buyerName || '';
       const centerX = this.pageWidth / 2;
 
-      this.doc.text(`For ${fallbackStr(title, 'Authorized Officer')}`, centerX, y, { align: 'center' });
+      const titleLines = this.doc.splitTextToSize(`For ${fallbackStr(title, 'Procuring Authority')}`, this.pageWidth - 40);
+      this.doc.text(titleLines[0], centerX, y, { align: 'center' });
 
       // Stamp (centered)
-      const stampUrl = sellerStampDataUrl || buyerStampDataUrl;
+      const stampUrl = buyerStampDataUrl || sellerStampDataUrl;
       if (stampUrl) {
         drawFitImage(this.doc, stampUrl, centerX - 13, y + 3, 26, 20, 'center');
       }
       // Signature (centered, below stamp)
-      const sigUrl = sellerSigDataUrl || buyerSigDataUrl;
+      const sigUrl = buyerSigDataUrl || sellerSigDataUrl;
       if (sigUrl) {
         const sigY = stampUrl ? y + 18 : y + 4;
         drawFitImage(this.doc, sigUrl, centerX - 15, sigY, 30, 14, 'center');
@@ -626,20 +659,27 @@ export class PdfEngine {
       if (name) {
         this.doc.text(name, centerX, y + 30, { align: 'center' });
       }
-      this.doc.text('Authorized Signatory', centerX, y + 35, { align: 'center' });
+      this.doc.text('Authorized Signatory (Procuring Authority)', centerX, y + 35, { align: 'center' });
 
       this.cursorY = y + 40;
       return;
     }
 
     // Bilateral mode (default) — Buyer on left, Seller on right
-    const buyerName = config.parties && config.parties[0]?.name ? config.parties[0].name : 'Buyer';
-    const sellerName = config.parties && config.parties[1]?.name ? config.parties[1].name : (config.parties && config.parties[0]?.name ? config.parties[0].name : 'Seller');
+    const rawBuyerTitle = config.signatures?.buyerTitle || (config.parties && config.parties[0]?.name ? config.parties[0].name : 'Buyer');
+    const rawSellerTitle = config.signatures?.sellerTitle || (config.parties && config.parties[1]?.name ? config.parties[1].name : 'Seller');
+    
+    // Guard against RFQ title being injected into seller signatory
+    const sellerTitle = (rawSellerTitle === config.documentTitle || rawSellerTitle.startsWith('Procurement of') || (config.parties && config.parties[1]?.title === 'RFQ'))
+      ? 'Authorized Bidder Representative'
+      : rawSellerTitle;
 
-    // Left Signatory (Buyer)
-    this.doc.text(`For ${fallbackStr(buyerName, 'Buyer')}`, 20, y);
-    // Right Signatory (Seller)
-    this.doc.text(`For ${fallbackStr(sellerName, 'Seller')}`, this.pageWidth - 20, y, { align: 'right' });
+    const signatoryColWidth = (this.pageWidth - 50) / 2;
+    const buyerSigLines = this.doc.splitTextToSize(`For ${fallbackStr(rawBuyerTitle, 'Buyer')}`, signatoryColWidth);
+    this.doc.text(buyerSigLines[0], 20, y);
+
+    const sellerSigLines = this.doc.splitTextToSize(`For ${fallbackStr(sellerTitle, 'Seller')}`, signatoryColWidth);
+    this.doc.text(sellerSigLines[0], this.pageWidth - 20, y, { align: 'right' });
 
     // Buyer Stamp & Signature (left side — stamp first, signature below)
     if (buyerStampDataUrl) {
@@ -663,7 +703,16 @@ export class PdfEngine {
     this.doc.setFont('helvetica', 'normal');
     this.doc.setFontSize(8);
     this.doc.setTextColor(...TEXT_MUTED);
+    const buyerOfficerName = config.signatures?.buyerName || '';
+    if (buyerOfficerName) {
+      this.doc.text(buyerOfficerName, 20, y + 30);
+    }
     this.doc.text('Authorized Signatory', 20, y + 35);
+
+    const sellerOfficerName = config.signatures?.sellerName || '';
+    if (sellerOfficerName) {
+      this.doc.text(sellerOfficerName, this.pageWidth - 20, y + 30, { align: 'right' });
+    }
     this.doc.text('Authorized Signatory', this.pageWidth - 20, y + 35, { align: 'right' });
 
     this.cursorY = y + 40;

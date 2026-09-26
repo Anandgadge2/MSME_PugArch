@@ -4004,6 +4004,7 @@ export function ProcurementDetailUnifiedView(
   const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
   const [selectedInvoiceModalData, setSelectedInvoiceModalData] = useState<any | null>(null);
   const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -7593,8 +7594,8 @@ export function ProcurementDetailUnifiedView(
         : "Submit Proposal";
 
   const handleDefaultPdfDownload = async () => {
+    const toastId = toast.loading(`Preparing ${procurementTypeLabel} document...`);
     try {
-      toast.info(`Generating ${procurementTypeLabel} PDF…`);
       const buyerReg =
         (props.buyer?.registrationDetails as Record<string, any>) || {};
       const buyerLogo =
@@ -7609,49 +7610,109 @@ export function ProcurementDetailUnifiedView(
           ? `/api/files/${props.buyer.organization.organizationLogoFileId}/download`
           : null);
 
+      const sourcingStrategyLabel = isTwoStageReverseAuction
+        ? "Two-Stage Tender with Dynamic Reverse Auction"
+        : isDirectReverseAuction
+          ? "Reverse Auction Sourcing"
+          : procurementMethod;
+
+      const humanPayTerms = (() => {
+        const p = String(paymentTerms || "").trim();
+        const pUpper = p.toUpperCase();
+        if (!p || p === "—" || p === "N/A") return "Payment on Consignment Delivery & Acceptance";
+        if (pUpper.includes("ON_DELIVERY") || pUpper.includes("DELIVERY")) return "Payment on Consignment Delivery & GRN Acceptance";
+        if (pUpper.includes("ADVANCE")) return "100% Advance Payment";
+        if (pUpper.includes("NET_30") || pUpper.includes("NET 30")) return "30 Days Net from GRN Approval";
+        return p;
+      })();
+
+      const humanDelTerms = (() => {
+        const d = String(deliveryTerms || props.deliveryTerms || "").trim();
+        const dUpper = d.toUpperCase();
+        if (!d || d === "—" || d === "N/A" || d === "Standard") return "Door delivery to site / consignee destination";
+        if (dUpper.includes("DOOR_DELIVERY") || dUpper.includes("DOOR DELIVERY")) return "Door delivery to site / consignee destination";
+        return d;
+      })();
+
+      const humanEvalMethod = (() => {
+        const e = String(evaluationMethod || "").trim();
+        const eUpper = e.toUpperCase();
+        if (eUpper.includes("L1") && !eUpper.includes("ITEM")) return "L1 Total Value (Lowest Responsive Bidder)";
+        if (eUpper.includes("QCBS")) return "Quality & Cost-Based Selection (QCBS)";
+        if (eUpper.includes("ITEM")) return "Item-wise L1 Evaluation";
+        return e || "L1 Total Value";
+      })();
+
+      const notesList: string[] = [];
+      if (isTwoStageReverseAuction) {
+        notesList.push("SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.");
+        notesList.push("Stage 1 (Technical & Baseline Qualification): Bidders submit technical compliance documents and baseline pricing for evaluation. Only approved vendors advance to Stage 2.");
+        notesList.push("Stage 2 (Live Reverse Auction): Technically approved bidders submit real-time decremented bids in the live bidding window.");
+      } else if (isDirectReverseAuction) {
+        notesList.push("SOURCING WORKFLOW: Direct Dynamic Reverse Auction.");
+      }
+
+      if (props.isEmdRequired && Number(props.emdAmount || 0) > 0) {
+        notesList.push(`EARNEST MONEY DEPOSIT (EMD): INR ${Number(props.emdAmount).toLocaleString("en-IN")} mandatory prior to bidding cutoff.`);
+        notesList.push("EMD EXEMPTION: Eligible MSME/MSE units with valid Udyam Registration are exempted as per Public Procurement Policy.");
+      } else {
+        notesList.push("EARNEST MONEY DEPOSIT (EMD): Nil / Fully Exempted for registered vendors.");
+      }
+
+      notesList.push(`BID SUBMISSION CUTOFF: ${closingDateFormatted || "Refer to portal schedule"} (Strict closing deadline).`);
+      if (technicalDateFormatted) {
+        notesList.push(`TECHNICAL PACKET OPENING: ${technicalDateFormatted}`);
+      }
+      if (bidValidityDateFormatted) {
+        notesList.push(`BID VALIDITY: ${bidValidityDateFormatted}`);
+      }
+
       const engine = new PdfEngine("p");
       const doc = await engine.generate({
-        documentTitle: `${procurementTypeLabel.toUpperCase()} PROCUREMENT DETAILS`,
+        documentTitle: `${procurementTypeLabel.toUpperCase()} SPECIFICATION NOTICE`,
         documentNumber: displayIdStr,
         dateStr: publishedDateFormatted || "N/A",
         status: statusLabel,
         issuerName:
           buyerOrgName !== "N/A" ? buyerOrgName : "Enterprise Procurement",
-        issuerSubtitle: `${procurementTypeLabel.toUpperCase()} Notice`,
+        issuerSubtitle: `${sourcingStrategyLabel} Notice`,
         issuerLogo: buyerLogo,
         parties: [
           {
-            title: "BUYER ORGANIZATION",
-            name: buyerOrgName !== "N/A" ? buyerOrgName : "Verified Buyer",
-            address: deliveryLocation !== "N/A" ? deliveryLocation : "N/A",
-            email: props.buyer?.email || buyerReg.email || "N/A",
+            title: "PROCURING ENTITY (BUYER)",
+            name: buyerOrgName !== "N/A" ? buyerOrgName : "Verified Enterprise Buyer",
+            address: buyerAddress || (deliveryLocation !== "N/A" ? deliveryLocation : undefined),
+            email: props.buyer?.email || buyerReg.email || undefined,
             phone:
               props.buyer?.mobile ||
               props.buyer?.phone ||
               buyerReg.mobile ||
-              "N/A",
-            gstin: props.buyer?.organization?.gstin || buyerReg.gstin || "N/A",
+              undefined,
+            gstin: props.buyer?.organization?.gstin || buyerReg.gstin || undefined,
             details: [
-              `Contact: ${contactPerson !== "N/A" ? contactPerson : "Procurement Officer"}`,
+              `Contact Officer: ${contactPerson !== "N/A" ? contactPerson : "Procurement Officer"}`,
+              `Department: ${department !== "N/A" ? department : "Procurement Division"}`,
               `Category: ${category !== "N/A" ? category : "General"}`,
             ],
           },
           {
-            title: procurementTypeLabel.toUpperCase(),
+            title: "TENDER SPECIFICATION & ELIGIBILITY",
             name: resolvedSubject,
             details: [
-              `Method: ${procurementMethod}`,
-              `Deadline: ${closingDateFormatted}`,
-              `Estimated Value: ${shouldShowEstimatedCost ? moneyPdf(props.estimatedValue) : "Confidential (Competitive Bidding)"}`,
+              `Procurement Ref: ${displayIdStr}`,
+              `Sourcing Method: ${sourcingStrategyLabel}`,
+              `Category: ${category !== "N/A" ? category : "General Equipment"}`,
+              `Submission Cutoff: ${closingDateFormatted || "Refer to portal schedule"}`,
+              `Bidding Currency: INR (Indian Rupee)`,
+              `Eligible Bidders: Verified & Registered MSME Suppliers`,
             ],
           },
         ],
         infoGrid: {
-          "Delivery Location": deliveryLocation,
-          "Payment Terms":
-            paymentTerms !== "N/A" ? paymentTerms : "As per procurement rules",
-          "Delivery SLA": props.deliveryTerms || "Standard Delivery SLA",
-          "Evaluation Method": evaluationMethod,
+          "Sourcing Method": sourcingStrategyLabel,
+          "Delivery SLA": humanDelTerms,
+          "Payment Terms": humanPayTerms,
+          "Evaluation Method": humanEvalMethod,
         },
         tableHeaders: [
           "#",
@@ -7661,35 +7722,49 @@ export function ProcurementDetailUnifiedView(
           "Estimated Price",
           "GST %",
         ],
-        tableData: lineItems.map((it: any, i: number) => [
-          String(i + 1),
-          it.itemName || it.name || it.description || `Item ${i + 1}`,
-          String(it.quantity || it.qty || 1),
-          it.unit || "Units",
-          shouldShowEstimatedCost
-            ? it.estimatedPrice || it.unitPrice || it.price
-              ? moneyPdf(it.estimatedPrice || it.unitPrice || it.price)
-              : "N/A"
-            : "Confidential",
-          it.gstRate || it.gst ? `${it.gstRate || it.gst}%` : "Standard",
-        ]),
-        financials: shouldShowEstimatedCost
+        tableData: lineItems.map((it: any, i: number) => {
+          const itemLines = [it.itemName || it.name || it.description || `Item ${i + 1}`];
+          if (it.brand || it.brandPreference || it.brand_preference) {
+            itemLines.push(`Brand: ${it.brand || it.brandPreference || it.brand_preference}`);
+          }
+          if (it.hsn_sac_code || it.hsn || it.hsnSacCode) {
+            itemLines.push(`HSN/SAC: ${it.hsn_sac_code || it.hsn || it.hsnSacCode}`);
+          }
+          return [
+            String(i + 1),
+            itemLines.join("\n"),
+            String(it.quantity || it.qty || 1),
+            it.unit || it.unitOfMeasure || "Nos",
+            shouldShowEstimatedCost
+              ? it.estimatedPrice || it.unitPrice || it.price
+                ? moneyPdf(it.estimatedPrice || it.unitPrice || it.price)
+                : "N/A"
+              : "Confidential (Competitive Sourcing)",
+            it.gstRate || it.gst ? `${it.gstRate || it.gst}%` : "Standard",
+          ];
+        }),
+        financials: shouldShowEstimatedCost && props.estimatedValue
           ? { grandTotal: Number(props.estimatedValue || 0) }
           : undefined,
         terms: [
-          `Payment Terms: ${paymentTerms}`,
-          `Delivery Terms: ${props.deliveryTerms || "Standard"}`,
-          `Evaluation Method: ${evaluationMethod}`,
+          `Payment Terms: ${humanPayTerms}`,
+          `Delivery Terms: ${humanDelTerms}`,
+          `Evaluation Method: ${humanEvalMethod}`,
+          `Consignee Site: ${deliveryLocation && deliveryLocation !== "N/A" ? deliveryLocation : (buyerAddress || "Site Delivery as per Purchase Order")}`,
         ],
+        notes: notesList,
+        signatoryMode: "single",
+        singleSignatoryTitle: buyerOrgName !== "N/A" ? buyerOrgName : "Procuring Entity",
+        singleSignatoryName: contactPerson !== "N/A" ? `${contactPerson} (Authorized Procurement Officer)` : "Authorized Sourcing Authority",
         footerNote: "MSME Enterprise Unified Sourcing & Procurement Portal",
       });
       doc.save(
         `${displayIdStr.replace(/[^a-zA-Z0-9-]/g, "_")}-${procurementTypeLabel.replace(/\s+/g, "_")}.pdf`,
       );
-      toast.success(`${procurementTypeLabel} PDF downloaded.`);
+      toast.success(`${procurementTypeLabel} document downloaded successfully.`, { id: toastId });
     } catch (err: any) {
       console.error(err);
-      toast.error("Failed to generate PDF.");
+      toast.error("Failed to generate PDF document.", { id: toastId });
     }
   };
 
@@ -9069,20 +9144,34 @@ export function ProcurementDetailUnifiedView(
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    if (props.onDownloadClick) {
-                      props.onDownloadClick();
-                    } else {
-                      handleDefaultPdfDownload();
+                  disabled={isDownloadingPdf}
+                  onClick={async () => {
+                    if (isDownloadingPdf) return;
+                    setIsDownloadingPdf(true);
+                    try {
+                      if (props.onDownloadClick) {
+                        await props.onDownloadClick();
+                      } else {
+                        await handleDefaultPdfDownload();
+                      }
+                    } finally {
+                      setIsDownloadingPdf(false);
                     }
                   }}
-                  className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                  className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Download
-                    className="h-3.5 w-3.5 text-slate-600"
-                    aria-hidden="true"
-                  />
-                  Download
+                  {isDownloadingPdf ? (
+                    <Loader2
+                      className="h-3.5 w-3.5 animate-spin text-slate-600"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Download
+                      className="h-3.5 w-3.5 text-slate-600"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {isDownloadingPdf ? "Downloading..." : "Download"}
                 </Button>
                 {props.invoiceStatus &&
                   (props.invoiceStatus.exists ? (

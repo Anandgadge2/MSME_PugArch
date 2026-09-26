@@ -347,8 +347,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   ];
 
   const handleDownloadPdf = async () => {
+    const toastId = toast.loading('Preparing Reverse Auction Sourcing Notice PDF...');
     try {
-      toast.info('Generating Reverse Auction Notice PDF…');
       const engine = new PdfEngine();
       const doc = await engine.generate({
         documentTitle: 'REVERSE AUCTION SOURCING NOTICE',
@@ -356,19 +356,21 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         dateStr: formatDateTime(auctionData.startTime),
         status,
         issuerName: auctionData.buyerOrganizationName || 'Procuring Entity',
+        issuerSubtitle: 'Live Reverse Auction Event Notice',
         parties: [
           {
             title: 'BUYER ORGANIZATION',
             name: auctionData.buyerOrganizationName || 'Verified Buyer',
             address: reqData.deliveryLocation || undefined,
-            details: [`Category: ${auctionData.category || reqData.category || 'N/A'}`],
+            details: [`Category: ${auctionData.category || reqData.category || 'General Procurement'}`],
           },
           {
-            title: 'AUCTION EVENT',
-            name: auctionData.title || 'Reverse Auction',
+            title: 'AUCTION EVENT SPECIFICATION',
+            name: auctionData.title || 'Reverse Auction Event',
             details: [
-              'Method: Reverse Auction',
-              `Closing: ${formatDateTime(auctionData.endTime)}`,
+              'Method: Dynamic Reverse Auction',
+              `Bidding Window Closes: ${formatDateTime(auctionData.endTime)}`,
+              'Participation: Technically Qualified Bidders Only',
             ],
           },
         ],
@@ -394,12 +396,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           `Delivery Terms: ${reqData.deliveryTerms || 'Standard'}`,
           `Auction Format: ${formatEnumLabel(auctionData.auctionType)}`,
         ],
+        signatoryMode: 'single',
+        singleSignatoryTitle: auctionData.buyerOrganizationName || 'Procuring Authority',
         footerNote: 'MSME Enterprise Procurement Portal - Reverse Auction Console',
       });
       doc.save(`${(auctionData.auctionCode || `RA-${effectiveId}`).replace(/[^a-zA-Z0-9-]/g, '_')}-Notice.pdf`);
-      toast.success('Notice PDF downloaded.');
+      toast.success('Notice PDF downloaded successfully.', { id: toastId });
     } catch {
-      toast.error('Failed to generate PDF.');
+      toast.error('Failed to generate PDF document.', { id: toastId });
     }
   };
 

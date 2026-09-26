@@ -257,6 +257,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedBuyerResponse, setSelectedBuyerResponse] = useState<any>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
     ? (bidData as any).technicalPacket
@@ -1040,29 +1041,185 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   /* ── Handlers ── */
   const handleDownloadPdf = async () => {
+    if (isDownloadingPdf) return;
+    setIsDownloadingPdf(true);
+    const toastId = toast.loading('Preparing RFQ specification document...');
     try {
-      toast.info('Generating PDF…');
+      const buyerGstin = preferReq
+        ? (reqObj?.buyerOrganization?.gstin || reqObj?.organization?.gstin || reqObj?.buyerProfile?.gstin || rawBid?.buyerOrganization?.gstin || rawBid?.buyer?.organization?.gstin || reqObj?.buyer?.buyerProfile?.gstin)
+        : (rawBid?.buyerOrganization?.gstin || rawBid?.buyer?.organization?.gstin || rawBid?.buyerProfile?.gstin || reqObj?.buyerOrganization?.gstin || reqObj?.organization?.gstin || rawBid?.buyer?.buyerProfile?.gstin);
+
+      const buyerPan = preferReq
+        ? (reqObj?.buyerOrganization?.pan || reqObj?.organization?.pan || reqObj?.buyerProfile?.pan || rawBid?.buyerOrganization?.pan || rawBid?.buyer?.organization?.pan)
+        : (rawBid?.buyerOrganization?.pan || rawBid?.buyer?.organization?.pan || reqObj?.buyerOrganization?.pan);
+
+      const hasReverseAuction = Boolean(
+        rawBid?.allowReverseAuction ||
+        rawBid?.technicalPacket?.allowReverseAuction ||
+        reqObj?.allowReverseAuction ||
+        reqObj?.payload?.allowReverseAuction ||
+        reqObj?.payload?.basics?.isReverseAuctionNeeded ||
+        rawBid?.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+        rawBid?.procurementType === 'REVERSE_AUCTION' ||
+        rawDescUpper.includes('REVERSE AUCTION')
+      );
+      const isTwoStage = hasReverseAuction || packetType === 'Two Packet' || !!techOpen || rawDescUpper.includes('TWO-STAGE');
+      const sourcingLabel = isTwoStage && hasReverseAuction
+        ? 'Two-Stage Tender with Reverse Auction'
+        : hasReverseAuction
+          ? 'Reverse Auction Procurement'
+          : derivedProcurementLabel;
+
+      const discloseEstimatedCost = Boolean(
+        rawBid?.discloseEstimatedCost ??
+        reqObj?.discloseEstimatedCost ??
+        reqObj?.payload?.discloseEstimatedCost ??
+        reqObj?.payload?.basics?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.discloseEstimatedCost ??
+        rawBid?.technicalPacket?.basics?.discloseEstimatedCost ??
+        false
+      );
+      const shouldShowEstimatedCost = Boolean(isBuyerOrAdmin || discloseEstimatedCost || isAwarded);
+
+      const humanPayTerms = (() => {
+        const p = String(payTerms || '').trim();
+        const pUpper = p.toUpperCase();
+        if (!p || p === '—' || p === 'N/A') return 'Payment on Consignment Delivery & Acceptance';
+        if (pUpper.includes('ON_DELIVERY') || pUpper.includes('DELIVERY')) return 'Payment on Consignment Delivery & GRN Acceptance';
+        if (pUpper.includes('ADVANCE')) return '100% Advance Payment';
+        if (pUpper.includes('NET_30') || pUpper.includes('NET 30')) return '30 Days Net from GRN Approval';
+        return p;
+      })();
+
+      const humanDelTerms = (() => {
+        const d = String(delTerms || '').trim();
+        const dUpper = d.toUpperCase();
+        if (!d || d === '—' || d === 'N/A') return 'Door delivery to site / consignee destination';
+        if (dUpper.includes('DOOR_DELIVERY') || dUpper.includes('DOOR DELIVERY')) return 'Door delivery to site / consignee destination';
+        return d;
+      })();
+
+      const humanEvalMethod = (() => {
+        const e = String(evalMethod || '').trim();
+        const eUpper = e.toUpperCase();
+        if (eUpper.includes('L1') && !eUpper.includes('ITEM')) return 'L1 Total Value (Lowest Responsive Bidder)';
+        if (eUpper.includes('QCBS')) return 'Quality & Cost-Based Selection (QCBS)';
+        if (eUpper.includes('ITEM')) return 'Item-wise L1 Evaluation';
+        return e || 'L1 Total Value';
+      })();
+
+      const tableHeaders = ['#', 'Item & Technical Specifications', 'Qty', 'Unit', 'Est. Price', 'GST'];
+      const tableData = items.map((it, i) => {
+        const descLines: string[] = [it.name];
+        if (it.brand) {
+          descLines.push(`Brand: ${it.brand} (${it.brandPolicy === 'Yes' || it.brandPolicy === 'Flexible' ? 'Equivalent OK' : 'Strict'})`);
+        }
+        if (it.hsn) {
+          descLines.push(`HSN/SAC: ${it.hsn}`);
+        }
+        if (it.desc && it.desc !== it.name && !it.desc.startsWith('Item #')) {
+          descLines.push(`Scope: ${it.desc.slice(0, 100)}`);
+        }
+        return [
+          String(i + 1),
+          descLines.join('\n'),
+          String(it.qty),
+          it.unit,
+          shouldShowEstimatedCost
+            ? (it.price ? moneyPdf(it.price) : 'N/A')
+            : 'Confidential (Competitive Sourcing)',
+          `${it.gst}%`,
+        ];
+      });
+
+      const termsList = [
+        `Payment Terms: ${humanPayTerms}`,
+        `Delivery Terms: ${humanDelTerms}`,
+        `Evaluation Criteria: ${humanEvalMethod}`,
+        `Warranty: ${warranty && warranty !== '—' ? warranty : '12 Months standard OEM warranty'}`,
+        `Consignee Destination: ${location && location !== '—' && location !== 'N/A' ? location : (buyerAddress || 'Site Delivery as per Purchase Order')}`,
+      ];
+
+      const notesList: string[] = [];
+      if (hasReverseAuction) {
+        notesList.push('SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.');
+        notesList.push('Stage 1 (Technical & Baseline Qualification): Bidders submit technical specification compliance and initial baseline commercial quotes. Only approved vendors advance to Stage 2.');
+        notesList.push('Stage 2 (Live Reverse Auction): Technically qualified bidders participate in dynamic downward decrement bidding.');
+      }
+      if (emdInfo?.isEmdRequired && emdInfo.emdAmount > 0) {
+        notesList.push(`EARNEST MONEY DEPOSIT (EMD): INR ${emdInfo.emdAmount.toLocaleString('en-IN')} mandatory before quotation cutoff.`);
+        notesList.push('EMD EXEMPTION: Eligible MSME/MSE units with valid Udyam Registration are exempted as per Public Procurement Policy.');
+      } else {
+        notesList.push('EARNEST MONEY DEPOSIT (EMD): Nil / Fully Exempted for registered vendors.');
+      }
+      notesList.push(`BID SUBMISSION CUTOFF: ${fmtDate(deadline, true) || 'Refer to portal live timer'} (Strict automated closing).`);
+      if (techOpen) {
+        notesList.push(`TECHNICAL PACKET OPENING: ${fmtDate(techOpen, true)}`);
+      }
+      if (bidValDate) {
+        notesList.push(`BID VALIDITY: ${fmtDate(bidValDate)}`);
+      }
+
       const engine = new PdfEngine();
       const doc = await engine.generate({
-        documentTitle: 'REQUEST FOR QUOTATION (RFQ)',
+        documentTitle: `${derivedProcurementLabel.toUpperCase()} SPECIFICATION NOTICE`,
         documentNumber: ref,
         dateStr: fmtDate(published),
         status,
-        issuerName: buyerOrg !== '—' ? buyerOrg : 'Procuring Entity',
+        issuerName: buyerOrg !== '—' ? buyerOrg : 'Enterprise Procuring Entity',
+        issuerSubtitle: `${sourcingLabel} Notice`,
         parties: [
-          { title: 'BUYER', name: buyerOrg !== '—' ? buyerOrg : 'N/A', address: location || undefined, email: email || undefined, phone: mobile || undefined, details: [`Contact: ${contact || 'N/A'}`, `Category: ${category || 'N/A'}`] },
-          { title: 'RFQ',   name: title || 'N/A',    details: [`Method: ${method || 'N/A'}`, `Deadline: ${fmtDate(deadline, true) || 'N/A'}`] },
+          {
+            title: 'PROCURING ENTITY (BUYER)',
+            name: buyerOrg !== '—' ? buyerOrg : 'Enterprise Procuring Entity',
+            address: buyerAddress || (location !== '—' ? location : undefined),
+            email: email || undefined,
+            phone: mobile || undefined,
+            gstin: buyerGstin || undefined,
+            pan: buyerPan || undefined,
+            details: [
+              `Contact Officer: ${contact && contact !== '—' ? contact : 'Procurement Officer'}`,
+              `Department: ${department && department !== '—' ? department : 'Procurement & Commercial Division'}`,
+              `Category: ${category && category !== '—' ? category : 'General'}`,
+            ],
+          },
+          {
+            title: 'TENDER SPECIFICATION & ELIGIBILITY',
+            name: title || 'Procurement Notice',
+            details: [
+              `Procurement Ref: ${ref}`,
+              `Sourcing Method: ${sourcingLabel}`,
+              `Category: ${category && category !== '—' ? category : 'General Equipment'}`,
+              `Submission Cutoff: ${fmtDate(deadline, true) || 'Refer to portal schedule'}`,
+              `Bidding Currency: INR (Indian Rupee)`,
+              `Eligible Bidders: Verified & Registered MSME Suppliers`,
+            ],
+          },
         ],
-        infoGrid: { Delivery: location || 'N/A', 'Payment Terms': payTerms || 'N/A', 'Delivery SLA': delTerms || 'N/A', 'Evaluation': evalMethod || 'N/A' },
-        tableHeaders: ['#', 'Item', 'Qty', 'Unit', 'Est. Price', 'GST'],
-        tableData: items.map((it, i) => [String(i + 1), it.name, String(it.qty), it.unit, it.price ? moneyPdf(it.price) : 'N/A', `${it.gst}%`]),
-        financials: { grandTotal: Number(value || 0) },
-        terms: [`Payment: ${payTerms || 'Standard'}`, `Delivery: ${delTerms || 'Standard'}`, `Evaluation: ${evalMethod || 'Standard'}`, `Warranty: ${warranty || 'Standard'}`],
-        footerNote: 'MSME Enterprise Procurement Portal',
+        infoGrid: {
+          'Sourcing Method': sourcingLabel,
+          'Delivery SLA': humanDelTerms,
+          'Payment Terms': humanPayTerms,
+          'Evaluation Criteria': humanEvalMethod,
+        },
+        tableHeaders,
+        tableData,
+        financials: shouldShowEstimatedCost && value ? { grandTotal: Number(value || 0) } : undefined,
+        terms: termsList,
+        notes: notesList,
+        signatoryMode: 'single',
+        singleSignatoryTitle: buyerOrg !== '—' ? buyerOrg : 'Procuring Entity',
+        singleSignatoryName: contact && contact !== '—' ? `${contact} (Authorized Procurement Officer)` : 'Authorized Sourcing Authority',
+        footerNote: 'MSME Enterprise Unified Sourcing & Procurement Portal',
       });
       doc.save(`${ref.replace(/[^a-zA-Z0-9-]/g, '_')}-RFQ.pdf`);
-      toast.success('PDF downloaded.');
-    } catch { toast.error('Failed to generate PDF.'); }
+      toast.success('Procurement document downloaded successfully.', { id: toastId });
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      toast.error('Failed to generate PDF document.', { id: toastId });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
   };
 
   const handleSubmitQuotation = () => {
