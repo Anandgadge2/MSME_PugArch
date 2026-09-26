@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Check, RefreshCw, Stamp, FileSignature, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { toast } from 'sonner';
 import { putApi } from '../../shared/apiClient';
+import { api, resolveMediaUrl } from '../../../lib/api';
 
 interface SignatureStampUploadModalProps {
   isOpen: boolean;
@@ -35,6 +36,75 @@ export function SignatureStampUploadModal({
   const stampInputRef = useRef<HTMLInputElement>(null);
   const sigInputRef = useRef<HTMLInputElement>(null);
 
+  // Synchronize state whenever modal opens or initial props update
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let resolvedLogo = initialLogo ?? null;
+    let resolvedStamp = initialStamp ?? null;
+    let resolvedSig = initialSignature ?? null;
+
+    if (!resolvedLogo && typeof window !== 'undefined') {
+      resolvedLogo = localStorage.getItem('msme_invoice_logo') || null;
+    }
+    if (!resolvedStamp && typeof window !== 'undefined') {
+      resolvedStamp = localStorage.getItem('msme_invoice_stamp') || null;
+    }
+    if (!resolvedSig && typeof window !== 'undefined') {
+      resolvedSig = localStorage.getItem('msme_invoice_signature') || null;
+    }
+
+    setLogoUrl(resolvedLogo);
+    setStampUrl(resolvedStamp);
+    setSignatureUrl(resolvedSig);
+
+    let isSubscribed = true;
+    const syncLatestBranding = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+        if (!token) return;
+
+        // Proactively fetch user invoice branding
+        const invRes = await api.fetch('/api/user/invoice-branding', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (invRes.ok) {
+          const invData = await invRes.json();
+          if (!isSubscribed) return;
+          if (invData?.logoUrl) {
+            setLogoUrl(prev => prev || invData.logoUrl);
+          }
+          if (invData?.stampUrl) {
+            setStampUrl(prev => prev || invData.stampUrl);
+          }
+          if (invData?.signatureUrl) {
+            setSignatureUrl(prev => prev || invData.signatureUrl);
+          }
+        }
+
+        // Proactively fetch seller branding if logo is still not resolved
+        const sellerBrandingRes = await api.fetch('/api/seller/settings/branding', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (sellerBrandingRes.ok) {
+          const sellerData = await sellerBrandingRes.json();
+          const orgLogo = sellerData?.data?.logoUrl || sellerData?.logoUrl;
+          if (orgLogo && isSubscribed) {
+            setLogoUrl(prev => prev || orgLogo);
+          }
+        }
+      } catch {
+        // Silently continue
+      }
+    };
+
+    void syncLatestBranding();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [isOpen, initialLogo, initialStamp, initialSignature]);
+
   if (!isOpen) return null;
 
   const handleFileUpload = async (
@@ -55,9 +125,10 @@ export function SignatureStampUploadModal({
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('entityType', type === 'logo' ? 'organization_logo' : type);
 
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      const res = await fetch('/api/upload', {
+      const res = await api.fetch('/api/upload', {
         method: 'POST',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -65,31 +136,29 @@ export function SignatureStampUploadModal({
         body: formData
       });
 
-      if (!res.ok) {
-        // Fallback: Read as base64 Data URL if upload endpoint is unavailable
-        const reader = new FileReader();
-        reader.onload = (readerEvent) => {
-          const dataUrl = readerEvent.target?.result as string;
-          if (type === 'logo') setLogoUrl(dataUrl);
-          if (type === 'stamp') setStampUrl(dataUrl);
-          if (type === 'signature') setSignatureUrl(dataUrl);
-          toast.success(`${type.toUpperCase()} loaded successfully`);
-        };
-        reader.readAsDataURL(file);
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        const uploadedUrl = data.data?.url || data.url || (data.fileId ? `/api/files/${data.fileId}/view` : (data.file?.id ? `/api/files/${data.file.id}/view` : null));
+
+        if (uploadedUrl) {
+          if (type === 'logo') setLogoUrl(uploadedUrl);
+          if (type === 'stamp') setStampUrl(uploadedUrl);
+          if (type === 'signature') setSignatureUrl(uploadedUrl);
+          toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
+          return;
+        }
       }
 
-      const data = await res.json();
-      const uploadedUrl = data.url || (data.fileId ? `/api/files/${data.fileId}/view` : null);
-
-      if (uploadedUrl) {
-        if (type === 'logo') setLogoUrl(uploadedUrl);
-        if (type === 'stamp') setStampUrl(uploadedUrl);
-        if (type === 'signature') setSignatureUrl(uploadedUrl);
-        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully`);
-      } else {
-        throw new Error('Upload did not return a valid URL');
-      }
+      // Fallback: Read as base64 Data URL if upload endpoint failed
+      const reader = new FileReader();
+      reader.onload = (readerEvent) => {
+        const dataUrl = readerEvent.target?.result as string;
+        if (type === 'logo') setLogoUrl(dataUrl);
+        if (type === 'stamp') setStampUrl(dataUrl);
+        if (type === 'signature') setSignatureUrl(dataUrl);
+        toast.success(`${type.toUpperCase()} loaded successfully`);
+      };
+      reader.readAsDataURL(file);
     } catch (err: any) {
       // Graceful fallback to DataURL
       const reader = new FileReader();
@@ -98,11 +167,12 @@ export function SignatureStampUploadModal({
         if (type === 'logo') setLogoUrl(dataUrl);
         if (type === 'stamp') setStampUrl(dataUrl);
         if (type === 'signature') setSignatureUrl(dataUrl);
-        toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} loaded successfully`);
+        toast.success(`${type.toUpperCase()} loaded successfully`);
       };
       reader.readAsDataURL(file);
     } finally {
       setLoader(false);
+      e.target.value = '';
     }
   };
 
@@ -128,6 +198,10 @@ export function SignatureStampUploadModal({
           stampUrl: stampUrl || null,
           signatureUrl: signatureUrl || null
         });
+        // Also sync seller branding if applicable
+        await putApi('/api/seller/settings/branding', {
+          logoUrl: logoUrl || null
+        }).catch(() => null);
       } catch {
         // Local persistence still active
       }
@@ -191,7 +265,14 @@ export function SignatureStampUploadModal({
                 </div>
                 <div className="h-24 w-full bg-white rounded-xl border border-slate-200 p-2 flex items-center justify-center shadow-xs overflow-hidden">
                   {logoUrl ? (
-                    <img src={logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+                    <img
+                      src={resolveMediaUrl(logoUrl) || logoUrl}
+                      alt="Company Logo"
+                      className="max-h-full max-w-full object-contain"
+                      onError={() => {
+                        console.warn('Failed to load logo in modal:', logoUrl);
+                      }}
+                    />
                   ) : (
                     <span className="text-[10px] font-bold text-slate-400">No logo (None)</span>
                   )}
@@ -202,7 +283,7 @@ export function SignatureStampUploadModal({
                   type="file"
                   ref={logoInputRef}
                   onChange={(e) => handleFileUpload(e, 'logo')}
-                  accept="image/png, image/jpeg, image/svg+xml"
+                  accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp"
                   className="hidden"
                 />
                 <Button
@@ -237,7 +318,11 @@ export function SignatureStampUploadModal({
                 </div>
                 <div className="h-24 w-full bg-white rounded-xl border border-slate-200 p-2 flex items-center justify-center shadow-xs overflow-hidden">
                   {stampUrl ? (
-                    <img src={stampUrl} alt="Stamp" className="max-h-full max-w-full object-contain" />
+                    <img
+                      src={resolveMediaUrl(stampUrl) || stampUrl}
+                      alt="Round Stamp"
+                      className="max-h-full max-w-full object-contain"
+                    />
                   ) : (
                     <span className="text-[10px] font-bold text-slate-400">No stamp (None)</span>
                   )}
@@ -248,7 +333,7 @@ export function SignatureStampUploadModal({
                   type="file"
                   ref={stampInputRef}
                   onChange={(e) => handleFileUpload(e, 'stamp')}
-                  accept="image/png, image/jpeg, image/svg+xml"
+                  accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp"
                   className="hidden"
                 />
                 <Button
@@ -283,7 +368,11 @@ export function SignatureStampUploadModal({
                 </div>
                 <div className="h-24 w-full bg-white rounded-xl border border-slate-200 p-2 flex items-center justify-center shadow-xs overflow-hidden">
                   {signatureUrl ? (
-                    <img src={signatureUrl} alt="Signature" className="max-h-full max-w-full object-contain" />
+                    <img
+                      src={resolveMediaUrl(signatureUrl) || signatureUrl}
+                      alt="Authorized Signature"
+                      className="max-h-full max-w-full object-contain"
+                    />
                   ) : (
                     <span className="text-[10px] font-bold text-slate-400">No signature (None)</span>
                   )}
@@ -294,7 +383,7 @@ export function SignatureStampUploadModal({
                   type="file"
                   ref={sigInputRef}
                   onChange={(e) => handleFileUpload(e, 'signature')}
-                  accept="image/png, image/jpeg, image/svg+xml"
+                  accept="image/png, image/jpeg, image/jpg, image/svg+xml, image/webp"
                   className="hidden"
                 />
                 <Button
@@ -328,20 +417,35 @@ export function SignatureStampUploadModal({
                 Live Signatory Preview
               </span>
               <span className="text-[9px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800">
-                {stampUrl || signatureUrl ? 'Active Stamp & Signature' : 'Clean Signatory Box (None)'}
+                {stampUrl || signatureUrl || logoUrl ? 'Active Stamp & Branding' : 'Clean Signatory Box (None)'}
               </span>
             </div>
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white rounded-xl p-4 text-slate-900 border border-slate-300">
-              <div className="text-xs space-y-1">
-                <p className="font-black text-slate-800 text-[11px]">Bank Details: Verified</p>
-                <p className="text-[10px] text-slate-500 font-mono">STATE BANK OF INDIA • SBIN0001234</p>
+              <div className="flex items-center gap-3">
+                {logoUrl && (
+                  <div className="h-12 w-12 rounded-lg border border-slate-200 bg-white p-1 flex items-center justify-center shrink-0 shadow-xs overflow-hidden">
+                    <img
+                      src={resolveMediaUrl(logoUrl) || logoUrl}
+                      alt="Company Logo"
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  </div>
+                )}
+                <div className="text-xs space-y-1">
+                  <p className="font-black text-slate-800 text-[11px]">Bank Details: Verified</p>
+                  <p className="text-[10px] text-slate-500 font-mono">STATE BANK OF INDIA • SBIN0001234</p>
+                </div>
               </div>
               <div className="relative flex items-center justify-center p-2 rounded-lg border border-slate-200 min-w-[140px] h-[75px] bg-slate-50">
                 {stampUrl && (
-                  <img src={stampUrl} alt="Stamp preview" className="h-16 w-16 object-contain" />
+                  <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Stamp preview" className="h-16 w-16 object-contain" />
                 )}
                 {signatureUrl && (
-                  <img src={signatureUrl} alt="Signature preview" className={stampUrl ? "absolute h-10 w-auto object-contain mix-blend-multiply" : "h-10 w-auto object-contain"} />
+                  <img
+                    src={resolveMediaUrl(signatureUrl) || signatureUrl}
+                    alt="Signature preview"
+                    className={stampUrl ? "absolute h-10 w-auto object-contain mix-blend-multiply" : "h-10 w-auto object-contain"}
+                  />
                 )}
                 {!stampUrl && !signatureUrl && (
                   <span className="text-[10px] font-bold text-slate-400 italic">No stamp / sign attached</span>

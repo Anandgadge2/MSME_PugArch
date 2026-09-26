@@ -271,6 +271,10 @@ function CatalogueRowActionMenu({
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    if ((rect.width === 0 && rect.height === 0) || buttonRef.current.offsetParent === null) {
+      setCoords(null);
+      return;
+    }
 
     // If trigger button is completely scrolled out of the viewport, close menu
     if (rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {

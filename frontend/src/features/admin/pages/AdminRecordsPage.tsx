@@ -1295,6 +1295,10 @@ function ActionMenu({
   const updatePosition = useCallback(() => {
     if (!triggerRef.current || !menuRef.current) return;
     const triggerRect = triggerRef.current.getBoundingClientRect();
+    if ((triggerRect.width === 0 && triggerRect.height === 0) || triggerRef.current.offsetParent === null) {
+      menuRef.current.style.visibility = 'hidden';
+      return;
+    }
     const menuRect = menuRef.current.getBoundingClientRect();
     
     const spaceBelow = window.innerHeight - triggerRect.bottom;

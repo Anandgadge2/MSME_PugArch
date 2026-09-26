@@ -3716,7 +3716,7 @@ export default function BuyerProfile() {
         onSaved={(branding) => {
           if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
           if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
-          if (branding.logoUrl !== undefined && branding.logoUrl) {
+          if (branding.logoUrl !== undefined) {
             setShowcaseProfile((prev: any) => ({ ...prev, logoUrl: branding.logoUrl }));
           }
         }}

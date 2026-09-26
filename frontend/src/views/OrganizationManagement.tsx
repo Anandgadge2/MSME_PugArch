@@ -1536,6 +1536,10 @@ function OrgActionsDropdown({
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    if ((rect.width === 0 && rect.height === 0) || buttonRef.current.offsetParent === null) {
+      setCoords(null);
+      return;
+    }
     const menuWidth = 192; // w-48
     const menuEstimatedHeight = 280;
     const spaceBelow = window.innerHeight - rect.bottom;

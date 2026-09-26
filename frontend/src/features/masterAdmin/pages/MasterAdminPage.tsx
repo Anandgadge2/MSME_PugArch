@@ -3172,6 +3172,10 @@ function ActionDropdownMenu({
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    if ((rect.width === 0 && rect.height === 0) || buttonRef.current.offsetParent === null) {
+      setCoords(null);
+      return;
+    }
     const menuEstimatedHeight = 260;
     const shouldOpenUp = rect.bottom + menuEstimatedHeight > window.innerHeight && rect.top > menuEstimatedHeight;
 

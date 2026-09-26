@@ -137,6 +137,10 @@ function ActionButtons({ delivery, onAction }: { delivery: DeliveryDto; onAction
     const updatePosition = useCallback(() => {
         if (!buttonRef.current) return;
         const rect = buttonRef.current.getBoundingClientRect();
+        if ((rect.width === 0 && rect.height === 0) || buttonRef.current.offsetParent === null) {
+            setCoords(null);
+            return;
+        }
         const menuWidth = 192; // 12rem / w-48
         const menuEstimatedHeight = 220;
         const spaceBelow = window.innerHeight - rect.bottom;

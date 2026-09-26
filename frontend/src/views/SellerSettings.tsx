@@ -45,7 +45,12 @@ export default function SellerSettings() {
   const isProprietorshipOrPartnership = ['PROPRIETORSHIP', 'PARTNERSHIP'].includes(String(resolvedOrgType).toUpperCase()) || String(resolvedOrgType).toLowerCase().includes('proprietor') || String(resolvedOrgType).toLowerCase().includes('partnership');
 
   // Logo & Branding states
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('msme_invoice_logo') || cachedProfile?.logoUrl || (user as any)?.organization?.profile?.logoUrl || null;
+    }
+    return cachedProfile?.logoUrl || (user as any)?.organization?.profile?.logoUrl || null;
+  });
   const [bannerUrl, setBannerUrl] = useState<string | null>(null);
   const [stampUrl, setStampUrl] = useState<string | null>(null);
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
@@ -113,7 +118,7 @@ export default function SellerSettings() {
           });
           if (res.ok) {
             const data = await res.json();
-            setLogoUrl(data.data?.logoUrl || null);
+            if (data.data?.logoUrl) setLogoUrl(data.data.logoUrl);
             setBannerUrl(data.data?.bannerUrl || null);
           }
 
@@ -125,11 +130,14 @@ export default function SellerSettings() {
             const invData = await invRes.json();
             if (invData.stampUrl) setStampUrl(invData.stampUrl);
             if (invData.signatureUrl) setSignatureUrl(invData.signatureUrl);
+            if (invData.logoUrl) setLogoUrl(prev => prev || invData.logoUrl);
           } else if (typeof window !== 'undefined') {
             const lsStamp = localStorage.getItem('msme_invoice_stamp');
             const lsSig = localStorage.getItem('msme_invoice_signature');
+            const lsLogo = localStorage.getItem('msme_invoice_logo');
             if (lsStamp) setStampUrl(lsStamp);
             if (lsSig) setSignatureUrl(lsSig);
+            if (lsLogo) setLogoUrl(prev => prev || lsLogo);
           }
         } catch (err) {
           console.error(err);
@@ -974,10 +982,10 @@ export default function SellerSettings() {
                         {stampUrl || signatureUrl ? (
                           <div className="relative h-full w-full flex items-center justify-center">
                             {stampUrl && (
-                              <img src={stampUrl} alt="Stamp" className="h-full w-auto object-contain opacity-90" />
+                              <img src={resolveMediaUrl(stampUrl) || stampUrl} alt="Stamp" className="h-full w-auto object-contain opacity-90" />
                             )}
                             {signatureUrl && (
-                              <img src={signatureUrl} alt="Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
+                              <img src={resolveMediaUrl(signatureUrl) || signatureUrl} alt="Signature" className="absolute inset-0 h-full w-full object-contain mix-blend-multiply" />
                             )}
                           </div>
                         ) : (
@@ -1200,7 +1208,7 @@ export default function SellerSettings() {
         onSaved={(branding) => {
           if (branding.stampUrl !== undefined) setStampUrl(branding.stampUrl);
           if (branding.signatureUrl !== undefined) setSignatureUrl(branding.signatureUrl);
-          if (branding.logoUrl !== undefined && branding.logoUrl) setLogoUrl(branding.logoUrl);
+          if (branding.logoUrl !== undefined) setLogoUrl(branding.logoUrl);
         }}
       />
 

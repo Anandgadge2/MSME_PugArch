@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { AlertTriangle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck } from 'lucide-react';
@@ -137,9 +137,10 @@ const SortHeader = ({ label, columnKey, className = '', sortBy, onToggleSort }: 
 };
 import { createPortal } from 'react-dom';
 
-const OrderActionsMenu = ({
+const OrderActionDropdown = ({
   order,
-  buttonId,
+  isOpen,
+  onToggle,
   onClose,
   isSeller,
   isBuyer,
@@ -163,59 +164,155 @@ const OrderActionsMenu = ({
   onViewInvoice
 }: any) => {
   const router = useRouter();
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
 
-  const calculateStyle = (): React.CSSProperties | null => {
-    if (typeof document === 'undefined') return null;
-    const btn = document.getElementById(buttonId);
-    if (!btn) return null;
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    if ((rect.width === 0 && rect.height === 0) || buttonRef.current.offsetParent === null) {
+      setCoords(null);
+      return;
+    }
 
-    const btnRect = btn.getBoundingClientRect();
     const menuWidth = 176; // w-44 = 11rem = 176px
-    const spaceBelow = window.innerHeight - btnRect.bottom;
-    const shouldOpenUp = spaceBelow < 220;
+    const menuEstimatedHeight = 260;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUp = spaceBelow < menuEstimatedHeight + 8 && spaceAbove > spaceBelow;
 
-    let left = btnRect.right - menuWidth;
+    let left = rect.right - menuWidth;
     if (left < 6) left = 6;
     if (left + menuWidth > window.innerWidth - 6) left = window.innerWidth - menuWidth - 6;
 
-    return {
-      position: 'fixed' as const,
-      top: shouldOpenUp ? undefined : `${btnRect.bottom + 6}px`,
-      bottom: shouldOpenUp ? `${window.innerHeight - btnRect.top + 6}px` : undefined,
-      left: `${left}px`,
-      zIndex: 99999,
-      transformOrigin: shouldOpenUp ? 'bottom right' : 'top right'
-    };
-  };
-
-  const [style, setStyle] = useState<React.CSSProperties | null>(calculateStyle);
+    setCoords({
+      top: shouldOpenUp ? undefined : Math.round(rect.bottom + 4),
+      bottom: shouldOpenUp ? Math.round(window.innerHeight - rect.top + 4) : undefined,
+      left: Math.round(left),
+    });
+  }, []);
 
   useEffect(() => {
-    const updatePosition = () => {
-      const newStyle = calculateStyle();
-      if (newStyle) setStyle(newStyle);
+    if (!isOpen) return;
+    updatePosition();
+
+    const handleScroll = (e: Event) => {
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) return;
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          onClose();
+          return;
+        }
+      }
+      updatePosition();
     };
 
-    updatePosition();
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        menuRef.current && !menuRef.current.contains(target) &&
+        buttonRef.current && !buttonRef.current.contains(target)
+      ) {
+        onClose();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+        buttonRef.current?.focus();
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      window.removeEventListener('scroll', handleScroll, { capture: true });
       window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [buttonId]);
+  }, [isOpen, updatePosition, onClose]);
 
-  if (typeof document === 'undefined' || !style) return null;
+  const handleMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!menuRef.current) return;
+    const items = Array.from(
+      menuRef.current.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not([disabled])')
+    );
+    if (items.length === 0) return;
 
-  return createPortal(
-    <div 
-      ref={menuRef}
-      style={style} 
-      onClick={e => e.stopPropagation()} 
-      className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
-    >
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = (currentIndex + 1) % items.length;
+      items[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = (currentIndex - 1 + items.length) % items.length;
+      items[prevIndex]?.focus();
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      items[0]?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (e.key === 'Tab') {
+      onClose();
+    }
+  };
+
+  return (
+    <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={`Actions for purchase order ${order.poNumber || order.id}`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isOpen) {
+            onClose();
+          } else {
+            updatePosition();
+            onToggle();
+          }
+        }}
+        className={cn(
+          "h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer",
+          isOpen && "bg-slate-100 border-slate-300 text-slate-900"
+        )}
+        title="Actions"
+      >
+        <MoreVertical className="h-4 w-4" aria-hidden="true" />
+      </button>
+
+      {isOpen && coords && typeof document !== 'undefined' && createPortal(
+        <div 
+          ref={menuRef}
+          style={{
+            position: 'fixed',
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            left: `${coords.left}px`,
+            zIndex: 99999,
+            transformOrigin: coords.bottom !== undefined ? 'bottom right' : 'top right'
+          }}
+          onClick={e => { e.preventDefault(); e.stopPropagation(); }}
+          onKeyDown={handleMenuKeyDown}
+          className="w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 flex flex-col gap-0.5 text-left animate-in fade-in zoom-in-95 duration-100"
+          role="menu"
+          aria-label={`Actions for purchase order ${order.poNumber || order.id}`}
+        >
       <button
         type="button"
         onClick={() => {
@@ -541,8 +638,10 @@ const OrderActionsMenu = ({
           <span>Cancel</span>
         </button>
       )}
-    </div>,
-    document.body
+        </div>,
+        document.body
+      )}
+    </div>
   );
 };
 
@@ -1004,52 +1103,36 @@ export default function PurchaseOrders() {
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
 
     return (
-      <div className="relative inline-flex items-center justify-end" onClick={e => e.stopPropagation()}>
-        <button
-          type="button"
-          id={`kebab-btn-${order.id}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpenKebabId(openKebabId === order.id ? null : order.id);
-          }}
-          className="h-8 w-8 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors shadow-2xs focus:outline-none"
-          title="Actions"
-        >
-          <MoreVertical className="h-4 w-4" />
-        </button>
-
-        {openKebabId === order.id && (
-          <OrderActionsMenu
-            order={order}
-            buttonId={`kebab-btn-${order.id}`}
-            onClose={() => setOpenKebabId(null)}
-            isSeller={isSeller}
-            isBuyer={isBuyer}
-            isIssued={isIssued}
-            isAccepted={isAccepted}
-            isDelivered={isDelivered}
-            isCancelled={isCancelled}
-            setViewingOrder={setViewingOrder}
-            handleAcceptOrder={handleAcceptOrder}
-            handleRejectOrder={handleRejectOrder}
-            handleOpenDelivery={handleOpenDelivery}
-            exportInvoicePdf={exportInvoicePdf}
-            setConfirming={setConfirming}
-            onUploadPaymentSlip={setUploadProofOrder}
-            onViewPaymentSlip={setViewProofOrder}
-            onViewReceipt={setReceiptModalOrder}
-            onRecordPayment={setRecordPaymentOrder}
-            onConfirmSettlement={setConfirmSettlementOrder}
-            onOpenGrnModal={(poId: number) => setGrnModalPoId(poId)}
-            onViewGrn={handleViewGrn}
-            onViewInvoice={(invId: number, invData: any) => {
-              setTaxInvoiceModalId(invId);
-              setTaxInvoiceModalData(invData);
-              setTaxInvoiceModalOpen(true);
-            }}
-          />
-        )}
-      </div>
+      <OrderActionDropdown
+        order={order}
+        isOpen={openKebabId === order.id}
+        onToggle={() => setOpenKebabId(openKebabId === order.id ? null : order.id)}
+        onClose={() => setOpenKebabId(null)}
+        isSeller={isSeller}
+        isBuyer={isBuyer}
+        isIssued={isIssued}
+        isAccepted={isAccepted}
+        isDelivered={isDelivered}
+        isCancelled={isCancelled}
+        setViewingOrder={setViewingOrder}
+        handleAcceptOrder={handleAcceptOrder}
+        handleRejectOrder={handleRejectOrder}
+        handleOpenDelivery={handleOpenDelivery}
+        exportInvoicePdf={exportInvoicePdf}
+        setConfirming={setConfirming}
+        onUploadPaymentSlip={setUploadProofOrder}
+        onViewPaymentSlip={setViewProofOrder}
+        onViewReceipt={setReceiptModalOrder}
+        onRecordPayment={setRecordPaymentOrder}
+        onConfirmSettlement={setConfirmSettlementOrder}
+        onOpenGrnModal={(poId: number) => setGrnModalPoId(poId)}
+        onViewGrn={handleViewGrn}
+        onViewInvoice={(invId: number, invData: any) => {
+          setTaxInvoiceModalId(invId);
+          setTaxInvoiceModalData(invData);
+          setTaxInvoiceModalOpen(true);
+        }}
+      />
     );
   };
 

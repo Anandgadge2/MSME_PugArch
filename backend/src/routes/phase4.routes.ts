@@ -12059,23 +12059,43 @@ router.put('/seller/settings/branding', authenticate, authorize('seller', 'shg')
 }));
 
 router.get('/user/invoice-branding', authenticate, asyncRoute(async (req, res) => {
+  const uid = userId(req);
   const user = await db.user.findUnique({
-    where: { id: userId(req) },
+    where: { id: uid },
     select: {
       id: true,
       registrationDetails: true,
+      organizationId: true,
       organization: {
         include: {
           profile: true
         }
-      }
+      },
+      sellerProfile: true,
+      buyerProfile: true
     }
   });
+
   const regDetails = (user?.registrationDetails as any) || {};
-  const orgLogo = user?.organization?.profile?.logoUrl;
-  const logoUrl = regDetails.logoUrl || orgLogo || null;
-  const stampUrl = regDetails.stampUrl || null;
-  const signatureUrl = regDetails.signatureUrl || null;
+  let orgLogo = user?.organization?.profile?.logoUrl;
+
+  if (!orgLogo) {
+    const orgId = user?.organizationId || user?.sellerProfile?.organizationId || user?.buyerProfile?.organizationId;
+    if (orgId) {
+      const orgProfile = await db.organizationProfile.findUnique({
+        where: { organizationId: orgId }
+      });
+      if (orgProfile?.logoUrl) {
+        orgLogo = orgProfile.logoUrl;
+      }
+    }
+  }
+
+  const rawLogoUrl = regDetails.logoUrl || orgLogo || null;
+  const logoUrl = await resolveBrandingAssetUrl(rawLogoUrl);
+  const stampUrl = await resolveBrandingAssetUrl(regDetails.stampUrl || null);
+  const signatureUrl = await resolveBrandingAssetUrl(regDetails.signatureUrl || null);
+
   ok(res, {
     logoUrl,
     stampUrl,
@@ -12090,18 +12110,23 @@ router.put('/user/invoice-branding', authenticate, asyncRoute(async (req, res) =
     signatureUrl: z.string().trim().optional().nullable()
   }), req.body);
 
+  const uid = userId(req);
   const user = await db.user.findUnique({
-    where: { id: userId(req) },
-    select: { id: true, registrationDetails: true, organizationId: true }
+    where: { id: uid },
+    select: { id: true, registrationDetails: true, organizationId: true, sellerProfile: true, buyerProfile: true }
   });
   if (!user) throw new ApiError(404, 'User not found', 'USER_NOT_FOUND');
+
+  const resolvedLogoUrl = body.logoUrl !== undefined ? await resolveBrandingAssetUrl(body.logoUrl) : undefined;
+  const resolvedStampUrl = body.stampUrl !== undefined ? await resolveBrandingAssetUrl(body.stampUrl) : undefined;
+  const resolvedSignatureUrl = body.signatureUrl !== undefined ? await resolveBrandingAssetUrl(body.signatureUrl) : undefined;
 
   const currentReg = (user.registrationDetails as Record<string, any>) || {};
   const updatedReg = {
     ...currentReg,
-    ...(body.logoUrl !== undefined && { logoUrl: body.logoUrl }),
-    ...(body.stampUrl !== undefined && { stampUrl: body.stampUrl }),
-    ...(body.signatureUrl !== undefined && { signatureUrl: body.signatureUrl })
+    ...(resolvedLogoUrl !== undefined && { logoUrl: resolvedLogoUrl }),
+    ...(resolvedStampUrl !== undefined && { stampUrl: resolvedStampUrl }),
+    ...(resolvedSignatureUrl !== undefined && { signatureUrl: resolvedSignatureUrl })
   };
 
   await db.user.update({
@@ -12109,12 +12134,13 @@ router.put('/user/invoice-branding', authenticate, asyncRoute(async (req, res) =
     data: { registrationDetails: updatedReg }
   });
 
-  if (body.logoUrl !== undefined && user.organizationId) {
+  const orgId = user.organizationId || user.sellerProfile?.organizationId || user.buyerProfile?.organizationId;
+  if (resolvedLogoUrl !== undefined && orgId) {
     try {
       await db.organizationProfile.upsert({
-        where: { organizationId: user.organizationId },
-        update: { logoUrl: body.logoUrl },
-        create: { organizationId: user.organizationId, logoUrl: body.logoUrl }
+        where: { organizationId: orgId },
+        update: { logoUrl: resolvedLogoUrl },
+        create: { organizationId: orgId, logoUrl: resolvedLogoUrl }
       });
     } catch {
       // ignore
