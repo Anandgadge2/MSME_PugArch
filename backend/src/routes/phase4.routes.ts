@@ -1499,8 +1499,11 @@ const rateContractConfigSchema = z.object({
   approvalWorkflow: z.string().trim().max(200).optional().default('Finance + Procurement'),
   contractDocument: z.object({
     fileAssetId: z.coerce.number().int().positive().optional().nullable(),
-    fileName: z.string().trim().max(2000).optional().nullable()
-  }).optional().nullable()
+    fileName: z.string().trim().max(2000).optional().nullable(),
+    fileSize: z.coerce.number().optional().nullable(),
+    fileUrl: z.string().trim().optional().nullable(),
+    uploadedAt: z.string().trim().optional().nullable()
+  }).passthrough().optional().nullable()
 }).passthrough();
 
 const normalizeRateContractConfigForDraft = (draft: any) => {
@@ -3094,6 +3097,16 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   const publicActor = await getPublicFileActor(id);
   if (!publicActor) throw new ApiError(404, 'Public document not found', 'FILE_NOT_FOUND');
 
+  const signed = await getSignedUrl(id, publicActor, {
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+
+  if (signed.signedUrl && (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://'))) {
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.redirect(302, signed.signedUrl);
+  }
+
   const file = await getFileContent(id, publicActor, {
     ipAddress: req.ip,
     userAgent: req.headers['user-agent']
@@ -3277,6 +3290,16 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
     actor = (await getPublicFileActor(id)) || undefined;
   }
   if (!actor) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+
+  const signed = await getSignedUrl(id, actor, {
+    ipAddress: req.ip,
+    userAgent: req.headers['user-agent']
+  });
+
+  if (signed.signedUrl && (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://'))) {
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    return res.redirect(302, signed.signedUrl);
+  }
 
   const file = await getFileContent(id, actor, {
     ipAddress: req.ip,

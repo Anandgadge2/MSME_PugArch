@@ -84,8 +84,36 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     authHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  // 2. If we have a file ID, fetch directly from viewEndpoint for authenticated blob streaming
+  // 2. If we have a file ID, fetch direct signed URL first for fast cloud CDN streaming
   if (fileId) {
+    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
+    try {
+      const res = await api.fetch(signedUrlEndpoint, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
+
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        const data = unwrapApiData<any>(body);
+        if (data?.signedUrl) {
+          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
+          if (previewUrl && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
+            return {
+              label,
+              url: previewUrl,
+              mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+            };
+          }
+        }
+      }
+    } catch {
+      // Fallback to viewEndpoint below
+    }
+
+    // Fallback: try viewEndpoint for local files or direct blob streaming
     const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
     try {
       const res = await api.fetch(viewEndpoint, {
@@ -103,42 +131,6 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           url: blobUrl,
           mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
         };
-      }
-
-      if (res.status === 404) {
-        const errJson = await res.json().catch(() => null);
-        if (errJson?.code === 'FILE_NOT_FOUND_ON_DISK' || errJson?.message?.includes('Stored file content not found')) {
-          throw new Error('Document file is not present on storage. Please request the supplier to re-upload it.');
-        }
-      }
-    } catch (err: any) {
-      if (err?.message?.includes('not present on storage')) {
-        throw err;
-      }
-      // Fallback below for other network issues
-    }
-
-    // Try signed URL endpoint if view endpoint failed
-    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
-    try {
-      const res = await api.fetch(signedUrlEndpoint, {
-        method: 'GET',
-        headers: authHeaders,
-        skipCache: true
-      });
-
-      if (res.ok) {
-        const body = await res.json().catch(() => null);
-        const data = unwrapApiData<any>(body);
-        if (data?.signedUrl) {
-          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
-          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
-          return {
-            label,
-            url: previewUrl,
-            mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
-          };
-        }
       }
     } catch {
       // Fallback below
