@@ -191,13 +191,14 @@ interface DeliveryDetailPageProps {
 
 export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPageProps) {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
   const detailQuery = useDeliveryDetail(deliveryId);
 
   const delivery = detailQuery.data;
 
   const accessRole = useMemo(() => {
     if (!user || !delivery) return null;
-    if (user.role === 'admin') return 'admin';
+    if (user.role === 'admin' || user.role === 'master_admin') return 'admin';
     if (delivery.purchaseOrder?.sellerId === Number(user.id)) return 'seller';
     if (delivery.purchaseOrder?.buyerId === Number(user.id)) return 'buyer';
     const participant = (delivery.participants || []).find(p => p.userId === Number(user.id) && p.isActive);
@@ -396,6 +397,11 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                   <span>View PO</span>
                 </button>
                 <SlaBadge slaStatus={delivery.slaStatus} />
+                {isAdmin && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-300 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-700 shadow-2xs">
+                    <Eye className="h-2.5 w-2.5 text-slate-500" /> Admin View-Only Mode
+                  </span>
+                )}
               </div>
 
               {/* Order Title */}
@@ -450,8 +456,8 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
               View Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}
             </Button>
 
-            {/* Approve Invoice Button for Buyer */}
-            {pendingSubmittedInvoice && (accessRole === 'buyer' || user?.role === 'buyer' || user?.role === 'admin') && (
+            {/* Approve Invoice Button for Buyer (Admin is strictly View-Only) */}
+            {pendingSubmittedInvoice && !isAdmin && (accessRole === 'buyer' || user?.role === 'buyer') && (
               <Button
                 type="button"
                 disabled={approvingInvoiceId === pendingSubmittedInvoice.id}
@@ -481,7 +487,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             </Button>
 
             {/* Prominent Mark Packed action if awaiting packing */}
-            {(accessRole === 'seller' || accessRole === 'admin') &&
+            {!isAdmin && accessRole === 'seller' &&
               (delivery.status === 'SELLER_ACCEPTED' || (delivery.status as string) === 'CREATED') && (
                 <Button
                   type="button"
@@ -493,7 +499,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             )}
 
             {/* Manage Fulfillment button */}
-            {(accessRole === 'seller' || accessRole === 'admin' || accessRole === 'logistics') && (
+            {!isAdmin && (accessRole === 'seller' || accessRole === 'logistics') && (
               <Button
                 type="button"
                 onClick={() => setIsFulfillmentModalOpen(true)}
@@ -692,6 +698,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
             docs={docs}
             deliveryId={delivery.id}
             accessRole={accessRole}
+            isAdmin={isAdmin}
             poNumber={poNumber}
             invoices={invoices}
             taxInvoiceDoc={taxInvoiceDoc}
@@ -708,39 +715,44 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
         {/* ─── Right Action Rail ─── */}
         <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-          {(accessRole === 'seller' || accessRole === 'admin') && (
-            <ManualTrackingActions
-              delivery={delivery}
-              latestManual={latestManual}
-              onRefresh={() => detailQuery.refetch()}
-              onOpenPackModal={() => setIsPackModalOpen(true)}
-              onOpenFulfillmentModal={() => setIsFulfillmentModalOpen(true)}
-            />
-          )}
-          {accessRole === 'seller' && (
-            <DpExtensionSection delivery={delivery} accessRole={accessRole} />
-          )}
+          {isAdmin ? (
+            <AdminOversightCard delivery={delivery} />
+          ) : (
+            <>
+              {accessRole === 'seller' && (
+                <ManualTrackingActions
+                  delivery={delivery}
+                  latestManual={latestManual}
+                  onRefresh={() => detailQuery.refetch()}
+                  onOpenPackModal={() => setIsPackModalOpen(true)}
+                  onOpenFulfillmentModal={() => setIsFulfillmentModalOpen(true)}
+                />
+              )}
+              {accessRole === 'seller' && (
+                <DpExtensionSection delivery={delivery} accessRole={accessRole} />
+              )}
 
-          {(accessRole === 'buyer' || accessRole === 'consignee') && (
-            <BuyerActions
-              delivery={delivery}
-              invoices={invoices}
-              onOpenInvoice={handleOpenInvoice}
-              onOpenPaymentProof={handleOpenPaymentProof}
-              onApproveInvoice={handleDirectApproveInvoice}
-              isApprovingInvoice={Boolean(approvingInvoiceId)}
-            />
-          )}
-          {(accessRole === 'finance' || accessRole === 'admin') && (
-            <FinanceActions
-              delivery={delivery}
-              onApproveInvoice={handleDirectApproveInvoice}
-              isApprovingInvoice={Boolean(approvingInvoiceId)}
-            />
-          )}
-          {accessRole === 'admin' && <AdminActions delivery={delivery} />}
-          {accessRole && accessRole !== 'seller' && (
-            <DisputeActions delivery={delivery} accessRole={accessRole} />
+              {(accessRole === 'buyer' || accessRole === 'consignee') && (
+                <BuyerActions
+                  delivery={delivery}
+                  invoices={invoices}
+                  onOpenInvoice={handleOpenInvoice}
+                  onOpenPaymentProof={handleOpenPaymentProof}
+                  onApproveInvoice={handleDirectApproveInvoice}
+                  isApprovingInvoice={Boolean(approvingInvoiceId)}
+                />
+              )}
+              {accessRole === 'finance' && (
+                <FinanceActions
+                  delivery={delivery}
+                  onApproveInvoice={handleDirectApproveInvoice}
+                  isApprovingInvoice={Boolean(approvingInvoiceId)}
+                />
+              )}
+              {accessRole && accessRole !== 'seller' && accessRole !== 'admin' && (
+                <DisputeActions delivery={delivery} accessRole={accessRole} />
+              )}
+            </>
           )}
         </aside>
       </div>
@@ -889,6 +901,62 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
   );
 }
 
+function AdminOversightCard({ delivery }: { delivery: DeliveryDetailDto }) {
+  const po = delivery.purchaseOrder;
+  const sellerName = po?.seller?.name || 'Assigned Supplier';
+  const buyerName = po?.buyer?.name || 'Procuring Buyer';
+
+  return (
+    <Card className="rounded-2xl border-slate-200/90 bg-white shadow-xs p-4 sm:p-5 space-y-4">
+      <div className="flex items-center gap-2.5 pb-3 border-b border-slate-100">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+          <Shield className="h-4 w-4" />
+        </span>
+        <div>
+          <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+            Administrative Oversight
+          </h3>
+          <span className="text-[10px] font-semibold text-slate-500">
+            Strict View-Only Audit Mode
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-2 text-xs">
+        <div className="rounded-xl bg-slate-50 p-3 border border-slate-100 space-y-1.5">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Current Stage</span>
+            <DeliveryStatusBadge status={delivery.status} size="sm" />
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-slate-200/60 text-slate-700">
+            <span className="text-[10px] font-bold uppercase text-slate-400">PO Number</span>
+            <span className="font-mono font-bold text-[11px]">{po?.poNumber || `PO-${delivery.purchaseOrderId}`}</span>
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-slate-200/60 text-slate-700">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Escrow Value</span>
+            <span className="font-bold text-emerald-800 text-[11px]">{formatCurrency(po?.amount || po?.totalValue || 0)}</span>
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-slate-200/60 text-slate-700">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Supplier</span>
+            <span className="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">{sellerName}</span>
+          </div>
+          <div className="flex justify-between items-center pt-1 border-t border-slate-200/60 text-slate-700">
+            <span className="text-[10px] font-bold uppercase text-slate-400">Buyer</span>
+            <span className="font-bold text-slate-800 text-[11px] truncate max-w-[150px]">{buyerName}</span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-blue-900 text-[11px] flex items-start gap-2 leading-relaxed">
+          <Eye className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            You are inspecting this procurement in <strong>Administrative Audit Mode</strong>. You have read-only access to PO details, invoices, tracking history, and payment proofs. Fulfillment updates and document submissions are reserved for buyer, supplier, and logistics entities.
+          </span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function SectionHeading({
   icon: Icon,
   title,
@@ -915,6 +983,7 @@ function DocumentsPanel({
   docs,
   deliveryId,
   accessRole,
+  isAdmin = false,
   poNumber,
   invoices = [],
   taxInvoiceDoc,
@@ -930,6 +999,7 @@ function DocumentsPanel({
   docs: DeliveryDetailDto['documents'];
   deliveryId: number;
   accessRole: string | null;
+  isAdmin?: boolean;
   poNumber?: string;
   invoices?: any[];
   taxInvoiceDoc?: any;
@@ -948,7 +1018,7 @@ function DocumentsPanel({
   const isInvSubmitted = rawStatus === 'submitted';
   const isInvApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
   const isInvPaid = rawStatus === 'paid';
-  const canApprove = accessRole === 'buyer' || accessRole === 'admin';
+  const canApprove = !isAdmin && accessRole === 'buyer';
 
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
@@ -1143,8 +1213,8 @@ function DocumentsPanel({
             })}
           </div>
         )}
-        {/* Document upload form commented out on buyer side as requested */}
-        {accessRole && accessRole !== 'dispute' && accessRole !== 'buyer' && accessRole !== 'consignee' && (
+        {/* Document upload form disabled for admin, buyer, consignee, and dispute */}
+        {accessRole && !isAdmin && accessRole !== 'dispute' && accessRole !== 'buyer' && accessRole !== 'consignee' && (
           <DocumentUploadForm deliveryId={deliveryId} />
         )}
       </div>
@@ -2308,8 +2378,8 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
           </div>
         )}
 
-        {/* Buyer / Admin Action: Respond to pending request */}
-        {(accessRole === 'buyer' || accessRole === 'admin') && pendingExt && (
+        {/* Buyer Action: Respond to pending request (Admin is view-only) */}
+        {accessRole === 'buyer' && pendingExt && (
           <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3 dt-fade-in-up">
             <p className="text-xs font-black text-amber-900">Pending DP Extension Request</p>
             <p className="text-xs text-amber-800 font-semibold">
