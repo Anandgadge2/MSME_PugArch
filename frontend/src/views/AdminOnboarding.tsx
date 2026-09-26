@@ -193,10 +193,17 @@ const REGISTRATION_TYPE_LABELS: Record<string, string> = {
 
 const getGstNumber = (item: any): string | undefined => {
   if (!item) return undefined;
+  const officeGst = Array.isArray(item.profile?.offices)
+    ? item.profile.offices.find((o: any) => o?.gstNumber)?.gstNumber
+    : Array.isArray(item.offices)
+      ? item.offices.find((o: any) => o?.gstNumber)?.gstNumber
+      : undefined;
+
   const gst =
     item.profile?.gstin ||
     item.profile?.gst ||
     item.profile?.gstNumber ||
+    officeGst ||
     item.organization?.gstin ||
     item.profile?.organization?.gstin ||
     item.gstin ||
@@ -205,8 +212,28 @@ const getGstNumber = (item: any): string | undefined => {
     item.registrationDetails?.gstin ||
     item.registrationDetails?.gst ||
     item.registrationDetails?.gstNumber ||
+    item.registrationDetails?.gstDetails?.gstin ||
+    item.registrationDetails?.gstDetails?.gstNumber ||
+    item.profile?.gstVerificationDetails?.gstin ||
     undefined;
   return gst && String(gst).trim().length > 0 ? String(gst).trim() : undefined;
+};
+
+const getPanNumber = (item: any): string | undefined => {
+  if (!item) return undefined;
+  const pan =
+    item.profile?.pan ||
+    item.profile?.panNumber ||
+    item.profile?.organization?.panNumber ||
+    item.organization?.panNumber ||
+    item.registrationDetails?.pan ||
+    item.registrationDetails?.orgPan ||
+    item.registrationDetails?.personalPan ||
+    item.registrationDetails?.gstDetails?.pan ||
+    item.profile?.gstVerificationDetails?.pan ||
+    item.pan ||
+    undefined;
+  return pan && String(pan).trim().length > 0 ? String(pan).trim() : undefined;
 };
 
 const getUdyamNumber = (item: any): string | undefined => {
@@ -243,6 +270,202 @@ const getCinNumber = (item: any): string | undefined => {
   return cin && String(cin).trim().length > 0 ? String(cin).trim() : undefined;
 };
 
+const getEntityAddress = (item: any) => {
+  const profile = item?.profile || {};
+  const primaryOffice = Array.isArray(profile.offices)
+    ? profile.offices[0]
+    : Array.isArray(item?.offices)
+      ? item.offices[0]
+      : {};
+  const org = profile.organization || item?.organization || {};
+  const regGst = item?.registrationDetails?.gstDetails || {};
+
+  const street =
+    primaryOffice?.address ||
+    org?.addressLine1 ||
+    profile?.registeredAddress ||
+    regGst?.address ||
+    item?.registrationDetails?.officeZoneName ||
+    "";
+
+  const city =
+    primaryOffice?.city ||
+    profile?.city ||
+    org?.city ||
+    regGst?.city ||
+    "";
+
+  const district =
+    primaryOffice?.district ||
+    profile?.district ||
+    org?.district ||
+    regGst?.district ||
+    item?.registrationDetails?.district ||
+    "";
+
+  const state =
+    primaryOffice?.state ||
+    profile?.state ||
+    org?.state ||
+    regGst?.state ||
+    item?.registrationDetails?.state ||
+    "";
+
+  const pincode =
+    primaryOffice?.pincode ||
+    profile?.pincode ||
+    org?.pincode ||
+    regGst?.pincode ||
+    item?.registrationDetails?.pincode ||
+    "";
+
+  const fullAddress = [street, city, district, state, pincode]
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  return { street, city, district, state, pincode, fullAddress };
+};
+
+const getBankDetails = (item: any) => {
+  const profile = item?.profile || {};
+  const primaryBank = Array.isArray(profile.bankAccounts) ? profile.bankAccounts[0] : {};
+  const regDetails = item?.registrationDetails || {};
+
+  const bankName = primaryBank?.bankName || regDetails.bankName || "";
+  const accountNumber = primaryBank?.accountNumber || primaryBank?.accountNumberMasked || regDetails.accountNumber || "";
+  const ifscCode = primaryBank?.ifscCode || primaryBank?.ifsc || regDetails.ifscCode || "";
+  const accountHolderName = primaryBank?.accountHolderName || regDetails.accountName || item?.name || "";
+
+  return { bankName, accountNumber, ifscCode, accountHolderName };
+};
+
+const toAbsoluteFileUrl = (urlOrAsset: any): string => {
+  if (!urlOrAsset) return "";
+  let rawUrl = "";
+  if (typeof urlOrAsset === "string") {
+    rawUrl = urlOrAsset;
+  } else if (urlOrAsset?.url) {
+    rawUrl = urlOrAsset.url;
+  } else if (urlOrAsset?.signedUrl) {
+    rawUrl = urlOrAsset.signedUrl;
+  } else if (urlOrAsset?.fileAsset?.url) {
+    rawUrl = urlOrAsset.fileAsset.url;
+  } else if (urlOrAsset?.fileAssetId || urlOrAsset?.fileId || urlOrAsset?.id) {
+    const id = urlOrAsset?.fileAssetId || urlOrAsset?.fileId || urlOrAsset?.id;
+    rawUrl = `/api/files/${id}/view`;
+  }
+  rawUrl = String(rawUrl || "").trim();
+  if (!rawUrl) return "";
+  if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+    return rawUrl;
+  }
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  return `${origin}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`;
+};
+
+const getExportDocumentLinks = (item: any) => {
+  const profile = item?.profile || {};
+  const regDetails = item?.registrationDetails || {};
+
+  const docMap: Record<string, string[]> = {
+    pan: [],
+    gst: [],
+    udyam: [],
+    bank: [],
+    address: [],
+    registration: [],
+    additional: [],
+    all: [],
+  };
+
+  const addDoc = (category: keyof typeof docMap, label: string, urlCandidate: any) => {
+    const url = toAbsoluteFileUrl(urlCandidate);
+    if (!url) return;
+    if (!docMap[category].includes(url)) {
+      docMap[category].push(url);
+    }
+    const formatted = `${label}: ${url}`;
+    if (!docMap.all.includes(formatted)) {
+      docMap.all.push(formatted);
+    }
+  };
+
+  const classifyAndAdd = (type: string, urlCandidate: any, customLabel?: string) => {
+    const norm = String(type || "").toLowerCase().replace(/[\s-]+/g, "_");
+    const label = customLabel || getDocumentLabel(type);
+
+    if (norm.includes("pan")) {
+      addDoc("pan", label, urlCandidate);
+    } else if (norm.includes("gst")) {
+      addDoc("gst", label, urlCandidate);
+    } else if (norm.includes("udyam") || norm.includes("msme")) {
+      addDoc("udyam", label, urlCandidate);
+    } else if (norm.includes("bank") || norm.includes("passbook") || norm.includes("cheque")) {
+      addDoc("bank", label, urlCandidate);
+    } else if (norm.includes("address")) {
+      addDoc("address", label, urlCandidate);
+    } else if (
+      norm.includes("reg") ||
+      norm.includes("incorporation") ||
+      norm.includes("business_registration")
+    ) {
+      addDoc("registration", label, urlCandidate);
+    } else {
+      addDoc("additional", label, urlCandidate);
+    }
+  };
+
+  // 1. Process profile.sellerDocuments
+  if (Array.isArray(profile.sellerDocuments)) {
+    for (const doc of profile.sellerDocuments) {
+      if (doc?.fileAsset) {
+        classifyAndAdd(doc.documentType || "DOCUMENT", doc.fileAsset);
+      }
+    }
+  }
+
+  // 2. Process profile.documents (JSON object)
+  if (profile.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)) {
+    for (const [key, value] of Object.entries(profile.documents)) {
+      const files = getDocumentFiles(value);
+      for (const file of files) {
+        classifyAndAdd(key, file);
+      }
+    }
+  }
+
+  // 3. Process regDetails.documents
+  if (regDetails.documents && typeof regDetails.documents === "object" && !Array.isArray(regDetails.documents)) {
+    for (const [key, value] of Object.entries(regDetails.documents)) {
+      const files = getDocumentFiles(value);
+      for (const file of files) {
+        classifyAndAdd(key, file);
+      }
+    }
+  }
+
+  // 4. Process certifications
+  if (Array.isArray(profile.certifications)) {
+    for (const cert of profile.certifications) {
+      if (cert?.fileAsset) {
+        classifyAndAdd(cert.name || cert.type || "CERTIFICATION", cert.fileAsset);
+      }
+    }
+  }
+
+  return {
+    panLink: docMap.pan.join(" ; "),
+    gstLink: docMap.gst.join(" ; "),
+    udyamLink: docMap.udyam.join(" ; "),
+    bankLink: docMap.bank.join(" ; "),
+    addressLink: docMap.address.join(" ; "),
+    registrationLink: docMap.registration.join(" ; "),
+    additionalLinks: docMap.additional.join(" ; "),
+    allLinks: docMap.all.join(" | "),
+  };
+};
+
 export default function AdminOnboarding() {
   const queryClient = useQueryClient();
   const token = typeof window !== 'undefined' ? localStorage.getItem("token") || "" : "";
@@ -253,6 +476,7 @@ export default function AdminOnboarding() {
 
   const [sellers, setSellers] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "sellers";
     const tab = new URLSearchParams(window.location.search).get("tab");
@@ -293,6 +517,7 @@ export default function AdminOnboarding() {
   const [showcaseItemsLoading, setShowcaseItemsLoading] = useState(false);
   const [showcaseActive, setShowcaseActive] = useState(true);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [viewingDocKey, setViewingDocKey] = useState<string | number | null>(null);
   const handleClosePreview = useCallback(() => setPreviewDocument(null), []);
 
   const [page, setPage] = useState(1);
@@ -1025,7 +1250,9 @@ export default function AdminOnboarding() {
   };
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
+    const key = fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId || fileAsset?.url || label;
     try {
+      setViewingDocKey(key);
       const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
         ? {
             ...fileAsset,
@@ -1036,6 +1263,8 @@ export default function AdminOnboarding() {
       setPreviewDocument(await getFileAssetPreview(fileAssetObj, label));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to open document");
+    } finally {
+      setViewingDocKey(null);
     }
   };
 
@@ -1620,28 +1849,126 @@ export default function AdminOnboarding() {
     }
   };
 
-  const handleExportCsv = () => {
-    const rows = currentData.map((item, index) => ({
-      "Sr No": index + 1,
-      "Stakeholder Type": getRoleLabel(item),
-      "Applicant Name": item.name || "",
-      "Entity Name": getEntityName(item),
-      PAN: item.profile?.pan || "",
-      GST: item.profile?.gst || "",
-      State: item.profile?.state || "",
-      Category: getPrimaryCategory(item),
-      "Submitted Date": formatDateTime(item.createdAt),
-      Status: item.onboardingStatus || "pending",
-      "Verification Progress": `${getProgress(item)}%`,
-    }));
-
-    if (!rows.length) {
+  const handleExportCsv = async () => {
+    if (currentData.length === 0) {
       toast.error("No records available for export");
       return;
     }
 
-    downloadCsv(`admin-onboarding-${activeTab}-${new Date().toISOString().split("T")[0]}.csv`, rows);
-    toast.success(`Exported ${rows.length} onboarding records`);
+    setIsExporting(true);
+    const toastId = toast.loading(`Preparing complete export for ${currentData.length} records...`);
+
+    try {
+      // Ensure each item has full details (including from detailCacheRef or fetch)
+      const detailedItems = await Promise.all(
+        currentData.map(async (item) => {
+          const key = String(item._id || item.id);
+          const cached = detailCacheRef.current.get(key);
+          if (cached) return { ...item, ...cached };
+          if (
+            (item.profile?.offices?.length || item.profile?.sellerDocuments?.length) &&
+            item.profile?.documents
+          ) {
+            return item;
+          }
+          const fetched = await fetchDetail(item);
+          return fetched ? { ...item, ...fetched } : item;
+        }),
+      );
+
+      const rows = detailedItems.map((item, index) => {
+        const docLinks = getExportDocumentLinks(item);
+        const addr = getEntityAddress(item);
+        const bank = getBankDetails(item);
+        const gst = getGstNumber(item) || "";
+        const pan = getPanNumber(item) || "";
+        const udyam = getUdyamNumber(item) || "";
+        const cin = getCinNumber(item) || "";
+        const email =
+          item.email ||
+          item.profile?.email ||
+          item.registrationDetails?.userId ||
+          "";
+        const mobile =
+          item.profile?.mobile ||
+          item.profile?.offices?.[0]?.contactNumber ||
+          item.profile?.contactPersonMobile ||
+          item.registrationDetails?.mobile ||
+          item.mobile ||
+          "";
+        const entityType =
+          item.profile?.organizationType ||
+          item.profile?.businessType ||
+          item.registrationDetails?.businessType ||
+          item.registrationDetails?.gstDetails?.constitutionOfBusiness ||
+          item.organization?.organizationType ||
+          "";
+        const msmeCategory =
+          item.profile?.msmeCategory ||
+          item.profile?.msmeType ||
+          (item.role === "seller" ? "MSME" : "");
+        const turnover =
+          item.profile?.turnoverMax3Yrs ||
+          item.profile?.annualBudget ||
+          item.profile?.organization?.annualTurnover ||
+          item.organization?.annualTurnover ||
+          "";
+
+        return {
+          "Sr No": index + 1,
+          "Stakeholder Type": getRoleLabel(item),
+          "Applicant Name": item.name || item.registrationDetails?.accountName || "",
+          "Entity Name": getEntityName(item) || item.registrationDetails?.businessName || item.name || "",
+          Email: email,
+          "Mobile Number": mobile,
+          PAN: pan,
+          GST: gst,
+          "UDYAM Registration Number": udyam,
+          "CIN Number": cin,
+          "Entity Type": entityType,
+          "MSME Category": msmeCategory,
+          Category: getPrimaryCategory(item),
+          "Registered Address": addr.fullAddress,
+          "Address Line": addr.street,
+          City: addr.city,
+          District: addr.district,
+          State: addr.state,
+          Pincode: addr.pincode,
+          "Annual Turnover": turnover,
+          "Bank Name": bank.bankName,
+          "Bank Account Number": bank.accountNumber,
+          "Bank IFSC Code": bank.ifscCode,
+          "Account Holder Name": bank.accountHolderName,
+          "Submitted Date": formatDateTime(item.createdAt),
+          Status: item.onboardingStatus || "pending",
+          "Verification Progress": `${getProgress(item)}%`,
+          "Admin Feedback": item.adminFeedback || "",
+          "PAN Document Link": docLinks.panLink,
+          "GST Certificate Link": docLinks.gstLink,
+          "UDYAM Certificate Link": docLinks.udyamLink,
+          "Bank Proof Link": docLinks.bankLink,
+          "Address Proof Link": docLinks.addressLink,
+          "Registration Certificate Link": docLinks.registrationLink,
+          "Additional Documents Links": docLinks.additionalLinks,
+          "All Uploaded Documents Links": docLinks.allLinks,
+        };
+      });
+
+      downloadCsv(
+        `admin-onboarding-${activeTab}-${new Date().toISOString().split("T")[0]}.csv`,
+        rows,
+      );
+      toast.dismiss(toastId);
+      toast.success(
+        `Exported ${rows.length} onboarding records with complete details and document links`,
+      );
+    } catch (err) {
+      console.error("[ExportCsvError]", err);
+      toast.dismiss(toastId);
+      toast.error("Failed to generate complete export");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -1665,11 +1992,15 @@ export default function AdminOnboarding() {
             <Button
               variant="outline"
               onClick={handleExportCsv}
-              disabled={currentData.length === 0}
+              disabled={currentData.length === 0 || isExporting}
               className="rounded-xl border-slate-200 text-slate-600 font-bold uppercase tracking-widest text-[10px]"
             >
-              <Download className="mr-2 h-3.5 w-3.5" />
-              Export CSV
+              {isExporting ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-3.5 w-3.5" />
+              )}
+              {isExporting ? "Exporting..." : "Export CSV"}
             </Button>
           </div>
         </div>
@@ -3705,11 +4036,16 @@ export default function AdminOnboarding() {
                                         <button
                                           type="button"
                                           onClick={() => handleViewDocument(file, doc.documentType)}
-                                          className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors"
+                                          disabled={viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType)}
+                                          className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors disabled:opacity-60"
                                           aria-label={`View ${doc.documentType || "document"}`}
                                         >
-                                          <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                          <span>View Document</span>
+                                          {viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType) ? (
+                                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#12335f]" aria-hidden="true" />
+                                          ) : (
+                                            <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                          )}
+                                          <span>{viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType) ? "Opening..." : "View Document"}</span>
                                         </button>
                                         <button
                                           type="button"
@@ -3818,12 +4154,17 @@ export default function AdminOnboarding() {
                                                 label,
                                               )
                                             }
-                                            className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors"
+                                            disabled={viewingDocKey === (file?.fileId || getDocumentUrl(file) || label)}
+                                            className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors disabled:opacity-60"
                                             aria-label={`View ${label} document${documentFiles.length > 1 ? ` ${index + 1}` : ""}`}
                                           >
-                                            <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                            {viewingDocKey === (file?.fileId || getDocumentUrl(file) || label) ? (
+                                              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#12335f]" aria-hidden="true" />
+                                            ) : (
+                                              <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                            )}
                                             <span>
-                                              View Document{documentFiles.length > 1 ? ` ${index + 1}` : ""}
+                                              {viewingDocKey === (file?.fileId || getDocumentUrl(file) || label) ? "Opening..." : `View Document${documentFiles.length > 1 ? ` ${index + 1}` : ""}`}
                                             </span>
                                           </button>
                                           <button
