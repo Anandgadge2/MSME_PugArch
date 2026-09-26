@@ -368,7 +368,12 @@ export function generateGrnPdf(grn: GrnDto, options: GrnPdfOptions = {}): jsPDF 
       currentY = 16;
     }
 
-    const noteBoxHeight = 15;
+    let notesContent = '';
+    if (hasInspectionNote) notesContent += `Inspection Note: ${grn.inspectionNote}. `;
+    if (hasRemarks) notesContent += `Gate Remarks: ${grn.remarks}.`;
+
+    const splitNotes = doc.splitTextToSize(notesContent, contentWidth - 6);
+    const noteBoxHeight = Math.max(15, 8 + splitNotes.length * 3.8);
     doc.setFillColor(...SLATE_LIGHT);
     doc.setDrawColor(...SLATE_BORDER);
     doc.setLineWidth(0.3);
@@ -382,13 +387,7 @@ export function generateGrnPdf(grn: GrnDto, options: GrnPdfOptions = {}): jsPDF 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...SLATE_DARK);
-
-    let notesContent = '';
-    if (hasInspectionNote) notesContent += `Inspection Note: ${grn.inspectionNote}. `;
-    if (hasRemarks) notesContent += `Gate Remarks: ${grn.remarks}.`;
-
-    const splitNotes = doc.splitTextToSize(notesContent, contentWidth - 6);
-    doc.text(splitNotes.slice(0, 2), marginX + 3, currentY + 8.2);
+    doc.text(splitNotes, marginX + 3, currentY + 8.2);
 
     currentY += noteBoxHeight + 4;
   }

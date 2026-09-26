@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { resolveMediaUrl } from '../../../lib/api';
+import { loadImageAsDataUrl, drawFitImage } from '../../../lib/pdfEngine';
 
 export interface TaxInvoiceItem {
   srNo: number | string;
@@ -56,42 +57,6 @@ export interface TaxInvoiceData {
   };
 }
 
-/**
- * Safely converts an image URL or SVG to a base64 PNG data URL via Canvas.
- */
-export async function loadImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
-  if (!url || typeof window === 'undefined') return null;
-  if (url.startsWith('data:image/')) return url;
-  const targetUrl = resolveMediaUrl(url) || url;
-
-  return new Promise((resolve) => {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.naturalWidth || img.width || 300;
-          canvas.height = img.naturalHeight || img.height || 100;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            resolve(null);
-            return;
-          }
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/png');
-          resolve(dataUrl);
-        } catch {
-          resolve(null);
-        }
-      };
-      img.onerror = () => resolve(null);
-      img.src = targetUrl;
-    } catch {
-      resolve(null);
-    }
-  });
-}
 
 export function formatInr(val: number | string | undefined | null): string {
   const num = Number(val || 0);
@@ -170,7 +135,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   const logoBoxX = rightX - logoBoxWidth - 3.5;
   if (logoDataUrl) {
     try {
-      doc.addImage(logoDataUrl, 'PNG', logoBoxX, currentY + 3.5, logoBoxWidth, logoBoxHeight);
+      drawFitImage(doc, logoDataUrl, logoBoxX, currentY + 3.5, logoBoxWidth, logoBoxHeight, 'right');
     } catch {
       // If image draw fails, show company name text
       doc.setFont('helvetica', 'bold');
@@ -420,7 +385,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // Render Official Stamp if provided
   if (stampDataUrl) {
     try {
-      doc.addImage(stampDataUrl, 'PNG', stampBoxX + 8, currentY + 7, 24, 24);
+      drawFitImage(doc, stampDataUrl, stampBoxX + 8, currentY + 7, 26, 22, 'center');
     } catch {
       // ignore if image format not supported
     }
@@ -429,7 +394,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // Render Authorized Signature if provided
   if (signatureDataUrl) {
     try {
-      doc.addImage(signatureDataUrl, 'PNG', rightX - 32, currentY + 16, 26, 12);
+      drawFitImage(doc, signatureDataUrl, rightX - 34, currentY + 18, 30, 14, 'right');
     } catch {
       // ignore if image format not supported
     }

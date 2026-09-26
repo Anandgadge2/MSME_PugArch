@@ -147,7 +147,8 @@ export default function RoleReportsPage() {
               notes: [
                 'This report contains procurement lifecycle readiness data including delivery, GRN, and invoice statuses.',
                 'Generated automatically by JSGSMILE MSME Procurement.'
-              ]
+              ],
+              signatoryMode: 'none' as const,
             };
 
             const engine = new PdfEngine('l'); // Landscape for reports
