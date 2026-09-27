@@ -3468,18 +3468,8 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
 
-  if (body.generatePoNow) {
-    logger.info({ awardId: award.id, bidId: bid.id }, '[RECOMMEND_AWARD] Direct PO requested, generating...');
-    const po = await createOrReuseProcurementPOForAward(req, award, bid);
-    return {
-      award,
-      purchaseOrder: po.purchaseOrder,
-      purchaseOrderReused: po.reused,
-      poId: po.purchaseOrder?.id,
-      poNumber: po.purchaseOrder?.poNumber
-    };
-  }
-
+  // In the simplified portal, NO auto-PO is generated at award time.
+  // The seller must review and accept the award first, then PO is generated and accepted.
   return {
     award,
     status: 'AWARD_OFFERED',
@@ -4019,16 +4009,20 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
 };
 
 export const generatePOForBid = async (req: AuthRequest, bidId: string, body: any = {}) => {
-  logger.info({ bidId, user: req.user?.id }, '[GENERATE_PO] Buyer generating Purchase Order');
+  logger.info({ bidId, user: req.user?.id }, '[GENERATE_PO] Generating Purchase Order');
   const bid = await resolveBid(bidId, {});
-  assertBuyerOwner(req.user!, bid);
+  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
+  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
+  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
+  const isBuyerOrAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin' || bid.buyerId === req.user!.id;
 
   let award = body?.awardId
     ? await db.procurementBidAward.findFirst({
         where: {
           bidId: bid.id,
           id: Number(body.awardId),
-          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] },
+          ...(isBuyerOrAdmin ? {} : { sellerId: { in: validSellerIds } })
         },
         include: { participation: true },
         orderBy: { updatedAt: 'desc' }
@@ -4039,7 +4033,8 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     award = await db.procurementBidAward.findFirst({
       where: {
         bidId: bid.id,
-        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] },
+        ...(isBuyerOrAdmin ? {} : { sellerId: { in: validSellerIds } })
       },
       include: { participation: true },
       orderBy: { updatedAt: 'desc' }
@@ -4047,7 +4042,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
   }
 
   if (!award) {
-    throw new ApiError(400, 'Cannot generate Purchase Order: No award found for this bid.', 'AWARD_NOT_FOUND');
+    throw new ApiError(400, 'Cannot generate Purchase Order: No eligible award found for your account on this bid.', 'AWARD_NOT_FOUND');
   }
 
   const po = await createOrReuseProcurementPOForAward(req, award, bid);
@@ -4055,7 +4050,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
   await db.purchaseOrder.update({
     where: { id: po.purchaseOrder.id },
     data: {
-      status: 'issued',
+      status: 'pending_acceptance',
       poStatus: 'ISSUED'
     }
   });
@@ -4069,7 +4064,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
 
   await notificationService.notifyUser(award.sellerId, {
     title: 'Purchase Order Issued',
-    message: `Buyer has issued Purchase Order #${po.purchaseOrder.poNumber} for "${bid.title}". Please accept the PO to commit to fulfillment.`,
+    message: `Purchase Order #${po.purchaseOrder.poNumber} has been generated for "${bid.title}". Please accept the PO to commit to fulfillment.`,
     type: 'purchase_order',
     redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
   }).catch(() => undefined);
@@ -4094,14 +4089,14 @@ export const approveFinalAward = async (req: AuthRequest, bidId: string, body: a
       where: { id: award.id },
       data: { awardStatus: 'ADMIN_APPROVED', awardedById: req.user!.id, awardedAt: now(), remarks: body.remarks || award.remarks }
     });
-    await tx.procurementBidParticipation.updateMany({ where: { bidId: bid.id, id: { not: award.participationId } }, data: { finalStatus: 'NOT_SELECTED' } });
+    // NOTE: Standby bidders remain active/standby and are NOT transitioned to NOT_SELECTED until seller accepts the PO!
     await tx.procurementBidParticipation.update({ where: { id: award.participationId }, data: { finalStatus: 'AWARDED' } });
-    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'AWARDED', lifecycleStage: 'AWARDED' } });
+    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'AWARD_RECOMMENDED', lifecycleStage: 'EVALUATION' } });
     return approved;
   });
   await procurementAudit(req, 'FINAL_AWARD_APPROVED', 'ProcurementBidAward', updated.id, updated);
-  const po = await createOrReuseProcurementPOForAward(req, updated, bid);
-  return { award: updated, purchaseOrder: po.purchaseOrder, purchaseOrderReused: po.reused };
+  // NOTE: In the simplified portal, NO auto PO is generated here. The seller must accept the award, then PO is generated and accepted.
+  return { award: updated, status: 'ADMIN_APPROVED', message: 'Award approved. Awaiting seller acceptance.' };
 };
 
 export const getAverageRatingsForSellers = async (sellerIds: number[]) => {
@@ -4404,183 +4399,19 @@ export const openFinancialEvaluationLandedCost = async (req: AuthRequest, bidId:
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-//  EDGE CASE 4: Item-Wise Split Award (BOQ Split)
-//  Allows buyer to award different line items to different L1 sellers.
+//  SIMPLIFIED PORTAL: Single-Winner Paradigm (Zero Award Splitting)
+//  All tenders are awarded 100% to a single winning bidder.
 // ════════════════════════════════════════════════════════════════════════════
 export const recommendSplitAward = async (req: AuthRequest, bidId: string, body: any) => {
-  const bid = await resolveBid(bidId, { participations: true });
-  assertBuyerOwner(req.user!, bid);
-
-  const awardStrategy = body.awardStrategy || 'OVERALL_L1';
-  if (awardStrategy === 'OVERALL_L1') {
-    return recommendAward(req, bidId, body);
-  }
-
-  // ITEM_WISE_SPLIT: expects body.itemAwards = [{ itemId, participationId }]
-  const itemAwards = body.itemAwards;
-  if (!Array.isArray(itemAwards) || !itemAwards.length) {
-    throw new ApiError(400, 'itemAwards array is required for ITEM_WISE_SPLIT strategy.', 'MISSING_ITEM_AWARDS');
-  }
-
-  const awards = [];
-  for (const ia of itemAwards) {
-    const participation = await db.procurementBidParticipation.findUnique({
-      where: { id: Number(ia.participationId) },
-      include: { seller: { include: { organization: true } } }
-    });
-    if (!participation || participation.bidId !== bid.id) {
-      throw new ApiError(404, `Participation ${ia.participationId} not found for this bid.`, 'PARTICIPATION_NOT_FOUND');
-    }
-
-    const award = await db.procurementBidAward.create({
-      data: {
-        bidId: bid.id,
-        participationId: participation.id,
-        sellerId: participation.sellerId,
-        awardedById: req.user!.id,
-        awardedAt: now(),
-        awardStatus: 'RECOMMENDED',
-        remarks: `Item-wise split award for item ${ia.itemId || 'N/A'}`,
-        awardedAmount: Number(ia.amount || participation.totalAmount || 0)
-      }
-    });
-    awards.push(award);
-  }
-
-  // Update bid metadata with award strategy
-  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
-  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
-  await db.procurementBid.update({
-    where: { id: bid.id },
-    data: {
-      status: 'AWARDED',
-      lifecycleStage: 'AWARDED',
-      technicalPacket: { ...pkt, metadata: { ...meta, awardStrategy: 'ITEM_WISE_SPLIT', splitAwardCount: awards.length } }
-    }
-  });
-
-  await procurementAudit(req, 'SPLIT_AWARD_RECOMMENDED', 'ProcurementBid', bid.id, { awardStrategy, awards: awards.map(a => ({ id: a.id, sellerId: a.sellerId })) });
-  return { bid, awards, awardStrategy };
+  throw new ApiError(400, 'Award splitting is disabled. This portal strictly awards 100% of the bid to a single qualified winner.', 'SPLIT_AWARD_DISABLED');
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-//  EDGE CASE 5: L1 Default / L2 Matching (Counter-Offer)
-//  When L1 seller defaults, invite L2 to match L1 price.
-// ════════════════════════════════════════════════════════════════════════════
 export const inviteL2ToMatchL1 = async (req: AuthRequest, bidId: string, body: any = {}) => {
-  const bid = await resolveBid(bidId, { participations: true });
-  assertBuyerOwner(req.user!, bid);
-
-  const participations = await db.procurementBidParticipation.findMany({
-    where: { bidId: bid.id, technicalStatus: 'QUALIFIED', submissionStatus: 'SUBMITTED' },
-    orderBy: { rank: 'asc' },
-    include: { seller: true }
-  });
-
-  const l1 = participations.find((p: any) => p.rank === 1 || p.finalStatus === 'L1');
-  const l2 = participations.find((p: any) => p.rank === 2 || p.finalStatus === 'L2');
-
-  if (!l1) throw new ApiError(400, 'No L1 seller found on this bid.', 'L1_NOT_FOUND');
-  if (!l2) throw new ApiError(400, 'No L2 seller found to offer L1 price match.', 'L2_NOT_FOUND');
-
-  const defaultReason = body.reason || 'L1 seller refused to accept the Purchase Order.';
-
-  // Mark L1 as defaulted
-  await db.procurementBidParticipation.update({
-    where: { id: l1.id },
-    data: { finalStatus: 'REJECTED', rejectionReason: `L1_DEFAULT: ${defaultReason}` }
-  });
-
-  // Update bid metadata
-  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
-  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
-  await db.procurementBid.update({
-    where: { id: bid.id },
-    data: {
-      technicalPacket: {
-        ...pkt,
-        metadata: {
-          ...meta,
-          l1DefaultedSellerId: l1.sellerId,
-          l1DefaultReason: defaultReason,
-          l2MatchInvitedSellerId: l2.sellerId,
-          l1MatchPrice: Number(l1.totalAmount),
-          l2MatchInvitedAt: new Date().toISOString()
-        }
-      }
-    }
-  });
-
-  await procurementAudit(req, 'L1_DEFAULT_L2_INVITED', 'ProcurementBid', bid.id, {
-    defaultedSellerId: l1.sellerId,
-    invitedSellerId: l2.sellerId,
-    l1Price: Number(l1.totalAmount)
-  });
-
-  // Send notification to L2 seller
-  try {
-    await notificationService.notifyUser(l2.sellerId, {
-      title: 'L1 Price Match Invitation',
-      message: `You are invited to match the L1 price of ₹${Number(l1.totalAmount).toLocaleString('en-IN')} for "${bid.title}". The L1 seller has defaulted.`,
-      type: 'bid.l2_match_invitation',
-      redirectUrl: `/bids/${bid.id}/participate`
-    }, ['in_app', 'email']);
-  } catch (err) {
-    logger.warn({ err }, 'Failed to send L2 match invitation notification');
-  }
-
-  return {
-    l1Defaulted: { sellerId: l1.sellerId, amount: Number(l1.totalAmount) },
-    l2Invited: { sellerId: l2.sellerId, amount: Number(l2.totalAmount), matchPrice: Number(l1.totalAmount) }
-  };
+  throw new ApiError(400, 'L2 price-matching counter-offers are disabled. Award next qualified seller directly if previous seller declines.', 'L2_MATCH_DISABLED');
 };
 
 export const acceptL2Match = async (req: AuthRequest, bidId: string, participationId: number) => {
-  const bid = await resolveBid(bidId, {});
-  const participation = await db.procurementBidParticipation.findUnique({ where: { id: participationId } });
-  if (!participation || participation.bidId !== bid.id) throw new ApiError(404, 'Participation not found.', 'PARTICIPATION_NOT_FOUND');
-  if (participation.sellerId !== req.user!.id) throw new ApiError(403, 'Only the invited L2 seller can accept.', 'FORBIDDEN_ROLE');
-
-  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
-  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
-  const matchPrice = meta.l1MatchPrice;
-  if (!matchPrice) throw new ApiError(400, 'No L1 match price invitation found.', 'NO_L2_MATCH_INVITATION');
-
-  // Promote L2 to L1 rank at the matched price
-  await db.procurementBidParticipation.update({
-    where: { id: participation.id },
-    data: { rank: 1, finalStatus: 'AWARDED', totalAmount: matchPrice, quotedAmount: matchPrice }
-  });
-
-  // Create award record
-  await db.procurementBidAward.create({
-    data: {
-      bidId: bid.id,
-      participationId: participation.id,
-      sellerId: participation.sellerId,
-      awardedById: req.user!.id,
-      awardedAt: now(),
-      awardStatus: 'RECOMMENDED',
-      awardedAmount: matchPrice,
-      remarks: 'L2 seller matched L1 price after L1 default.'
-    }
-  });
-
-  await db.procurementBid.update({
-    where: { id: bid.id },
-    data: {
-      status: 'AWARDED',
-      lifecycleStage: 'AWARDED',
-      technicalPacket: { ...pkt, metadata: { ...meta, l2MatchAccepted: true, l2MatchAcceptedAt: new Date().toISOString() } }
-    }
-  });
-
-  await procurementAudit(req, 'L2_MATCH_ACCEPTED', 'ProcurementBid', bid.id, {
-    sellerId: participation.sellerId,
-    matchPrice
-  });
-
-  return { participation, matchPrice, message: 'L2 seller promoted to L1 at matched price.' };
+  throw new ApiError(400, 'L2 price-matching counter-offers are disabled.', 'L2_MATCH_DISABLED');
 };
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -828,8 +828,13 @@ export const procurementBidApi = {
       typeof data === 'object' && data !== null && !Array.isArray(data)
         ? data
         : (data !== undefined && data !== null && data !== '' ? { awardId: data } : {});
-    const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, payload, { headers: authHeaders() });
-    return readApiBody(res);
+    try {
+      const res = await api.post(`/api/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, payload, { headers: authHeaders() });
+      return await readApiBody(res);
+    } catch {
+      const res = await api.post(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/generate-po`, payload, { headers: authHeaders() });
+      return await readApiBody(res);
+    }
   },
   async acceptPO(poId: number | string, data: any = {}) {
     const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/accept-po`, data, { headers: authHeaders() });

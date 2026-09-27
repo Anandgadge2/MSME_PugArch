@@ -223,3 +223,32 @@ test('14. UI Data Formatting & Anti-Raw Dump Invariants: Zero raw JSON dumps, no
   assert.match(unifiedView, /formatMoney/);
   assert.match(unifiedView, /formatCurrency/);
 });
+
+test('15. Simplified Portal Architecture: Zero Award Splitting, No Auto-PO, Sequential Award -> PO Acceptance', () => {
+  const service = read('src/modules/procurementBid/procurement-bid.service.ts');
+  const orderService = read('src/modules/procurementBid/procurement-order.service.ts');
+  const routes = read('src/modules/procurementBid/procurement-bid.routes.ts');
+
+  // 1. Award Splitting and L2 Counter-offers disabled
+  assert.match(service, /SPLIT_AWARD_DISABLED/);
+  assert.match(service, /L2_MATCH_DISABLED/);
+
+  // 2. No Auto-PO in recommendAward or approveFinalAward
+  const recommendAwardCode = service.match(/export const recommendAward =[\s\S]*?^};/m)?.[0] || '';
+  assert.doesNotMatch(recommendAwardCode, /generatePoNow/);
+  const approveFinalAwardCode = service.match(/export const approveFinalAward =[\s\S]*?^};/m)?.[0] || '';
+  assert.doesNotMatch(approveFinalAwardCode, /createOrReuseProcurementPOForAward/);
+
+  // 3. Standby bidders are NOT prematurely rejected in approveFinalAward
+  assert.doesNotMatch(approveFinalAwardCode, /updateMany\(\{\s*where:\s*\{\s*bidId:\s*bid\.id,\s*id:\s*\{\s*not:\s*award\.participationId\s*\}\s*\}/);
+
+  // 4. Standby bidders are transitioned to NOT_SELECTED strictly inside acceptPO upon PO acceptance
+  const acceptPOCode = orderService.match(/export const acceptPO =[\s\S]*?^};/m)?.[0] || '';
+  assert.match(acceptPOCode, /sellerId:\s*\{\s*not:\s*po\.sellerId\s*\}/);
+  assert.match(acceptPOCode, /finalStatus:\s*'NOT_SELECTED'/);
+  assert.match(acceptPOCode, /Tender Concluded/);
+
+  // 5. PO Generation endpoint allows both seller and buyer
+  assert.match(routes, /\/seller\/procurement-bids\/:bidId\/generate-po/);
+});
+

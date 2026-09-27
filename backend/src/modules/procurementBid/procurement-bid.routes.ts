@@ -1969,7 +1969,7 @@ router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bid
   return apiResponse.success(res, data, 200, 'Award offer declined successfully');
 }));
 
-router.post('/buyer/procurement-bids/:bidId/generate-po', authenticate, requireAccountType('buyer', 'admin'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+router.post(['/buyer/procurement-bids/:bidId/generate-po', '/seller/procurement-bids/:bidId/generate-po', '/procurement-bids/:bidId/generate-po'], authenticate, requireAccountType('buyer', 'admin', 'seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.generatePOForBid(req, req.params.bidId, req.body || {});
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.created(res, data, 'Purchase order generated and issued');
@@ -2165,17 +2165,7 @@ router.post('/:bidId/financial-evaluation-landed-cost', authenticate, asyncRoute
   return apiResponse.success(res, data, 200, 'Financial evaluation opened with Landed Cost evaluation');
 }));
 
-// Split award route removed — only L1 evaluation is supported
-
-router.post('/:bidId/l1-default', authenticate, asyncRoute(async (req, res) => {
-  const data = await service.inviteL2ToMatchL1(req, req.params.bidId, req.body || {});
-  return apiResponse.success(res, data, 200, 'L1 default marked and L2 invited for price match');
-}));
-
-router.post('/:bidId/accept-l2-match/:participationId', authenticate, asyncRoute(async (req, res) => {
-  const data = await service.acceptL2Match(req, req.params.bidId, Number(req.params.participationId));
-  return apiResponse.success(res, data, 200, 'L2 seller accepted match and promoted to L1');
-}));
+// Split award & L2 counter-offer routes removed — only direct single-winner evaluation is supported
 
 router.put('/:bidId/participations/:participationId/revise', authenticate, asyncRoute(async (req, res) => {
   const data = await service.reviseParticipation(req, req.params.bidId, Number(req.params.participationId), req.body || {});

@@ -8292,26 +8292,40 @@ export function ProcurementDetailUnifiedView(
               </div>
             )}
 
-          {/* Seller: Award Accepted, Waiting for PO */}
+          {/* Seller: Award Accepted, Ready to Generate PO */}
           {!isBuyerSide &&
             isAwardedToMe &&
             activeAward?.awardStatus === "ACCEPTED" &&
             !effectiveActiveOrder && (
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                    <CheckCircle2 className="h-4 w-4" />
+              <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-blue-50/40 to-white p-3 sm:p-3.5 shadow-2xs animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-[13px] font-extrabold text-indigo-950 leading-tight">
+                        Award Acceptance Confirmed — Ready for Purchase Order Generation
+                      </h4>
+                      <p className="text-[11px] sm:text-xs font-medium text-indigo-800/90 mt-0.5 leading-snug">
+                        You have formally accepted the contract award. Generate the official Purchase Order to review fulfillment terms and commit to order delivery.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs sm:text-[13px] font-extrabold text-indigo-950 leading-tight">
-                      Award Acceptance Confirmed — Awaiting Purchase Order
-                      Issuance
-                    </h4>
-                    <p className="text-[11px] sm:text-xs font-medium text-indigo-800/90 mt-0.5 leading-snug">
-                      You have accepted the award. The buyer is now finalizing
-                      and issuing the official Purchase Order. You will receive
-                      an immediate notification upon issuance.
-                    </p>
+                  <div className="shrink-0">
+                    <Button
+                      type="button"
+                      disabled={isIssuingPOFromBanner}
+                      onClick={() => handleGeneratePOFromBanner(activeAward.id)}
+                      className="h-9 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-4 shadow-sm border border-indigo-400 gap-1.5 cursor-pointer rounded-lg transition-transform active:scale-95"
+                    >
+                      {isIssuingPOFromBanner ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5" />
+                      )}
+                      Generate Purchase Order
+                    </Button>
                   </div>
                 </div>
               </div>
