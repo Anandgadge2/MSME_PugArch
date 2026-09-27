@@ -13,9 +13,9 @@ const assertSellerOwner = async (model: 'product' | 'service', id: number, actor
 };
 
 const assertApprovedSeller = async (actor: WorkflowActor) => {
-  if (actor.role === 'admin') return;
+  if (actor.role === 'admin' || actor.role === 'master_admin') return;
   const user = await db.user.findUnique({ where: { id: actor.id }, select: { role: true, onboardingStatus: true } });
-  if (user?.role !== 'seller' || !['approved_for_procurement', 'approved'].includes(String(user.onboardingStatus))) {
+  if (!['seller', 'shg'].includes(String(user?.role)) || !['approved_for_procurement', 'approved'].includes(String(user?.onboardingStatus))) {
     throw new ApiError(
       403,
       'Your seller account must be approved before you can create or change catalogue items.',

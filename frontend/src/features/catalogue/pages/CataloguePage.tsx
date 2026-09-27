@@ -1016,14 +1016,17 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                 <Button disabled={!sellerApproved} onClick={() => router.push('/seller/services/new')} className="h-10 rounded-2xl border border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-white/15">
                   <Wrench className="mr-2 h-4 w-4" /> Add Service
                 </Button>
-                <Button disabled={!sellerApproved} variant="outline" onClick={() => setImportKind('product')} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
-                  <FileUp className="mr-2 h-4 w-4" /> Import
+                <Button disabled={!sellerApproved} variant="outline" onClick={() => setImportKind(kindFilter === 'service' ? 'service' : 'product')} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
+                  <FileUp className="mr-2 h-4 w-4" /> Import {kindFilter === 'service' ? 'Services' : kindFilter === 'product' ? 'Products' : ''}
                 </Button>
                 <Button disabled={!sellerApproved} variant="outline" onClick={() => {
-                  downloadCatalogueFile('/api/catalogue/import/templates/products', 'catalogue_products_template.xlsx')
-                    .catch(() => toast.error('Template download failed'));
-                }} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15" title="Download Product Template">
-                  <Download className="mr-2 h-4 w-4" /> Template
+                  const isService = kindFilter === 'service';
+                  downloadCatalogueFile(
+                    isService ? '/api/catalogue/import/templates/services' : '/api/catalogue/import/templates/products',
+                    isService ? 'catalogue_services_template.xlsx' : 'catalogue_products_template.xlsx'
+                  ).catch(() => toast.error('Template download failed'));
+                }} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15" title={kindFilter === 'service' ? 'Download Service Template' : 'Download Product Template'}>
+                  <Download className="mr-2 h-4 w-4" /> {kindFilter === 'service' ? 'Service Template' : kindFilter === 'product' ? 'Product Template' : 'Template'}
                 </Button>
               </>
             )}

@@ -22,6 +22,18 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
 
+  React.useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        reset();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const reset = () => {
@@ -78,7 +90,12 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="flex h-full w-full max-h-[90vh] flex-col overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 sm:max-w-3xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="catalogue-import-modal-title"
+        className="flex h-full w-full max-h-[90vh] flex-col overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 sm:max-w-3xl"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200/90 px-5 py-3.5 bg-slate-50/70">
           <div className="flex items-center gap-2.5">
@@ -89,7 +106,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
               {isProduct ? <Package className="h-4 w-4" /> : <Wrench className="h-4 w-4" />}
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-900 leading-tight">
+              <h2 id="catalogue-import-modal-title" className="text-base font-bold text-slate-900 leading-tight">
                 Bulk Import Catalogue {isProduct ? 'Products' : 'Services'}
               </h2>
               <p className="text-[11px] text-slate-500">
@@ -214,13 +231,24 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
           </div>
 
           {/* File Dropzone */}
-          <label className={cn(
-            "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 transition-all duration-150",
-            file
-              ? "border-emerald-500 bg-emerald-50/30"
-              : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400"
-          )}>
-            <Upload className={cn("mb-2 h-7 w-7", file ? "text-emerald-600" : "text-slate-400")} />
+          <label
+            tabIndex={0}
+            role="button"
+            aria-label="Upload Excel template spreadsheet file (.xlsx)"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-6 transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+              file
+                ? "border-emerald-500 bg-emerald-50/30"
+                : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400"
+            )}
+          >
+            <Upload className={cn("mb-2 h-7 w-7", file ? "text-emerald-600" : "text-slate-400")} aria-hidden="true" />
             <span className="text-xs font-bold text-slate-700">
               {file ? file.name : 'Choose or drop your filled .xlsx file here'}
             </span>
@@ -231,7 +259,9 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
               ref={fileRef}
               type="file"
               accept=".xlsx"
-              className="hidden"
+              className="sr-only"
+              tabIndex={-1}
+              aria-label="Select Excel file"
               onChange={e => { setFile(e.target.files?.[0] || null); setPreview(null); }}
             />
           </label>
@@ -269,7 +299,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
 
           {/* Preview & Validation Results Section */}
           {preview && (
-            <div className="space-y-3 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
+            <div role="region" aria-label="Validation Results" aria-live="polite" className="space-y-3 pt-2 border-t border-slate-200 animate-in fade-in duration-200">
               {/* Summary Counter Grid */}
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[

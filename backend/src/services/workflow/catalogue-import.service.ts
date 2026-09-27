@@ -430,8 +430,29 @@ const parseNumber = (value: unknown): number | null => {
 };
 
 const parseDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   const v = clean(value);
   if (!v) return null;
+
+  // Handle Excel numeric serial dates (e.g. 45536)
+  if (/^\d{5}(\.\d+)?$/.test(v)) {
+    const num = Number(v);
+    if (num >= 20000 && num <= 80000) {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+  }
+
+  // Handle Indian date formats DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = v.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmyMatch) {
+    const [, day, month, year] = dmyMatch;
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  // Standard ISO/US formats (e.g. YYYY-MM-DD)
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
 };
@@ -538,15 +559,15 @@ const col = (row: Record<string, unknown>, ...names: string[]) => {
 };
 
 const assertApprovedSeller = async (actor: WorkflowActor) => {
-  if (actor.role === "admin") return;
+  if (actor.role === "admin" || actor.role === "master_admin") return;
   const user = await db.user.findUnique({
     where: { id: actor.id },
     select: { role: true, onboardingStatus: true },
   });
   if (
-    user?.role !== "seller" ||
+    !["seller", "shg"].includes(String(user?.role)) ||
     !["approved_for_procurement", "approved"].includes(
-      String(user.onboardingStatus),
+      String(user?.onboardingStatus),
     )
   ) {
     throw new ApiError(
@@ -790,7 +811,7 @@ export const catalogueImportService = {
         "2026-12-31",
         "Yes",
         50,
-        "https://images.unsplash.com/photo-1578873375969-d729352e464c",
+        "https://images.unsplash.com/photo-1504307651254-35680f356dfd",
         "",
       ],
       [
@@ -1077,11 +1098,20 @@ export const catalogueImportService = {
         "INVALID_FILE_TYPE",
       );
 
-    const workbook = XLSX.read(file.buffer, {
-      type: "buffer",
-      cellFormula: false,
-      cellHTML: false,
-    });
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(file.buffer, {
+        type: "buffer",
+        cellFormula: false,
+        cellHTML: false,
+      });
+    } catch {
+      throw new ApiError(
+        400,
+        "Invalid or corrupted Excel file. Please upload a valid .xlsx spreadsheet.",
+        "INVALID_EXCEL_FILE",
+      );
+    }
     const mainSheet = type === "PRODUCT" ? "Products" : "Services";
     const specSheet =
       type === "PRODUCT" ? "Product Specifications" : "Service Specifications";
