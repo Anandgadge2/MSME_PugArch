@@ -3139,16 +3139,18 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                 if (legacy) return -legacy.id;
             }
 
-            const mirror = await db.buyerRequirement.findFirst({
-                where: {
-                    title: bid.title,
-                    createdById: bid.buyerId,
-                    ...(bid.buyerOrganizationId ? { buyerOrganizationId: bid.buyerOrganizationId } : {})
-                },
-                select: { id: true }
-            }).catch(() => null);
+            if (bid.bidNumber) {
+                const mirror = await db.buyerRequirement.findFirst({
+                    where: {
+                        referenceNumber: bid.bidNumber,
+                        createdById: bid.buyerId,
+                    },
+                    select: { id: true }
+                }).catch(() => null);
+                if (mirror) return mirror.id;
+            }
 
-            return mirror?.id || null;
+            return null;
         };
 
         let id = Number(idToken);
@@ -3716,12 +3718,11 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
                     select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
                 }).catch(() => null);
             }
-            if (!resolvedBuyerReq) {
+            if (!resolvedBuyerReq && resolvedBid.bidNumber) {
                 resolvedBuyerReq = await db.buyerRequirement.findFirst({
                     where: {
-                        title: resolvedBid.title,
+                        referenceNumber: resolvedBid.bidNumber,
                         createdById: resolvedBid.buyerId,
-                        ...(resolvedBid.buyerOrganizationId ? { buyerOrganizationId: resolvedBid.buyerOrganizationId } : {})
                     },
                     select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
                 }).catch(() => null);
@@ -3734,11 +3735,7 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
                     OR: [
                         { technicalPacket: { path: ['sourceRequirementId'], equals: resolvedBuyerReq.id } },
                         { technicalPacket: { path: ['requirementId'], equals: resolvedBuyerReq.id } },
-                        {
-                            title: resolvedBuyerReq.title,
-                            buyerId: resolvedBuyerReq.createdById,
-                            ...(resolvedBuyerReq.buyerOrganizationId ? { buyerOrganizationId: resolvedBuyerReq.buyerOrganizationId } : {})
-                        }
+                        ...(resolvedBuyerReq.referenceNumber ? [{ bidNumber: resolvedBuyerReq.referenceNumber }] : [])
                     ]
                 },
                 select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }

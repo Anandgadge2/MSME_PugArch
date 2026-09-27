@@ -4551,10 +4551,10 @@ export function ProcurementDetailUnifiedView(
             "",
           submittedAt: r.createdAt || r.submittedAt || r.updatedAt,
           submissionStatus:
-            r.status === "SHORTLISTED" || r.status === "ACCEPTED"
+            r.status === "SHORTLISTED" || r.status === "ACCEPTED" || r.status === "QUALIFIED"
               ? "SUBMITTED"
-              : r.status || r.submissionStatus || "SUBMITTED",
-          status: r.status || r.submissionStatus || "SUBMITTED",
+              : r.submissionStatus || r.status || (r.offeredPrice || r.quotedAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
+          status: r.status || r.submissionStatus || (r.offeredPrice || r.quotedAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
           quotedAmount: Number(
             r.offeredPrice ||
               r.quotedAmount ||
@@ -4625,10 +4625,6 @@ export function ProcurementDetailUnifiedView(
         };
       };
 
-      const trailingDigits = String(targetId).match(/\d+/g);
-      const lastNumericPart = trailingDigits
-        ? trailingDigits[trailingDigits.length - 1]
-        : null;
       const rawPropId =
         props.id !== undefined && props.id !== null ? String(props.id) : null;
       const absPropId =
@@ -4647,7 +4643,6 @@ export function ProcurementDetailUnifiedView(
             props.displayId !== "—"
               ? String(props.displayId)
               : null,
-            lastNumericPart,
           ].filter(Boolean) as string[],
         ),
       );
@@ -6629,7 +6624,7 @@ export function ProcurementDetailUnifiedView(
       const statusStr = String(
         p.submissionStatus || p.status || "",
       ).toUpperCase();
-      return statusStr !== "DRAFT" && statusStr !== "CANCELLED";
+      return statusStr !== "DRAFT" && statusStr !== "CANCELLED" && statusStr !== "INVITED";
     });
   }, [allParticipationsList]);
 

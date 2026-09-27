@@ -1532,12 +1532,11 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
       }
     }
 
-    const candidateTitles = Array.from(new Set(bids.map(b => b.title).filter(Boolean)));
     const reqIdsArray = Array.from(targetReqIds);
     const reqNumsArray = Array.from(new Set([...targetReqNumbers, ...targetBidNumbers]));
 
     // If no candidate requirement IDs or numbers, return immediately without touching DB
-    if (reqIdsArray.length === 0 && reqNumsArray.length === 0 && candidateTitles.length === 0) {
+    if (reqIdsArray.length === 0 && reqNumsArray.length === 0) {
       return bids;
     }
 
@@ -1547,10 +1546,10 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
         where: {
           OR: [
             ...(reqIdsArray.length > 0 ? [{ id: { in: reqIdsArray } }] : []),
-            ...(candidateTitles.length > 0 ? [{ title: { in: candidateTitles as string[] } }] : [])
+            ...(reqNumsArray.length > 0 ? [{ referenceNumber: { in: reqNumsArray } }] : [])
           ]
         },
-        select: { id: true, title: true, description: true, createdById: true, buyerOrganizationId: true }
+        select: { id: true, title: true, referenceNumber: true, description: true, createdById: true, buyerOrganizationId: true }
       }).catch(() => []),
       prisma.requirement.findMany({
         where: {
@@ -1637,17 +1636,12 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
           (bidNumberNorm && normalizeStr(lr.requirementNumber) === bidNumberNorm) ||
           (bidReqNumNorm && normalizeStr(lr.requirementNumber) === bidReqNumNorm)
         ));
-        const matchedReqObj = responseRequirement || legacyReqs.find(lr => lr.id === reqId);
-        const responseTitleNorm = normalizeStr(matchedReqObj?.title);
-        const titleMatchesBid = Boolean(responseTitleNorm && bidTitleNorm && responseTitleNorm === bidTitleNorm);
-        const buyerMatchesBid = Boolean(
-          (bidBuyerId > 0 && Number((matchedReqObj as any)?.createdById || (matchedReqObj as any)?.buyerId || 0) === bidBuyerId) ||
-          (bidBuyerOrganizationId > 0 && Number((matchedReqObj as any)?.buyerOrganizationId || (matchedReqObj as any)?.organizationId || 0) === bidBuyerOrganizationId) ||
-          (bidBuyerId > 0 && Number(r.buyerUserId || 0) === bidBuyerId)
+        const matchedBuyerReq = responseRequirement && (
+          (bidNumberNorm && normalizeStr(responseRequirement.referenceNumber) === bidNumberNorm) ||
+          (bidReqNumNorm && normalizeStr(responseRequirement.referenceNumber) === bidReqNumNorm)
         );
-        const isTitleAndBuyerMatch = Boolean(titleMatchesBid && buyerMatchesBid);
 
-        if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || isTitleAndBuyerMatch) {
+        if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || matchedBuyerReq) {
           const sellerId = r.sellerUserId;
           if (sellerId) {
             const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});
