@@ -240,15 +240,12 @@ export const step6Schema = z.object({
   bidderDocuments: z.array(z.string()).min(1, 'Bidder documents are required'),
   msePreference: yesNoBoolean,
   makeInIndiaPreference: yesNoBoolean,
-  emdRequired: yesNoBoolean,
-  emdAmount: z.coerce.number().nonnegative().optional(),
   pbgRequired: yesNoBoolean,
   pbgPercentage: z.coerce.number().nonnegative().optional(),
   blacklistingDeclarationRequired: yesNoBoolean,
   conflictOfInterestDeclarationRequired: yesNoBoolean,
   technicalPacket: technicalPacketSchema.optional()
-}).refine(data => !data.emdRequired || Number(data.emdAmount || 0) > 0, { path: ['emdAmount'], message: 'EMD amount is required' })
-  .refine(data => !data.pbgRequired || Number(data.pbgPercentage || 0) > 0, { path: ['pbgPercentage'], message: 'PBG percentage is required' });
+}).refine(data => !data.pbgRequired || Number(data.pbgPercentage || 0) > 0, { path: ['pbgPercentage'], message: 'PBG percentage is required' });
 
 export const financialPacketSchema = z.object({
   financialQuoteFormat: z.enum(['ITEM_WISE', 'TOTAL_BOQ', 'PERCENTAGE', 'LOT_WISE']),

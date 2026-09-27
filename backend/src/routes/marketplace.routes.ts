@@ -1287,7 +1287,6 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
         orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
         select: {
             id: true,
-            parentId: true,
             name: true,
             slug: true,
             type: true,
@@ -1299,7 +1298,6 @@ const loadFeaturedCategories = async () => getOrSetCache(redisKeys.cacheMarketpl
     }).catch(() => []);
     return (categories || []).map((category: any) => ({
         id: category.id,
-        parentId: category.parentId || null,
         name: category.name,
         slug: category.slug,
         icon: category.slug,
@@ -3263,41 +3261,6 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             return apiResponse.error(res, 403, 'Please complete seller onboarding and verification to respond to this requirement.', 'SELLER_VERIFICATION_REQUIRED');
         }
         const sellerOrganizationId = seller?.organizationId || req.user?.organizationId || null;
-
-        // EMD Security Check: Verify EMD payment if mandatory
-        const targetReqRecord = id > 0 ? await db.buyerRequirement.findUnique({
-            where: { id },
-            select: { id: true, isEmdRequired: true, emdAmount: true, payload: true }
-        }).catch(() => null) : null;
-
-        const isEmdRequired = Boolean(
-            targetReqRecord?.isEmdRequired ||
-            (targetReqRecord?.payload as any)?.terms?.emdRequired ||
-            (targetReqRecord?.emdAmount && Number(targetReqRecord.emdAmount) > 0)
-        );
-
-        if (isEmdRequired) {
-            const { resolveEmdPaymentStatus } = await import('./emd.routes.js');
-            const emdPayment = await resolveEmdPaymentStatus(Number(req.user?.id), id, idToken);
-            if (!emdPayment || !['PAID', 'VERIFIED'].includes(String(emdPayment.status).toUpperCase())) {
-                return apiResponse.error(
-                    res,
-                    400,
-                    'Earnest Money Deposit (EMD) payment is required before submitting your quotation.',
-                    'EMD_PAYMENT_REQUIRED'
-                );
-            }
-            if ((emdPayment as any).id && id > 0) {
-                await (db as any).emdPayment.update({
-                    where: { id: (emdPayment as any).id },
-                    data: {
-                        requirementId: id,
-                        status: 'VERIFIED',
-                        verifiedAt: (emdPayment as any).verifiedAt || new Date()
-                    }
-                }).catch(() => undefined);
-            }
-        }
 
         const response = await db.$transaction(async (tx: any) => {
             let targetId = id;

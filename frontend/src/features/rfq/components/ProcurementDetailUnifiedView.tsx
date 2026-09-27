@@ -74,8 +74,6 @@ import { getApi } from "../../shared/apiClient";
 import { procurementBidApi } from "../../procurementBid/api";
 import { KpiCard } from "../../shared/KpiCard";
 import ClarificationPanel from "./ClarificationPanel";
-import { EmdCard, EmdInfo, isEmdApplicable } from "./EmdCard";
-import { EmdPaymentModal } from "./EmdPaymentModal";
 import StartReverseAuctionModal, {
   SubmittedVendorItem,
 } from "../../reverseAuctions/components/StartReverseAuctionModal";
@@ -3915,8 +3913,6 @@ export interface ProcurementDetailUnifiedViewProps {
   hasSubmittedProposal?: boolean;
   ownParticipation?: any;
   ownResponse?: any;
-  emdAmount?: number;
-  isEmdRequired?: boolean;
   packetType?: string;
   allowClarification?: boolean;
   backRoute?: string;
@@ -3967,6 +3963,9 @@ export interface ProcurementDetailUnifiedViewProps {
   rawBid?: any;
   quantity?: number | string;
   unit?: string;
+  emdAmount?: number | string | null;
+  emdRequired?: boolean;
+  isEmdRequired?: boolean;
 }
 
 export function ProcurementDetailUnifiedView(
@@ -3983,7 +3982,6 @@ export function ProcurementDetailUnifiedView(
     | "evaluation"
     | "clarifications"
   >("overview");
-  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<
     any | null
   >(null);
@@ -4726,61 +4724,10 @@ export function ProcurementDetailUnifiedView(
     ),
     staleTime: 5_000,
   });
-  const {
-    data: emdRes,
-    refetch: refetchEmd,
-    isLoading: emdLoading,
-  } = useQuery({
-    queryKey: ["emd-status-unified", targetId, currentUser?.id],
-    queryFn: async () => {
-      if (!targetId) return null;
-      try {
-        const r = await getApi<any>(
-          `/api/emd/status?requestId=${encodeURIComponent(targetId)}`,
-        );
-        return r?.data ?? r;
-      } catch {
-        return null;
-      }
-    },
-    enabled: currentUser?.role === "seller" && !!targetId,
-  });
-
-  const isEmdPaid = emdRes?.status === "PAID" || emdRes?.status === "VERIFIED";
-  const emdInfo: EmdInfo | null = useMemo(() => {
-    const isEmdReq = emdRes?.isEmdRequired ?? props.isEmdRequired ?? false;
-    const amt = emdRes?.emdAmount ?? props.emdAmount ?? 0;
-    if (!isEmdReq || Number(amt) <= 0) return null;
-
-    return {
-      isEmdRequired: isEmdReq,
-      emdAmount: Number(amt),
-      paymentMethod: emdRes?.paymentMethod || "Online Escrow",
-      paymentDeadline: emdRes?.paymentDeadline,
-      refundPolicy:
-        emdRes?.refundPolicy || "Refundable upon completion of evaluation",
-      instructions: emdRes?.instructions,
-      status: isEmdPaid ? "PAID" : emdRes?.status || "PENDING",
-      payment: emdRes?.payment || null,
-    };
-  }, [emdRes, props.isEmdRequired, props.emdAmount, isEmdPaid]);
-
-  // ── EMD Flow (Commented out as requested) ──
-  const showEmdCard = false; // isEmdApplicable(props.procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
-  const isEmdGated = false; // showEmdCard && !isEmdPaid && !props.hasSubmittedProposal;
-
   const handleActionSubmit = () => {
     if (!currentUser) {
       toast.error("Please login to participate.");
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
-      return;
-    }
-
-    if (isEmdGated) {
-      toast.error(
-        "Please complete EMD Payment before submitting your quotation/proposal.",
-      );
-      setIsEmdModalOpen(true);
       return;
     }
 
@@ -6100,29 +6047,6 @@ export function ProcurementDetailUnifiedView(
           },
         ]
       : [];
-
-  const isEmdRequired = Boolean(
-    props.isEmdRequired ??
-    emdInfo?.isEmdRequired ??
-    payload?.emd?.isEmdRequired ??
-    basics?.isEmdRequired ??
-    rules?.isEmdRequired ??
-    false,
-  );
-  const rawEmdAmt = isEmdRequired
-    ? (emdInfo?.emdAmount ??
-      props.emdAmount ??
-      payload?.emd?.amount ??
-      rules?.emdAmount ??
-      0)
-    : 0;
-
-  const emdDisplay =
-    isEmdRequired && Number(rawEmdAmt) > 0
-      ? formatCurrency(rawEmdAmt)
-      : isEmdRequired
-        ? "Required"
-        : "Not required";
 
   const vendors = payload.vendors || {};
   const approval = payload.approval || {};
@@ -7666,13 +7590,6 @@ export function ProcurementDetailUnifiedView(
         notesList.push("Stage 2 (Live Reverse Auction): Technically approved bidders submit real-time decremented bids in the live bidding window.");
       } else if (isDirectReverseAuction) {
         notesList.push("SOURCING WORKFLOW: Direct Dynamic Reverse Auction.");
-      }
-
-      if (props.isEmdRequired && Number(props.emdAmount || 0) > 0) {
-        notesList.push(`EARNEST MONEY DEPOSIT (EMD): INR ${Number(props.emdAmount).toLocaleString("en-IN")} mandatory prior to bidding cutoff.`);
-        notesList.push("EMD EXEMPTION: Eligible MSME/MSE units with valid Udyam Registration are exempted as per Public Procurement Policy.");
-      } else {
-        notesList.push("EARNEST MONEY DEPOSIT (EMD): Nil / Fully Exempted for registered vendors.");
       }
 
       notesList.push(`BID SUBMISSION CUTOFF: ${closingDateFormatted || "Refer to portal schedule"} (Strict closing deadline).`);
@@ -9371,17 +9288,12 @@ export function ProcurementDetailUnifiedView(
                       type="button"
                       size="sm"
                       onClick={handleActionSubmit}
-                      className={cn(
-                        "h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5",
-                        isEmdGated ? "bg-amber-600 hover:bg-amber-700" : "",
-                      )}
+                      className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
                     >
                       <span>
-                        {isEmdGated
-                          ? "Pay EMD to Submit"
-                          : isBuyerOrAdmin && isBidAwarded
-                            ? "View Awarded Results & Ranking"
-                            : props.submitButtonLabel || defaultSubmitBtnLabel}
+                        {isBuyerOrAdmin && isBidAwarded
+                          ? "View Awarded Results & Ranking"
+                          : props.submitButtonLabel || defaultSubmitBtnLabel}
                       </span>
                       <ArrowRight className="h-3 w-3" />
                     </Button>
@@ -9430,8 +9342,6 @@ export function ProcurementDetailUnifiedView(
                 }
               />
             )}
-
-          {/* EMD Section commented out */}
 
           {/* Summary Metrics */}
           <section
@@ -11442,8 +11352,6 @@ export function ProcurementDetailUnifiedView(
                   })()}
             </div>
           )}
-
-          {/* EMD Payment Modal commented out */}
         </div>
       </div>
     </BuyerSideContext.Provider>

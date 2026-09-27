@@ -452,8 +452,6 @@ const transformDraftToProcurementBidPayload = async (draft: any, buyerId: number
     financialOpeningDate: packetType === 'TWO_PACKET' ? normalizeDate(step3.financialOpeningDate, new Date(endDate.getTime() + 24 * 60 * 60 * 1000)) : undefined,
     bidValidityDate,
     evaluationMethod: step6.evaluationMethod || step4.evaluationMethod || 'L1',
-    isEmdRequired: Boolean(step6.emdRequired),
-    emdAmount: positiveNumberOrUndefined(step6.emdAmount),
     documentFee: 0,
     allowClarification: Boolean(step8.sellerQueryAllowed || step8.clarificationWindowRequired),
     allowReverseAuction: Boolean(step1.isReverseAuctionRequired || bidType === 'BID_WITH_RA' || bidType === 'REVERSE_AUCTION'),

@@ -179,21 +179,31 @@ test('12. Payment via Offline Slip Upload: Upload proof, admin verification & re
   assert.match(deliveryService, /PAYMENT_RELEASED/);
 });
 
-test('13. EMD & Tender Document Fee Deactivation: Cleanly bypassed for all sellers and SHGs', () => {
-  const emdCard = read('../frontend/src/features/rfq/components/EmdCard.tsx');
+test('13. EMD & Subcategory Complete Elimination: Zero dead code, models, or routes', () => {
+  const schema = read('prisma/schema.prisma');
+  const routesIndex = read('src/routes/index.ts');
   const participationPage = read('../frontend/src/features/procurementBid/pages/BidParticipationPage.tsx');
   const unifiedView = read('../frontend/src/features/rfq/components/ProcurementDetailUnifiedView.tsx');
 
-  // isEmdApplicable returns false, EmdCard returns null
-  assert.match(emdCard, /export function isEmdApplicable\([^{]*\{\s*\/\/[^\n]*\s*return false;\s*\}/);
-  assert.match(emdCard, /export const EmdCard:\s*React\.FC<EmdCardProps>\s*=\s*\(\)\s*=>\s*\{\s*\/\/[^\n]*\s*return null;\s*\}/);
+  // Verify EmdPayment model does not exist and Category has no parentId or children
+  assert.doesNotMatch(schema, /\bmodel EmdPayment\b/);
+  const categoryModel = schema.match(/model Category \{[\s\S]*?\}/)?.[0] || '';
+  assert.doesNotMatch(categoryModel, /\bparentId\b/);
+  assert.doesNotMatch(categoryModel, /\bchildren\b/);
 
-  // No active EMD gating in participation page
+  // Verify emd routes are not mounted
+  assert.doesNotMatch(routesIndex, /\bemdRoutes\b/);
+  assert.equal(existsSync(new URL('../src/routes/emd.routes.ts', import.meta.url)), false);
+
+  // Verify EmdCard.tsx and EmdPaymentModal.tsx do not exist in frontend
+  assert.equal(existsSync(new URL('../../frontend/src/features/rfq/components/EmdCard.tsx', import.meta.url)), false);
+  assert.equal(existsSync(new URL('../../frontend/src/features/rfq/components/EmdPaymentModal.tsx', import.meta.url)), false);
+
+  // No active EMD gating or components in participation page or unified view
   assert.doesNotMatch(participationPage, /<EmdCard[^>]*\/>/);
-
-  // No active EMD section in unified view
-  assert.match(unifiedView, /const showEmdCard = false;/);
-  assert.match(unifiedView, /const isEmdGated = false;/);
+  assert.doesNotMatch(participationPage, /<EmdPaymentModal[^>]*\/>/);
+  assert.doesNotMatch(unifiedView, /<EmdCard[^>]*\/>/);
+  assert.doesNotMatch(unifiedView, /<EmdPaymentModal[^>]*\/>/);
 });
 
 test('14. UI Data Formatting & Anti-Raw Dump Invariants: Zero raw JSON dumps, noisy keys filtered', () => {
@@ -206,7 +216,7 @@ test('14. UI Data Formatting & Anti-Raw Dump Invariants: Zero raw JSON dumps, no
   assert.match(unifiedView, /noisyDetailKeys/);
   const requiredFilters = ['_id', '__v', 'tenantId', 'technicalPacket', 'rawPayload', 'password', 'token'];
   for (const key of requiredFilters) {
-    assert.match(unifiedView, new RegExp(`'${key}'`));
+    assert.match(unifiedView, new RegExp(`['"]${key}['"]`));
   }
 
   // Proper currency formatting

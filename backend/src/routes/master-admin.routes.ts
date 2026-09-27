@@ -2396,7 +2396,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
     await rawSql('Tender_nullify_cat', `UPDATE "Tender" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
     await rawSql('BuyerRequirement_nullify_cat', `UPDATE "BuyerRequirement" SET "categoryId" = NULL WHERE "buyerOrganizationId" = ${id} OR "categoryId" IN (${categorySub})`);
     await rawSql('MarketplaceInteraction_nullify_cat', `UPDATE "MarketplaceInteraction" SET "categoryId" = NULL WHERE "organizationId" = ${id} OR "categoryId" IN (${categorySub})`);
-    await rawSql('Category_nullify_parent', `UPDATE "Category" SET "parentId" = NULL WHERE "organizationId" = ${id} OR "parentId" IN (${categorySub})`);
     await rawSql('Category', `DELETE FROM "Category" WHERE "organizationId" = ${id}`);
 
     // Delete products, services, requirements

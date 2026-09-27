@@ -135,7 +135,7 @@ const SOP_WORKFLOWS: SopWorkflow[] = [
       },
       {
         title: 'Opportunity Radar & Bid Submission',
-        description: 'Discover published tenders and quote requests matching your categories. Submit compliant technical and commercial proposals with automated EMD exemption verification.',
+        description: 'Discover published tenders and quote requests matching your categories. Submit compliant technical and commercial proposals seamlessly directly on the portal.',
         prerequisites: ['Statutory Eligibility Check', 'Commercial Quotation Form', 'Compliance Declarations'],
         actionLabel: 'Browse Opportunities',
         actionHref: '/seller/opportunities'
@@ -186,7 +186,7 @@ const SOP_WORKFLOWS: SopWorkflow[] = [
       },
       {
         title: 'Preferential Procurement Participation',
-        description: 'Access tenders with statutory SHG preference, relaxed turnover criteria, and 100% EMD fee waiver. Submit bids with guidance from community animators.',
+        description: 'Access tenders with statutory SHG preference, relaxed turnover criteria, and zero participation fees. Submit bids with guidance from community animators.',
         prerequisites: ['SHG Standing Certificate', 'Price Bid Submission'],
         actionLabel: 'SHG Opportunities',
         actionHref: '/shg/opportunities'
@@ -264,7 +264,7 @@ const DOCUMENTATION_STANDARDS = [
     icon: Scale,
     items: [
       'Quote all prices inclusive of basic rate, applicable HSN/SAC code, and itemized GST rate breakdown.',
-      'Qualified MSMEs with active Udyam certificates and SHGs receive statutory EMD and PBG exemptions.',
+      'Qualified MSMEs with active Udyam certificates and SHGs receive statutory procurement preferences and simplified participation.',
       'Strict adherence to the 45-day statutory payment maximum under Section 15 of the MSMED Act 2006.'
     ]
   },
@@ -351,8 +351,8 @@ const FAQS = [
     answer: 'The primary cause of verification delay is discrepancy between the legal name or address recorded on the PAN card, GSTIN portal, and the Udyam Registration Certificate. Please ensure your entity name, authorized signatory, and registered address match across all official documents before submitting.'
   },
   {
-    question: 'Are MSME suppliers and SHGs exempt from Earnest Money Deposit (EMD) and tender fees?',
-    answer: 'Yes. In accordance with the Public Procurement Policy for MSEs, all registered Micro and Small Enterprises holding a valid Udyam Registration Certificate and verified Self Help Groups (SHGs) are 100% exempt from payment of tender fees and Earnest Money Deposit (EMD) across all district procurement tenders.'
+    question: 'Do MSME suppliers and SHGs need to pay any tender participation fees?',
+    answer: 'No. In accordance with the Public Procurement Policy for MSEs, all registered Micro and Small Enterprises holding a valid Udyam Registration Certificate and verified Self Help Groups (SHGs) participate in all district procurements and public bidding with zero fees.'
   },
   {
     question: 'How does the Goods Receipt Note (GRN) protect both buyers and suppliers?',

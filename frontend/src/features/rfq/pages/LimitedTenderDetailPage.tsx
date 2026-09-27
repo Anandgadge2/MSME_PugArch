@@ -340,8 +340,6 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
         participantsCount={bid.participantsCount ?? participationsList.length}
         hasSubmittedProposal={hasSubmittedProposal}
         ownParticipation={ownParticipation}
-        emdAmount={bid.emdAmount || reqObj.emdAmount || basics.emdAmount}
-        isEmdRequired={bid.isEmdRequired ?? reqObj.isEmdRequired ?? basics.isEmdRequired}
         backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
         backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
         submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Limited Tender Proposal')}

@@ -604,14 +604,13 @@ const BuyerRequirementDetailsPage = () => {
               </div>
             )}
 
-            {(payload.tender?.bidStartDate || payload.tender?.bidClosingDate || payload.rules?.emdRequired) && (
+            {(payload.tender?.bidStartDate || payload.tender?.bidClosingDate) && (
               <div className="mt-6">
                 <h3 className="mb-3 text-xs font-black uppercase tracking-wider text-slate-500">Bid Timeline & Commercial Rules</h3>
                 <div className="grid grid-cols-2 gap-2.5 sm:gap-4 rounded-xl border border-slate-200 bg-slate-50/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
                   {payload.tender?.bidStartDate && <DetailRow icon={Calendar} label="Bid Start" value={formatDateTime(payload.tender.bidStartDate)} />}
                   {payload.tender?.bidClosingDate && <DetailRow icon={Calendar} label="Bid Closing" value={formatDateTime(payload.tender.bidClosingDate)} />}
                   {payload.tender?.technicalEvaluationDate && <DetailRow icon={Calendar} label="Technical Opening" value={formatDateTime(payload.tender.technicalEvaluationDate)} />}
-                  {payload.rules?.emdRequired ? <DetailRow icon={IndianRupee} label="EMD" value={formatMoney(payload.rules.emdAmount)} /> : null}
                   {payload.tender?.performanceSecurityAmount ? <DetailRow icon={Shield} label="Performance Security" value={formatMoney(payload.tender.performanceSecurityAmount)} /> : null}
                 </div>
               </div>

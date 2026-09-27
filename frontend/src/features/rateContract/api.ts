@@ -25,7 +25,6 @@ export type RateContractMetadata = {
   contractTitle: string;
   contractDescription: string;
   contractCategory: string;
-  contractSubCategory: string;
   periodStartDate: string;
   periodEndDate: string;
   rateValidityPeriod: string;

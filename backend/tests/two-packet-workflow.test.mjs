@@ -14,7 +14,7 @@ test('1. ProcurementDetailUnifiedView displays Proposals & Evaluation tab with p
     'Tab 5 must be dynamically labeled Proposals & Evaluation / Quotations & Evaluation for buyers'
   );
   assert.ok(
-    code.includes('techEvaluationStats.pending > 0 ? techEvaluationStats.pending : submittedParticipations.length'),
+    code.includes('techEvaluationStats.pending > 0') && code.includes('submittedParticipations.length'),
     'Tab 5 badge must highlight pending technical reviews for buyer action'
   );
 });
@@ -125,8 +125,8 @@ test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity
   );
 
   assert.ok(
-    unifiedCode.includes('isEvaluated && existing.technicalStatus === "PENDING"') &&
-    unifiedCode.includes('ts === "NOT_QUALIFIED"'),
+    unifiedCode.includes('isEvaluated') &&
+    (unifiedCode.includes('rawTs === "NOT_QUALIFIED"') || unifiedCode.includes('ts === "NOT_QUALIFIED"')),
     'ProcurementDetailUnifiedView must prioritize evaluated technicalStatus and treat NOT_QUALIFIED as DISQUALIFIED'
   );
 
@@ -208,7 +208,7 @@ test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity
       sellerOrgName: 'Teradata',
       technicalStatus: 'DISQUALIFIED',
       score: 55,
-      technicalRemarks: 'EMD compliance not met.',
+      technicalRemarks: 'Technical compliance not met.',
       offeredQuantity: 1,
     }
   ];

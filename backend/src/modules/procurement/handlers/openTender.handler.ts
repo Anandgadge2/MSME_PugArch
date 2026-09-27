@@ -11,7 +11,6 @@ export interface OpenTenderRequirementInput {
   description?: string;
   categoryId?: number;
   estimatedValue?: number;
-  emdAmount?: number;
   tenderFee?: number;
   closesAt?: Date;
   preQualificationCriteria?: Array<{ criteria: string; mandatory: boolean }>;
@@ -21,7 +20,6 @@ export interface OpenTenderRequirementInput {
 
 export interface OpenTenderBidInput {
   sellerId: number;
-  emdPaymentRef?: string;
   technicalDocs?: string[];
   financialBidAmount?: number;
   boqLineQuotes?: Array<{ itemNo: number; rate: number }>;
@@ -39,16 +37,12 @@ export const openTenderHandler = {
     if (input.closesAt && new Date(input.closesAt) <= new Date()) {
       errors.push('Open Tender closing date must be in the future');
     }
-    if (input.emdAmount !== undefined && input.emdAmount < 0) {
-      errors.push('EMD amount cannot be negative');
-    }
     return { valid: errors.length === 0, errors };
   },
 
   normalizePayload(input: OpenTenderRequirementInput): Record<string, unknown> {
     return {
       procurementType: 'OPEN_TENDER',
-      emdAmount: input.emdAmount || 0,
       tenderFee: input.tenderFee || 0,
       preQualificationCriteria: input.preQualificationCriteria || [],
       boqItems: input.boqItems || [],

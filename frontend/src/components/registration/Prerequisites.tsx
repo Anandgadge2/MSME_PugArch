@@ -117,7 +117,7 @@ const prerequisiteDocs: Record<string, { personal: string[], business: string[],
       'Business PAN details (4th character of your PAN number should be P or H)',
       'Bank account number and IFSC ',
       'Company Registered Address ',
-      'Udyam number for MSME (EMD exemption in BID) '],
+      'Udyam number for MSME verification'],
     optional: [
       'Income tax returns of last 3 years (It is required for BID participation if your business is older than 24 months) ',
       'GST number for inter state business',

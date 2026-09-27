@@ -808,8 +808,6 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         itemCondition: bid.deliveryLocation,
         bidValidityDays: bid.bidValidityDate ? undefined : 90,
         bidValidityDate: bid.bidValidityDate,
-        emdAmount: bid.emdAmount ? Number(bid.emdAmount) : 0,
-        isEmdRequired: bid.isEmdRequired,
         evaluationMethod: bid.evaluationMethod,
         technicalOpeningDate: bid.technicalOpeningDate,
         financialOpeningDate: bid.financialOpeningDate,
@@ -1293,9 +1291,6 @@ const validateProcurementDraftForSubmit = (draft: any) => {
       throw new ApiError(400, 'Financial opening date must be after technical opening date', 'PROCUREMENT_DATE_INVALID');
     }
   }
-  if (rules.emdRequired && Number(rules.emdAmount || 0) <= 0) {
-    throw new ApiError(400, 'EMD amount is required when EMD is enabled', 'PROCUREMENT_EMD_REQUIRED');
-  }
   if (rules.performanceSecurity && Number(tender.performanceSecurityAmount || 0) <= 0) {
     throw new ApiError(400, 'ePBG / performance security amount is required when enabled', 'PROCUREMENT_EPBG_REQUIRED');
   }
@@ -1475,7 +1470,6 @@ const rateContractConfigSchema = z.object({
   contractTitle: z.string().trim().min(3).max(200),
   contractDescription: z.string().trim().max(4000).optional().default(''),
   contractCategory: z.string().trim().max(160).optional().default(''),
-  contractSubCategory: z.string().trim().max(160).optional().default(''),
   periodStartDate: safeCoercedDate,
   periodEndDate: safeCoercedDate,
   rateValidityPeriod: z.string().trim().min(2).max(120),
@@ -1532,7 +1526,6 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     contractTitle: raw.contractTitle || payload.basics?.title || draft.title,
     contractDescription: raw.contractDescription || payload.basics?.description || draft.description || '',
     contractCategory: raw.contractCategory || payload.basics?.category || payload.category || '',
-    contractSubCategory: raw.contractSubCategory || '',
     periodStartDate: raw.periodStartDate || raw.startDate || payload.tender?.bidStartDate,
     periodEndDate: raw.periodEndDate || raw.endDate || payload.tender?.bidClosingDate || draft.requiredBy,
     rateValidityPeriod: raw.rateValidityPeriod || 'Contract period',
@@ -1545,8 +1538,8 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     minimumOrderQuantity: raw.minimumOrderQuantity ?? 0,
     deliverySla: raw.deliverySla || payload.terms?.deliveryTerms || 'As per contract terms',
     penaltyClause: raw.penaltyClause || payload.terms?.penaltyClause || 'As per contract terms',
-    securityDepositRequired: Boolean(raw.securityDepositRequired ?? payload.terms?.emdRequired ?? false),
-    securityDepositAmount: Number(raw.securityDepositAmount ?? payload.terms?.securityDeposit ?? payload.terms?.emdAmount ?? 0),
+    securityDepositRequired: Boolean(raw.securityDepositRequired ?? false),
+    securityDepositAmount: Number(raw.securityDepositAmount ?? payload.terms?.securityDeposit ?? 0),
     pbgRequired: Boolean(raw.pbgRequired ?? payload.terms?.pbgRequired ?? false),
     pbgAmount: Number(raw.pbgAmount ?? payload.terms?.securityDeposit ?? 0),
     approvalWorkflow: raw.approvalWorkflow || payload.approval?.workflow || 'Finance + Procurement',
@@ -1930,8 +1923,6 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     approvedAt: creationTime,
     lifecycleStage: 'SELLER_PARTICIPATION',
     evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
-    isEmdRequired: Boolean(terms.emdRequired || tender.emdRequired),
-    emdAmount: terms.emdAmount || tender.emdAmount || null,
     documentFee: tender.documentFee || null,
     allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
     allowReverseAuction: ['bid-with-reverse-auction', 'reverse-auction'].includes(methodSlug) || payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false),
@@ -5033,7 +5024,6 @@ router.get('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (
 router.post('/admin/categories', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const body = parse(z.object({
     name: z.string().trim().min(2).max(160),
-    parentId: z.coerce.number().int().positive().optional(),
     type: z.enum(['PRODUCT', 'SERVICE', 'BOTH']).default('BOTH'),
     description: z.string().trim().max(1000).optional(),
     imageUrl: z.string().optional().nullable()
@@ -5081,7 +5071,6 @@ router.delete('/admin/categories/:id', authenticate, authorizeAdmin, asyncRoute(
   const { id } = parse(idParams, req.params);
   
   await db.$transaction(async (tx) => {
-    await tx.category.updateMany({ where: { parentId: id }, data: { parentId: null } });
     await tx.product.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
     await tx.service.updateMany({ where: { categoryId: id }, data: { categoryId: null } });
     await tx.buyerRequirement.updateMany({ where: { categoryId: id }, data: { categoryId: null } });

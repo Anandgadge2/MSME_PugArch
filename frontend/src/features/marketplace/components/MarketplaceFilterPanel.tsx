@@ -18,7 +18,6 @@ import {
     Percent,
     Layers,
     Sparkles,
-    Boxes,
     Package,
     Wrench
 } from 'lucide-react';
@@ -31,11 +30,6 @@ export interface MarketplaceFilterPanelProps {
     selectedCategoryIds: string[];
     onSelectCategory: (categoryId: string) => void;
     onClearCategories: () => void;
-    
-    availableSubcategories: string[];
-    selectedSubcategories: string[];
-    onToggleSubcategory: (sub: string) => void;
-    onClearSubcategories: () => void;
     
     canViewPrice: boolean;
     priceFilter: string;
@@ -83,10 +77,6 @@ export function MarketplaceFilterPanel({
     selectedCategoryIds,
     onSelectCategory,
     onClearCategories,
-    availableSubcategories,
-    selectedSubcategories,
-    onToggleSubcategory,
-    onClearSubcategories,
     canViewPrice,
     priceFilter,
     onPriceChange,
@@ -123,7 +113,6 @@ export function MarketplaceFilterPanel({
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({
         quick: true,
         categories: false,
-        subcategories: false,
         price: false,
         rating: false,
         sellers: false,
@@ -146,18 +135,6 @@ export function MarketplaceFilterPanel({
     }, [categories, categorySearch]);
 
     const displayedCategories = showAllCategories || categorySearch ? filteredCategories : filteredCategories.slice(0, 6);
-
-    // Subcategory search & show-more
-    const [subcategorySearch, setSubcategorySearch] = useState('');
-    const [showAllSubcategories, setShowAllSubcategories] = useState(false);
-
-    const filteredSubcategories = useMemo(() => {
-        if (!subcategorySearch.trim()) return availableSubcategories;
-        const query = subcategorySearch.toLowerCase().trim();
-        return availableSubcategories.filter(s => s.toLowerCase().includes(query));
-    }, [availableSubcategories, subcategorySearch]);
-
-    const displayedSubcategories = showAllSubcategories || subcategorySearch ? filteredSubcategories : filteredSubcategories.slice(0, 6);
 
     // Seller search & show-more
     const [sellerSearch, setSellerSearch] = useState('');
@@ -480,101 +457,7 @@ export function MarketplaceFilterPanel({
             </div>
 
             {/* Accordion 2: Product Types / Subcategories */}
-            {availableSubcategories.length > 0 && (
-                <div className="border-t border-slate-100 pt-3">
-                    <div className="flex items-center justify-between mb-2">
-                        <button
-                            type="button"
-                            onClick={() => toggleSection('subcategories')}
-                            className="flex-1 flex items-center justify-between text-left py-1 text-xs font-black uppercase tracking-wider text-slate-900 hover:text-blue-700 transition focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded cursor-pointer"
-                            aria-expanded={openSections.subcategories}
-                        >
-                            <span className="flex items-center gap-2">
-                                <Boxes className="h-3.5 w-3.5 text-indigo-600" />
-                                <span>Product Type</span>
-                                {selectedSubcategories.length > 0 && (
-                                    <span className="inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">
-                                        {selectedSubcategories.length}
-                                    </span>
-                                )}
-                            </span>
-                            <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", openSections.subcategories && "rotate-180")} />
-                        </button>
-                        {selectedSubcategories.length > 0 && (
-                            <button
-                                type="button"
-                                onClick={onClearSubcategories}
-                                className="text-[10px] font-bold text-slate-400 hover:text-red-600 transition ml-2 px-1 py-0.5 rounded cursor-pointer"
-                            >
-                                Clear
-                            </button>
-                        )}
-                    </div>
-
-                    {openSections.subcategories && (
-                        <div className="space-y-2 pt-1 animate-in fade-in duration-200">
-                            {availableSubcategories.length > 6 && (
-                                <div className="relative mb-2">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        value={subcategorySearch}
-                                        onChange={(e) => setSubcategorySearch(e.target.value)}
-                                        placeholder="Search product types..."
-                                        className="w-full h-8 pl-8 pr-7 text-xs rounded-xl border border-slate-200 bg-slate-50/70 focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none transition-all placeholder:text-slate-400"
-                                    />
-                                    {subcategorySearch && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setSubcategorySearch('')}
-                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-                                        >
-                                            <X className="h-3 w-3" />
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className="space-y-1 max-h-48 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-200">
-                                {displayedSubcategories.map((sub: string) => {
-                                    const isChecked = selectedSubcategories.includes(sub);
-                                    return (
-                                        <label
-                                            key={sub}
-                                            className={cn(
-                                                "flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition select-none border",
-                                                isChecked
-                                                    ? "bg-indigo-50/90 border-indigo-200 text-indigo-900 font-bold shadow-2xs"
-                                                    : "border-transparent text-slate-700 hover:bg-slate-50 hover:border-slate-100"
-                                            )}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={isChecked}
-                                                onChange={() => onToggleSubcategory(sub)}
-                                                className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                                            />
-                                            <span title={sub} className="truncate flex-1">{sub}</span>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-
-                            {filteredSubcategories.length > 6 && !subcategorySearch && (
-                                <button
-                                    type="button"
-                                    onClick={() => setShowAllSubcategories(!showAllSubcategories)}
-                                    className="w-full text-left text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition pt-1 pl-1 cursor-pointer"
-                                >
-                                    {showAllSubcategories ? '− Show fewer' : `+ View ${filteredSubcategories.length - 6} more`}
-                                </button>
-                            )}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Accordion 3: Price Range (₹) */}
+            {/* Accordion 2: Price Range (₹) */}
             {canViewPrice && (
                 <div className="border-t border-slate-100 pt-3">
                     <div className="flex items-center justify-between mb-2">

@@ -12,8 +12,6 @@ import {
   Check, FileSpreadsheet, Scale, AlertCircle, HelpCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { EmdCard, EmdInfo } from '../components/EmdCard';
-import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -254,7 +252,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     staleTime: 60_000,
   });
 
-  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [selectedBuyerResponse, setSelectedBuyerResponse] = useState<any>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
@@ -340,18 +337,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     } : null) ??
     localSubmittedResponse;
 
-  const emdTargetReqId = requirementId || rawBid?.sourceId || (typeof rawBid?.id === 'number' ? rawBid.id : null);
-  const targetBidToken = requestId    || rawBid?.bidNumber  || rawBid?.id;
-
-  const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
-    queryKey: ['emd-status', emdTargetReqId, targetBidToken, user?.id],
-    queryFn:  async () => {
-      const r = await getApi<any>(`/api/emd/status?requirementId=${emdTargetReqId ?? ''}&requestId=${targetBidToken ?? ''}`);
-      return r?.data ?? r;
-    },
-    enabled:   user?.role === 'seller' && (!!emdTargetReqId || !!targetBidToken),
-    staleTime: 0, gcTime: 0,
-  });
 
   const hasValidInitialData = Boolean(
     initialData &&
@@ -1017,28 +1002,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     docs.push({ id: fid ?? `d${docs.length}`, name: nm, type: d.documentType || 'Document', fid, url: d.fileUrl || d.url, required: Boolean(d.required || d.documentType === 'REQUIRED') });
   }
 
-  /* ── EMD ── */
-  const emdInfo: EmdInfo | null = emdRes ? {
-    isEmdRequired:   Boolean(emdRes.isEmdRequired ?? rawBid?.isEmdRequired ?? false),
-    emdAmount:       Number(emdRes.emdAmount || rawBid?.emdAmount || 0),
-    paymentMethod:   emdRes.paymentMethod  || 'Online / Net Banking / UPI',
-    paymentDeadline: emdRes.paymentDeadline || deadline,
-    refundPolicy:    emdRes.refundPolicy   || 'Refundable after evaluation & contract award',
-    instructions:    emdRes.instructions   || 'Pay EMD via Online Gateway or Bank Transfer.',
-    status:          emdRes.status         || 'PENDING',
-    payment:         emdRes.payment,
-  } : {
-    isEmdRequired:   Boolean(rawBid?.isEmdRequired || reqObj?.isEmdRequired || false),
-    emdAmount:       Number(rawBid?.emdAmount || reqObj?.emdAmount || 0),
-    paymentMethod:   'Online / Net Banking / UPI',
-    paymentDeadline: deadline,
-    refundPolicy:    'Refundable after evaluation & contract award',
-    instructions:    'Pay EMD via Online Gateway or Bank Transfer.',
-    status:          'PENDING',
-    payment:         null,
-  };
-  const isEmdPaid = !emdInfo?.isEmdRequired || ['PAID','VERIFIED'].includes(emdInfo?.status ?? '');
-
   /* ── Handlers ── */
   const handleDownloadPdf = async () => {
     if (isDownloadingPdf) return;
@@ -1145,12 +1108,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         notesList.push('SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.');
         notesList.push('Stage 1 (Technical & Baseline Qualification): Bidders submit technical specification compliance and initial baseline commercial quotes. Only approved vendors advance to Stage 2.');
         notesList.push('Stage 2 (Live Reverse Auction): Technically qualified bidders participate in dynamic downward decrement bidding.');
-      }
-      if (emdInfo?.isEmdRequired && emdInfo.emdAmount > 0) {
-        notesList.push(`EARNEST MONEY DEPOSIT (EMD): INR ${emdInfo.emdAmount.toLocaleString('en-IN')} mandatory before quotation cutoff.`);
-        notesList.push('EMD EXEMPTION: Eligible MSME/MSE units with valid Udyam Registration are exempted as per Public Procurement Policy.');
-      } else {
-        notesList.push('EARNEST MONEY DEPOSIT (EMD): Nil / Fully Exempted for registered vendors.');
       }
       notesList.push(`BID SUBMISSION CUTOFF: ${fmtDate(deadline, true) || 'Refer to portal live timer'} (Strict automated closing).`);
       if (techOpen) {
@@ -1424,8 +1381,6 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       hasSubmittedProposal={submitted}
       ownParticipation={ownParticipation}
       ownResponse={ownResponse}
-      emdAmount={emdRes?.emdAmount}
-      isEmdRequired={emdRes?.isEmdRequired}
       backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
       submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results & Ranking' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
       onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}

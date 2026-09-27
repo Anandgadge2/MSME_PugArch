@@ -130,65 +130,7 @@ function buildDynamicCategoryGroups(dbCategories: MarketplaceCategory[]): Dynami
     const valid = dbCategories.filter(c => isLegitimateCategory(c.name));
     if (valid.length === 0) return [];
 
-    // Check if database has explicit parent-child relations
-    const hasParentIds = valid.some(c => c.parentId != null && c.parentId > 0);
-
-    if (hasParentIds) {
-        // 1. Explicit DB Hierarchy
-        const parentMap = new Map<number, MarketplaceCategory>();
-        const childrenByParentId = new Map<number, MarketplaceCategory[]>();
-        const topLevelOrphan: MarketplaceCategory[] = [];
-
-        valid.forEach(c => {
-            if (!c.parentId) {
-                parentMap.set(c.id, c);
-            }
-        });
-
-        valid.forEach(c => {
-            if (c.parentId && parentMap.has(c.parentId)) {
-                const list = childrenByParentId.get(c.parentId) || [];
-                list.push(c);
-                childrenByParentId.set(c.parentId, list);
-            } else if (!parentMap.has(c.id)) {
-                topLevelOrphan.push(c);
-            }
-        });
-
-        const groups: DynamicCategoryGroup[] = [];
-
-        parentMap.forEach(parent => {
-            const domainKey = classifyDomainKey(parent.name, parent.slug);
-            const style = DOMAIN_CONFIGS[domainKey] || DEFAULT_DOMAIN_CONFIG;
-            const items = childrenByParentId.get(parent.id) || [];
-            groups.push({
-                id: `parent-${parent.id}`,
-                name: parent.name,
-                parentCategory: parent,
-                icon: style.icon,
-                accentColor: style.accentColor,
-                bgAccent: style.bgAccent,
-                borderAccent: style.borderAccent,
-                items
-            });
-        });
-
-        if (topLevelOrphan.length > 0) {
-            groups.push({
-                id: 'other-categories',
-                name: 'Additional Categories',
-                icon: DEFAULT_DOMAIN_CONFIG.icon,
-                accentColor: DEFAULT_DOMAIN_CONFIG.accentColor,
-                bgAccent: DEFAULT_DOMAIN_CONFIG.bgAccent,
-                borderAccent: DEFAULT_DOMAIN_CONFIG.borderAccent,
-                items: topLevelOrphan
-            });
-        }
-
-        return groups.filter(g => g.items.length > 0 || g.parentCategory);
-    }
-
-    // 2. Dynamic Domain Clustering from Flat DB Categories
+    // Dynamic Domain Clustering from Flat DB Categories
     const domainBuckets: Record<string, MarketplaceCategory[]> = {
         electrical: [],
         mechanical: [],
@@ -229,7 +171,7 @@ function buildDynamicCategoryGroups(dbCategories: MarketplaceCategory[]): Dynami
             i.name.toLowerCase().trim() === domainTitles[key]?.toLowerCase().trim()
         );
 
-        // Filter out the umbrella category from subcategory list if present
+        // Filter out the umbrella category from items list if present
         const subItems = parentCandidate ? items.filter(i => i.id !== parentCandidate.id) : items;
 
         groups.push({

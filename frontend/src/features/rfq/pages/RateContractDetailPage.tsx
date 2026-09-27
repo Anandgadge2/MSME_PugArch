@@ -863,8 +863,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         hasSubmittedProposal={isRateQuotationSubmitted}
         ownParticipation={ownParticipation}
         ownResponse={ownResponse}
-        emdAmount={rcData.emdAmount}
-        isEmdRequired={rcData.isEmdRequired}
         backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
         backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
         submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'Rate Quotation Submitted' : (isProcurementEnded ? undefined : 'Submit Rate Quote'))}

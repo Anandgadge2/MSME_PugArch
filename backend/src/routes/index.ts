@@ -32,7 +32,6 @@ import procurementCheckoutRoutes from '../modules/procurementCheckout/procuremen
 import prcCracRoutes from '../modules/receiptChain/prc-crac.routes.js';
 import rbacRoutes from './rbac.routes.js';
 import navigationRoutes from './navigation.routes.js';
-import emdRoutes from './emd.routes.js';
 import transaction2faRoutes from '../modules/auth/transaction-2fa.routes.js';
 import consentRoutes from './consent.routes.js';
 import appealRoutes from './appeal.routes.js';
@@ -123,7 +122,6 @@ router.use('/', procurementCheckoutRoutes);
 router.use('/', prcCracRoutes);
 router.use('/', rbacRoutes);
 router.use('/', navigationRoutes);
-router.use('/', emdRoutes);
 router.use('/consent', consentRoutes);
 router.use('/', noticeCircularRoutes);
 

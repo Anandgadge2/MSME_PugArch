@@ -232,8 +232,6 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       participantsCount={bid.participantsCount || bid.participations?.length || 0}
       hasSubmittedProposal={isSubmitted}
       ownParticipation={myParticipation}
-      emdAmount={bid.emdAmount}
-      isEmdRequired={bid.isEmdRequired}
       backRoute="/seller/procurement/events"
       submitButtonLabel={isSubmitted ? 'Proposal Submitted' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}

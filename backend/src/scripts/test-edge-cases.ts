@@ -23,9 +23,9 @@ async function testEdgeCases() {
         const seller2 = sellers[1];
 
         // ----------------------------------------------------------------
-        // Edge Case 1: MSME / NSIC EMD Exemption
+        // Edge Case 1: MSME / MSE Public Procurement Classification
         // ----------------------------------------------------------------
-        console.log('[Edge Case 1/7] Testing MSME / NSIC EMD Exemption...');
+        console.log('[Edge Case 1/7] Testing MSME / MSE Classification...');
         await prisma.sellerProfile.upsert({
             where: { userId: seller1.id },
             update: { isUdyamCertified: true, msmeCategoryEnum: 'MICRO' },
@@ -39,10 +39,10 @@ async function testEdgeCases() {
 
         const sellerProfile = await prisma.sellerProfile.findUnique({ where: { userId: seller1.id } });
         const isMSE = ['MICRO', 'SMALL'].includes(String(sellerProfile?.msmeCategoryEnum || '').toUpperCase());
-        const isEmdExempt = Boolean(sellerProfile?.isUdyamCertified && isMSE);
+        const isEligibleMSE = Boolean(sellerProfile?.isUdyamCertified && isMSE);
 
-        if (!isEmdExempt) throw new Error('MSME EMD Exemption calculation failed.');
-        console.log(`  ✓ Seller ID ${seller1.id} (Category: ${sellerProfile?.msmeCategoryEnum}, Udyam: ${sellerProfile?.isUdyamCertified}) -> EMD Exempt: YES`);
+        if (!isEligibleMSE) throw new Error('MSME classification calculation failed.');
+        console.log(`  ✓ Seller ID ${seller1.id} (Category: ${sellerProfile?.msmeCategoryEnum}, Udyam: ${sellerProfile?.isUdyamCertified}) -> Verified MSE: YES`);
         console.log('  ✓ Edge Case 1 PASSED\n');
         passedCount++;
 

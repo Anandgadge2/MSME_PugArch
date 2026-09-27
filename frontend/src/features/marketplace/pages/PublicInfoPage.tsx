@@ -1680,8 +1680,8 @@ const FAQ_SECTIONS = [
         a: 'Suppliers must possess a valid Udyam Registration Certificate proving Micro, Small, or Medium classification, active GSTIN, entity PAN, operational business address within Jharsuguda District, active bank account with cancelled cheque, and authorization letter for the primary user.',
       },
       {
-        q: 'Are MSME suppliers exempt from Earnest Money Deposit (EMD) and tender fees?',
-        a: 'Yes. In strict accordance with the Public Procurement Policy for MSEs, all registered Micro and Small Enterprises holding a valid Udyam certificate are 100% exempt from payment of tender fees and Earnest Money Deposit (EMD) across all district public procurements.',
+        q: 'Do MSME suppliers need to pay any tender participation fees?',
+        a: 'No. All registered Micro and Small Enterprises holding a valid Udyam certificate can participate in district procurements and public bidding with zero participation fees.',
       },
       {
         q: 'How are seller products and services listed in the public marketplace catalogue?',
@@ -1768,7 +1768,7 @@ function KnowledgeBaseFaqView() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search questions (e.g. 45 days, EMD exemption, GRN, reverse auction, Udyam)..."
+            placeholder="Search questions (e.g. 45 days, GRN, reverse auction, Udyam)..."
             className="w-full rounded-xl border border-slate-300 pl-12 pr-4 py-3 text-xs sm:text-sm font-semibold text-slate-900 placeholder-slate-400 focus:border-[#0b2447] focus:ring-1 focus:ring-[#0b2447] outline-none"
           />
         </div>

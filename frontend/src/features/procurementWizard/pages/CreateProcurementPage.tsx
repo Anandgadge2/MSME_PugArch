@@ -164,7 +164,6 @@ type AuctionConfig = {
   auctionDescription: string;
   procurementMethod: 'REVERSE_AUCTION' | 'BID_WITH_REVERSE_AUCTION';
   auctionCategory: string;
-  auctionSubCategory: string;
   currency: string;
   auctionStatus: 'DRAFT';
   buyerOrganization: string;
@@ -220,7 +219,6 @@ type RateContractConfig = {
   contractTitle: string;
   contractDescription: string;
   contractCategory: string;
-  contractSubCategory: string;
   periodStartDate: string;
   periodEndDate: string;
   rateValidityPeriod: string;
@@ -665,7 +663,6 @@ const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
   auctionDescription: '',
   procurementMethod: 'REVERSE_AUCTION',
   auctionCategory: '',
-  auctionSubCategory: '',
   currency: 'INR',
   auctionStatus: 'DRAFT',
   buyerOrganization: '',
@@ -725,7 +722,6 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       auctionTitle: base.auctionTitle || draft.basics.title,
       auctionDescription: base.auctionDescription || draft.basics.justification,
       auctionCategory: base.auctionCategory || draft.basics.category,
-      auctionSubCategory: base.auctionSubCategory || '',
       buyerOrganization: base.buyerOrganization || draft.internal.orgName,
       department: base.department || draft.internal.department || draft.basics.department,
       startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
@@ -742,7 +738,6 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',
-  contractSubCategory: '',
   periodStartDate: today,
   periodEndDate: nextFortnight,
   rateValidityPeriod: 'Contract period',
@@ -884,7 +879,6 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       contractTitle: base.contractTitle || draft.basics.title,
       contractDescription: base.contractDescription || draft.basics.justification,
       contractCategory: base.contractCategory || draft.basics.category,
-      contractSubCategory: base.contractSubCategory || '',
       selectedSuppliers,
       itemRateSchedule,
       deliverySla: base.deliverySla || draft.terms.deliveryTerms,
@@ -1595,10 +1589,6 @@ export default function CreateProcurementPage() {
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
     list.push({ label: 'Delivery terms are required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
-    // EMD check commented out as requested
-    // if (d.terms.emdRequired) {
-    //   list.push({ label: 'EMD amount must be greater than 0 if EMD is required', ok: d.terms.emdAmount > 0, severity: 'error', stepIdx: 6 });
-    // }
     // PBG check commented out as requested
     // if (d.terms.pbgRequired) {
     //   list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 6 });
@@ -1634,7 +1624,7 @@ export default function CreateProcurementPage() {
     }
 
     // Info (Sourcing Overrides)
-    const customDocs = d.requiredDocs.filter(doc => !['PAN Card', 'GST Certificate', 'MSME Certificate', 'Bid Security / EMD exemption', 'Technical Proposal', 'Proprietary Article Certificate', 'Sanction Letter'].includes(doc.name));
+    const customDocs = d.requiredDocs.filter(doc => !['PAN Card', 'GST Certificate', 'MSME Certificate', 'Bid Security / Exemption Certificate', 'Technical Proposal', 'Proprietary Article Certificate', 'Sanction Letter'].includes(doc.name));
     customDocs.forEach(c => {
       list.push({ label: `Custom document checklist added: "${c.name}"`, ok: true, severity: 'info' });
     });
@@ -1738,8 +1728,6 @@ export default function CreateProcurementPage() {
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
       if (!d.terms.deliveryTerms) return false;
-      // EMD check commented out as requested
-      // if (d.terms.emdRequired && d.terms.emdAmount <= 0) return false;
       // PBG check commented out as requested
       // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
     } else if (stepIdx === 7) {
@@ -2052,11 +2040,6 @@ export default function CreateProcurementPage() {
         toast.error('Delivery terms are required.');
         return false;
       }
-      // EMD check commented out as requested
-      // if (d.terms.emdRequired && d.terms.emdAmount <= 0) {
-      //   toast.error('Please specify an EMD amount greater than 0.');
-      //   return false;
-      // }
       // PBG check commented out as requested
       // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) {
       //   toast.error('PBG Amount / Performance Security amount is required when enabled.');
@@ -2915,7 +2898,7 @@ function BasicsStepForm({
           })()}
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-md">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-            <span>Internal Benchmark — Used for financial validation, CFA approval tier, and EMD computation.</span>
+            <span>Internal Benchmark — Used for financial validation and CFA approval tier.</span>
           </div>
 
           <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3 transition-colors hover:bg-slate-50">
@@ -6614,14 +6597,6 @@ function ScheduleStepForm({
                   placeholder="e.g. Safety Gear & Supplies"
                 />
               </Field>
-              <Field label="Contract Subcategory (Optional)">
-                <input
-                  value={draft.rateContractConfig.contractSubCategory}
-                  onChange={e => updateRateContract('contractSubCategory', e.target.value)}
-                  className={inputClass}
-                  placeholder="Enter contract subcategory (Optional)"
-                />
-              </Field>
               <Field label="Contract Start Date" required>
                 <input
                   type="date"
@@ -7231,7 +7206,6 @@ function ScheduleStepForm({
                         procurementMethod: 'BID_WITH_REVERSE_AUCTION',
                         auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
                         auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                        auctionSubCategory: c.auctionConfig.auctionSubCategory || '',
                         startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
                         minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
                         autoExtensionEnabled: true,
@@ -8403,7 +8377,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     auctionTitle: draft.auctionConfig.auctionTitle || title,
     auctionDescription: draft.auctionConfig.auctionDescription || draft.basics.justification || basics.description,
     auctionCategory: draft.auctionConfig.auctionCategory || draft.basics.category,
-    auctionSubCategory: draft.auctionConfig.auctionSubCategory || '',
     buyerOrganization: draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     department: draft.auctionConfig.department || draft.internal.department || draft.basics.department,
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
@@ -8438,7 +8411,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractTitle: draft.rateContractConfig.contractTitle || title,
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
-    contractSubCategory: draft.rateContractConfig.contractSubCategory || '',
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, ''),
@@ -8459,11 +8431,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   tender.evaluationMethod = chosenEvaluationMethod;
 
   const rules = {
-    // EMD flow commented out as requested
-    // emdRequired: draft.terms.emdRequired,
-    // emdAmount: draft.terms.emdAmount,
-    emdRequired: false,
-    emdAmount: 0,
     performanceSecurity: draft.terms.pbgRequired,
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,

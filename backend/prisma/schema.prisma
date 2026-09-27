@@ -1145,7 +1145,6 @@ model ShgDocumentRequirementConfig {
 
 model Category {
   id                      Int                      @id @default(autoincrement())
-  parentId                Int?
   organizationId          Int?
   name                    String
   slug                    String                   @unique
@@ -1158,15 +1157,12 @@ model Category {
   updatedAt               DateTime                 @updatedAt
   buyerRequirements       BuyerRequirement[]
   organization            Organization?            @relation(fields: [organizationId], references: [id])
-  parent                  Category?                @relation("CategoryTree", fields: [parentId], references: [id])
-  children                Category[]               @relation("CategoryTree")
   marketplaceInteractions MarketplaceInteraction[]
   products                Product[]
   requirements            Requirement[]
   services                Service[]
   tenders                 Tender[]
 
-  @@index([parentId])
   @@index([organizationId])
   @@index([type])
   @@index([isActive])
@@ -3342,8 +3338,6 @@ model ProcurementBid {
   approvalStatus        ProcurementApprovalStatus     @default(DRAFT)
   lifecycleStage        ProcurementLifecycleStage     @default(BID_PUBLISHED)
   evaluationMethod      String                        @default("L1")
-  isEmdRequired         Boolean                       @default(false)
-  emdAmount             Decimal?                      @db.Decimal(18, 2)
   documentFee           Decimal?                      @db.Decimal(18, 2)
   allowClarification    Boolean                       @default(true)
   allowReverseAuction   Boolean                       @default(false)
@@ -5440,31 +5434,6 @@ enum CatalogueImportStatus {
   CANCELLED
 }
 
-model EmdPayment {
-  id            Int       @id @default(autoincrement())
-  requirementId Int?
-  bidId         Int?
-  sellerId      Int
-  sellerOrgId   Int?
-  amount        Decimal   @db.Decimal(18, 2)
-  paymentMethod String    @default("ONLINE")
-  transactionId String    @unique
-  status        String    @default("PAID")
-  refundPolicy  String?
-  instructions  String?
-  paidAt        DateTime  @default(now())
-  verifiedAt    DateTime?
-  refundedAt    DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  @@unique([sellerId, requirementId])
-  @@unique([sellerId, bidId])
-  @@index([sellerId])
-  @@index([requirementId])
-  @@index([bidId])
-  @@index([status])
-}
 
 enum SuspensionType {
   MANUAL

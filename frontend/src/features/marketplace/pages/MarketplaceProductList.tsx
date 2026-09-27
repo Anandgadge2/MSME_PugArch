@@ -71,7 +71,6 @@ export default function MarketplaceProductList() {
     const initialCategoryIds = useMemo(() => initialCategoryParam.split(',').map(s => s.trim()).filter(Boolean), [initialCategoryParam]);
     
     const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>(initialCategoryIds);
-    const [selectedSubcategories, setSelectedSubcategories] = useState<string[]>([]);
     
     // Initialize sort unconditionally to preserve URL state during auth loading
     const [sort, setSort] = useState(searchParams?.get('sort') || 'popular');
@@ -292,9 +291,6 @@ export default function MarketplaceProductList() {
         const itemCatId = String(item.category?.id || item.categoryId || '');
         const matchesCategory = selectedCategoryIds.length === 0 || selectedCategoryIds.includes(itemCatId);
 
-        // Subcategory / Product Type match
-        const matchesSubcategory = selectedSubcategories.length === 0 || selectedSubcategories.some(sub => itemNameLower.includes(sub.toLowerCase()));
-
         const status = String(item.status || '').toUpperCase();
         const verification = String(item.organization?.verificationStatus || '').toUpperCase();
         const price = Number(isServices ? item.basePrice || 0 : item.price || 0);
@@ -331,8 +327,8 @@ export default function MarketplaceProductList() {
         const matchesRating = !minRatingFilter || (Number(item.avgRating || item.rating || 0) >= minRatingFilter);
         const matchesFastDispatch = !fastDispatchFilter || Boolean(item.sellerBadges?.includes('FAST_DISPATCH') || item.sellerBadges?.includes('48H_DISPATCH') || item.organization?.sellerBadges?.includes('FAST_DISPATCH') || item.organization?.sellerBadges?.includes('48H_DISPATCH') || item.isFastDispatch);
 
-        return matchesSearch && matchesCategory && matchesSubcategory && matchesStatus && matchesVerification && matchesPrice && matchesCondition && matchesPricingModel && matchesMsme && matchesBulk && matchesTaxRate && matchesBrand && matchesDistrict && matchesDiscount && matchesRating && matchesFastDispatch;
-    }), [items, searchQuery, selectedCategoryIds, selectedSubcategories, statusFilter, verificationFilter, priceFilter, conditionFilter, pricingModelFilter, msmeOnlyFilter, bulkDealFilter, taxRateFilter, brandSearchFilter, districtFilter, discountFilter, minRatingFilter, fastDispatchFilter, isServices]);
+        return matchesSearch && matchesCategory && matchesStatus && matchesVerification && matchesPrice && matchesCondition && matchesPricingModel && matchesMsme && matchesBulk && matchesTaxRate && matchesBrand && matchesDistrict && matchesDiscount && matchesRating && matchesFastDispatch;
+    }), [items, searchQuery, selectedCategoryIds, statusFilter, verificationFilter, priceFilter, conditionFilter, pricingModelFilter, msmeOnlyFilter, bulkDealFilter, taxRateFilter, brandSearchFilter, districtFilter, discountFilter, minRatingFilter, fastDispatchFilter, isServices]);
     
     const displayTotal = filteredItems.length;
 
@@ -367,7 +363,6 @@ export default function MarketplaceProductList() {
         let count = 0;
         if (searchQuery) count++;
         if (selectedCategoryIds.length > 0) count += selectedCategoryIds.length;
-        if (selectedSubcategories.length > 0) count += selectedSubcategories.length;
         if (priceFilter) count++;
         if (brandSearchFilter) count++;
         if (districtFilter) count++;
@@ -379,11 +374,10 @@ export default function MarketplaceProductList() {
         if (fastDispatchFilter) count++;
         if (bulkDealFilter) count++;
         return count;
-    }, [searchQuery, selectedCategoryIds, selectedSubcategories, priceFilter, brandSearchFilter, districtFilter, discountFilter, verificationFilter, minRatingFilter, conditionFilter, msmeOnlyFilter, fastDispatchFilter, bulkDealFilter]);
+    }, [searchQuery, selectedCategoryIds, priceFilter, brandSearchFilter, districtFilter, discountFilter, verificationFilter, minRatingFilter, conditionFilter, msmeOnlyFilter, fastDispatchFilter, bulkDealFilter]);
 
     const handleClearAllFilters = () => {
         setSelectedCategoryIds([]);
-        setSelectedSubcategories([]);
         setPriceFilter('');
         setBrandSearchFilter('');
         setDistrictFilter('');
@@ -621,35 +615,6 @@ export default function MarketplaceProductList() {
         });
         return Array.from(set).sort((a, b) => a.localeCompare(b));
     }, [items]);
-    // Category-specific subcategories mapping
-    const availableSubcategories = useMemo(() => {
-        const subMap: Record<string, string[]> = {
-            'electrical': ['Electric Motors', 'Cables & Wires', 'MCCB & Switchgear', 'VFD Inverters', 'High Bay Lighting'],
-            'safety': ['Safety Boots', 'Safety Helmets', 'Fall Protection Harness', 'Fire Extinguishers', 'Safety Goggles'],
-            'tool': ['Arc Welders', 'Welding Electrodes', 'Impact Wrenches', 'Grinding Machines'],
-            'bearing': ['Deep Groove Bearings', 'Pillow Block', 'Roller Bearings', 'Industrial Grease'],
-            'pipe': ['Seamless Pipes', 'Flanged Valves', 'Pipe Fittings'],
-        };
-        
-        // Find matching subcategories based on selected categories
-        const matched = new Set<string>();
-        if (selectedCategoryIds.length === 0) {
-            return ['Safety Boots', 'Electric Motors', 'Arc Welders', 'Deep Groove Bearings', 'Seamless Pipes', 'Fire Extinguishers', 'VFD Inverters', 'Welding Electrodes'];
-        }
-
-        selectedCategoryIds.forEach(cId => {
-            const cat = categories.find((c: any) => String(c.id) === cId);
-            const catName = (cat?.name || '').toLowerCase();
-            Object.entries(subMap).forEach(([key, list]) => {
-                if (catName.includes(key)) {
-                    list.forEach(item => matched.add(item));
-                }
-            });
-        });
-
-        return matched.size > 0 ? Array.from(matched) : ['Safety Boots', 'Electric Motors', 'Arc Welders', 'Deep Groove Bearings', 'Seamless Pipes', 'Fire Extinguishers'];
-    }, [selectedCategoryIds, categories]);
-
     return (
         <div className={useDashboardShell ? "w-full bg-slate-50/50" : "min-h-dvh bg-slate-50/50 flex flex-col"}>
             <main className="flex-1">
@@ -879,20 +844,11 @@ export default function MarketplaceProductList() {
                                     setPage(1);
                                     syncUrl({ categoryId: next.join(','), page: 1 });
                                 }}
-                                onClearCategories={() => {
+                                 onClearCategories={() => {
                                     setSelectedCategoryIds([]);
                                     setPage(1);
                                     syncUrl({ categoryId: '', page: 1 });
                                 }}
-                                availableSubcategories={availableSubcategories}
-                                selectedSubcategories={selectedSubcategories}
-                                onToggleSubcategory={(sub) => {
-                                    const next = selectedSubcategories.includes(sub)
-                                        ? selectedSubcategories.filter(s => s !== sub)
-                                        : [...selectedSubcategories, sub];
-                                    setSelectedSubcategories(next);
-                                }}
-                                onClearSubcategories={() => setSelectedSubcategories([])}
                                 canViewPrice={canViewPrice}
                                 priceFilter={priceFilter}
                                 onPriceChange={(val) => {
@@ -1008,20 +964,11 @@ export default function MarketplaceProductList() {
                                                 setPage(1);
                                                 syncUrl({ categoryId: next.join(','), page: 1 });
                                             }}
-                                            onClearCategories={() => {
+                                             onClearCategories={() => {
                                                 setSelectedCategoryIds([]);
                                                 setPage(1);
                                                 syncUrl({ categoryId: '', page: 1 });
                                             }}
-                                            availableSubcategories={availableSubcategories}
-                                            selectedSubcategories={selectedSubcategories}
-                                            onToggleSubcategory={(sub) => {
-                                                const next = selectedSubcategories.includes(sub)
-                                                    ? selectedSubcategories.filter(s => s !== sub)
-                                                    : [...selectedSubcategories, sub];
-                                                setSelectedSubcategories(next);
-                                            }}
-                                            onClearSubcategories={() => setSelectedSubcategories([])}
                                             canViewPrice={canViewPrice}
                                             priceFilter={priceFilter}
                                             onPriceChange={(val) => {
@@ -1156,18 +1103,6 @@ export default function MarketplaceProductList() {
                                             </span>
                                         );
                                     })}
-                                    {selectedSubcategories.map(sub => (
-                                        <span key={sub} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-800 border border-indigo-200">
-                                            {sub}
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedSubcategories(prev => prev.filter(s => s !== sub))}
-                                                className="hover:text-red-600 ml-1 font-black cursor-pointer"
-                                            >
-                                                ✕
-                                            </button>
-                                        </span>
-                                    ))}
                                     {priceFilter && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
                                             Price: {priceFilter === 'UNDER_1K' ? 'Under ₹1,000' :

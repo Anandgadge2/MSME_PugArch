@@ -11,7 +11,6 @@ export interface OpenTenderWizardState {
   description: string;
   categoryId: string;
   estimatedValue: string;
-  emdAmount: string;
   tenderFee: string;
   closesAt: string;
   preQualificationCriteria: Array<{ id: string; criteria: string; mandatory: boolean }>;
@@ -26,7 +25,6 @@ export const openTenderWizardConfig = {
 
   steps: [
     { id: 'basics', title: 'Tender Overview', description: 'Define tender title, category, and estimated budget' },
-    { id: 'emd', title: 'EMD & Tender Fees', description: 'Specify Earnest Money Deposit and document fee requirements' },
     { id: 'items', title: 'Bill of Quantities (BOQ)', description: 'Set BOQ items, quantities, and estimated rates' },
     { id: 'criteria', title: 'Pre-Qualification', description: 'Define mandatory vendor qualification criteria' },
     { id: 'schedule', title: 'Bidding Schedule', description: 'Set bid opening date, closing deadline, and evaluation schedule' },
@@ -39,7 +37,6 @@ export const openTenderWizardConfig = {
       description: '',
       categoryId: '',
       estimatedValue: '',
-      emdAmount: '',
       tenderFee: '',
       closesAt: '',
       preQualificationCriteria: [
@@ -56,10 +53,6 @@ export const openTenderWizardConfig = {
     if (stepId === 'basics') {
       if (!state.title || state.title.trim().length < 5) {
         errors.push('Open Tender title must be at least 5 characters');
-      }
-    } else if (stepId === 'emd') {
-      if (state.emdAmount && Number(state.emdAmount) < 0) {
-        errors.push('EMD amount cannot be negative');
       }
     } else if (stepId === 'schedule') {
       if (!state.closesAt) {
@@ -81,7 +74,6 @@ export const openTenderWizardConfig = {
       closesAt: state.closesAt ? new Date(state.closesAt) : undefined,
       payload: {
         tenderMeta: {
-          emdAmount: state.emdAmount ? Number(state.emdAmount) : 0,
           tenderFee: state.tenderFee ? Number(state.tenderFee) : 0,
           preQualificationCriteria: state.preQualificationCriteria,
           boqItems: state.boqItems

@@ -445,8 +445,6 @@ export default function TenderDetailPage() {
         tender.evaluationMethod ||
         'L1 Basis'
       }
-      emdAmount={tender.emdAmount}
-      isEmdRequired={Boolean(tender.emdAmount && tender.emdAmount > 0)}
       backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}
       backRouteLabel="Tender Opportunities"
       participations={tenderParticipations}

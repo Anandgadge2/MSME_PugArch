@@ -60,7 +60,7 @@ export type DeliveryTrackingDto = {
   events?: Array<{ id: number; status?: string; location?: string; remarks?: string; createdAt?: string }>;
 };
 
-export type CategoryDto = { id: number; name: string; parentId?: number | null; type?: string; isActive?: boolean };
+export type CategoryDto = { id: number; name: string; type?: string; isActive?: boolean };
 export type CatalogueItemDto = {
   id: number;
   name: string;

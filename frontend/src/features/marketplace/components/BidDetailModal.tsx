@@ -325,14 +325,6 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.evaluation || 'L1 Lowest Price'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">EMD Required:</span>{' '}
-                                                    <span className="font-bold text-slate-800">
-                                                        {requirement.payload.rules.emdRequired 
-                                                            ? `Yes (INR ${Number(requirement.payload.rules.emdAmount || 0).toLocaleString('en-IN')})` 
-                                                            : 'No'}
-                                                    </span>
-                                                </div>
-                                                <div>
                                                     <span className="text-slate-400 font-semibold">Performance Security:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.performanceSecurity ? 'Yes' : 'No'}</span>
                                                 </div>

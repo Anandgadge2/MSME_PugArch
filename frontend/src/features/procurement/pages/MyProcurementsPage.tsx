@@ -2054,10 +2054,6 @@ export function ProcurementDetailView({
                 {p.estimatedValue ? formatCurrency(p.estimatedValue) : '—'}
               </span>
             </div>
-            <div className="flex justify-between items-center py-1 border-b border-slate-100 text-[11px]">
-              <span className="text-slate-500 font-medium">EMD Amount</span>
-              <span className="font-bold text-slate-800">Exempted</span>
-            </div>
             <div className="flex justify-between items-center py-1 text-[11px]">
               <span className="text-slate-500 font-medium">Freight Charges</span>
               <span className="font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">

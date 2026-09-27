@@ -41,8 +41,6 @@ import { cn } from '../../../lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getCookieValue } from '../../../lib/auth';
 import { BASE_URL, api, resolveMediaUrl } from '../../../lib/api';
-import { EmdCard, EmdInfo, isEmdApplicable } from '../components/EmdCard';
-import { EmdPaymentModal } from '../components/EmdPaymentModal';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
@@ -864,7 +862,6 @@ export default function SubmitQuotationPage() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
-  const [isEmdModalOpen, setIsEmdModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
@@ -1247,34 +1244,6 @@ export default function SubmitQuotationPage() {
 
   const targetReqId = rfqData?.id || requirementId;
 
-  const { data: emdRes, refetch: refetchEmd, isLoading: emdLoading } = useQuery({
-    queryKey: ['emd-status', targetReqId, user?.id],
-    queryFn: async () => {
-      const r = await getApi<any>(`/api/emd/status?requirementId=${targetReqId ?? ''}`);
-      return r?.data ?? r;
-    },
-    enabled: user?.role === 'seller' && !!targetReqId && Boolean(rfqData?.isEmdRequired && Number(rfqData?.emdAmount) > 0),
-  });
-
-  const emdInfo: EmdInfo | null = React.useMemo(() => {
-    const payloadEmd = rfqData?.payload?.emd || rfqData?.payload?.technicalPacket?.emd || {};
-    const isEmdReq = emdRes?.isEmdRequired ?? rfqData?.isEmdRequired ?? payloadEmd?.isEmdRequired ?? payloadEmd?.required ?? false;
-    const amt = emdRes?.emdAmount ?? rfqData?.emdAmount ?? payloadEmd?.amount ?? payloadEmd?.emdAmount ?? 0;
-
-    if (!isEmdReq || Number(amt) <= 0) return null;
-
-    return {
-      isEmdRequired: isEmdReq,
-      emdAmount: Number(amt),
-      paymentMethod: emdRes?.paymentMethod || payloadEmd?.paymentMethod || 'Online Escrow',
-      paymentDeadline: emdRes?.paymentDeadline || payloadEmd?.deadline,
-      refundPolicy: emdRes?.refundPolicy || payloadEmd?.refundPolicy || 'Refundable upon completion of evaluation',
-      instructions: emdRes?.instructions || payloadEmd?.instructions || '',
-      status: emdRes?.status || (emdRes?.payment ? 'PAID' : 'PENDING'),
-      payment: emdRes?.payment || null,
-    };
-  }, [emdRes, rfqData]);
-
   const isFreightIncluded = React.useMemo(() => {
     const raw = rfqData?.payload?.terms?.freightIncluded ??
       rfqData?.payload?.freightIncluded ??
@@ -1326,9 +1295,6 @@ export default function SubmitQuotationPage() {
     : isRateContract ? 'RATE_CONTRACT'
     : isRfp ? 'RFP'
     : 'RFQ';
-
-  const isEmdActive = isEmdApplicable(procurementType, emdInfo?.isEmdRequired, emdInfo?.emdAmount);
-  const isEmdPaid = !isEmdActive || emdInfo?.status === 'PAID' || emdInfo?.status === 'VERIFIED';
 
   // Restore quotation details from ownResponse on load (whether DRAFT or SUBMITTED)
   const restoredResponseIdRef = useRef<any>(null);
@@ -1573,7 +1539,7 @@ export default function SubmitQuotationPage() {
       if (!val) return true;
       const s = String(val).trim().toLowerCase();
       if (!s || s === 'n/a' || s === '—' || s === 'none' || s === 'null' || s === 'undefined') return true;
-      if (s === 'general' || s === 'general procurement' || s === 'general sub-category' || s === 'default' || s === 'uncategorized' || s === 'item' || s === 'product' || s === 'requirement item' || s === 'sourcing requirement' || s === 'procurement item' || s === 'procurement product') return true;
+      if (s === 'general' || s === 'general procurement' || s === 'default' || s === 'uncategorized' || s === 'item' || s === 'product' || s === 'requirement item' || s === 'sourcing requirement' || s === 'procurement item' || s === 'procurement product') return true;
       if (s.startsWith('item #') || s.startsWith('item-') || s.startsWith('product #') || s.startsWith('procurement #') || s.startsWith('procurement bid #') || s.startsWith('untitled procurement')) return true;
       return false;
     };
@@ -1656,7 +1622,7 @@ export default function SubmitQuotationPage() {
           }
         }
 
-        // If still no valid name, check category/subcategory if non-generic
+        // If still no valid name, check category if non-generic
         if (!finalName) {
           const catCandidates = [
             item?.category,
@@ -2474,11 +2440,6 @@ export default function SubmitQuotationPage() {
     if (isSubmittedQuote) {
       return;
     }
-    // EMD check commented out as requested
-    // if (isEmdActive && !isEmdPaid) {
-    //   toast.error('This procurement requires an Earnest Money Deposit (EMD). Please complete the EMD payment before submitting your response.');
-    //   return;
-    // }
     if (!validate()) return;
     const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
     if (!resolvedId) {
@@ -3483,7 +3444,30 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
-
+            {/* Commercial Bid Secrecy Guarantee (Two-Cover Rule) */}
+            <div className="rounded-2xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-slate-50 p-4 sm:p-5 shadow-2xs space-y-2 mb-4">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs">
+                  <Lock className="h-5 w-5" />
+                </div>
+                <div className="space-y-1 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded">
+                      Two-Cover Bidding Standard • Rule 160 Compliance
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded flex items-center gap-1">
+                      <ShieldCheck className="h-3 w-3" /> Two-Cover Rule Commercial Bid Secrecy
+                    </span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                    Commercial Bid Secrecy &amp; Price Protection Guarantee
+                  </h4>
+                  <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                    Your financial quote, line-item pricing, and commercial schedules remain <strong>cryptographically sealed in the database</strong> until the buyer completes <strong>Stage 1 Technical Evaluation</strong>. The evaluation committee scrutinizes only specifications, quality, and eligibility to ensure 100% fair and unbiased technical qualification.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {lineQuotes.length === 0 ? (
               <div className="text-center py-12 px-4 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">

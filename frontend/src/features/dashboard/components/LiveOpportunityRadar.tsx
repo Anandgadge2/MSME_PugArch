@@ -41,7 +41,6 @@ interface OpportunityItem {
   closingDate: string;
   createdAt?: string;
   daysLeft: number;
-  isEmdExempt: boolean;
   category: string;
   actionHref: string;
   actionLabel: string;
@@ -161,7 +160,6 @@ export function LiveOpportunityRadar() {
           closingDate: bid.endDate ? new Date(bid.endDate).toISOString().split('T')[0] : 'Open',
           createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
           daysLeft: diffDays,
-          isEmdExempt: Boolean(bid.emdExempt),
           category: bid.category || 'General',
           actionHref,
           actionLabel,
@@ -196,7 +194,6 @@ export function LiveOpportunityRadar() {
           closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
           createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
           daysLeft: diffDays,
-          isEmdExempt: true,
           category: auction.category || 'Dynamic Auction',
           actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
           actionLabel: isExpired ? 'View Results' : 'Join Auction',
@@ -386,11 +383,6 @@ export function LiveOpportunityRadar() {
                         <Sparkles className="h-2.5 w-2.5 text-emerald-600" /> New
                       </span>
                     )}
-                    {item.isEmdExempt && (
-                      <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <ShieldCheck className="h-2.5 w-2.5" /> EMD Exempt
-                      </span>
-                    )}
                     {item.isExpired ? (
                       <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                         <Clock className="h-2.5 w-2.5 text-slate-400" /> Closed / Evaluation
@@ -465,7 +457,7 @@ export function LiveOpportunityRadar() {
       <div className="bg-slate-50/80 px-3.5 py-2.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[10px] font-medium text-slate-600">
         <span className="flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-          Showing top {displayedOpportunities.length} of {filtered.length} active opportunities. MSME 100% EMD waiver applies.
+          Showing top {displayedOpportunities.length} of {filtered.length} active opportunities.
         </span>
         <Link 
           href={viewAllHref}

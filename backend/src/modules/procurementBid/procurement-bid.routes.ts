@@ -117,8 +117,6 @@ const bidBaseSchema = z.object({
   financialOpeningDate: z.coerce.date().optional(),
   bidValidityDate: z.coerce.date().optional(),
   evaluationMethod: z.string().trim().max(120).optional(),
-  isEmdRequired: z.boolean().optional(),
-  emdAmount: z.coerce.number().nonnegative().optional(),
   documentFee: z.coerce.number().nonnegative().optional(),
   allowClarification: z.boolean().optional(),
   allowReverseAuction: z.boolean().optional(),
@@ -629,8 +627,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         approvalStatus: 'APPROVED',
         lifecycleStage: 'SELLER_PARTICIPATION',
         evaluationMethod: srcPayload?.evaluation?.method || 'L1',
-        isEmdRequired: Boolean(meta.securityDepositRequired),
-        emdAmount: meta.securityDepositAmount ? Number(meta.securityDepositAmount) : null,
         packetType: 'SINGLE_PACKET',
         technicalPacket: {
           basics: {
@@ -677,8 +673,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             penaltyClause: meta.penaltyClause || srcPayload?.terms?.penaltyClause || '',
             withdrawal: srcPayload?.terms?.withdrawal ?? (srcPayload?.schedule?.allowWithdrawal ?? null),
             revision: srcPayload?.terms?.revision ?? (srcPayload?.schedule?.allowRevision ?? null),
-            emdRequired: Boolean(meta.securityDepositRequired),
-            emdAmount: meta.securityDepositAmount ? Number(meta.securityDepositAmount) : null,
             pbgRequired: Boolean(meta.pbgRequired),
           },
           vendors: {
@@ -702,7 +696,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             contractTitle: realTitle,
             contractDescription: meta.contractDescription || '',
             contractCategory: realCategory,
-            contractSubCategory: meta.contractSubCategory || '',
             periodStartDate: startDateStr,
             periodEndDate: endDateStr,
             rateValidityPeriod: meta.rateValidityPeriod || '',

@@ -1612,8 +1612,6 @@ function DraftDetailView({
         tender.evaluationMethod ||
         'L1 Evaluation'
       }
-      emdAmount={terms.emdAmount || basics.emdAmount || 0}
-      isEmdRequired={Boolean(terms.emdRequired || basics.emdRequired)}
       backRoute="/buyer/procurement/drafts"
       backRouteLabel="Procurement Drafts"
       onBack={onBack}
