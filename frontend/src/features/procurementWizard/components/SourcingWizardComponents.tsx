@@ -653,6 +653,8 @@ export interface Supplier {
   pastOrdersCount?: number;
   onTimeDeliveryRate?: number;
   gstVerified?: boolean;
+  categories?: string[];
+  isUdyamVerified?: boolean;
 }
 
 interface SupplierSelectorProps {
@@ -714,11 +716,9 @@ export function SupplierSelector({
               <tr>
                 <th className="px-3 py-2 w-14 text-center">Select</th>
                 <th className="px-3 py-2">Supplier Name</th>
-                {/* <th className="px-3 py-2">MSME / Udyam</th> */}
+                <th className="px-3 py-2">Categories / Trade</th>
                 <th className="px-3 py-2">Location</th>
-                {/* <th className="px-3 py-2">Rating</th>
-                <th className="px-3 py-2">On-Time</th>
-                <th className="px-3 py-2">Compliance</th> */}
+                <th className="px-3 py-2 text-center">Type</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-semibold text-slate-750">
@@ -732,20 +732,38 @@ export function SupplierSelector({
                         checked={isSelected}
                         onChange={() => onToggleInvite(seller.id, seller.organizationName)}
                         className="h-4 w-4 rounded accent-[#12335f] cursor-pointer"
+                        aria-label={`Select ${seller.organizationName}`}
                       />
                     </td>
                     <td className="px-3 py-2 font-extrabold text-slate-900">{seller.organizationName}</td>
-                    {/* <td className="px-3 py-2">{seller.msmeCategory || 'General'}</td> */}
-                    <td className="px-3 py-2 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
-                    {/* <td className="px-3 py-2">
-                      <span className="text-amber-500">&#9733; {seller.rating || '4.0'}</span>
-                    </td>
-                    <td className="px-3 py-2">{seller.onTimeDeliveryRate ? `${seller.onTimeDeliveryRate}%` : 'N/A'}</td>
                     <td className="px-3 py-2">
-                      <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase px-2 py-0.5 rounded border border-emerald-100">
-                        GST Verified
-                      </span>
-                    </td> */}
+                      {seller.categories && seller.categories.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {seller.categories.slice(0, 2).map((cat, idx) => (
+                            <span key={idx} className="bg-blue-50 text-[#12335f] text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-100">
+                              {cat}
+                            </span>
+                          ))}
+                          {seller.categories.length > 2 && (
+                            <span className="text-[9px] text-slate-400 font-bold">+{seller.categories.length - 2}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">Verified Seller</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
+                    <td className="px-3 py-2 text-center">
+                      {seller.isUdyamVerified ? (
+                        <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">
+                          MSME
+                        </span>
+                      ) : (
+                        <span className="bg-slate-50 text-slate-500 text-[9px] font-bold px-1.5 py-0.5 rounded">
+                          General
+                        </span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}

@@ -6010,22 +6010,32 @@ function VendorsStepForm({
   const [search, setSearch] = useState('');
   const [msmeOnly, setMsmeOnly] = useState(false);
 
+  const effectiveCategory = draft.basics.category || draft.rateContractConfig?.contractCategory || draft.auctionConfig?.auctionCategory || '';
+
   const fetchSellersList = () => {
     setLoading(true);
-    const params: Record<string, string | number> = { pageSize: 50 };
+    const params: Record<string, string | number | boolean> = { pageSize: 50 };
     if (search) params.q = search;
-    marketplaceApi.getSellers(params)
+    if (draft.vendors.selection === 'Category' && effectiveCategory) {
+      params.category = effectiveCategory;
+    }
+    if (msmeOnly) {
+      params.msmeOnly = true;
+    }
+    marketplaceApi.getSellers(params as any)
       .then(res => {
         // Map API response to Supplier interface
         const items = (res?.sellers || []).map((s: any) => ({
           id: s.id || s.sellerUserId,
           organizationName: s.organizationName || s.name || 'Vendor',
-          msmeCategory: s.msmeCategory || 'General',
-          officeCity: s.officeCity || s.city || 'N/A',
+          msmeCategory: s.organizationType || s.msmeCategory || (s.isUdyamVerified ? 'MSME' : 'General'),
+          officeCity: s.city || s.officeCity || s.district || 'N/A',
           rating: s.rating || '4.0',
           pastOrdersCount: s.pastOrdersCount || 0,
           onTimeDeliveryRate: s.onTimeDeliveryRate || 95,
-          gstVerified: true
+          gstVerified: Boolean(s.gstin || s.verificationStatus === 'VERIFIED'),
+          categories: s.categories || [],
+          isUdyamVerified: Boolean(s.isUdyamVerified || s.udyamNumber)
         }));
         setSellers(items);
       })
@@ -6037,7 +6047,7 @@ function VendorsStepForm({
     queueMicrotask(() => {
       fetchSellersList();
     });
-  }, [search]);
+  }, [search, msmeOnly, draft.vendors.selection, effectiveCategory]);
 
   const toggleInviteSeller = (id: number, name: string) => {
     updateDraft(current => {

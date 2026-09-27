@@ -432,7 +432,8 @@ export const calculateLiquidatedDamages = (delivery: any) => {
   const contractMeta = (po?.contract?.metadata || {}) as any;
   const penaltyTerms = poMeta?.penaltyTerms || contractMeta?.penaltyTerms;
 
-  let weeklyRate = 0.005;
+  const DEFAULT_LIQUIDATED_DAMAGES = { weeklyRate: 0.005, maxCapPercent: 10 };
+  let weeklyRate = DEFAULT_LIQUIDATED_DAMAGES.weeklyRate;
   if (penaltyTerms?.ratePerWeek !== undefined && penaltyTerms?.ratePerWeek !== null) {
     weeklyRate = Number(penaltyTerms.ratePerWeek) / 100;
   } else if (poMeta?.penaltyRatePerWeek !== undefined && poMeta?.penaltyRatePerWeek !== null) {
@@ -441,7 +442,7 @@ export const calculateLiquidatedDamages = (delivery: any) => {
     weeklyRate = Number(contractMeta.penaltyRatePerWeek) / 100;
   }
 
-  let maxCapPercent = 10;
+  let maxCapPercent = DEFAULT_LIQUIDATED_DAMAGES.maxCapPercent;
   if (penaltyTerms?.maxCapPercent !== undefined && penaltyTerms?.maxCapPercent !== null) {
     maxCapPercent = Number(penaltyTerms.maxCapPercent);
   } else if (poMeta?.maxPenaltyCapPercentage !== undefined && poMeta?.maxPenaltyCapPercentage !== null) {

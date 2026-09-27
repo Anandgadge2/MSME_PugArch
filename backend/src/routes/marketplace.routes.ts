@@ -2339,10 +2339,39 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
         const pageSize = query.pageSize || 12;
         const skip = (page - 1) * pageSize;
 
-        const where: any = { ...sellerOrganizationWhere };
+        const andConditions: any[] = [{ ...sellerOrganizationWhere }];
         if (query.q) {
-            where.organizationName = { contains: query.q, mode: 'insensitive' };
+            andConditions.push({ organizationName: { contains: query.q, mode: 'insensitive' } });
         }
+        if (query.category) {
+            const catName = query.category.trim();
+            andConditions.push({
+                OR: [
+                    { products: { some: { status: 'ACTIVE', category: { name: { contains: catName, mode: 'insensitive' } } } } },
+                    { services: { some: { status: 'ACTIVE', category: { name: { contains: catName, mode: 'insensitive' } } } } }
+                ]
+            });
+        }
+        if (query.categoryId) {
+            andConditions.push({
+                OR: [
+                    { products: { some: { status: 'ACTIVE', categoryId: query.categoryId } } },
+                    { services: { some: { status: 'ACTIVE', categoryId: query.categoryId } } }
+                ]
+            });
+        }
+        const msmeOnly = String(req.query.msmeOnly || '').toLowerCase() === 'true';
+        if (msmeOnly) {
+            andConditions.push({
+                OR: [
+                    { organizationType: { in: ['MSME', 'SHG'] } },
+                    { profile: { isBigMsme: true } },
+                    { udyamNumber: { not: null } }
+                ]
+            });
+        }
+
+        const where: any = andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
 
         const rawSort = String(req.query.sort || '').toLowerCase();
         let orderBy: any = { updatedAt: 'desc' };
@@ -2366,6 +2395,7 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
                     verificationStatus: true,
                     gstin: true,
                     panNumber: true,
+                    udyamNumber: true,
                     logoFile: { select: organizationLogoSelect },
                     profile: { select: organizationProfileBrandSelect },
                     products: {
@@ -2410,6 +2440,8 @@ router.get('/marketplace/sellers', shortCache(60), async (req: Request, res: Res
                 verificationStatus: org.verificationStatus,
                 gstin: org.gstin,
                 panNumber: org.panNumber,
+                udyamNumber: org.udyamNumber,
+                isUdyamVerified: Boolean(org.udyamNumber || org.organizationType === 'MSME' || org.organizationType === 'SHG'),
                 logoFile: org.logoFile,
                 profile: org.profile,
                 categories,
