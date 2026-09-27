@@ -3241,6 +3241,65 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
   }
 });
 
+app.get('/api/files/:id/download', async (req: any, res: any) => {
+  try {
+    const fileId = Number(req.params.id);
+    if (!Number.isInteger(fileId) || fileId <= 0) throw new ApiError(400, 'Invalid file id', 'FILE_ID_INVALID');
+
+    let user = req.user;
+    if (!user) {
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+      const queryToken = req.query?.token as string | undefined;
+
+      const isCookieSession = (t: string | null | undefined) =>
+        !t || t === 'cookie-session' || t === 'null' || t === 'undefined';
+
+      let token: string | null = null;
+      if (bearerToken && !isCookieSession(bearerToken)) {
+        token = bearerToken;
+      } else if (queryToken && !isCookieSession(queryToken)) {
+        token = queryToken;
+      } else {
+        token = getAccessTokenFromRequest(req) || null;
+      }
+
+      if (token) {
+        try {
+          user = verifyAccessToken(token);
+        } catch {}
+      }
+    }
+
+    let file;
+    if (user) {
+      file = await getStoredFileContent(fileId, user, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    } else {
+      const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
+      if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
+      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(asset.entityType);
+      if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
+      file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      });
+    }
+
+    const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
+
+    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+    res.setHeader('Content-Length', file.buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(file.buffer);
+  } catch (err: any) {
+    return handleUploadRouteError(res, err);
+  }
+});
+
 app.get('/api/files/raw/*', async (req: any, res: any) => {
   try {
     const rawKey = req.params[0] || req.path.replace(/^\/api\/files\/raw\//, '');

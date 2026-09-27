@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Download, Eye, FileSpreadsheet, FileText, FileType, ImageIcon, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../../../lib/utils';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, downloadFileAsset } from '../../../lib/files';
 import { api } from '../../../lib/api';
 import VoiceNotePlayer from './VoiceNotePlayer';
 
@@ -86,6 +86,8 @@ export default function MessageAttachmentView({
   const [previewUrl, setPreviewUrl] = useState<string | null>(() => imageBlobUrlCache.get(fileAsset.id) || null);
   const [loadingPreview, setLoadingPreview] = useState(() => !imageBlobUrlCache.has(fileAsset.id) && isImageMime(fileAsset.mimeType));
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     if (isAudioAttachment(fileAsset) || !isImageMime(fileAsset.mimeType)) return;
@@ -99,7 +101,7 @@ export default function MessageAttachmentView({
     const loadPreview = async () => {
       setLoadingPreview(true);
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token') || '') : '';
         const res = await api.fetch(`/api/files/${fileAsset.id}/view`, {
           method: 'GET',
           headers: token ? { Authorization: `Bearer ${token}` } : {}
@@ -136,10 +138,43 @@ export default function MessageAttachmentView({
   }
 
   const handleOpen = async () => {
+    if (opening) return;
+    setOpening(true);
     try {
       await openFileAsset(fileAsset, label);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Unable to open attachment');
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const handleDownload = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      // 1. If an image is already in blob cache, download immediately without roundtrip
+      const cachedUrl = previewUrl || imageBlobUrlCache.get(fileAsset.id);
+      if (cachedUrl && isImageMime(fileAsset.mimeType)) {
+        const link = document.createElement('a');
+        link.href = cachedUrl;
+        link.download = label;
+        link.setAttribute('download', label);
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(link);
+          } catch {}
+        }, 100);
+        return;
+      }
+      await downloadFileAsset(fileAsset, label);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Unable to download attachment');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -180,18 +215,22 @@ export default function MessageAttachmentView({
               type="button"
               onClick={() => setLightboxOpen(false)}
               className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-900/70 text-white hover:bg-slate-900"
+              aria-label="Close image preview"
             >
               <X className="h-4 w-4" />
             </button>
             <img src={previewUrl} alt={label} className="max-h-[80vh] w-auto object-contain rounded-xl" />
             <div className="flex items-center justify-between p-2">
-              <span className="text-xs font-bold text-slate-700">{label}</span>
+              <span className="text-xs font-bold text-slate-700 truncate max-w-[60%]">{label}</span>
               <button
                 type="button"
-                onClick={() => void handleOpen()}
-                className="flex items-center gap-1 text-xs font-black text-[#12335f] hover:underline"
+                onClick={() => void handleDownload()}
+                disabled={downloading}
+                className="flex items-center gap-1 text-xs font-black text-[#12335f] hover:underline disabled:opacity-50"
+                title={`Download ${label}`}
               >
-                <Download className="h-3.5 w-3.5" /> Download Full
+                {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                <span>Download Full</span>
               </button>
             </div>
           </div>
@@ -199,59 +238,91 @@ export default function MessageAttachmentView({
       )}
 
       {/* Document / File Card */}
-      <button
-        type="button"
-        onClick={() => void handleOpen()}
+      <div
         className={cn(
           'flex w-full items-center gap-2.5 rounded-xl border p-2.5 text-left text-xs font-bold transition shadow-2xs',
           chipClass
         )}
       >
-        {/* Specific File Type Badge */}
+        {/* Clickable Icon and File Info to View */}
         <div
-          className={cn(
-            'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-inner',
-            isWord
-              ? 'bg-blue-600 text-white'
-              : isPdf
-              ? 'bg-rose-600 text-white'
-              : isExcel
-              ? 'bg-emerald-600 text-white'
-              : isImage
-              ? 'bg-purple-600 text-white'
-              : 'bg-slate-700 text-white'
-          )}
+          role="button"
+          tabIndex={0}
+          onClick={() => void handleOpen()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleOpen();
+            }
+          }}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 select-none focus:outline-none focus:ring-1 focus:ring-blue-400 rounded-lg p-0.5"
+          title={`Click to view ${label}`}
+          aria-label={`View document ${label}`}
         >
-          {isWord ? (
-            <span className="font-mono text-[10px] font-black">DOC</span>
-          ) : isPdf ? (
-            <span className="font-mono text-[10px] font-black">PDF</span>
-          ) : isExcel ? (
-            <FileSpreadsheet className="h-4 w-4" />
-          ) : isImage ? (
-            <ImageIcon className="h-4 w-4" />
-          ) : (
-            <FileText className="h-4 w-4" />
-          )}
-        </div>
+          {/* Specific File Type Badge */}
+          <div
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-inner',
+              isWord
+                ? 'bg-blue-600 text-white'
+                : isPdf
+                ? 'bg-rose-600 text-white'
+                : isExcel
+                ? 'bg-emerald-600 text-white'
+                : isImage
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-700 text-white'
+            )}
+          >
+            {isWord ? (
+              <span className="font-mono text-[10px] font-black">DOC</span>
+            ) : isPdf ? (
+              <span className="font-mono text-[10px] font-black">PDF</span>
+            ) : isExcel ? (
+              <FileSpreadsheet className="h-4 w-4" />
+            ) : isImage ? (
+              <ImageIcon className="h-4 w-4" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+          </div>
 
-        {/* Name and Size */}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-black leading-tight">{label}</p>
-          <div className="mt-0.5 flex items-center gap-2 text-[10px] opacity-75">
-            {fileAsset.size ? <span>{formatFileSize(fileAsset.size)}</span> : null}
-            <span>•</span>
-            <span className="uppercase">{isWord ? 'Word Doc' : isPdf ? 'PDF' : isExcel ? 'Excel' : 'File'}</span>
+          {/* Name and Size */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-black leading-tight hover:underline">{label}</p>
+            <div className="mt-0.5 flex items-center gap-2 text-[10px] opacity-75">
+              {fileAsset.size ? <span>{formatFileSize(fileAsset.size)}</span> : null}
+              <span>•</span>
+              <span className="uppercase">{isWord ? 'Word Doc' : isPdf ? 'PDF' : isExcel ? 'Excel' : 'File'}</span>
+            </div>
           </div>
         </div>
 
-        {/* View / Download Action */}
-        <div className="flex shrink-0 items-center gap-1.5 rounded-lg bg-black/5 px-2 py-1 text-[10px] font-bold">
-          <Eye className="h-3 w-3" />
+        {/* View Action Button */}
+        <button
+          type="button"
+          onClick={() => void handleOpen()}
+          disabled={opening}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg bg-black/5 hover:bg-black/10 px-2.5 py-1.5 text-[10px] font-bold transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          title={`View ${label}`}
+          aria-label={`View ${label}`}
+        >
+          {opening ? <Loader2 className="h-3 w-3 animate-spin" /> : <Eye className="h-3 w-3" />}
           <span>View</span>
-        </div>
-        <Download className="h-4 w-4 shrink-0 opacity-70 hover:opacity-100" />
-      </button>
+        </button>
+
+        {/* Download Action Button */}
+        <button
+          type="button"
+          onClick={(e) => void handleDownload(e)}
+          disabled={downloading}
+          className="flex shrink-0 items-center justify-center rounded-lg bg-black/5 hover:bg-black/10 p-1.5 text-inherit opacity-80 hover:opacity-100 transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          title={`Download ${label}`}
+          aria-label={`Download ${label}`}
+        >
+          {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+        </button>
+      </div>
     </div>
   );
 }

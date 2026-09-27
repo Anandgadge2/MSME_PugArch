@@ -88,6 +88,12 @@ const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | nu
     delete next.Authorization;
     delete next.authorization;
   }
+  if (!next.Authorization && !next.authorization && typeof window !== 'undefined') {
+    const token = localStorage.getItem('token') || localStorage.getItem('msme_auth_token');
+    if (token && token !== 'null' && token !== 'undefined') {
+      next['Authorization'] = `Bearer ${token}`;
+    }
+  }
   if (body instanceof FormData) {
     delete next['Content-Type'];
     delete next['content-type'];

@@ -63,7 +63,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
   }
 
   const fallbackUrl = typeof fileAsset === 'object'
-    ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    ? (fileAsset?.viewUrl || fileAsset?.downloadUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
     : null;
   const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
 
@@ -77,10 +77,10 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     }
   }
 
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
   const hasSession = Boolean(token || getCookieValue('csrfToken'));
   const authHeaders: Record<string, string> = {};
-  if (token) {
+  if (token && token !== 'null' && token !== 'undefined') {
     authHeaders['Authorization'] = `Bearer ${token}`;
   }
 
@@ -194,10 +194,10 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
   }
 
   const fallbackUrl = typeof fileAsset === 'object'
-    ? (fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    ? (fileAsset?.viewUrl || fileAsset?.downloadUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
     : null;
   const rawAbsoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
   const absoluteFallbackUrl = (token && rawAbsoluteFallbackUrl && (rawAbsoluteFallbackUrl.includes('/api/files/') || rawAbsoluteFallbackUrl.includes('/api/public/files/')) && !rawAbsoluteFallbackUrl.includes('token='))
     ? `${rawAbsoluteFallbackUrl}${rawAbsoluteFallbackUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
     : rawAbsoluteFallbackUrl;
@@ -240,7 +240,12 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       return;
     }
 
-    const hasSession = Boolean((typeof window !== 'undefined' && localStorage.getItem('token')) || getCookieValue('csrfToken'));
+    const hasSession = Boolean(token || getCookieValue('csrfToken'));
+    const authHeaders: Record<string, string> = {};
+    if (token && token !== 'null' && token !== 'undefined') {
+      authHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
     const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
 
@@ -248,6 +253,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     try {
       const res = await api.fetch(signedUrlEndpoint, {
         method: 'GET',
+        headers: authHeaders,
         skipCache: true
       });
 
@@ -276,6 +282,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     try {
       res = await api.fetch(viewEndpoint, {
         method: 'GET',
+        headers: authHeaders,
         skipCache: true
       });
     } catch {
@@ -283,12 +290,13 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     }
 
     if (!res || !res.ok) {
-      if (absoluteFallbackUrl) {
+      const fallbackTarget = absoluteFallbackUrl || (fileId ? getAbsoluteApiUrl(`/api/files/${fileId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`) : '');
+      if (fallbackTarget) {
         if (previewWindow && !previewWindow.closed) {
           try { previewWindow.opener = null; } catch {}
-          previewWindow.location.href = absoluteFallbackUrl;
+          previewWindow.location.href = fallbackTarget;
         } else {
-          window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
+          window.open(fallbackTarget, '_blank', 'noopener,noreferrer');
         }
         return;
       }
@@ -352,3 +360,117 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     throw err;
   }
 };
+
+const triggerDownloadBlob = (url: string, filename: string) => {
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.setAttribute('download', filename);
+  link.target = '_blank';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => {
+    try {
+      document.body.removeChild(link);
+    } catch {}
+  }, 100);
+};
+
+export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document') => {
+  let fileId: number | null = null;
+  if (typeof fileAsset === 'number') {
+    fileId = fileAsset;
+  } else if (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset)) {
+    fileId = Number(fileAsset);
+  } else if (fileAsset && typeof fileAsset === 'object') {
+    if (fileAsset.fileAssetId && !isNaN(Number(fileAsset.fileAssetId))) {
+      fileId = Number(fileAsset.fileAssetId);
+    } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
+      fileId = Number(fileAsset.fileId);
+    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
+      fileId = fileAsset.id;
+    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+      fileId = Number(fileAsset.id);
+    }
+  }
+
+  const fileName = (typeof fileAsset === 'object' && (fileAsset?.originalName || fileAsset?.name || fileAsset?.fileName)) || fallbackName;
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
+  const authHeaders: Record<string, string> = {};
+  if (token && token !== 'null' && token !== 'undefined') {
+    authHeaders['Authorization'] = `Bearer ${token}`;
+  }
+
+  // 1. If local File object
+  if (fileAsset?.file instanceof File) {
+    const blobUrl = URL.createObjectURL(fileAsset.file);
+    triggerDownloadBlob(blobUrl, fileName);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    return;
+  }
+
+  // 2. If already a blob or data URL
+  const existingUrl = typeof fileAsset === 'string' ? fileAsset : (fileAsset?.blobUrl || fileAsset?.url);
+  if (existingUrl && (existingUrl.startsWith('blob:') || existingUrl.startsWith('data:'))) {
+    triggerDownloadBlob(existingUrl, fileName);
+    return;
+  }
+
+  // 3. If fileId is present, fetch blob via /api/files/:id/download or /api/files/:id/view with auth
+  if (fileId) {
+    const endpoints = [
+      `/api/files/${fileId}/download`,
+      `/api/files/${fileId}/view`,
+      `/api/public/files/${fileId}/view`
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const res = await api.fetch(ep, {
+          method: 'GET',
+          headers: authHeaders,
+          skipCache: true
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          triggerDownloadBlob(blobUrl, fileName);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+          return;
+        }
+      } catch {}
+    }
+  }
+
+  // 4. Try fallback URL
+  const fallbackUrl = typeof fileAsset === 'object'
+    ? (fileAsset?.downloadUrl || fileAsset?.viewUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    : (typeof fileAsset === 'string' ? fileAsset : null);
+
+  if (fallbackUrl) {
+    const absoluteUrl = getAbsoluteApiUrl(fallbackUrl);
+    try {
+      const res = await api.fetch(absoluteUrl, {
+        method: 'GET',
+        headers: authHeaders,
+        skipCache: true
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        triggerDownloadBlob(blobUrl, fileName);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+        return;
+      }
+    } catch {}
+
+    const tokenParam = (token && (absoluteUrl.includes('/api/files/') || absoluteUrl.includes('/api/public/files/')) && !absoluteUrl.includes('token='))
+      ? `${absoluteUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+      : '';
+    triggerDownloadBlob(`${absoluteUrl}${tokenParam}`, fileName);
+    return;
+  }
+
+  throw new Error('Document file is not uploaded on server.');
+};
+
