@@ -473,21 +473,8 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
     }
     if (valueKey && valueKey.toLowerCase().includes("evaluation")) {
       const lower = trimmed.toLowerCase();
-      if (
-        lower.includes("qcbs") ||
-        lower.includes("quality and cost") ||
-        lower.includes("weighted technical")
-      ) {
-        return "Quality and Cost Based Selection (QCBS)";
-      }
       if (lower === "l1" || lower === "l1 basis") {
         return "L1 Basis";
-      }
-      if (lower.includes("item-wise") || lower.includes("item wise")) {
-        return "Item-wise L1";
-      }
-      if (lower.includes("package-wise") || lower.includes("package wise")) {
-        return "Package-wise L1";
       }
       if (
         lower.includes("technical qualification then l1") ||
@@ -504,6 +491,7 @@ function formatPrimitiveValue(val: any, valueKey?: string): string {
       if (lower.includes("l1 total value") || lower.includes("l1 total")) {
         return "L1 Total Value";
       }
+      return "L1 Basis";
     }
     return trimmed;
   }
@@ -533,28 +521,7 @@ function getEvaluationMethodDetails(
 ): EvaluationMethodDetails {
   const lower = (methodRaw || "").toLowerCase().trim();
 
-  // 1. QCBS / Weighted
-  if (
-    lower.includes("qcbs") ||
-    lower.includes("quality and cost") ||
-    lower.includes("weighted technical") ||
-    lower.includes("weighted")
-  ) {
-    return {
-      title: "Quality and Cost Based Selection (QCBS)",
-      badge: "Weighted Tech-Commercial",
-      basisLabel: "Highest Composite Score (H1)",
-      shortSummary:
-        "Weighted evaluation combining technical evaluation scores and commercial financial price.",
-      description:
-        "Bids are evaluated on a combined technical and commercial scoring matrix. The bidder achieving the highest composite score (H1) is recommended for contract award.",
-      keyPoints: [
-        "Combined Technical & Financial Scoring",
-        "Configured Tech/Financial Weightage",
-        "Highest Ranked Combined Bidder (H1) Award",
-      ],
-    };
-  }
+  // All non-L1 methods removed — QCBS evaluation is no longer supported
 
   // 2. Item-wise L1
   // if (lower.includes("item-wise") || lower.includes("item wise")) {
@@ -7574,10 +7541,9 @@ export function ProcurementDetailUnifiedView(
       const humanEvalMethod = (() => {
         const e = String(evaluationMethod || "").trim();
         const eUpper = e.toUpperCase();
-        if (eUpper.includes("L1") && !eUpper.includes("ITEM")) return "L1 Total Value (Lowest Responsive Bidder)";
-        if (eUpper.includes("QCBS")) return "Quality & Cost-Based Selection (QCBS)";
-        if (eUpper.includes("ITEM")) return "Item-wise L1 Evaluation";
-        return e || "L1 Total Value";
+        if (eUpper.includes("REVERSE AUCTION")) return "Reverse Auction Final Bid Rank (L1)";
+        if (eUpper.includes("L1")) return "L1 Total Value (Lowest Responsive Bidder)";
+        return "L1 Total Value (Lowest Responsive Bidder)";
       })();
 
       const notesList: string[] = [];

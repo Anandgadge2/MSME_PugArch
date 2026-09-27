@@ -1065,10 +1065,9 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       const humanEvalMethod = (() => {
         const e = String(evalMethod || '').trim();
         const eUpper = e.toUpperCase();
-        if (eUpper.includes('L1') && !eUpper.includes('ITEM')) return 'L1 Total Value (Lowest Responsive Bidder)';
-        if (eUpper.includes('QCBS')) return 'Quality & Cost-Based Selection (QCBS)';
-        if (eUpper.includes('ITEM')) return 'Item-wise L1 Evaluation';
-        return e || 'L1 Total Value';
+        if (eUpper.includes('REVERSE AUCTION')) return 'Reverse Auction Final Bid Rank (L1)';
+        if (eUpper.includes('L1')) return 'L1 Total Value (Lowest Responsive Bidder)';
+        return 'L1 Total Value (Lowest Responsive Bidder)';
       })();
 
       const tableHeaders = ['#', 'Item & Technical Specifications', 'Qty', 'Unit', 'Est. Price', 'GST'];

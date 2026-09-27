@@ -378,22 +378,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         boqTable={payload.boqTable || payload.boq}
         serviceDetails={serviceDetails}
         consigneeDetails={payload.consigneeDetails}
-        evaluationMethod={
-          [
-            evaluation.method,
-            evaluation.evaluationMethod,
-            payload.evaluation?.method,
-            payload.evaluation?.evaluationMethod,
-            payload.evaluationMethod,
-            reqObj?.payload?.evaluation?.method,
-            bid.technicalPacket?.evaluation?.method,
-            bid.evaluationMethod,
-          ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
-          bid.evaluationMethod ||
-          evaluation.method ||
-          payload.evaluationMethod ||
-          'QCBS (Quality & Cost Based Selection)'
-        }
+        evaluationMethod={'L1 Basis (Lowest Landed Cost)'}
         participations={participationsList}
         participantsCount={bid.participantsCount ?? participationsList.length}
         hasSubmittedProposal={hasSubmittedProposal}

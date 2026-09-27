@@ -1088,7 +1088,6 @@ interface EvaluationCriteriaBuilderProps {
   onChange: (id: string, key: keyof EvalCriteria, val: any) => void;
   onAddRow: () => void;
   onDeleteRow: (id: string) => void;
-  isQCBS?: boolean;
 }
 
 export function EvaluationCriteriaBuilder({
@@ -1096,19 +1095,12 @@ export function EvaluationCriteriaBuilder({
   onChange,
   onAddRow,
   onDeleteRow,
-  isQCBS = false
 }: EvaluationCriteriaBuilderProps) {
   const tableInput = 'h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15';
   const totalWeightage = criteria.reduce((sum, c) => sum + Number(c.weightage || 0), 0);
 
   return (
     <div className="space-y-3">
-      {isQCBS && totalWeightage !== 100 && (
-        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-xs font-semibold flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span>Note: Quality and Cost evaluation (QCBS) requires total criteria weightage to sum to 100%. (Current total: {totalWeightage}%)</span>
-        </div>
-      )}
 
       <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
         <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">

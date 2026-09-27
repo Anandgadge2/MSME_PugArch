@@ -116,7 +116,7 @@ const bidBaseSchema = z.object({
   technicalOpeningDate: z.coerce.date().optional(),
   financialOpeningDate: z.coerce.date().optional(),
   bidValidityDate: z.coerce.date().optional(),
-  evaluationMethod: z.string().trim().max(120).optional(),
+  evaluationMethod: z.string().trim().max(120).optional().default('L1'),
   documentFee: z.coerce.number().nonnegative().optional(),
   allowClarification: z.boolean().optional(),
   allowReverseAuction: z.boolean().optional(),
@@ -626,7 +626,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
         status: String(rateContract.status || 'ACTIVE'),
         approvalStatus: 'APPROVED',
         lifecycleStage: 'SELLER_PARTICIPATION',
-        evaluationMethod: srcPayload?.evaluation?.method || 'L1',
+        evaluationMethod: 'L1',
         packetType: 'SINGLE_PACKET',
         technicalPacket: {
           basics: {
@@ -1187,7 +1187,7 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           status: requirement.status === 'APPROVED' ? 'OPEN' : requirement.status || 'OPEN',
           approvalStatus: requirement.status || 'APPROVED',
           lifecycleStage: 'SELLER_PARTICIPATION',
-          evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1',
+          evaluationMethod: 'L1',
           isEmdRequired: false,
           emdAmount: null,
           documentFee: null,
@@ -2154,10 +2154,7 @@ router.post('/:bidId/financial-evaluation-landed-cost', authenticate, asyncRoute
   return apiResponse.success(res, data, 200, 'Financial evaluation opened with Landed Cost evaluation');
 }));
 
-router.post('/:bidId/split-award', authenticate, asyncRoute(async (req, res) => {
-  const data = await service.recommendSplitAward(req, req.params.bidId, req.body || {});
-  return apiResponse.success(res, data, 200, 'Split award processed');
-}));
+// Split award route removed — only L1 evaluation is supported
 
 router.post('/:bidId/l1-default', authenticate, asyncRoute(async (req, res) => {
   const data = await service.inviteL2ToMatchL1(req, req.params.bidId, req.body || {});

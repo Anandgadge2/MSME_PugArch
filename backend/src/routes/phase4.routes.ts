@@ -808,7 +808,7 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         itemCondition: bid.deliveryLocation,
         bidValidityDays: bid.bidValidityDate ? undefined : 90,
         bidValidityDate: bid.bidValidityDate,
-        evaluationMethod: bid.evaluationMethod,
+        evaluationMethod: 'L1',
         technicalOpeningDate: bid.technicalOpeningDate,
         financialOpeningDate: bid.financialOpeningDate,
         allowReverseAuction: bid.allowReverseAuction,
@@ -1922,7 +1922,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     approvalStatus: 'APPROVED',
     approvedAt: creationTime,
     lifecycleStage: 'SELLER_PARTICIPATION',
-    evaluationMethod: payload.evaluation?.evaluationMethod || payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.quotationFormat || 'L1',
+    evaluationMethod: 'L1',
     documentFee: tender.documentFee || null,
     allowClarification: schedule.clarificationAllowed !== false && schedule.clarificationAllowed !== 'false' && schedule.allowClarifications !== false,
     allowReverseAuction: ['bid-with-reverse-auction', 'reverse-auction'].includes(methodSlug) || payload.allowReverseAuction === true || (payload.basics?.isReverseAuctionNeeded === true && payload.allowReverseAuction !== false),
@@ -12797,7 +12797,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const eligibilityCriteria = b.eligibilityCriteria || [];
     const termsAndConditions = b.termsAndConditions || [];
     if (b.evaluationMethod) {
-      termsAndConditions.push(`Evaluation Method: ${b.evaluationMethod}`);
+      termsAndConditions.push('Evaluation Method: L1 Basis (Lowest Landed Cost)');
     }
 
     all.push({
@@ -12828,7 +12828,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       actionUrl: `/bids/${b.id}`,
-      evaluationMethod: b.evaluationMethod || (b.technicalPacket as any)?.evaluation?.method || (b.technicalPacket as any)?.evaluationMethod || (b.technicalPacket as any)?.rules?.evaluationMethod || 'L1 Basis',
+      evaluationMethod: 'L1 Basis',
       documents,
       items,
       paymentTerms: terms.paymentTerms || '',
@@ -13269,7 +13269,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       participantsCount: reqResponseCountMap.get(r.id) || 0,
       createdAt: r.createdAt?.toISOString?.() || '',
       updatedAt: r.updatedAt?.toISOString?.() || '',
-      evaluationMethod: payload.evaluation?.method || payload.evaluation?.evaluationMethod || payload.evaluationMethod || payload.rules?.evaluationMethod || 'L1 Basis',
+      evaluationMethod: 'L1 Basis',
       actionUrl: (() => {
         const linkedAuction = auctionsByRequirementId[r.id];
         if (linkedAuction) {

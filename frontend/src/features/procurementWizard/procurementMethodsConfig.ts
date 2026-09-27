@@ -65,11 +65,11 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     badge: 'Strategic Sourcing',
     valueHint: 'For service-heavy or solution-driven requirements',
     fit: ['Complex services or solutions', 'Qualitative evaluation criteria needed', 'Negotiation scope available'],
-    gates: ['Detailed scope of work', 'Weighted evaluation matrix (QCBS)', 'Pre-proposal meeting details'],
+    gates: ['Detailed scope of work', 'Pre-proposal meeting details'],
     complexity: 'High',
     estimatedTime: '14-21 Days',
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation'],
-    allowedEvaluations: ['QCBS / weighted technical-commercial score']
+    allowedEvaluations: ['L1 total value']
   },
   {
     id: 'OPEN_TENDER',
@@ -84,7 +84,7 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
     complexity: 'High',
     estimatedTime: '21-45 Days',
     requiredFields: ['title', 'estimatedValue', 'deliveryLocation', 'submissionDate'],
-    allowedEvaluations: ['L1 total value', 'QCBS / weighted technical-commercial score']
+    allowedEvaluations: ['L1 total value']
   },
   {
     id: 'LIMITED_TENDER',

@@ -965,7 +965,7 @@ const stepLibrary = {
   schedule: { id: 'schedule', label: 'Timeline & Rules', description: 'Envelope bids & deadline schedules', icon: CalendarClock },
   terms: { id: 'terms', label: 'Commercial Terms', description: 'Payment, delivery', icon: BadgeCheck },
   documents: { id: 'documents', label: 'Required Documents', description: 'Checklists and validation requests', icon: Upload },
-  evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'QCBS weights and technical scores', icon: BarChart3 },
+  evaluation: { id: 'evaluation', label: 'Evaluation Basis', description: 'L1 Lowest Landed Cost evaluation', icon: BarChart3 },
   publish: { id: 'publish', label: 'Approval & Publish', description: 'Summary review & workflow release', icon: BadgeCheck },
 } as const;
 
@@ -2369,7 +2369,7 @@ export default function CreateProcurementPage() {
 
             {/* Step 8 Evaluation scoring */}
             {currentStepKind === 'evaluation' && (
-              <SectionCard title="Evaluation Basis & Weightages" description="Define QCBS scoring percentages or L1 award guidelines" icon={stepLibrary.evaluation.icon}>
+              <SectionCard title="Evaluation Basis" description="L1 Lowest Landed Cost evaluation basis" icon={stepLibrary.evaluation.icon}>
                 <EvaluationBasisForm
                   draft={draft}
                   updateDraft={updateDraft}
@@ -7939,52 +7939,26 @@ function EvaluationBasisForm({
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
 }) {
-  const updateEval = (key: keyof Draft['evaluation'], val: any) => {
-    updateDraft(c => ({ ...c, evaluation: { ...c.evaluation, [key]: val } }));
-  };
-
-
-  const isQCBS = draft.evaluation.method === 'QCBS / weighted technical-commercial score';
+  // Hardcode evaluation method to L1 on mount if not already set
+  if (draft.evaluation.method !== 'L1 total value') {
+    updateDraft(c => ({ ...c, evaluation: { ...c.evaluation, method: 'L1 total value' } }));
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Evaluation Method basis" required>
-          <select
-            value={draft.evaluation.method === 'QCBS / weighted technical-commercial score' ? 'QCBS / weighted technical-commercial score' : 'L1 total value'}
-            onChange={e => updateEval('method', e.target.value)}
-            className={inputClass}
-          >
-            <option value="L1 total value">L1 Total Value Basis (Lowest Landed Cost)</option>
-            <option value="QCBS / weighted technical-commercial score">Quality and Cost Based Selection (QCBS)</option>
-          </select>
-          <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Choose how vendor proposals are evaluated. Enable Reverse Auction in Timeline & Rules if dynamic downward price bidding is required.
-          </p>
-        </Field>
-
-        {isQCBS && (
-          <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-            <Field label="Tech weightage %">
-              <input
-                type="number"
-                value={draft.evaluation.techWeight || 70}
-                onChange={e => updateEval('techWeight', Number(e.target.value || 0))}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Financial weightage %">
-              <input
-                type="number"
-                value={draft.evaluation.commWeight || 30}
-                onChange={e => updateEval('commWeight', Number(e.target.value || 0))}
-                className={inputClass}
-              />
-            </Field>
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5">
+            Evaluation Method Basis <span className="text-red-500">*</span>
+          </label>
+          <div className="h-9 flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-700">
+            L1 Total Value Basis (Lowest Landed Cost)
           </div>
-        )}
+          <p className="text-[10px] text-slate-500 font-semibold mt-1">
+            All procurement events are evaluated on L1 Lowest Landed Cost basis. The quotation with the lowest total delivered cost is designated as L1 for contract award.
+          </p>
+        </div>
       </div>
-
     </div>
   );
 }
@@ -8427,7 +8401,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     })),
   } : null;
 
-  const chosenEvaluationMethod = draft.evaluation.method || 'L1 total value';
+  const chosenEvaluationMethod = 'L1 total value';
   tender.evaluationMethod = chosenEvaluationMethod;
 
   const rules = {
