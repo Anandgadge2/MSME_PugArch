@@ -60,6 +60,13 @@ import { isValidCanonicalRef } from '../utils/refIdUtils.js';
 import { cancelProcurementRequest } from '../modules/procurementCheckout/procurement-checkout.service.js';
 import { createApprovalChain } from '../services/approval-chain.service.js';
 import { parseDateIST } from '../utils/dateUtils.js';
+import {
+  validateCallOffOrderRequest,
+  parseDeliverySlaDays,
+  calculateExpectedDeliveryDate,
+  parsePenaltyTerms,
+  getRateContractUtilization
+} from '../modules/rateContract/rate-contract.service.js';
 
 
 const safeCoercedDate = z.preprocess((val) => {
@@ -1485,7 +1492,11 @@ const rateContractConfigSchema = z.object({
   maximumOrderQuantityPerCallOff: z.coerce.number().positive().optional().nullable(),
   minimumOrderQuantity: z.coerce.number().nonnegative().default(0),
   deliverySla: z.string().trim().min(2).max(500),
+  deliverySlaDays: z.coerce.number().int().positive().default(15),
   penaltyClause: z.string().trim().min(2).max(1000),
+  penaltyRatePerWeek: z.coerce.number().min(0).max(100).default(0.5),
+  penaltyGraceDays: z.coerce.number().int().nonnegative().default(0),
+  maxPenaltyCapPercentage: z.coerce.number().min(0).max(100).default(10),
   securityDepositRequired: z.coerce.boolean().default(false),
   securityDepositAmount: z.coerce.number().nonnegative().default(0),
   pbgRequired: z.coerce.boolean().default(false),
@@ -1521,6 +1532,10 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
       ? payload.vendors.invitedSellers.map((supplierId: unknown) => ({ supplierId }))
       : [];
 
+  const deliverySla = raw.deliverySla || payload.terms?.deliveryTerms || 'As per contract terms';
+  const deliverySlaDays = raw.deliverySlaDays !== undefined ? Number(raw.deliverySlaDays) : parseDeliverySlaDays(deliverySla, 15);
+  const penaltyTerms = parsePenaltyTerms(raw);
+
   return {
     rateContractNumber: raw.rateContractNumber,
     contractTitle: raw.contractTitle || payload.basics?.title || draft.title,
@@ -1536,8 +1551,12 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     callOffOrderAllowed: Boolean(raw.callOffOrderAllowed ?? true),
     maximumOrderQuantityPerCallOff: raw.maximumOrderQuantityPerCallOff ?? null,
     minimumOrderQuantity: raw.minimumOrderQuantity ?? 0,
-    deliverySla: raw.deliverySla || payload.terms?.deliveryTerms || 'As per contract terms',
+    deliverySla,
+    deliverySlaDays,
     penaltyClause: raw.penaltyClause || payload.terms?.penaltyClause || 'As per contract terms',
+    penaltyRatePerWeek: raw.penaltyRatePerWeek !== undefined ? Number(raw.penaltyRatePerWeek) : penaltyTerms.ratePerWeek,
+    penaltyGraceDays: raw.penaltyGraceDays !== undefined ? Number(raw.penaltyGraceDays) : penaltyTerms.gracePeriodDays,
+    maxPenaltyCapPercentage: raw.maxPenaltyCapPercentage !== undefined ? Number(raw.maxPenaltyCapPercentage) : penaltyTerms.maxCapPercent,
     securityDepositRequired: Boolean(raw.securityDepositRequired ?? false),
     securityDepositAmount: Number(raw.securityDepositAmount ?? payload.terms?.securityDeposit ?? 0),
     pbgRequired: Boolean(raw.pbgRequired ?? payload.terms?.pbgRequired ?? false),
@@ -5916,31 +5935,29 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
     items: z.array(z.object({
       itemName: z.string().trim().min(2).max(240),
       quantity: z.coerce.number().positive(),
-      unitOfMeasure: z.string().trim().min(1).max(120),
-      unitPrice: z.coerce.number().positive(),
+      unitOfMeasure: z.string().trim().min(1).max(120).optional(),
+      unitPrice: z.coerce.number().positive().optional(),
       taxRate: z.coerce.number().min(0).max(100).optional().default(0)
     })).min(1)
   }), req.body);
+
   const contract = await db.contract.findUnique({ where: { id } });
   const metadata = (contract?.metadata || {}) as any;
   if (!contract || contract.contractType !== 'RATE_CONTRACT' || Number(metadata.buyerId || 0) !== userId(req)) {
     throw new ApiError(404, 'Rate contract not found', 'RATE_CONTRACT_NOT_FOUND');
   }
-  if (!metadata.callOffOrderAllowed) throw new ApiError(409, 'Call-off orders are not allowed for this rate contract', 'RATE_CONTRACT_CALLOFF_NOT_ALLOWED');
-  if (contract.endDate && contract.endDate < new Date()) throw new ApiError(409, 'Rate contract has expired', 'RATE_CONTRACT_EXPIRED');
-  const selectedSuppliers = Array.isArray(metadata.selectedSuppliers) ? metadata.selectedSuppliers : [];
-  const supplierAllowed = selectedSuppliers.some((supplier: any) =>
-    Number(supplier.supplierUserId || supplier.sellerUserId || supplier.supplierId || 0) === body.sellerId
-  );
-  if (!supplierAllowed) throw new ApiError(400, 'Seller is not part of this rate contract', 'RATE_CONTRACT_SUPPLIER_INVALID');
-  const totalQuantity = body.items.reduce((sum, item) => sum + Number(item.quantity), 0);
-  if (Number(metadata.minimumOrderQuantity || 0) > 0 && totalQuantity < Number(metadata.minimumOrderQuantity)) {
-    throw new ApiError(400, 'Call-off order quantity is below minimum order quantity', 'RATE_CONTRACT_MIN_QTY_INVALID');
-  }
-  if (metadata.maximumOrderQuantityPerCallOff && totalQuantity > Number(metadata.maximumOrderQuantityPerCallOff)) {
-    throw new ApiError(400, 'Call-off order quantity exceeds maximum quantity per call-off', 'RATE_CONTRACT_MAX_QTY_INVALID');
-  }
-  const amount = body.items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unitPrice) * (1 + Number(item.taxRate || 0) / 100), 0);
+
+  // Validate call-off quantity bounds, cumulative balances, seller, and resolve prices
+  const validation = await validateCallOffOrderRequest(contract, body);
+
+  const slaDays = parseDeliverySlaDays(metadata.deliverySlaDays || metadata.deliverySla, 15);
+  const expectedDelivery = body.expectedDelivery
+    ? new Date(body.expectedDelivery)
+    : calculateExpectedDeliveryDate(new Date(), slaDays);
+
+  const penaltyTerms = parsePenaltyTerms(metadata);
+  const amount = validation.resolvedItems.reduce((sum, item) => sum + item.totalAmount, 0);
+
   const po = await db.purchaseOrder.create({
     data: {
       poNumber: `CO-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -5952,33 +5969,49 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
       totalValue: amount,
       currency: contract.currency,
       status: 'generated',
+      poStatus: 'ISSUED',
       sourceType: 'RATE_CONTRACT_CALLOFF',
       sourceId: contract.id,
-      expectedDelivery: body.expectedDelivery,
+      expectedDelivery,
       deliveryAddress: body.deliveryAddress,
       metadata: {
         rateContractId: contract.id,
         rateContractNumber: contract.contractNumber,
         deliverySla: metadata.deliverySla,
-        penaltyClause: metadata.penaltyClause
+        deliverySlaDays: slaDays,
+        penaltyClause: metadata.penaltyClause,
+        penaltyTerms
       },
       items: {
-        create: body.items.map(item => {
-          const lineTotal = Number(item.quantity) * Number(item.unitPrice) * (1 + Number(item.taxRate || 0) / 100);
-          return {
-            itemName: item.itemName,
-            quantity: item.quantity,
-            unitOfMeasure: item.unitOfMeasure,
-            unitPrice: item.unitPrice,
-            taxRate: item.taxRate,
-            totalAmount: lineTotal
-          };
-        })
+        create: validation.resolvedItems.map(item => ({
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unitOfMeasure: item.unitOfMeasure,
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate,
+          totalAmount: item.totalAmount
+        }))
       }
     },
     include: { items: true }
   });
-  await auditWrite(req, 'rate_contract.calloff_order_created', 'purchaseOrder', po.id, { contractId: contract.id });
+
+  // Automatically initialize delivery tracking milestone
+  await db.deliveryTracking.create({
+    data: {
+      purchaseOrderId: po.id,
+      status: 'CREATED',
+      expectedDelivery,
+      slaStatus: 'ON_TIME',
+      remarks: `Call-off Order against Rate Contract ${contract.contractNumber} (SLA: ${slaDays} days)`
+    }
+  }).catch(() => null);
+
+  await auditWrite(req, 'rate_contract.calloff_order_created', 'purchaseOrder', po.id, {
+    contractId: contract.id,
+    totalQuantity: validation.totalCallOffQty,
+    expectedDelivery
+  });
   notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
   ok(res, po, 201);
 }, 'Unable to create rate contract call-off order'));
@@ -5991,7 +6024,13 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
       purchaseOrders: {
         orderBy: { createdAt: 'desc' },
         take: 50,
-        include: { items: true }
+        include: {
+          items: true,
+          deliveryTrackings: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
       }
     }
   });
@@ -6015,7 +6054,12 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
     }
   }
   const [enriched] = await enrichRateContracts([contract]);
-  ok(res, enriched || contract);
+  const utilization = await getRateContractUtilization(contract.id, contract.metadata, Number(contract.value || 0));
+
+  ok(res, {
+    ...(enriched || contract),
+    utilization
+  });
 }, 'Unable to load rate contract details'));
 
 // ── Public Procurement Opportunities (Home Page) ──

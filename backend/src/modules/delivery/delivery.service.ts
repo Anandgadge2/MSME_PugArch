@@ -122,6 +122,7 @@ const loadDelivery = async (id: number) => {
         include: {
           buyer: true,
           seller: true,
+          contract: { select: { id: true, contractNumber: true, contractType: true, metadata: true } },
           items: true,
           invoices: {
             orderBy: { createdAt: 'desc' },
@@ -167,6 +168,7 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
         include: {
           buyer: true,
           seller: true,
+          contract: { select: { id: true, contractNumber: true, contractType: true, metadata: true } },
           items: true,
           invoices: {
             orderBy: { createdAt: 'desc' },
@@ -425,11 +427,38 @@ export const calculateLiquidatedDamages = (delivery: any) => {
   const isWaived = approvedExtension?.waiveLd === true;
   const effectiveExpectedDate = approvedExtension?.approvedDeliveryDate || delivery.expectedDelivery || po?.expectedDelivery;
 
+  // Extract contractual penalty terms from PO metadata or parent Contract metadata
+  const poMeta = (po?.metadata || {}) as any;
+  const contractMeta = (po?.contract?.metadata || {}) as any;
+  const penaltyTerms = poMeta?.penaltyTerms || contractMeta?.penaltyTerms;
+
+  let weeklyRate = 0.005;
+  if (penaltyTerms?.ratePerWeek !== undefined && penaltyTerms?.ratePerWeek !== null) {
+    weeklyRate = Number(penaltyTerms.ratePerWeek) / 100;
+  } else if (poMeta?.penaltyRatePerWeek !== undefined && poMeta?.penaltyRatePerWeek !== null) {
+    weeklyRate = Number(poMeta.penaltyRatePerWeek) / 100;
+  } else if (contractMeta?.penaltyRatePerWeek !== undefined && contractMeta?.penaltyRatePerWeek !== null) {
+    weeklyRate = Number(contractMeta.penaltyRatePerWeek) / 100;
+  }
+
+  let maxCapPercent = 10;
+  if (penaltyTerms?.maxCapPercent !== undefined && penaltyTerms?.maxCapPercent !== null) {
+    maxCapPercent = Number(penaltyTerms.maxCapPercent);
+  } else if (poMeta?.maxPenaltyCapPercentage !== undefined && poMeta?.maxPenaltyCapPercentage !== null) {
+    maxCapPercent = Number(poMeta.maxPenaltyCapPercentage);
+  } else if (contractMeta?.maxPenaltyCapPercentage !== undefined && contractMeta?.maxPenaltyCapPercentage !== null) {
+    maxCapPercent = Number(contractMeta.maxPenaltyCapPercentage);
+  }
+
+  const gracePeriodDays = Number(penaltyTerms?.gracePeriodDays ?? poMeta?.penaltyGraceDays ?? contractMeta?.penaltyGraceDays ?? 0);
+
   if (!poValue || !effectiveExpectedDate) {
     return {
       delayDays: 0,
-      weeklyRate: 0.005,
-      maxCapPercent: 10,
+      delayedWeeks: 0,
+      weeklyRate,
+      maxCapPercent,
+      gracePeriodDays,
       calculatedLdAmount: 0,
       isWaived,
       effectiveExpectedDate: effectiveExpectedDate || null,
@@ -439,12 +468,17 @@ export const calculateLiquidatedDamages = (delivery: any) => {
 
   const endDate = delivery.actualDelivery ? new Date(delivery.actualDelivery) : new Date();
   const expDate = new Date(effectiveExpectedDate);
+  if (gracePeriodDays > 0) {
+    expDate.setDate(expDate.getDate() + gracePeriodDays);
+  }
 
   if (endDate <= expDate) {
     return {
       delayDays: 0,
-      weeklyRate: 0.005,
-      maxCapPercent: 10,
+      delayedWeeks: 0,
+      weeklyRate,
+      maxCapPercent,
+      gracePeriodDays,
       calculatedLdAmount: 0,
       isWaived,
       effectiveExpectedDate,
@@ -454,17 +488,19 @@ export const calculateLiquidatedDamages = (delivery: any) => {
 
   const diffMs = endDate.getTime() - expDate.getTime();
   const delayDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  const delayWeeks = delayDays / 7;
+  const delayWeeks = Math.ceil(delayDays / 7);
 
-  const unCappedLd = poValue * (0.005 * delayWeeks);
-  const maxCapAmount = poValue * 0.10;
+  const unCappedLd = poValue * (weeklyRate * delayWeeks);
+  const maxCapAmount = poValue * (maxCapPercent / 100);
   const rawLdAmount = Math.min(unCappedLd, maxCapAmount);
   const calculatedLdAmount = isWaived ? 0 : Math.round(rawLdAmount * 100) / 100;
 
   return {
     delayDays,
-    weeklyRate: 0.005,
-    maxCapPercent: 10,
+    delayedWeeks: delayWeeks,
+    weeklyRate,
+    maxCapPercent,
+    gracePeriodDays,
     calculatedLdAmount,
     isWaived,
     effectiveExpectedDate,

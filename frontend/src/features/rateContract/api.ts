@@ -32,7 +32,16 @@ export type RateContractMetadata = {
   minimumOrderQuantity: number;
   maximumOrderQuantityPerCallOff: number;
   deliverySla: string;
+  deliverySlaDays?: number;
   penaltyClause: string;
+  penaltyRatePerWeek?: number;
+  penaltyGraceDays?: number;
+  maxPenaltyCapPercentage?: number;
+  penaltyTerms?: {
+    ratePerWeek: number;
+    gracePeriodDays: number;
+    maxCapPercent: number;
+  };
   selectedSuppliers: SelectedSupplier[];
   itemRateSchedule: RateContractItem[];
   supplierSelectionStrategy: string;
@@ -44,6 +53,25 @@ export type RateContractMetadata = {
   approvalWorkflow: string;
   contractDocument: { fileName: string };
   activeState: string;
+};
+
+export type ItemUtilizationDto = {
+  itemName: string;
+  unitOfMeasure: string;
+  contractedQuantity: number;
+  drawnQuantity: number;
+  remainingQuantity: number;
+  utilizationPercent: number;
+  contractedRate: number;
+};
+
+export type RateContractUtilizationDto = {
+  contractId: number;
+  totalContractValue: number;
+  totalOrderedValue: number;
+  totalRemainingValue: number;
+  valueUtilizationPercent: number;
+  items: ItemUtilizationDto[];
 };
 
 export type RateContractDto = {
@@ -61,6 +89,7 @@ export type RateContractDto = {
   createdAt: string;
   updatedAt: string;
   purchaseOrders?: PurchaseOrderDto[];
+  utilization?: RateContractUtilizationDto;
 };
 
 type RateContractsListResponse = {

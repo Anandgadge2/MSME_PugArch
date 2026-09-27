@@ -167,15 +167,23 @@ export default function RateContractsPage() {
   // open call-off PO modal
   const openPoModal = async (c: RateContractDto) => {
     let full = c;
-    if (!c.purchaseOrders) {
-      try { full = await fetchRateContractDetail(c.id); } catch { /* use partial */ }
+    try {
+      full = await fetchRateContractDetail(c.id);
+    } catch {
+      /* use partial */
     }
     setPoContract(full);
     const meta = (full.metadata || {}) as RateContractMetadata;
     const first = meta.selectedSuppliers?.[0];
     setPoSellerId(first?.supplierUserId || 0);
     setPoDeliveryAddress('');
-    setPoExpectedDelivery('');
+
+    // Auto-calculate expected delivery date from SLA days
+    const slaDays = Number(meta.deliverySlaDays || 15);
+    const expDate = new Date();
+    expDate.setDate(expDate.getDate() + slaDays);
+    setPoExpectedDelivery(expDate.toISOString().slice(0, 10));
+
     const items = (meta.itemRateSchedule || []).map(item => ({
       itemName: item.itemName || '',
       quantity: 0,
@@ -192,11 +200,41 @@ export default function RateContractsPage() {
       toast.error('Fill all required fields');
       return;
     }
+    const meta = (poContract.metadata || {}) as RateContractMetadata;
+    const minQty = Number(meta.minimumOrderQuantity || 0);
+    const maxQty = Number(meta.maximumOrderQuantityPerCallOff || 0);
+
     const validItems = poItems.filter(i => i.quantity > 0 && i.itemName.trim());
     if (validItems.length === 0) {
       toast.error('At least one item with quantity > 0 required');
       return;
     }
+
+    const totalQty = validItems.reduce((s, it) => s + Number(it.quantity || 0), 0);
+    if (minQty > 0 && totalQty < minQty) {
+      toast.error(`Minimum call-off quantity is ${minQty} units. Your current order is ${totalQty} units.`);
+      return;
+    }
+    if (maxQty > 0 && totalQty > maxQty) {
+      toast.error(`Maximum call-off quantity per order is ${maxQty} units. Your current order is ${totalQty} units.`);
+      return;
+    }
+
+    // Check item remaining balances from utilization if available
+    if (poContract.utilization?.items) {
+      for (const reqItem of validItems) {
+        const utilItem = poContract.utilization.items.find(
+          u => u.itemName.trim().toLowerCase() === reqItem.itemName.trim().toLowerCase()
+        );
+        if (utilItem && utilItem.contractedQuantity > 0 && reqItem.quantity > utilItem.remainingQuantity) {
+          toast.error(
+            `Requested quantity (${reqItem.quantity}) for "${reqItem.itemName}" exceeds available contract balance (${utilItem.remainingQuantity} units remaining).`
+          );
+          return;
+        }
+      }
+    }
+
     setPoSubmitting(true);
     try {
       await runWithToast(
@@ -448,33 +486,55 @@ export default function RateContractsPage() {
                       {/* Purchase Orders */}
                       {detailContract.purchaseOrders && detailContract.purchaseOrders.length > 0 && (
                         <div>
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Call-off Orders ({detailContract.purchaseOrders.length})</h4>
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                              Call-off Orders ({detailContract.purchaseOrders.length})
+                            </h4>
+                            <span className="text-[10px] text-slate-500">
+                              SLA: <strong>{meta.deliverySlaDays || 15} Days</strong>
+                            </span>
+                          </div>
                           <div className="space-y-2">
-                            {detailContract.purchaseOrders.map(po => (
-                              <Card key={po.id} className="rounded-xl border border-slate-100 bg-white">
-                                <CardContent className="p-3">
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <span className="text-xs font-bold text-slate-900">{po.poNumber}</span>
-                                      <span className="ml-2 text-[10px] text-slate-500">{formatDateTime(po.createdAt)}</span>
-                                      <span className={cn(
-                                        'ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
-                                        po.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
-                                        po.status === 'shipped' ? 'bg-blue-100 text-blue-700' :
-                                        po.status === 'confirmed' || po.status === 'accepted' ? 'bg-teal-100 text-teal-700' :
-                                        'bg-amber-100 text-amber-700'
-                                      )}>{po.status || 'pending'}</span>
+                            {detailContract.purchaseOrders.map(po => {
+                              const isDelayed = po.expectedDelivery && new Date(po.expectedDelivery) < new Date() && po.status !== 'delivered' && po.status !== 'completed';
+                              return (
+                                <Card key={po.id} className="rounded-xl border border-slate-100 bg-white shadow-2xs">
+                                  <CardContent className="p-3">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-bold text-slate-900">{po.poNumber}</span>
+                                        <span className="text-[10px] text-slate-500">{formatDateTime(po.createdAt)}</span>
+                                        <span className={cn(
+                                          'px-1.5 py-0.5 rounded text-[9px] font-bold uppercase',
+                                          po.status === 'delivered' ? 'bg-emerald-100 text-emerald-700' :
+                                          po.status === 'shipped' || po.status === 'in_fulfillment' ? 'bg-blue-100 text-blue-700' :
+                                          po.status === 'confirmed' || po.status === 'accepted' ? 'bg-teal-100 text-teal-700' :
+                                          'bg-amber-100 text-amber-700'
+                                        )}>{po.status || 'pending'}</span>
+                                        {isDelayed && (
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase bg-rose-100 text-rose-700">
+                                            Delayed (Penalty Applicable)
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-xs font-bold text-slate-900 tabular-nums">{formatCurrency(po.totalValue || po.amount)}</span>
                                     </div>
-                                    <span className="text-xs font-bold text-slate-900 tabular-nums">{formatCurrency(po.totalValue || po.amount)}</span>
-                                  </div>
-                                  {po.deliveryAddress && (
-                                    <p className="mt-1 text-[10px] text-slate-500 flex items-center gap-1">
-                                      <MapPin className="h-3 w-3" />{po.deliveryAddress}
-                                    </p>
-                                  )}
-                                </CardContent>
-                              </Card>
-                            ))}
+
+                                    <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5">
+                                      <div className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3 text-slate-400" />
+                                        <span>Expected Delivery: <strong>{po.expectedDelivery ? formatDate(po.expectedDelivery) : 'Not specified'}</strong></span>
+                                      </div>
+                                      {po.deliveryAddress && (
+                                        <span className="truncate max-w-[200px]" title={po.deliveryAddress}>
+                                          <MapPin className="inline h-3 w-3 mr-0.5 text-slate-400" />{po.deliveryAddress}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -502,8 +562,39 @@ export default function RateContractsPage() {
             <button onClick={() => setShowPoModal(false)} className="absolute right-4 top-4 rounded-full p-1 text-slate-400 hover:bg-slate-100">
               <X className="h-5 w-5" />
             </button>
-            <h2 className="text-lg font-black text-slate-900 mb-4">Create Call-off Order</h2>
-            <p className="text-xs text-slate-500 mb-4">Against contract: <strong>{poContract.contractNumber}</strong> — {poContract.title}</p>
+            <h2 className="text-lg font-black text-slate-900 mb-1">Create Call-off Order</h2>
+            <p className="text-xs text-slate-500 mb-3">Against contract: <strong>{poContract.contractNumber}</strong> — {poContract.title}</p>
+
+            {/* Contract Constraints Badge Bar */}
+            {(() => {
+              const meta = (poContract.metadata || {}) as RateContractMetadata;
+              const minQty = Number(meta.minimumOrderQuantity || 0);
+              const maxQty = Number(meta.maximumOrderQuantityPerCallOff || 0);
+              const slaDays = Number(meta.deliverySlaDays || 15);
+              const rateWk = Number(meta.penaltyRatePerWeek ?? 0.5);
+              const maxCap = Number(meta.maxPenaltyCapPercentage ?? 10);
+
+              return (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-[11px]">
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-slate-400">Min Call-off</span>
+                    <span className="font-bold text-slate-800">{minQty > 0 ? `${minQty} units` : 'No minimum'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-slate-400">Max Call-off</span>
+                    <span className="font-bold text-slate-800">{maxQty > 0 ? `${maxQty} units` : 'No ceiling'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-slate-400">Delivery SLA</span>
+                    <span className="font-bold text-blue-700">{slaDays} Calendar Days</span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-slate-400">Penalty Clause</span>
+                    <span className="font-bold text-slate-800">{rateWk}%/wk (Max {maxCap}%)</span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="space-y-4">
               {/* Supplier Selection */}
@@ -522,48 +613,102 @@ export default function RateContractsPage() {
                 <div>
                   <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Delivery Address *</label>
                   <textarea value={poDeliveryAddress} onChange={e => setPoDeliveryAddress(e.target.value)}
+                    placeholder="Enter consignee / warehouse delivery address"
                     className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-medium min-h-[60px]" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Expected Delivery</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Expected Delivery Date *</label>
                   <input type="date" value={poExpectedDelivery} onChange={e => setPoExpectedDelivery(e.target.value)}
                     className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-medium" />
+                  <span className="mt-1 block text-[10px] text-slate-400">
+                    Auto-calculated from {poContract.metadata?.deliverySlaDays || 15}-day delivery SLA.
+                  </span>
                 </div>
               </div>
 
               {/* Items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Order Items</label>
-                  <span className="text-[9px] text-slate-400">Set quantity {'>'} 0 for items to include</span>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Order Items &amp; Quantities</label>
+                  <span className="text-[9px] text-slate-400">Locked contract rates apply</span>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {poItems.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/50 p-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-semibold text-slate-900 truncate">{item.itemName}</p>
-                        <p className="text-[10px] text-slate-500">{item.unitOfMeasure} @ {formatCurrency(item.unitPrice)}</p>
+                  {poItems.map((item, idx) => {
+                    const utilItem = poContract.utilization?.items?.find(
+                      u => u.itemName.trim().toLowerCase() === item.itemName.trim().toLowerCase()
+                    );
+                    const remaining = utilItem ? utilItem.remainingQuantity : null;
+                    const isOverRemaining = remaining !== null && (item.quantity || 0) > remaining;
+
+                    return (
+                      <div key={idx} className={cn(
+                        'flex items-center gap-2 rounded-xl border p-2.5 transition-colors',
+                        isOverRemaining ? 'border-rose-300 bg-rose-50/40' : 'border-slate-200 bg-slate-50/50'
+                      )}>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-slate-900 truncate">{item.itemName}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {item.unitOfMeasure} @ {formatCurrency(item.unitPrice)}
+                            {remaining !== null && (
+                              <span className="ml-2 font-medium text-blue-700">
+                                ({remaining} available of {utilItem?.contractedQuantity})
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <input type="number" min={0} value={item.quantity || ''}
+                          onChange={e => {
+                            const nv = [...poItems];
+                            nv[idx] = { ...nv[idx], quantity: Number(e.target.value) || 0 };
+                            setPoItems(nv);
+                          }}
+                          placeholder="Qty"
+                          className={cn(
+                            'w-24 rounded-lg border px-2 py-1.5 text-xs font-bold text-center tabular-nums',
+                            isOverRemaining ? 'border-rose-400 text-rose-700 bg-white' : 'border-slate-200 text-slate-900'
+                          )} />
                       </div>
-                      <input type="number" min={0} value={item.quantity || ''}
-                        onChange={e => {
-                          const nv = [...poItems];
-                          nv[idx] = { ...nv[idx], quantity: Number(e.target.value) || 0 };
-                          setPoItems(nv);
-                        }}
-                        placeholder="Qty"
-                        className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-bold text-center tabular-nums" />
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Summary */}
+              {/* Order Quantity & Value Summary */}
               {(() => {
-                const sub = poItems.reduce((s, i) => s + i.quantity * i.unitPrice * (1 + i.taxRate / 100), 0);
+                const meta = (poContract.metadata || {}) as RateContractMetadata;
+                const minQty = Number(meta.minimumOrderQuantity || 0);
+                const maxQty = Number(meta.maximumOrderQuantityPerCallOff || 0);
+                const totalOrderQty = poItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+                const sub = poItems.reduce((s, i) => s + (Number(i.quantity) || 0) * i.unitPrice * (1 + i.taxRate / 100), 0);
+
+                const isBelowMin = minQty > 0 && totalOrderQty > 0 && totalOrderQty < minQty;
+                const isAboveMax = maxQty > 0 && totalOrderQty > maxQty;
+
                 return (
-                  <div className="rounded-xl bg-slate-50 p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Estimated Total</span>
+                  <div className="rounded-2xl bg-slate-50 p-3.5 space-y-2 border border-slate-200/80">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-slate-600">Total Call-off Quantity:</span>
+                      <span className={cn(
+                        'font-black tabular-nums',
+                        (isBelowMin || isAboveMax) ? 'text-rose-600' : 'text-slate-900'
+                      )}>
+                        {totalOrderQty} units
+                      </span>
+                    </div>
+
+                    {isBelowMin && (
+                      <p className="text-[11px] font-bold text-rose-600">
+                        ⚠ Minimum Call-off Quantity is {minQty} units. Please increase order quantity.
+                      </p>
+                    )}
+                    {isAboveMax && (
+                      <p className="text-[11px] font-bold text-rose-600">
+                        ⚠ Maximum Call-off Quantity is {maxQty} units. Order exceeds allowed single call-off ceiling.
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between border-t border-slate-200/80 pt-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Estimated Total (incl. GST)</span>
                       <span className="text-base font-black text-slate-900 tabular-nums">{formatCurrency(sub)}</span>
                     </div>
                   </div>

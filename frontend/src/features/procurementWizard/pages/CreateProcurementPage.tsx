@@ -230,7 +230,11 @@ type RateContractConfig = {
   maximumOrderQuantityPerCallOff: number;
   minimumOrderQuantity: number;
   deliverySla: string;
+  deliverySlaDays: number;
   penaltyClause: string;
+  penaltyRatePerWeek: number;
+  penaltyGraceDays: number;
+  maxPenaltyCapPercentage: number;
   securityDepositRequired: boolean;
   securityDepositAmount: number;
   pbgRequired: boolean;
@@ -749,7 +753,11 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   maximumOrderQuantityPerCallOff: 0,
   minimumOrderQuantity: 0,
   deliverySla: 'Delivery within agreed SLA from call-off order date',
-  penaltyClause: 'As per agreed contract terms',
+  deliverySlaDays: 15,
+  penaltyClause: '0.5% per week of delay up to a maximum of 10%',
+  penaltyRatePerWeek: 0.5,
+  penaltyGraceDays: 0,
+  maxPenaltyCapPercentage: 10,
   securityDepositRequired: false,
   securityDepositAmount: 0,
   pbgRequired: false,
@@ -1722,8 +1730,8 @@ export default function CreateProcurementPage() {
         if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
         if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
-        if (!contract.deliverySla.trim()) return false;
-        if (!contract.penaltyClause.trim()) return false;
+        if (!contract.deliverySla.trim() || contract.deliverySlaDays <= 0) return false;
+        if (!contract.penaltyClause.trim() || contract.penaltyRatePerWeek < 0 || contract.maxPenaltyCapPercentage <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -2025,8 +2033,16 @@ export default function CreateProcurementPage() {
           toast.error('Delivery SLA is required.');
           return false;
         }
+        if (contract.deliverySlaDays <= 0) {
+          toast.error('Delivery SLA days must be at least 1 calendar day.');
+          return false;
+        }
         if (!contract.penaltyClause.trim()) {
           toast.error('Penalty clause is required.');
+          return false;
+        }
+        if (contract.penaltyRatePerWeek < 0 || contract.maxPenaltyCapPercentage <= 0) {
+          toast.error('Penalty rate and maximum penalty cap must be valid positive values.');
           return false;
         }
       }
@@ -6833,16 +6849,29 @@ function ScheduleStepForm({
               <span>Fulfillment SLA &amp; Call-Off Order Controls</span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Delivery SLA" required>
+              <Field label="Delivery SLA (Clause)" required>
                 <input
+                  id="rc-delivery-sla"
                   value={draft.rateContractConfig.deliverySla}
                   onChange={e => updateRateContract('deliverySla', e.target.value)}
                   className={inputClass}
-                  placeholder="e.g. Door delivery within 7 working days from call-off issue"
+                  placeholder="e.g. Delivery within agreed SLA from call-off order date"
+                />
+              </Field>
+              <Field label="Delivery SLA (Calendar Days)" required>
+                <input
+                  id="rc-delivery-sla-days"
+                  type="number"
+                  min={1}
+                  value={draft.rateContractConfig.deliverySlaDays || ''}
+                  onChange={e => updateRateContract('deliverySlaDays', Math.max(1, Number(e.target.value || 1)))}
+                  className={inputClass}
+                  placeholder="e.g. 15"
                 />
               </Field>
               <Field label="Penalty Clause" required>
                 <input
+                  id="rc-penalty-clause"
                   value={draft.rateContractConfig.penaltyClause}
                   onChange={e => updateRateContract('penaltyClause', e.target.value)}
                   className={inputClass}
@@ -6850,9 +6879,50 @@ function ScheduleStepForm({
                 />
               </Field>
 
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Delay Rate (% / Wk)">
+                  <input
+                    id="rc-penalty-rate"
+                    type="number"
+                    step="0.1"
+                    min={0}
+                    max={100}
+                    value={draft.rateContractConfig.penaltyRatePerWeek ?? 0.5}
+                    onChange={e => updateRateContract('penaltyRatePerWeek', Math.max(0, Number(e.target.value || 0)))}
+                    className={inputClass}
+                    placeholder="0.5"
+                  />
+                </Field>
+                <Field label="Grace (Days)">
+                  <input
+                    id="rc-grace-days"
+                    type="number"
+                    min={0}
+                    value={draft.rateContractConfig.penaltyGraceDays ?? 0}
+                    onChange={e => updateRateContract('penaltyGraceDays', Math.max(0, Number(e.target.value || 0)))}
+                    className={inputClass}
+                    placeholder="0"
+                  />
+                </Field>
+                <Field label="Max Cap (%)">
+                  <input
+                    id="rc-max-cap"
+                    type="number"
+                    step="0.5"
+                    min={0}
+                    max={100}
+                    value={draft.rateContractConfig.maxPenaltyCapPercentage ?? 10}
+                    onChange={e => updateRateContract('maxPenaltyCapPercentage', Math.max(0, Number(e.target.value || 0)))}
+                    className={inputClass}
+                    placeholder="10"
+                  />
+                </Field>
+              </div>
+
               <div className="sm:col-span-2 rounded-xl border border-slate-200/80 bg-white p-4 space-y-3">
                 <label className="flex items-center gap-2.5 cursor-pointer select-none">
                   <input
+                    id="rc-calloff-allowed"
                     type="checkbox"
                     checked={draft.rateContractConfig.callOffOrderAllowed}
                     onChange={e => updateRateContract('callOffOrderAllowed', e.target.checked)}
@@ -6867,27 +6937,37 @@ function ScheduleStepForm({
                 </label>
 
                 {draft.rateContractConfig.callOffOrderAllowed && (
-                  <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-slate-100">
-                    <Field label="Maximum Order Quantity Per Call-off">
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
-                        onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
-                        className={inputClass}
-                        placeholder="0 = No ceiling"
-                      />
-                    </Field>
-                    <Field label="Minimum Order Quantity Per Call-off">
-                      <input
-                        type="number"
-                        min={0}
-                        value={draft.rateContractConfig.minimumOrderQuantity || ''}
-                        onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
-                        className={inputClass}
-                        placeholder="0 = No minimum"
-                      />
-                    </Field>
+                  <div className="space-y-3 pt-2 border-t border-slate-100">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Minimum Order Quantity Per Call-off">
+                        <input
+                          id="rc-min-order-qty"
+                          type="number"
+                          min={0}
+                          value={draft.rateContractConfig.minimumOrderQuantity || ''}
+                          onChange={e => updateRateContract('minimumOrderQuantity', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0 = No minimum"
+                        />
+                      </Field>
+                      <Field label="Maximum Order Quantity Per Call-off">
+                        <input
+                          id="rc-max-order-qty"
+                          type="number"
+                          min={0}
+                          value={draft.rateContractConfig.maximumOrderQuantityPerCallOff || ''}
+                          onChange={e => updateRateContract('maximumOrderQuantityPerCallOff', Number(e.target.value || 0))}
+                          className={inputClass}
+                          placeholder="0 = No ceiling"
+                        />
+                      </Field>
+                    </div>
+                    <div className="flex items-start gap-2 rounded-lg bg-blue-50/70 p-2.5 text-[11px] text-blue-900 border border-blue-100/80">
+                      <span className="font-bold text-blue-800 shrink-0">Validation Rule:</span>
+                      <span>
+                        The system enforces: <strong>Minimum Call-off Qty &le; Call-off PO Qty &le; Maximum Call-off Qty</strong>. Staggered delivery SLAs and contractual late delivery penalties will be applied individually to each Call-off PO.
+                      </span>
+                    </div>
                   </div>
                 )}
               </div>

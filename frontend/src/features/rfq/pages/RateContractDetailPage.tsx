@@ -509,7 +509,25 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const minimumOrderQty = rateContractConfig.minimumOrderQuantity || 0;
   const maxOrderQty = rateContractConfig.maximumOrderQuantityPerCallOff || 0;
   const deliverySla = rateContractConfig.deliverySla || terms.deliveryTerms || rcData.deliveryTerms || null;
+  const deliverySlaDays = Number(rateContractConfig.deliverySlaDays || 15);
   const penaltyClause = rateContractConfig.penaltyClause || terms.penaltyClause || null;
+  const penaltyRatePerWeek = Number(rateContractConfig.penaltyRatePerWeek ?? 0.5);
+  const penaltyGraceDays = Number(rateContractConfig.penaltyGraceDays ?? 0);
+  const maxPenaltyCapPercentage = Number(rateContractConfig.maxPenaltyCapPercentage ?? 10);
+
+  payload.rateContractConfig = {
+    ...rateContractConfig,
+    callOffOrderAllowed,
+    minimumOrderQuantity: minimumOrderQty,
+    maximumOrderQuantityPerCallOff: maxOrderQty,
+    deliverySla,
+    deliverySlaDays,
+    penaltyClause,
+    penaltyRatePerWeek,
+    penaltyGraceDays,
+    maxPenaltyCapPercentage,
+  };
+
   const supplierStrategy = rateContractConfig.supplierSelectionStrategy
     ? formatDisplayValue(rateContractConfig.supplierSelectionStrategy)
     : null;
