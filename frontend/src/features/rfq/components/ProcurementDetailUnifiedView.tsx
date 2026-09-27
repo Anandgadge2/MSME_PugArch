@@ -3963,9 +3963,6 @@ export interface ProcurementDetailUnifiedViewProps {
   rawBid?: any;
   quantity?: number | string;
   unit?: string;
-  emdAmount?: number | string | null;
-  emdRequired?: boolean;
-  isEmdRequired?: boolean;
 }
 
 export function ProcurementDetailUnifiedView(
