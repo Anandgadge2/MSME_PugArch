@@ -1526,7 +1526,14 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
     }
 
     const reqIdsArray = Array.from(targetReqIds);
-    const reqNumsArray = Array.from(new Set([...targetReqNumbers, ...targetBidNumbers]));
+    const canonicalVariants = new Set<string>();
+    for (const n of [...targetReqNumbers, ...targetBidNumbers]) {
+      canonicalVariants.add(n);
+      for (const v of getCanonicalLookupVariants(n)) {
+        canonicalVariants.add(v);
+      }
+    }
+    const reqNumsArray = Array.from(canonicalVariants);
 
     // If no candidate requirement IDs or numbers, return immediately without touching DB
     if (reqIdsArray.length === 0 && reqNumsArray.length === 0) {
@@ -1633,8 +1640,12 @@ export const enrichBidsWithResponses = async (bids: any[], _buyerId?: number) =>
           (bidNumberNorm && normalizeStr(responseRequirement.referenceNumber) === bidNumberNorm) ||
           (bidReqNumNorm && normalizeStr(responseRequirement.referenceNumber) === bidReqNumNorm)
         );
+        const matchedByTitleAndBuyer = responseRequirement &&
+          bidTitleNorm &&
+          normalizeStr(responseRequirement.title) === bidTitleNorm &&
+          Number(responseRequirement.createdById) === bidBuyerId;
 
-        if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || matchedBuyerReq) {
+        if (isDirectSourceMatch || isReqIdMatch || matchedLegacyReq || matchedBuyerReq || matchedByTitleAndBuyer) {
           const sellerId = r.sellerUserId;
           if (sellerId) {
             const respData = typeof r.responseData === 'string' ? JSON.parse(r.responseData) : (r.responseData || {});

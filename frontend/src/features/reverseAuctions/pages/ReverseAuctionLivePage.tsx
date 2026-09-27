@@ -53,6 +53,7 @@ import { formatCurrency, formatDateTime, formatNumber, formatTime } from '../../
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionBid, type ReverseAuctionParticipant } from '../api';
+import { useReverseAuctionRealtime } from '../hooks/useReverseAuctionRealtime';
 import { toast } from 'sonner';
 
 const numberValue = (value: unknown, fallback = 0) => {
@@ -76,9 +77,10 @@ const getBidAmount = (bid: ReverseAuctionBid) => numberValue(bid.amount ?? bid.b
 const liveSummaryCache = new Map<number | string, any>();
 
 const liveAwareRefetch = (query: any) => {
-  const auction = query?.state?.data?.auction || query?.state?.data;
-  if (!auction) return 15_000;
-  return isAuctionLive(auction, query?.state?.data?.serverTime) ? 3_000 : 20_000;
+  const cachedAuction = liveSummaryCache.get(query?.queryKey?.[1])?.auction;
+  const auction = query?.state?.data?.auction || cachedAuction || (query?.state?.data?.status ? query?.state?.data : undefined);
+  if (!auction) return 10_000;
+  return isAuctionLive(auction, query?.state?.data?.serverTime) ? 2_000 : 15_000;
 };
 
 export default function ReverseAuctionLivePage({ id }: { id: number | string }) {
@@ -118,7 +120,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     }
   });
 
-  const canonicalCode = summary.data?.auction?.auctionCode || String(id);
+  const canonicalCode = summary.data?.auction?.auctionCode || liveSummaryCache.get(id)?.auction?.auctionCode || String(id);
+
+  // Real-time WebSocket and Pusher synchronization
+  useReverseAuctionRealtime(id, canonicalCode);
 
   // Sync URL to human-readable canonical code
   useEffect(() => {
@@ -183,6 +188,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       const errorMsg = err.message || 'Bid submission failed';
       setLocalError(errorMsg);
       toast.error(errorMsg);
+      invalidate();
+      if (err?.details?.maxAllowedBid) {
+        setAmount(String(err.details.maxAllowedBid));
+      }
     }
   });
 
@@ -237,12 +246,26 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   );
   const latestBid = bidRows[0];
 
-  const currentLowest = getCurrentLowest(auction);
+  const rawCurrentLowest = getCurrentLowest(auction);
+  const lowestFromBids = bidRows.reduce((lowest, b) => {
+    const amt = getBidAmount(b);
+    return amt > 0 && (!lowest || amt < lowest) ? amt : lowest;
+  }, 0);
+  const currentLowest = lowestFromBids > 0 && (rawCurrentLowest <= 0 || lowestFromBids < rawCurrentLowest)
+    ? lowestFromBids
+    : rawCurrentLowest;
+
   const startPrice = numberValue(auction?.startPrice, 0);
   const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
   const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
-  const minNextBid = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, currentLowest);
   const decrement = numberValue(auction?.minDecrementAmount ?? auction?.minDecrement, 0);
+  const percentDecrement = auction?.minDecrementPercent ? currentLowest * (numberValue(auction.minDecrementPercent, 0) / 100) : 0;
+  const requiredDecrement = Math.max(decrement, percentDecrement);
+  const calculatedNextBid = currentLowest > 0 && requiredDecrement > 0 ? Math.max(0, currentLowest - requiredDecrement) : 0;
+  const serverMinNext = numberValue(summary.data?.minimumNextBid || liveSummaryCache.get(id)?.minimumNextBid, 0);
+  const minNextBid = serverMinNext > 0 && calculatedNextBid > 0
+    ? Math.min(serverMinNext, calculatedNextBid)
+    : (serverMinNext || calculatedNextBid || (currentLowest > 0 && requiredDecrement > 0 ? Math.max(0, currentLowest - requiredDecrement) : currentLowest));
 
   // Compute seller's own best bid
   const myBestBid = useMemo(() => {
@@ -521,20 +544,34 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         <div 
           role="alert"
           aria-live="polite"
-          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-800 flex justify-between items-center shadow-xs"
+          className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs"
         >
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-red-600 shrink-0" />
             <span>{localError}</span>
           </div>
-          <button 
-            type="button"
-            onClick={() => setLocalError('')} 
-            className="text-red-600 hover:text-red-800 p-1 rounded-md transition"
-            aria-label="Dismiss error"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            {minNextBid > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAmount(String(minNextBid));
+                  setLocalError('');
+                }}
+                className="rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-red-700 transition"
+              >
+                Use {formatCurrency(minNextBid)}
+              </button>
+            )}
+            <button 
+              type="button"
+              onClick={() => setLocalError('')} 
+              className="text-red-600 hover:text-red-800 p-1 rounded-md transition"
+              aria-label="Dismiss error"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 

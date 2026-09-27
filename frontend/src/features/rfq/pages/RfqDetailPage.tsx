@@ -392,8 +392,8 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       return [];
     },
     enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
-    staleTime: 5_000,
-    refetchInterval: 12_000,
+    staleTime: 2_000,
+    refetchInterval: 3_000,
     refetchOnWindowFocus: true,
   });
 

@@ -15,6 +15,7 @@ import { notifyPurchaseOrderCreated } from '../services/invoice-pdf.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
+import { invalidateBidCaches } from '../modules/procurementBid/procurement-bid.routes.js';
 
 const db = prisma as any;
 const router = Router();
@@ -3152,6 +3153,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
         };
 
         let id = Number(idToken);
+        let matchedProcurementBid: any = null;
         if (Number.isFinite(id) && id > 0) {
             const modern = await db.buyerRequirement.findUnique({ where: { id }, select: { id: true } }).catch(() => null);
             if (!modern) {
@@ -3159,6 +3161,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     where: { id },
                     select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
                 }).catch(() => null);
+                if (bid) matchedProcurementBid = bid;
                 const resolved = await resolveFromProcurementBid(bid);
                 if (resolved) id = resolved;
                 else {
@@ -3183,6 +3186,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                     },
                     select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
                 }).catch(() => null);
+                if (bid) matchedProcurementBid = bid;
                 const bidResolved = await resolveFromProcurementBid(bid);
 
                 if (bidResolved) {
@@ -3228,6 +3232,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                                     where: { id: numericId },
                                     select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true }
                                 }).catch(() => null);
+                                if (directBid) matchedProcurementBid = directBid;
                                 const directResolved = await resolveFromProcurementBid(directBid);
                                 if (directResolved) {
                                     id = directResolved;
@@ -3349,22 +3354,29 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             }
 
             if (!requirement) {
-                const bidRecord = await tx.procurementBid.findUnique({
+                const bidRecord = matchedProcurementBid || await tx.procurementBid.findUnique({
                     where: { id },
-                    select: { id: true, title: true, description: true, buyerId: true, buyerOrganizationId: true }
+                    select: { id: true, bidNumber: true, title: true, description: true, buyerId: true, buyerOrganizationId: true }
                 }).catch(() => null);
                 if (bidRecord) {
+                    matchedProcurementBid = bidRecord;
                     let mirror = await tx.buyerRequirement.findFirst({
                         where: {
-                            title: bidRecord.title,
-                            createdById: bidRecord.buyerId,
-                            ...(bidRecord.buyerOrganizationId ? { buyerOrganizationId: bidRecord.buyerOrganizationId } : {})
+                            OR: [
+                                ...(bidRecord.bidNumber ? [{ referenceNumber: bidRecord.bidNumber }] : []),
+                                {
+                                    title: bidRecord.title,
+                                    createdById: bidRecord.buyerId,
+                                    ...(bidRecord.buyerOrganizationId ? { buyerOrganizationId: bidRecord.buyerOrganizationId } : {})
+                                }
+                            ]
                         }
                     }).catch(() => null);
                     if (!mirror) {
                         mirror = await tx.buyerRequirement.create({
                             data: {
                                 title: bidRecord.title,
+                                referenceNumber: bidRecord.bidNumber || undefined,
                                 requirementType: 'PRODUCT',
                                 description: bidRecord.description || bidRecord.title,
                                 status: 'PUBLISHED',
@@ -3372,6 +3384,11 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                                 createdById: bidRecord.buyerId,
                                 buyerOrganizationId: bidRecord.buyerOrganizationId
                             }
+                        });
+                    } else if (!mirror.referenceNumber && bidRecord.bidNumber) {
+                        mirror = await tx.buyerRequirement.update({
+                            where: { id: mirror.id },
+                            data: { referenceNumber: bidRecord.bidNumber }
                         });
                     }
                     requirement = mirror;
@@ -3471,22 +3488,26 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
 
             // Sync with ProcurementBidParticipation if linked to a ProcurementBid
             try {
-                const matchingBid = await tx.procurementBid.findFirst({
-                    where: {
-                        OR: [
-                            { id: targetId },
-                            { technicalPacket: { path: ['sourceRequirementId'], equals: targetId } },
-                            { technicalPacket: { path: ['requirementId'], equals: targetId } },
-                            ...(requirement.title ? [{
-                                title: requirement.title,
-                                buyerId: requirement.createdById,
-                                ...(requirement.buyerOrganizationId ? { buyerOrganizationId: requirement.buyerOrganizationId } : {})
-                            }] : [])
-                        ]
-                    }
-                });
+                let matchingBid = matchedProcurementBid ? await tx.procurementBid.findUnique({ where: { id: matchedProcurementBid.id } }) : null;
+                if (!matchingBid) {
+                    matchingBid = await tx.procurementBid.findFirst({
+                        where: {
+                            OR: [
+                                ...(requirement.referenceNumber ? [{ bidNumber: requirement.referenceNumber }] : []),
+                                { technicalPacket: { path: ['sourceRequirementId'], equals: targetId } },
+                                { technicalPacket: { path: ['requirementId'], equals: targetId } },
+                                ...(requirement.title ? [{
+                                    title: requirement.title,
+                                    buyerId: requirement.createdById,
+                                    ...(requirement.buyerOrganizationId ? { buyerOrganizationId: requirement.buyerOrganizationId } : {})
+                                }] : [])
+                            ]
+                        }
+                    });
+                }
 
                 if (matchingBid) {
+                    matchedProcurementBid = matchingBid;
                     const sellerUserId = Number(req.user?.id);
                     const existingPart = await tx.procurementBidParticipation.findFirst({
                         where: {
@@ -3544,37 +3565,42 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             return savedResponse;
         }, { timeout: 30000, maxWait: 10000 });
 
+        // Invalidate procurement bid caches
+        const finalBidToInvalidate = matchedProcurementBid;
+        if (finalBidToInvalidate) {
+            await invalidateBidCaches(finalBidToInvalidate, idToken);
+        }
+
         // Invalidate dashboard summary cache for the seller so bid count updates immediately
         if (req.user?.id) {
             await deleteCache(redisKeys.cacheDashboardSummary(req.user.id));
         }
 
-        // Try to invalidate buyer's cache if we have the requirement's creator
-        if (response && (response as any).requirementId) {
-             const reqData = await db.buyerRequirement.findUnique({
-                 where: { id: (response as any).requirementId },
-                 select: { createdById: true }
-             });
-             if (reqData && reqData.createdById) {
-                 await deleteCache(redisKeys.cacheDashboardSummary(reqData.createdById));
-             }
+        // Try to invalidate buyer's cache if we have the requirement's creator or bid buyer
+        const buyerIdToInvalidate = (response as any)?.createdById || finalBidToInvalidate?.buyerId;
+        if (buyerIdToInvalidate) {
+            await deleteCache(redisKeys.cacheDashboardSummary(buyerIdToInvalidate));
         }
 
         // Broadcast real-time event to all clients viewing this procurement or requirement
         try {
+            const broadcastTargets = new Set<string>();
             const broadcastTarget = (response as any)?.requirementId || idToken;
-            broadcastToProcurement(broadcastTarget, {
-                type: 'QUOTATION_SUBMITTED',
-                requirementId: broadcastTarget,
-                responseId: (response as any)?.id,
-                offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
-                sellerOrgId: sellerOrganizationId || null,
-                timestamp: new Date().toISOString()
-            });
-            if (idToken && String(idToken) !== String(broadcastTarget)) {
-                broadcastToProcurement(idToken, {
+            if (broadcastTarget) broadcastTargets.add(String(broadcastTarget));
+            if (idToken) broadcastTargets.add(String(idToken));
+            if (finalBidToInvalidate?.id) broadcastTargets.add(String(finalBidToInvalidate.id));
+            if (finalBidToInvalidate?.bidNumber) {
+                broadcastTargets.add(String(finalBidToInvalidate.bidNumber));
+                for (const v of getCanonicalLookupVariants(finalBidToInvalidate.bidNumber)) {
+                    broadcastTargets.add(v);
+                }
+            }
+
+            for (const target of broadcastTargets) {
+                broadcastToProcurement(target, {
                     type: 'QUOTATION_SUBMITTED',
-                    requirementId: idToken,
+                    requirementId: target,
+                    procurementId: finalBidToInvalidate?.id || target,
                     responseId: (response as any)?.id,
                     offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
                     sellerOrgId: sellerOrganizationId || null,

@@ -69,6 +69,19 @@ export const publishProcurementEvent = async (procurementId: number | string, ev
   }
 };
 
+export const publishAuctionEvent = async (auctionId: number | string, event: any): Promise<boolean> => {
+  if (!pusherInstance) return false;
+  try {
+    const channel = `auction-${auctionId}`;
+    await pusherInstance.trigger(channel, event.type, event);
+    logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
+    return true;
+  } catch (err) {
+    logger.error({ err, auctionId, eventType: event.type }, '[Pusher] Failed to trigger auction event');
+    return false;
+  }
+};
+
 export const authorizePusherChannel = (socketId: string, channelName: string, data?: any) => {
   if (!pusherInstance) {
     throw new Error('Pusher server is not configured');

@@ -105,6 +105,10 @@ export default function PlaceLowerBidModal({
       const msg = err.message || 'Failed to place bid';
       setErrorMsg(msg);
       toast.error(msg);
+      if (err?.details?.maxAllowedBid) {
+        setAmount(String(err.details.maxAllowedBid));
+      }
+      if (onSuccess) onSuccess();
     } finally {
       setSubmitting(false);
     }

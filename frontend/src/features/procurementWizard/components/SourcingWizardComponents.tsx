@@ -262,13 +262,42 @@ export function BuyerTypeBadge({ buyerType, className }: { buyerType: string; cl
 // ─────────────────────────────────────────────────────────────────────────────
 interface MethodBadgeProps {
   method: string;
+  className?: string;
 }
 
-export function MethodBadge({ method }: MethodBadgeProps) {
+export function MethodBadge({ method, className }: MethodBadgeProps) {
+  const raw = String(method || '').trim();
+  const upper = raw.toUpperCase();
+
+  const hasRA = upper.includes('+ RA') || upper.includes('+RA') || upper.includes('REVERSE_AUCTION') || upper.includes('REVERSE AUCTION') || upper.includes('WITH_RA');
+
+  let base = raw.replace(/_/g, ' ');
+  if (hasRA && !upper.includes('+ RA') && !upper.includes('+RA')) {
+    if (upper.startsWith('RFQ')) base = 'RFQ';
+    else if (upper.startsWith('RFP')) base = 'RFP';
+    else if (upper.includes('LIMITED')) base = 'Limited Tender';
+    else if (upper.includes('OPEN') || upper.includes('TENDER')) base = 'Open Tender';
+    else if (upper.includes('RATE')) base = 'Rate Contract';
+    else if (upper === 'REVERSE_AUCTION' || upper === 'REVERSE AUCTION') base = 'Reverse Auction';
+    else base = 'Procurement';
+  }
+
+  const parts = base.split(/\s*\+\s*/);
+  const baseName = parts[0] || 'Procurement';
+  const containsPlusRa = (parts.length > 1 || hasRA) && baseName !== 'Reverse Auction';
+
   return (
-    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold uppercase leading-none text-slate-650">
-      {String(method || '').replace(/_/g, ' ')}
-    </span>
+    <div className={cn("inline-flex items-center gap-1 shrink-0", className)}>
+      <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-slate-700">
+        {baseName}
+      </span>
+      {containsPlusRa && (
+        <span className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-rose-700 shadow-2xs">
+          <Gavel className="h-2.5 w-2.5 text-rose-600" aria-hidden="true" />
+          + RA
+        </span>
+      )}
+    </div>
   );
 }
 

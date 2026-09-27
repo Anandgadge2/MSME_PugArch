@@ -54,7 +54,20 @@ import { useAuth } from '../../../hooks/useAuth';
 import { getSellerOpportunityAdapter } from '../adapters';
 import { formatRefId } from '../../../utils/refIdUtils';
 
-type OpportunityType = 'RFQ' | 'RFP' | 'Open Tender' | 'Limited Tender' | 'Reverse Auction' | 'Direct Purchase' | 'Rate Contract' | 'Repeat Order';
+type OpportunityType =
+  | 'RFQ'
+  | 'RFP'
+  | 'Open Tender'
+  | 'Limited Tender'
+  | 'Reverse Auction'
+  | 'Direct Purchase'
+  | 'Rate Contract'
+  | 'Repeat Order'
+  | 'RFQ + RA'
+  | 'RFP + RA'
+  | 'Open Tender + RA'
+  | 'Limited Tender + RA'
+  | 'Rate Contract + RA';
 
 interface SellerOpportunity {
   id: string;
@@ -244,12 +257,55 @@ const isDisqualifiedOrNotSelected = (item: SellerOpportunity) => {
     eligUpper.includes('NOT SELECTED') ||
     eligUpper.includes('NOT_SELECTED') ||
     eligUpper.includes('REJECTED') ||
-    actionUpper.includes('DISQUALIF') ||
-    actionUpper.includes('NOT SELECTED') ||
     nextUpper.includes('DISQUALIF') ||
     nextUpper.includes('NOT SELECTED')
   );
 };
+
+/**
+ * TypeBadge component for rendering base procurement badges with dynamic + RA sub-badges
+ */
+export function TypeBadge({ type, className }: { type: OpportunityType; className?: string }) {
+  const rawType = String(type || '');
+  const isPlusRa = rawType.includes('+ RA') || rawType.includes('+RA');
+  const baseType = rawType.replace(/\s*\+\s*RA$/i, '').trim();
+
+  const getBaseColorClass = (t: string) => {
+    switch (t) {
+      case 'RFQ':
+        return 'border-orange-200 bg-orange-50 text-orange-700';
+      case 'RFP':
+        return 'border-purple-200 bg-purple-50 text-purple-700';
+      case 'Open Tender':
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+      case 'Limited Tender':
+        return 'border-blue-200 bg-blue-50 text-blue-700';
+      case 'Rate Contract':
+        return 'border-amber-200 bg-amber-50 text-amber-700';
+      case 'Reverse Auction':
+        return 'border-red-200 bg-red-50 text-red-700';
+      default:
+        return 'border-slate-200 bg-slate-50 text-slate-700';
+    }
+  };
+
+  return (
+    <div className={cn("inline-flex items-center gap-1 shrink-0", className)}>
+      <span className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap",
+        getBaseColorClass(baseType)
+      )}>
+        {baseType}
+      </span>
+      {isPlusRa && (
+        <span className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-rose-700 shrink-0 shadow-2xs">
+          <Gavel className="h-2.5 w-2.5 text-rose-600" aria-hidden="true" />
+          + RA
+        </span>
+      )}
+    </div>
+  );
+}
 
 /**
  * Clean procurement descriptions
@@ -498,16 +554,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     }
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
-      const seenKeys = new Set<string>();
-      const seenRefKeys = new Set<string>();
-      const seenTitleKeys = new Set<string>();
       const deduped: SellerOpportunity[] = [];
 
       const cleanCoreTitle = (str: string) => {
         const cleaned = (str || '')
           .toLowerCase()
           .replace(/^procurement of\s+/, '')
-          .replace(/\b(annual|rate|contract|contracts|for|service|services|1|year|years|supply|supplies|procurement|of)\b/gi, ' ')
+          .replace(/\b(annual|rate|contract|contracts|for|service|services|1|year|years|supply|supplies|procurement|of|reverse|auction|live|negotiation)\b/gi, ' ')
           .replace(/\s+/g, ' ')
           .trim();
         return cleaned || (str || '').trim().toLowerCase();
@@ -515,41 +568,72 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
       const extractRefKeys = (opp: SellerOpportunity) => {
         const keys: string[] = [];
-        if (opp.sourceRef) keys.push(String(opp.sourceRef).toUpperCase().trim());
+        if (opp.sourceRef) {
+          const parts = String(opp.sourceRef).toUpperCase().split(/[•\s]+/);
+          parts.forEach(p => {
+            const cleanP = p.trim();
+            if (cleanP) keys.push(cleanP);
+          });
+        }
 
-        const searchStr = `${opp.href || ''} ${opp.detailsHref || ''} ${JSON.stringify(opp.detailRows || [])}`;
+        const searchStr = `${opp.id || ''} ${opp.href || ''} ${opp.detailsHref || ''} ${JSON.stringify(opp.detailRows || [])}`;
         const reqIdMatches = searchStr.match(/requirementId=(\d+)/gi) || [];
+        const bidIdMatches = searchStr.match(/linkedBidId=(\d+)/gi) || searchStr.match(/bid-(\d+)/gi) || searchStr.match(/PBID-\d+/gi) || [];
         const reqNoMatches = searchStr.match(/REQ-[\w-]+/gi) || [];
+        const rfqNoMatches = searchStr.match(/RFQ-[\w-]+/gi) || [];
+        const rfpNoMatches = searchStr.match(/RFP-[\w-]+/gi) || [];
         const rcNoMatches = searchStr.match(/RC-[\w-]+/gi) || [];
+        const raNoMatches = searchStr.match(/RA-[\w-]+/gi) || [];
 
-        for (const m of [...reqIdMatches, ...reqNoMatches, ...rcNoMatches]) {
+        for (const m of [...reqIdMatches, ...bidIdMatches, ...reqNoMatches, ...rfqNoMatches, ...rfpNoMatches, ...rcNoMatches, ...raNoMatches]) {
           keys.push(m.toUpperCase().trim());
         }
         return Array.from(new Set(keys));
       };
 
+      const getBaseType = (typeStr: string): string => {
+        return (typeStr || '').replace(/\s*\+\s*RA$/i, '').trim();
+      };
+
       opportunities.forEach(opportunity => {
-        const exactKey = `${opportunity.type}_${opportunity.sourceRef}_${(opportunity.title || '').trim().toLowerCase()}`;
+        const oppIsAuction = opportunity.type === 'Reverse Auction' || opportunity.type.endsWith('+ RA');
         const coreTitle = cleanCoreTitle(opportunity.title);
-        const titleKey = `${opportunity.type}_${coreTitle}`;
-
         const refKeys = extractRefKeys(opportunity);
-        const existingIndex = deduped.findIndex(item => {
-          const itemExact = `${item.type}_${item.sourceRef}_${(item.title || '').trim().toLowerCase()}`;
-          const itemTitleKey = `${item.type}_${cleanCoreTitle(item.title)}`;
-          const itemRefKeys = extractRefKeys(item);
 
-          if (itemExact === exactKey || itemTitleKey === titleKey) return true;
-          return refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
+        const existingIndex = deduped.findIndex(item => {
+          const itemRefKeys = extractRefKeys(item);
+          const itemCoreTitle = cleanCoreTitle(item.title);
+
+          if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() === opportunity.sourceRef.trim().toUpperCase()) {
+            return true;
+          }
+
+          const sharedRef = refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
+          if (sharedRef) return true;
+
+          if (coreTitle.length >= 4 && itemCoreTitle.length >= 4 && coreTitle === itemCoreTitle) {
+            return true;
+          }
+
+          return false;
         });
 
         if (existingIndex === -1) {
-          seenKeys.add(exactKey);
-          seenTitleKeys.add(titleKey);
-          refKeys.forEach(ref => seenRefKeys.add(ref));
           deduped.push(opportunity);
         } else {
           const existing = deduped[existingIndex];
+          const existingIsAuction = existing.type === 'Reverse Auction' || existing.type.endsWith('+ RA');
+
+          let mergedType = existing.type;
+          if (existing.type === 'Reverse Auction' && opportunity.type !== 'Reverse Auction') {
+            mergedType = `${opportunity.type} + RA` as OpportunityType;
+          } else if (existing.type !== 'Reverse Auction' && opportunity.type === 'Reverse Auction') {
+            mergedType = `${existing.type} + RA` as OpportunityType;
+          } else if (existing.type.endsWith('+ RA') || opportunity.type.endsWith('+ RA')) {
+            const base = existing.type !== 'Reverse Auction' ? getBaseType(existing.type) : getBaseType(opportunity.type);
+            mergedType = `${base} + RA` as OpportunityType;
+          }
+
           const titleA = existing.title || '';
           const titleB = opportunity.title || '';
           const bestTitle = titleB.length > titleA.length ? titleB : titleA;
@@ -561,7 +645,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const categoryA = existing.category || '';
           const categoryB = opportunity.category || '';
-          const isGenericCat = (c: string) => !c || c === 'Rate Contract' || c === 'General Sourcing';
+          const isGenericCat = (c: string) => !c || c === 'Rate Contract' || c === 'General Sourcing' || c === 'Negotiate Price';
           const bestCategory = isGenericCat(categoryA) && !isGenericCat(categoryB) ? categoryB : categoryA;
 
           const locA = existing.location || '';
@@ -596,8 +680,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               const tsA = new Date(pubA).getTime();
               const tsB = new Date(pubB).getTime();
               if (Number.isFinite(tsA) && Number.isFinite(tsB)) {
-                // A procurement cannot go live before it was created.
-                // Pick the authentic live publication timestamp (later between draft initialization and actual publish)
                 bestPublishedAt = tsA >= tsB ? pubA : pubB;
               } else {
                 bestPublishedAt = pubA || pubB;
@@ -618,8 +700,27 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           };
           const bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
 
+          const auctionOpp = oppIsAuction ? opportunity : (existingIsAuction ? existing : null);
+          const parentOpp = existing.type !== 'Reverse Auction' ? existing : (opportunity.type !== 'Reverse Auction' ? opportunity : null);
+
+          let bestActionLabel = parentOpp?.actionLabel || existing.actionLabel;
+          let bestHref = parentOpp?.href || existing.href;
+          let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref;
+
+          if (auctionOpp) {
+            const isAuctionActive = String(auctionOpp.status).toUpperCase() === 'OPEN' || String(auctionOpp.status).toUpperCase() === 'SCHEDULED' || String(auctionOpp.status).toUpperCase() === 'LIVE';
+            if (isAuctionActive) {
+              bestActionLabel = 'Join Live Auction';
+              bestHref = auctionOpp.href;
+            }
+          }
+
+          const bestSourceRef = parentOpp?.sourceRef || existing.sourceRef;
+
           deduped[existingIndex] = {
             ...existing,
+            ...parentOpp,
+            type: mergedType as OpportunityType,
             title: bestTitle,
             buyer: bestBuyer,
             category: bestCategory,
@@ -628,8 +729,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             discloseEstimatedCost: bestDisclose,
             publishedAt: bestPublishedAt,
             closingDate: bestClosingDate,
-            href: existing.href || opportunity.href,
-            detailsHref: existing.detailsHref || opportunity.detailsHref,
+            actionLabel: bestActionLabel,
+            href: bestHref,
+            detailsHref: bestDetailsHref,
+            sourceRef: bestSourceRef,
             events: (existing.events && existing.events.length > 0) ? existing.events : opportunity.events,
           };
         }
@@ -1195,8 +1298,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
       if (type) {
         if (type === 'Limited Tender') {
-          if (!item.isInvitation && item.type !== 'Limited Tender') return false;
-        } else if (item.type !== type) {
+          if (!item.isInvitation && item.type !== 'Limited Tender' && item.type !== 'Limited Tender + RA') return false;
+        } else if (type === 'Reverse Auction') {
+          if (item.type !== 'Reverse Auction' && !item.type.endsWith('+ RA')) return false;
+        } else if (item.type !== type && item.type !== `${type} + RA`) {
           return false;
         }
       }
@@ -1247,8 +1352,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const kpiItems = useMemo(() => {
     if (!type) return items;
-    if (type === 'Limited Tender') return items.filter(i => i.isInvitation || i.type === 'Limited Tender');
-    return items.filter(i => i.type === type);
+    if (type === 'Limited Tender') return items.filter(i => i.isInvitation || i.type === 'Limited Tender' || i.type === 'Limited Tender + RA');
+    if (type === 'Reverse Auction') return items.filter(i => i.type === 'Reverse Auction' || i.type.endsWith('+ RA'));
+    return items.filter(i => i.type === type || i.type === `${type} + RA`);
   }, [items, type]);
 
   const kpis = useMemo(() => {
@@ -1417,16 +1523,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       width: 'w-[10.5%]',
       cell: (item) => (
         <div className="flex flex-col gap-1 items-start">
-          <span className={cn(
-            "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap shrink-0",
-            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-            "border-amber-200 bg-amber-50 text-amber-600"
-          )}>
-            {item.type}
-          </span>
+          <TypeBadge type={item.type} />
           {isParticipatedOpportunity(item) ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0">
               <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Submitted
@@ -1726,10 +1823,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         counts.participated++;
       }
       counts.all++;
-      if (item.type && counts[item.type] !== undefined) {
-        counts[item.type]++;
+
+      const isPlusRa = item.type.endsWith('+ RA');
+      const baseType = item.type.replace(/\s*\+\s*RA$/i, '').trim();
+
+      if (counts[baseType] !== undefined) {
+        counts[baseType]++;
       } else if (item.isInvitation) {
         counts['Limited Tender']++;
+      }
+
+      if (item.type === 'Reverse Auction' || isPlusRa) {
+        counts['Reverse Auction']++;
       }
     });
 
@@ -2084,16 +2189,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                       {/* Top row: Badges */}
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={cn(
-                            "inline-flex rounded px-2 py-0.5 text-[9px] font-black uppercase tracking-wider border",
-                            item.type === 'Reverse Auction' ? "border-red-200 bg-red-50 text-red-600" :
-                            item.type === 'RFQ' ? "border-orange-200 bg-orange-50 text-orange-600" :
-                            item.type === 'RFP' ? "border-purple-200 bg-purple-50 text-purple-600" :
-                            item.type === 'Open Tender' ? "border-emerald-200 bg-emerald-50 text-emerald-600" :
-                            "border-amber-200 bg-amber-50 text-amber-600"
-                          )}>
-                            {item.type}
-                          </span>
+                          <TypeBadge type={item.type} />
                           {participated ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800 shadow-2xs">
                               <CheckCircle2 className="h-3 w-3 text-emerald-600" />
@@ -2469,20 +2565,7 @@ function SelectFilter({
   );
 }
 
-function TypeBadge({ type }: { type: OpportunityType }) {
-  const tone = type === 'RFQ'
-    ? 'border-orange-200 bg-orange-50 text-orange-700'
-    : type === 'RFP'
-      ? 'border-indigo-200 bg-indigo-50 text-indigo-750'
-      : type === 'Open Tender'
-        ? 'border-amber-200 bg-amber-50 text-amber-700'
-        : type === 'Limited Tender'
-          ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-          : type === 'Direct Purchase'
-            ? 'border-teal-200 bg-teal-50 text-teal-700'
-            : 'border-rose-200 bg-rose-50 text-rose-700';
-  return <Badge className={cn('rounded-md', tone)}>{type}</Badge>;
-}
+
 
 function OpportunityCard({ item, serial, onView }: { item: SellerOpportunity; serial: number; onView: () => void }) {
   return (

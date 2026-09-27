@@ -17,9 +17,13 @@ export type DisputeSocketEvent =
   | { type: 'DISPUTE_EVIDENCE_ADDED'; disputeId: number; evidence: any };
 
 export type ProcurementSocketEvent =
-  | { type: 'QUOTATION_SUBMITTED'; requirementId: number | string; responseId?: number; offeredPrice?: number; sellerOrgId?: number | null; timestamp: string }
-  | { type: 'QUOTATION_STATUS_CHANGED'; requirementId: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
-  | { type: 'PROCUREMENT_UPDATED'; requirementId: number | string; status?: string; timestamp: string };
+  | { type: 'QUOTATION_SUBMITTED'; requirementId: number | string; procurementId?: number | string; responseId?: number; offeredPrice?: number; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'QUOTATION_STATUS_CHANGED'; requirementId: number | string; procurementId?: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
+  | { type: 'PROCUREMENT_UPDATED'; requirementId: number | string; procurementId?: number | string; status?: string; timestamp: string };
+
+export type AuctionSocketEvent =
+  | { type: 'REVERSE_AUCTION_BID'; auctionId: number | string; auctionCode?: string; currentLowest: number; minimumNextBid: number; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'REVERSE_AUCTION_UPDATED'; auctionId: number | string; status?: string; timestamp: string };
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -141,6 +145,18 @@ const handleProcurementSubscribe = async (socket: AuthenticatedWebSocket, procur
   socket.send(JSON.stringify({ type: 'SUBSCRIBE_PROCUREMENT_SUCCESS', procurementId: cleanId }));
 };
 
+const handleAuctionSubscribe = async (socket: AuthenticatedWebSocket, auctionId: string | number) => {
+  if (!socket.user) {
+    socket.send(JSON.stringify({ type: 'ERROR', message: 'Not authenticated' }));
+    return;
+  }
+  const cleanId = String(auctionId).trim();
+  if (!cleanId) return;
+
+  joinRoom(socket, `auction:${cleanId}`);
+  socket.send(JSON.stringify({ type: 'SUBSCRIBE_AUCTION_SUCCESS', auctionId: cleanId }));
+};
+
 wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
   logger.info(`[WS] New connection from ${req.socket.remoteAddress}`);
   socket.isAlive = true;
@@ -174,6 +190,8 @@ wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
             await handleSubscribe(socket, Number(message.disputeId));
           } else if (message.procurementId || message.requirementId) {
             await handleProcurementSubscribe(socket, message.procurementId || message.requirementId);
+          } else if (message.auctionId || message.auctionCode) {
+            await handleAuctionSubscribe(socket, message.auctionId || message.auctionCode);
           }
           break;
         case 'UNSUBSCRIBE':
@@ -181,6 +199,8 @@ wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
             leaveRoom(socket, `dispute:${message.disputeId}`);
           } else if (message.procurementId || message.requirementId) {
             leaveRoom(socket, `procurement:${String(message.procurementId || message.requirementId).trim()}`);
+          } else if (message.auctionId || message.auctionCode) {
+            leaveRoom(socket, `auction:${String(message.auctionId || message.auctionCode).trim()}`);
           }
           break;
         case 'SUBSCRIBE_PROCUREMENT':
@@ -191,6 +211,16 @@ wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
         case 'UNSUBSCRIBE_PROCUREMENT':
           if (message.procurementId || message.requirementId) {
             leaveRoom(socket, `procurement:${String(message.procurementId || message.requirementId).trim()}`);
+          }
+          break;
+        case 'SUBSCRIBE_AUCTION':
+          if (message.auctionId || message.auctionCode) {
+            await handleAuctionSubscribe(socket, message.auctionId || message.auctionCode);
+          }
+          break;
+        case 'UNSUBSCRIBE_AUCTION':
+          if (message.auctionId || message.auctionCode) {
+            leaveRoom(socket, `auction:${String(message.auctionId || message.auctionCode).trim()}`);
           }
           break;
         case 'PING':
@@ -229,7 +259,7 @@ export const handleUpgrade = (request: IncomingMessage, socket: any, head: Buffe
   });
 };
 
-import { publishDisputeEvent, publishProcurementEvent } from './pusher.service.js';
+import { publishDisputeEvent, publishProcurementEvent, publishAuctionEvent } from './pusher.service.js';
 
 export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent) => {
   // Always push to Pusher if configured (serverless compatible)
@@ -286,5 +316,33 @@ export const broadcastToProcurement = (procurementId: number | string, event: Pr
   }
 
   logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId} (and procurement:all)`);
+};
+
+export const broadcastToAuction = (auctionId: number | string, event: AuctionSocketEvent) => {
+  const cleanId = String(auctionId).trim();
+  void publishAuctionEvent(cleanId, event);
+
+  const roomId = `auction:${cleanId}`;
+  const room = rooms.get(roomId);
+  const codeRoom = (event as any).auctionCode ? rooms.get(`auction:${String((event as any).auctionCode).trim()}`) : null;
+  const allRoom = rooms.get('auction:all');
+
+  const message = JSON.stringify(event);
+  let sentCount = 0;
+  const sentSockets = new Set<AuthenticatedWebSocket>();
+
+  [room, codeRoom, allRoom].forEach((targetRoom) => {
+    if (targetRoom) {
+      targetRoom.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN && !sentSockets.has(client)) {
+          client.send(message);
+          sentSockets.add(client);
+          sentCount++;
+        }
+      });
+    }
+  });
+
+  logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
 };
 

@@ -8,7 +8,12 @@ const headers = (): Record<string, string> => {
 const json = async <T>(response: Response): Promise<T> => {
   const body = await readJsonResponse(response);
   if (!response.ok) {
-    throw new Error(body?.message || 'Request failed');
+    const error: any = new Error(body?.message || 'Request failed');
+    error.statusCode = response.status;
+    error.code = body?.code || body?.errorCode;
+    error.details = body?.details;
+    error.instruction = body?.instruction;
+    throw error;
   }
   return unwrapApiData<T>(body);
 };

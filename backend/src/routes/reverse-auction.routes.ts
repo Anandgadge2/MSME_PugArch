@@ -15,6 +15,7 @@ import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
+import { broadcastToAuction, broadcastToProcurement } from '../services/websocket.service.js';
 
 const router = Router();
 const db = prisma as any;
@@ -796,6 +797,12 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
     );
     const disqualificationReason = participant?.disqualificationReason || participant?.rejectionReason || participant?.qualificationRemarks || null;
 
+    const currentLow = toNumber(auction.currentLowestAmount ?? auction.currentLowestBid ?? auction.currentBid ?? auction.startPrice);
+    const amountDecrement = toNumber(auction.minDecrementAmount ?? auction.minDecrement, 0);
+    const percentDecrement = auction.minDecrementPercent ? currentLow * (toNumber(auction.minDecrementPercent) / 100) : 0;
+    const requiredDecrement = Math.max(amountDecrement, percentDecrement);
+    const calculatedNextBid = Math.max(0, currentLow - requiredDecrement);
+
     return apiResponse.success(res, {
       serverTime: new Date(),
       auction: maskSensitive({
@@ -814,7 +821,7 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       totalBidsCount,
       myBestBid: myBestBidRecord ? toNumber(myBestBidRecord.amount ?? myBestBidRecord.bidAmount) : null,
       myRank: participant?.currentRank || null,
-      minimumNextBid: toNumber(auction.currentLowestAmount ?? auction.currentLowestBid ?? auction.currentBid ?? auction.startPrice) - toNumber(auction.minDecrementAmount ?? auction.minDecrement, 0)
+      minimumNextBid: Number(calculatedNextBid.toFixed(2))
     });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load live summary', error.code || 'REVERSE_AUCTION_SUMMARY_ERROR');
@@ -1209,6 +1216,16 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
       const data = { status: target, statusEnum: enumStatus, ...(extra ? extra(req, auction) : {}) };
       const updated = await db.auction.update({ where: { id }, data });
       await writeAuctionEvent(req, id, target.toLowerCase(), `Auction moved to ${target}`, data);
+      try {
+        broadcastToAuction(id, {
+          type: 'REVERSE_AUCTION_UPDATED',
+          auctionId: id,
+          status: target,
+          timestamp: new Date().toISOString()
+        });
+      } catch (bcErr) {
+        logger.warn({ bcErr }, '[ReverseAuction] Failed to broadcast auction update');
+      }
       if (auction.linkedBidId && ['CLOSED', 'COMPLETED'].includes(target)) {
         await db.procurementBid.update({
           where: { id: auction.linkedBidId },
@@ -1823,14 +1840,29 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
         const requiredDecrement = Math.max(amountDecrement, percentDecrement);
         const maxAllowed = current - requiredDecrement;
         if (payload.amount > maxAllowed) {
-          throw new ApiError(400, `Bid must be at least ${requiredDecrement.toFixed(2)} below current lowest amount`, 'AUCTION_MIN_DECREMENT');
+          throw new ApiError(
+            400,
+            `Bid of ₹${payload.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is too high. Current lowest offer is ₹${current.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Your bid must be at least ₹${requiredDecrement.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lower (maximum permitted: ₹${maxAllowed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`,
+            'AUCTION_MIN_DECREMENT',
+            {
+              currentLowest: current,
+              requiredDecrement,
+              maxAllowedBid: Number(maxAllowed.toFixed(2)),
+              submittedAmount: payload.amount
+            }
+          );
         }
         // Reserve price is the buyer's floor: in a reverse auction sellers drive the
         // price down, so a bid under the reserve is rejected. (bidSchema already
         // guarantees amount > 0, so no separate positivity check is needed here.)
         const reserve = auction.reservePrice != null ? toNumber(auction.reservePrice) : null;
         if (reserve != null && reserve > 0 && payload.amount < reserve) {
-          throw new ApiError(400, `Bid cannot be below the auction reserve price`, 'AUCTION_BELOW_RESERVE');
+          throw new ApiError(
+            400,
+            `Bid cannot be below the auction reserve price of ₹${reserve.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+            'AUCTION_BELOW_RESERVE',
+            { reservePrice: reserve, submittedAmount: payload.amount }
+          );
         }
 
         const msToEnd = new Date(auction.endTime).getTime() - now.getTime();
@@ -1866,13 +1898,52 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
           }
         });
         await recalculateRanks(tx, auctionId);
-        return { auction: updatedAuction, auctionBid: bid };
+        return { auction: updatedAuction, auctionBid: bid, requiredDecrement };
       }), { ttlMs: 10_000 }
     );
     await writeAuctionEvent(req, auctionId, 'bid_submitted', 'Seller submitted reverse auction bid', { amount: payload.amount });
+
+    try {
+      const currentLow = toNumber(payload.amount);
+      const reqDec = toNumber((result as any)?.requiredDecrement || 0);
+      const nextMax = Math.max(0, currentLow - reqDec);
+      broadcastToAuction(auctionId, {
+        type: 'REVERSE_AUCTION_BID',
+        auctionId,
+        auctionCode: result.auction?.auctionCode,
+        currentLowest: currentLow,
+        minimumNextBid: Number(nextMax.toFixed(2)),
+        sellerOrgId: req.user?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+      if (result.auction?.linkedBidId) {
+        broadcastToProcurement(result.auction.linkedBidId, {
+          type: 'PROCUREMENT_UPDATED',
+          requirementId: result.auction.linkedBidId,
+          procurementId: result.auction.linkedBidId,
+          timestamp: new Date().toISOString()
+        });
+      }
+      if (result.auction?.linkedRequirementId) {
+        broadcastToProcurement(result.auction.linkedRequirementId, {
+          type: 'PROCUREMENT_UPDATED',
+          requirementId: result.auction.linkedRequirementId,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[ReverseAuction] Failed to broadcast bid event');
+    }
+
     return apiResponse.created(res, maskSensitive(result), 'Bid submitted');
   } catch (error: any) {
-    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to submit bid', error.code || 'REVERSE_AUCTION_BID_ERROR');
+    return apiResponse.error(
+      res,
+      error.statusCode || 400,
+      error.message || 'Unable to submit bid',
+      error.code || 'REVERSE_AUCTION_BID_ERROR',
+      error.details
+    );
   }
 });
 

@@ -50,6 +50,7 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
       void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
 
       if (data.type === 'QUOTATION_SUBMITTED') {

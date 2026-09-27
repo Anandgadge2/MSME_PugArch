@@ -81,6 +81,7 @@ import { ExtendScheduleModal } from "./ExtendScheduleModal";
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
+import { useProcurementRealtime } from "../hooks/useProcurementRealtime";
 import {
   formatDate,
   formatDateTime,
@@ -3978,6 +3979,9 @@ export function ProcurementDetailUnifiedView(
       ? props.displayId
       : props.id,
   );
+  useProcurementRealtime(targetId);
+  useProcurementRealtime(props.id && String(props.id) !== targetId ? props.id : null);
+  useProcurementRealtime(props.displayId && String(props.displayId) !== targetId ? props.displayId : null);
   const userRoleStr = String(currentUser?.role || "").toLowerCase();
   const isBuyerOrAdmin =
     userRoleStr === "buyer" ||
@@ -4686,7 +4690,9 @@ export function ProcurementDetailUnifiedView(
     enabled: Boolean(
       isBuyerOrAdmin && targetId && targetId !== "RFQ" && targetId !== "RFP",
     ),
-    staleTime: 5_000,
+    staleTime: 2_000,
+    refetchInterval: 3_000,
+    refetchOnWindowFocus: true,
   });
   const handleActionSubmit = () => {
     if (!currentUser) {
