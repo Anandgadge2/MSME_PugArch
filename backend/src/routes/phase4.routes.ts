@@ -1823,6 +1823,11 @@ const createRateContractForSubmittedProcurement = async (req: AuthRequest, requi
         requirementNumber: requirement.requirementNumber,
         buyerId: userId(req),
         buyerOrganizationId: req.user?.organizationId || requirement.organizationId || null,
+        buyerOrganizationName: (req.user as any)?.organizationName || requirement.organization?.organizationName || null,
+        buyerName: (req.user as any)?.name || requirement.createdBy?.name || null,
+        district: requirement.deliveryDistrict || requirement.district || null,
+        state: requirement.deliveryState || requirement.state || null,
+        deliveryLocation: requirement.deliveryLocation || null,
         callOffOrderAllowed: config.callOffOrderAllowed,
         activeState: config.periodEndDate.getTime() >= Date.now() ? 'ACTIVE' : 'EXPIRED'
       }
@@ -5751,6 +5756,123 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
   }
 }, 'Unable to submit procurement'));
 
+const enrichRateContracts = async (contracts: any[]) => {
+  if (!contracts || contracts.length === 0) return contracts;
+  const buyerOrgIds: number[] = [];
+  const buyerUserIds: number[] = [];
+  const requirementIds: number[] = [];
+
+  for (const c of contracts) {
+    const meta = (c?.metadata || {}) as any;
+    const orgId = Number(meta.buyerOrganizationId || 0);
+    const uId = Number(meta.buyerId || 0);
+    const rId = Number(meta.requirementId || 0);
+    if (orgId > 0 && !buyerOrgIds.includes(orgId)) buyerOrgIds.push(orgId);
+    if (uId > 0 && !buyerUserIds.includes(uId)) buyerUserIds.push(uId);
+    if (rId > 0 && !requirementIds.includes(rId)) requirementIds.push(rId);
+  }
+
+  const [orgs, users, reqs] = await Promise.all([
+    buyerOrgIds.length > 0 ? db.organization.findMany({
+      where: { id: { in: buyerOrgIds } },
+      select: { id: true, organizationName: true, addressLine1: true, addressLine2: true, city: true, district: true, state: true, pincode: true }
+    }) : [],
+    buyerUserIds.length > 0 ? db.user.findMany({
+      where: { id: { in: buyerUserIds } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        organizationId: true,
+        organization: { select: { id: true, organizationName: true, addressLine1: true, city: true, district: true, state: true, pincode: true } }
+      }
+    }) : [],
+    requirementIds.length > 0 ? db.requirement.findMany({
+      where: { id: { in: requirementIds } },
+      select: {
+        id: true,
+        requirementNumber: true,
+        title: true,
+        deliveryLocation: true,
+        deliveryDistrict: true,
+        deliveryState: true,
+        district: true,
+        state: true,
+        createdBy: { select: { id: true, name: true } },
+        organization: { select: { id: true, organizationName: true, city: true, district: true, state: true } }
+      }
+    }) : []
+  ]);
+
+  const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
+  const userMap = new Map<number, any>(users.map((u: any) => [u.id, u]));
+  const reqMap = new Map<number, any>(reqs.map((r: any) => [r.id, r]));
+
+  return contracts.map(contract => {
+    const meta = (contract.metadata || {}) as any;
+    const buyerOrg = orgMap.get(Number(meta.buyerOrganizationId));
+    const buyerUser = userMap.get(Number(meta.buyerId));
+    const reqItem = reqMap.get(Number(meta.requirementId));
+
+    const resolvedOrgName = buyerOrg?.organizationName
+      || buyerUser?.organization?.organizationName
+      || reqItem?.organization?.organizationName
+      || meta.buyerOrganizationName
+      || meta.buyerOrganization?.organizationName
+      || buyerUser?.name
+      || null;
+
+    const resolvedBuyerName = buyerUser?.name
+      || reqItem?.createdBy?.name
+      || resolvedOrgName
+      || meta.buyerName
+      || null;
+
+    const resolvedDistrict = reqItem?.deliveryDistrict
+      || reqItem?.district
+      || buyerOrg?.district
+      || buyerUser?.organization?.district
+      || meta.district
+      || null;
+
+    const resolvedState = reqItem?.deliveryState
+      || reqItem?.state
+      || buyerOrg?.state
+      || buyerUser?.organization?.state
+      || meta.state
+      || null;
+
+    const rawDeliveryLoc = meta.deliveryLocation && !meta.deliveryLocation.toLowerCase().includes('sla') && !meta.deliveryLocation.toLowerCase().includes('agreed')
+      ? meta.deliveryLocation
+      : null;
+
+    const resolvedLocation = reqItem?.deliveryLocation
+      || rawDeliveryLoc
+      || (resolvedDistrict && resolvedState ? `${resolvedDistrict}, ${resolvedState}` : resolvedDistrict || resolvedState || null);
+
+    const enrichedMeta = {
+      ...meta,
+      buyerOrganizationName: resolvedOrgName || meta.buyerOrganizationName,
+      buyerName: resolvedBuyerName || meta.buyerName,
+      district: resolvedDistrict || meta.district,
+      state: resolvedState || meta.state,
+      deliveryLocation: resolvedLocation || null
+    };
+
+    return {
+      ...contract,
+      buyerOrganizationName: resolvedOrgName,
+      buyerName: resolvedBuyerName,
+      district: resolvedDistrict,
+      state: resolvedState,
+      deliveryLocation: resolvedLocation,
+      location: resolvedLocation,
+      buyerOrganization: buyerOrg || buyerUser?.organization || reqItem?.organization || null,
+      metadata: enrichedMeta
+    };
+  });
+};
+
 router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery.extend({
     contractState: z.enum(['ACTIVE', 'EXPIRED']).optional()
@@ -5779,7 +5901,8 @@ router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admi
           return isSelectedSeller || contract.status === 'ACTIVE' || contract.status === 'PUBLISHED' || contract.status === 'OPEN' || !contract.endDate || contract.endDate >= now;
         })
       : allContracts.filter(contract => Number((contract.metadata as any)?.buyerId || 0) === userId(req));
-  ok(res, paged(filtered, filtered.length, query, 'rateContracts'));
+  const enriched = await enrichRateContracts(filtered);
+  ok(res, paged(enriched, enriched.length, query, 'rateContracts'));
 }, 'Unable to load rate contracts'));
 
 router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
@@ -5891,7 +6014,8 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
       throw new ApiError(403, 'Access denied', 'FORBIDDEN');
     }
   }
-  ok(res, contract);
+  const [enriched] = await enrichRateContracts([contract]);
+  ok(res, enriched || contract);
 }, 'Unable to load rate contract details'));
 
 // ── Public Procurement Opportunities (Home Page) ──

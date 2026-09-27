@@ -18,6 +18,7 @@ import {
   Loader2,
   Receipt,
   ArrowRight,
+  Award,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
@@ -427,19 +428,10 @@ export default function LiveAuctionLeaderboard({
             ) : (
               <Button
                 type="button"
-                onClick={handleAcceptAndGeneratePo}
-                disabled={actionLoading === 'po'}
-                className="h-11 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs uppercase tracking-wider shadow-md shadow-emerald-600/25 flex items-center gap-2"
+                onClick={() => router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(auction?.auctionCode || auctionId)}/result`)}
+                className="h-11 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-xs uppercase tracking-wider shadow-md shadow-indigo-600/25 flex items-center gap-2"
               >
-                {actionLoading === 'po' ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" /> Generating PO…
-                  </>
-                ) : (
-                  <>
-                    <FileCheck className="h-4 w-4" /> Accept & Generate PO
-                  </>
-                )}
+                <Award className="h-4 w-4" /> Review Outcomes & Issue Award Offer
               </Button>
             )}
           </div>

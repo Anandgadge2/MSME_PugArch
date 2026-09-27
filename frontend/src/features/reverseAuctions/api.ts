@@ -139,6 +139,13 @@ export type ReverseAuctionResult = {
     metadata?: any;
   } | null;
   canRecommendAward?: boolean;
+  canOfferAward?: boolean;
+  canAcceptAward?: boolean;
+  canGeneratePo?: boolean;
+  isAwardOffered?: boolean;
+  isAwardAccepted?: boolean;
+  isWinningSeller?: boolean;
+  winningParticipant?: ReverseAuctionParticipant | null;
   isManager?: boolean;
   myParticipant?: ReverseAuctionParticipant | null;
 };
@@ -185,6 +192,10 @@ export const reverseAuctionApi = {
     api.get(`/api/reverse-auctions/${encodeURIComponent(String(id))}/result`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuctionResult>(res)),
   recommendAward: (id: number | string, participantId?: number, remarks?: string) =>
     api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/award-recommendation`, { participantId, remarks }, { headers: headers() }).then(res => json<any>(res)),
+  acceptAward: (id: number | string, remarks?: string) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/accept-award`, { remarks }, { headers: headers() }).then(res => json<any>(res)),
+  declineAward: (id: number | string, reason?: string) =>
+    api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/decline-award`, { reason }, { headers: headers() }).then(res => json<any>(res)),
   startFromBids: (data: {
     procurementId: number | string;
     title?: string;

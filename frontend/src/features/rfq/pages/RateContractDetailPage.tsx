@@ -256,7 +256,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       discount: it.discount,
       gst: it.gst
     })),
-    location: cMeta.deliveryLocation || cMeta.deliverySla || [cMeta.district, cMeta.state].filter(Boolean).join(', ') || 'Location as agreed in call-off orders',
+    location: (cMeta.deliveryLocation && !cMeta.deliveryLocation.toLowerCase().includes('sla') ? cMeta.deliveryLocation : null) || [cMeta.district, cMeta.state].filter(Boolean).join(', ') || 'Location as agreed in call-off orders',
     requirementNumber: contractData.contractNumber || cMeta.requirementNumber,
     paymentTerms: cMeta.paymentTerms || 'Standard Payment Terms',
     deliveryTerms: cMeta.deliverySla || 'Standard Delivery SLA',

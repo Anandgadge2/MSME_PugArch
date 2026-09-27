@@ -389,65 +389,70 @@ const auctionIncludeFor = (req: AuthRequest) => ({
     : { orderBy: { submittedAt: 'desc' }, take: 200 }
 });
 
-const recalculateRanks = async (tx: any, auctionId: number) => {
-  const bids = await tx.auctionBid.findMany({
-    where: { auctionId, isValid: true },
-    orderBy: [{ amount: 'asc' }, { bidAmount: 'asc' }, { submittedAt: 'asc' }]
-  });
-  const bestByOrg = new Map<number, any>();
-  for (const bid of bids) {
-    const orgId = Number(bid.sellerOrgId || 0);
-    if (orgId && !bestByOrg.has(orgId)) bestByOrg.set(orgId, bid);
-  }
+const recalculateRanks = async (client: any, auctionId: number) => {
+  try {
+    const target = client?.$transaction ? client : db;
+    const bids = await target.auctionBid.findMany({
+      where: { auctionId, isValid: true },
+      orderBy: [{ amount: 'asc' }, { bidAmount: 'asc' }, { submittedAt: 'asc' }]
+    });
+    const bestByOrg = new Map<number, any>();
+    for (const bid of bids) {
+      const orgId = Number(bid.sellerOrgId || 0);
+      if (orgId && !bestByOrg.has(orgId)) bestByOrg.set(orgId, bid);
+    }
 
-  const participants = await tx.auctionParticipant.findMany({
-    where: { auctionId }
-  });
-  const participantMap = new Map<number, any>(participants.map(p => [Number(p.sellerOrgId), p]));
+    const participants = await target.auctionParticipant.findMany({
+      where: { auctionId }
+    });
+    const participantMap = new Map<number, any>(participants.map((p: any) => [Number(p.sellerOrgId), p]));
 
-  let rank = 1;
-  const participantUpdates = [];
-  const bidUpdates = [];
+    let rank = 1;
+    const participantUpdates: any[] = [];
+    const bidUpdates: any[] = [];
 
-  for (const bid of bestByOrg.values()) {
-    const orgId = Number(bid.sellerOrgId || 0);
-    const p = participantMap.get(orgId);
-    const bidAmount = bid.amount || bid.bidAmount;
+    for (const bid of bestByOrg.values()) {
+      const orgId = Number(bid.sellerOrgId || 0);
+      const p = participantMap.get(orgId);
+      const bidAmount = bid.amount || bid.bidAmount;
 
-    if (p) {
-      if (p.currentRank !== rank || toNumber(p.lastBidAmount) !== toNumber(bidAmount)) {
+      if (p) {
+        if (p.currentRank !== rank || toNumber(p.lastBidAmount) !== toNumber(bidAmount)) {
+          participantUpdates.push(
+            target.auctionParticipant.updateMany({
+              where: { auctionId, sellerOrgId: orgId },
+              data: { currentRank: rank, lastBidAmount: bidAmount }
+            }).catch((err: any) => logger.warn({ err }, 'Failed to update participant rank'))
+          );
+        }
+      } else {
         participantUpdates.push(
-          tx.auctionParticipant.updateMany({
+          target.auctionParticipant.updateMany({
             where: { auctionId, sellerOrgId: orgId },
             data: { currentRank: rank, lastBidAmount: bidAmount }
-          })
+          }).catch((err: any) => logger.warn({ err }, 'Failed to update participant rank'))
         );
       }
-    } else {
-      participantUpdates.push(
-        tx.auctionParticipant.updateMany({
-          where: { auctionId, sellerOrgId: orgId },
-          data: { currentRank: rank, lastBidAmount: bidAmount }
-        })
-      );
+
+      if (bid.rankAtSubmission !== rank) {
+        bidUpdates.push(
+          target.auctionBid.update({
+            where: { id: bid.id },
+            data: { rankAtSubmission: rank }
+          }).catch(() => undefined)
+        );
+      }
+      rank += 1;
     }
 
-    if (bid.rankAtSubmission !== rank) {
-      bidUpdates.push(
-        tx.auctionBid.update({
-          where: { id: bid.id },
-          data: { rankAtSubmission: rank }
-        }).catch(() => undefined)
-      );
+    if (participantUpdates.length > 0) {
+      await Promise.all(participantUpdates);
     }
-    rank += 1;
-  }
-
-  if (participantUpdates.length > 0) {
-    await Promise.all(participantUpdates);
-  }
-  if (bidUpdates.length > 0) {
-    await Promise.all(bidUpdates);
+    if (bidUpdates.length > 0) {
+      await Promise.all(bidUpdates);
+    }
+  } catch (err) {
+    logger.warn({ err, auctionId }, '[ReverseAuction] Error in recalculateRanks (non-fatal)');
   }
 };
 
@@ -1094,6 +1099,129 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
   }
 });
 
+const enrichAuctions = async (auctions: any[]) => {
+  if (!auctions || auctions.length === 0) return auctions;
+
+  const buyerOrgIds = Array.from(new Set(auctions.map((a: any) => a.buyerOrgId).filter((id: any) => typeof id === 'number' && id > 0)));
+  const creatorUserIds = Array.from(new Set(auctions.map((a: any) => a.createdByUserId).filter((id: any) => typeof id === 'number' && id > 0)));
+  const linkedReqIds = Array.from(new Set(auctions.map((a: any) => a.linkedRequirementId).filter((id: any) => typeof id === 'number' && id > 0)));
+  const linkedBidIds = Array.from(new Set(auctions.map((a: any) => a.linkedBidId).filter((id: any) => typeof id === 'number' && id > 0)));
+
+  const [orgs, creators, reqItems, bidItems] = await Promise.all([
+    buyerOrgIds.length > 0 ? db.organization.findMany({
+      where: { id: { in: buyerOrgIds } },
+      select: { id: true, organizationName: true, addressLine1: true, addressLine2: true, city: true, district: true, state: true, pincode: true }
+    }) : [],
+    creatorUserIds.length > 0 ? db.user.findMany({
+      where: { id: { in: creatorUserIds } },
+      select: { id: true, name: true, organizationId: true, organization: { select: { id: true, organizationName: true, district: true, state: true } } }
+    }) : [],
+    linkedReqIds.length > 0 ? db.requirement.findMany({
+      where: { id: { in: linkedReqIds } },
+      select: {
+        id: true,
+        requirementNumber: true,
+        deliveryLocation: true,
+        deliveryDistrict: true,
+        deliveryState: true,
+        district: true,
+        state: true,
+        organization: { select: { id: true, organizationName: true, district: true, state: true } },
+        createdBy: { select: { id: true, name: true } }
+      }
+    }) : [],
+    linkedBidIds.length > 0 ? db.procurementBid.findMany({
+      where: { id: { in: linkedBidIds } },
+      select: {
+        id: true,
+        bidNumber: true,
+        deliveryLocation: true,
+        district: true,
+        state: true,
+        buyerName: true,
+        buyerOrganizationName: true,
+        requirement: {
+          select: {
+            id: true,
+            requirementNumber: true,
+            deliveryLocation: true,
+            deliveryDistrict: true,
+            deliveryState: true,
+            district: true,
+            state: true,
+            organization: { select: { id: true, organizationName: true, district: true, state: true } },
+            createdBy: { select: { id: true, name: true } }
+          }
+        }
+      }
+    }) : []
+  ]);
+
+  const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
+  const creatorMap = new Map<number, any>(creators.map((c: any) => [c.id, c]));
+  const reqMap = new Map<number, any>(reqItems.map((r: any) => [r.id, r]));
+  const bidMap = new Map<number, any>(bidItems.map((b: any) => [b.id, b]));
+
+  return auctions.map((auction: any) => {
+    const org = auction.buyerOrgId ? orgMap.get(auction.buyerOrgId) : null;
+    const creator = auction.createdByUserId ? creatorMap.get(auction.createdByUserId) : null;
+    const reqItem = auction.linkedRequirementId ? reqMap.get(auction.linkedRequirementId) : null;
+    const bidItem = auction.linkedBidId ? bidMap.get(auction.linkedBidId) : null;
+    const bidReq = bidItem?.requirement;
+
+    const buyerOrgName = org?.organizationName
+      || bidItem?.buyerOrganizationName
+      || reqItem?.organization?.organizationName
+      || bidReq?.organization?.organizationName
+      || creator?.organization?.organizationName
+      || null;
+
+    const buyerName = creator?.name
+      || bidItem?.buyerName
+      || reqItem?.createdBy?.name
+      || bidReq?.createdBy?.name
+      || buyerOrgName
+      || null;
+
+    const district = reqItem?.deliveryDistrict
+      || reqItem?.district
+      || bidReq?.deliveryDistrict
+      || bidReq?.district
+      || bidItem?.district
+      || org?.district
+      || creator?.organization?.district
+      || null;
+
+    const state = reqItem?.deliveryState
+      || reqItem?.state
+      || bidReq?.deliveryState
+      || bidReq?.state
+      || bidItem?.state
+      || org?.state
+      || creator?.organization?.state
+      || null;
+
+    const deliveryLocation = reqItem?.deliveryLocation
+      || bidReq?.deliveryLocation
+      || bidItem?.deliveryLocation
+      || (district && state ? `${district}, ${state}` : district || state || null);
+
+    const buyerOrganization = org || creator?.organization || reqItem?.organization || bidReq?.organization || null;
+
+    return {
+      ...auction,
+      buyerOrgName: buyerOrgName || auction.buyerOrgName || 'Verified Buyer',
+      buyerOrganizationName: buyerOrgName || auction.buyerOrganizationName || 'Verified Buyer',
+      buyerName: buyerName || auction.buyerName || buyerOrgName || 'Verified Buyer',
+      district: district || auction.district || null,
+      state: state || auction.state || null,
+      deliveryLocation: deliveryLocation || auction.deliveryLocation || null,
+      location: deliveryLocation || auction.location || null,
+      buyerOrganization: buyerOrganization || auction.buyerOrganization || null
+    };
+  });
+};
+
 router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page || 1));
@@ -1115,7 +1243,8 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
       db.auction.count({ where })
     ]);
     const withStatuses = await Promise.all(auctions.map((auction: any) => withEffectiveStatus(auction)));
-    return apiResponse.success(res, { auctions: maskSensitive(withStatuses), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+    const enriched = await enrichAuctions(withStatuses);
+    return apiResponse.success(res, { auctions: maskSensitive(enriched), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (error: any) {
     return apiResponse.error(res, 500, 'Unable to load reverse auctions', 'REVERSE_AUCTION_LIST_ERROR');
   }
@@ -1812,8 +1941,8 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
     const auctionId = await resolveAuctionId(req.params.id);
     if (!auctionId) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const payload = bidSchema.parse(req.body);
-    const result = await withDistributedLock(redisKeys.lockAuction(auctionId), async () =>
-      db.$transaction(async (tx: any) => {
+    const result = await withDistributedLock(redisKeys.lockAuction(auctionId), async () => {
+      const txResult = await db.$transaction(async (tx: any) => {
         const auction = await tx.auction.findUnique({ where: { id: auctionId } });
         if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
         // Both reverse-auction methods now run a pre-bid qualification stage, so only
@@ -1897,10 +2026,13 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
             extensionCount: shouldExtend ? { increment: 1 } : undefined
           }
         });
-        await recalculateRanks(tx, auctionId);
         return { auction: updatedAuction, auctionBid: bid, requiredDecrement };
-      }), { ttlMs: 10_000 }
-    );
+      }, { maxWait: 10_000, timeout: 25_000 });
+
+      // Run rank recalculation within the distributed lock
+      await recalculateRanks(db, auctionId);
+      return txResult;
+    }, { ttlMs: 30_000 });
     await writeAuctionEvent(req, auctionId, 'bid_submitted', 'Seller submitted reverse auction bid', { amount: payload.amount });
 
     try {
@@ -1937,10 +2069,16 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
 
     return apiResponse.created(res, maskSensitive(result), 'Bid submitted');
   } catch (error: any) {
+    logger.error({ err: error, rawId: req.params.id }, '[ReverseAuction] Bid submission failure');
+    const isDbError = Boolean(error.code?.startsWith?.('P') || String(error.message || '').includes('Transaction') || String(error.message || '').includes('invocation'));
+    const userMessage = isDbError
+      ? 'The bidding server experienced a momentary transaction delay. Please retry submitting your bid.'
+      : (error.message || 'Unable to submit bid');
+
     return apiResponse.error(
       res,
-      error.statusCode || 400,
-      error.message || 'Unable to submit bid',
+      error.statusCode || (isDbError ? 503 : 400),
+      userMessage,
       error.code || 'REVERSE_AUCTION_BID_ERROR',
       error.details
     );
@@ -2074,26 +2212,10 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
 
-    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
-    const ranking = participants.map((p: any, index: number) => {
-      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
-                   (req.user?.id && p.sellerUserId === req.user.id);
-      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
-      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
-
-      const isAwarded = Boolean(
-        (auction.winnerSellerId && (p.sellerUserId === auction.winnerSellerId || p.sellerOrgId === auction.winnerSellerId)) ||
-        p.status === 'ACCEPTED' ||
-        p.status === 'AWARDED'
-      );
-
-      return {
-        ...p,
-        sellerOrgName: displayName,
-        isCurrentViewer: Boolean(isMe),
-        isAwarded
-      };
-    });
+    // Identify winning participant if awarded or offered
+    const winningParticipant = auction.winnerSellerId
+      ? participants.find((p: any) => p.sellerUserId === auction.winnerSellerId || p.sellerOrgId === auction.winnerSellerId)
+      : participants.find((p: any) => p.currentRank === 1) || (participants.length > 0 ? participants[0] : null);
 
     // Also fetch associated Purchase Order if generated
     const purchaseOrder = await db.purchaseOrder.findFirst({
@@ -2105,6 +2227,7 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
         id: true,
         poNumber: true,
         status: true,
+        poStatus: true,
         totalValue: true,
         currency: true,
         createdAt: true,
@@ -2113,11 +2236,60 @@ router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.vi
       orderBy: { createdAt: 'desc' }
     });
 
+    const isAwardOffered = ['AWARD_OFFERED', 'AWARD_RECOMMENDED'].includes(auction.status) ||
+                          (auction.statusEnum === 'AWARD_RECOMMENDED' && Boolean(auction.winnerSellerId));
+
+    const isAwardAccepted = auction.status === 'AWARD_ACCEPTED' ||
+                           Boolean(winningParticipant && winningParticipant.status === 'ACCEPTED' && winningParticipant.acceptedAt) ||
+                           Boolean(purchaseOrder);
+
+    const isWinningSeller = Boolean(
+      req.user &&
+      winningParticipant &&
+      ((req.user.organizationId && winningParticipant.sellerOrgId === req.user.organizationId) ||
+       (req.user.id && winningParticipant.sellerUserId === req.user.id) ||
+       (auction.winnerSellerId && (req.user.id === auction.winnerSellerId || (req.user.organizationId && winningParticipant.sellerOrgId === req.user.organizationId))))
+    );
+
+    const canAcceptAward = isWinningSeller && isAwardOffered && !isAwardAccepted;
+    const canGeneratePo = isManager && isAwardAccepted && !purchaseOrder;
+    const canOfferAward = isManager && !isAwardOffered && !isAwardAccepted && !purchaseOrder && ['CLOSED', 'COMPLETED', 'FINALIZED'].includes(auction.status || auction.statusEnum);
+
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const ranking = participants.map((p: any, index: number) => {
+      const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
+                   (req.user?.id && p.sellerUserId === req.user.id);
+      const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+
+      const isWinner = Boolean(winningParticipant && winningParticipant.id === p.id);
+      const isAwardOfferedToP = isWinner && isAwardOffered;
+      const isAwardAcceptedByP = isWinner && isAwardAccepted;
+      const isAwarded = isWinner && Boolean(purchaseOrder || auction.statusEnum === 'AWARDED');
+
+      return {
+        ...p,
+        sellerOrgName: displayName,
+        isCurrentViewer: Boolean(isMe),
+        isWinner,
+        isAwardOffered: isAwardOfferedToP,
+        isAwardAccepted: isAwardAcceptedByP,
+        isAwarded
+      };
+    });
+
     return apiResponse.success(res, {
       auction: maskSensitive(auction),
       ranking: maskSensitive(ranking),
       purchaseOrder: purchaseOrder ? maskSensitive(purchaseOrder) : null,
       canRecommendAward: isManager,
+      canOfferAward,
+      canAcceptAward,
+      canGeneratePo,
+      isAwardOffered,
+      isAwardAccepted,
+      isWinningSeller,
+      winningParticipant: winningParticipant ? maskSensitive(winningParticipant) : null,
       isManager,
       myParticipant: maskSensitive(myParticipant)
     });
@@ -2157,7 +2329,7 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
     const updated = await db.auction.update({
       where: { id },
       data: {
-        status: 'AWARD_RECOMMENDED',
+        status: 'AWARD_OFFERED',
         statusEnum: 'AWARD_RECOMMENDED',
         winnerSellerId: sellerUserId,
         overrideReason: isNonL1 ? (payload.remarks || 'Discretionary award recommendation') : null,
@@ -2165,23 +2337,297 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
       }
     });
 
-    await db.auctionParticipant.update({
+    // If linked to a procurementBid, issue the formal bid award offer
+    if (auction.linkedBidId) {
+      const bidParticipation = await db.procurementBidParticipation.findFirst({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            { sellerId: sellerUserId },
+            ...(winner.sellerOrgId ? [{ organizationId: winner.sellerOrgId }] : [])
+          ]
+        }
+      });
+      const awardAmount = Number(winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice || 0);
+      if (bidParticipation) {
+        const existingAward = await db.procurementBidAward.findFirst({
+          where: { bidId: auction.linkedBidId, participationId: bidParticipation.id }
+        });
+        if (existingAward) {
+          await db.procurementBidAward.update({
+            where: { id: existingAward.id },
+            data: {
+              awardStatus: 'OFFERED',
+              awardedAmount: awardAmount,
+              originalBidAmount: awardAmount,
+              justificationReason: isNonL1 ? payload.remarks : null,
+              remarks: payload.remarks || 'Award offered from Reverse Auction outcome',
+              awardedAt: new Date()
+            }
+          }).catch(() => null);
+        } else {
+          await db.procurementBidAward.create({
+            data: {
+              bidId: auction.linkedBidId,
+              participationId: bidParticipation.id,
+              sellerId: sellerUserId,
+              awardedAmount: awardAmount,
+              originalBidAmount: awardAmount,
+              justificationReason: isNonL1 ? payload.remarks : null,
+              awardStatus: 'OFFERED',
+              awardedById: req.user!.id,
+              remarks: payload.remarks || 'Award offered from Reverse Auction outcome',
+              awardedAt: new Date()
+            }
+          }).catch(() => null);
+        }
+        await db.procurementBidParticipation.update({
+          where: { id: bidParticipation.id },
+          data: { finalStatus: 'AWARD_OFFERED' }
+        }).catch(() => null);
+      }
+      await db.procurementBid.update({
+        where: { id: auction.linkedBidId },
+        data: {
+          status: 'AWARD_OFFERED',
+          lifecycleStage: 'AWARD_RECOMMENDED'
+        }
+      }).catch(() => null);
+    }
+
+    await writeAuctionEvent(req, id, 'award_offered', `Contract award offer issued for participant #${winner.id} (Rank L${winner.currentRank || 1})`, {
+      participantId: winner.id,
+      sellerOrgId: winner.sellerOrgId,
+      sellerUserId,
+      isNonL1,
+      overrideReason: isNonL1 ? payload.remarks : null
+    });
+
+    await notificationService.notifyUser(sellerUserId, {
+      title: 'Contract Award Offer Received',
+      message: `You have been offered the contract award for Reverse Auction "${auction.title || auction.auctionCode || ('RA-' + auction.id)}". Please review and formally accept the award.`,
+      type: 'bid_awarded',
+      redirectUrl: `/seller/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
+    }).catch(() => undefined);
+
+    return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award offer successfully issued to supplier');
+  } catch (error: any) {
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to recommend award', error.code || 'REVERSE_AUCTION_AWARD_ERROR');
+  }
+});
+
+router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    const auction = await db.auction.findUnique({ where: { id } });
+    if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+
+    // Find the participant intended for award
+    const winner = await db.auctionParticipant.findFirst({
+      where: {
+        auctionId: id,
+        OR: [
+          ...(auction.winnerSellerId ? [{ sellerUserId: auction.winnerSellerId }, { sellerOrgId: auction.winnerSellerId }] : []),
+          { currentRank: 1 }
+        ]
+      }
+    });
+
+    if (!winner) {
+      throw new ApiError(404, 'Awarded participant not found for this auction', 'WINNER_NOT_FOUND');
+    }
+
+    const isWinningSeller = Boolean(
+      req.user && (
+        req.user.role === 'admin' ||
+        (auction.winnerSellerId && req.user.id === auction.winnerSellerId) ||
+        (winner.sellerUserId && req.user.id === winner.sellerUserId) ||
+        (winner.sellerOrgId && req.user.organizationId === winner.sellerOrgId)
+      )
+    );
+
+    if (!isWinningSeller) {
+      throw new ApiError(403, 'Only the awarded supplier organization can formally accept this award offer', 'FORBIDDEN_AWARD_ACCEPTANCE');
+    }
+
+    // Idempotent check: if already accepted
+    if (auction.status === 'AWARD_ACCEPTED' || winner.status === 'ACCEPTED') {
+      return apiResponse.success(res, { auction: maskSensitive(auction), winner: maskSensitive(winner) }, 200, 'Award offer has already been accepted');
+    }
+
+    // Update auction status
+    const updatedAuction = await db.auction.update({
+      where: { id },
+      data: {
+        status: 'AWARD_ACCEPTED'
+      }
+    });
+
+    const updatedWinner = await db.auctionParticipant.update({
       where: { id: winner.id },
       data: {
         status: 'ACCEPTED',
         acceptedAt: new Date()
       }
-    }).catch(() => null);
+    });
 
-    await writeAuctionEvent(req, id, 'award_recommended', `Award recommendation generated for participant #${winner.id} (Rank L${winner.currentRank || 1})`, {
+    // If linked to bid, update procurementBid and award records
+    if (auction.linkedBidId) {
+      await db.procurementBid.update({
+        where: { id: auction.linkedBidId },
+        data: { status: 'AWARD_ACCEPTED' }
+      }).catch(() => null);
+
+      const bidAward = await db.procurementBidAward.findFirst({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            { sellerId: winner.sellerUserId || auction.winnerSellerId || 0 },
+            ...(winner.sellerOrgId ? [{ participation: { organizationId: winner.sellerOrgId } }] : [])
+          ]
+        }
+      });
+
+      if (bidAward) {
+        await db.procurementBidAward.update({
+          where: { id: bidAward.id },
+          data: { awardStatus: 'ACCEPTED', awardedAt: new Date() }
+        }).catch(() => null);
+
+        if (bidAward.participationId) {
+          await db.procurementBidParticipation.update({
+            where: { id: bidAward.participationId },
+            data: { finalStatus: 'AWARD_ACCEPTED' }
+          }).catch(() => null);
+        }
+      }
+    }
+
+    await writeAuctionEvent(req, id, 'award_accepted', `Contract award offer accepted by supplier organization #${winner.sellerOrgId || winner.sellerUserId}`, {
       participantId: winner.id,
       sellerOrgId: winner.sellerOrgId,
-      isNonL1,
-      overrideReason: isNonL1 ? payload.remarks : null
+      sellerUserId: winner.sellerUserId
     });
-    return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award recommendation generated');
+
+    // Notify buyer
+    const buyerUserId = auction.createdByUserId;
+    if (buyerUserId) {
+      await notificationService.notifyUser(buyerUserId, {
+        title: 'Award Offer Formally Accepted',
+        message: `Supplier has formally accepted your contract award offer for Reverse Auction "${auction.title || auction.auctionCode || ('RA-' + auction.id)}". You may now generate the official Purchase Order.`,
+        type: 'award_accepted',
+        redirectUrl: `/buyer/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
+      }).catch(() => undefined);
+    }
+
+    return apiResponse.success(res, {
+      auction: maskSensitive(updatedAuction),
+      winner: maskSensitive(updatedWinner)
+    }, 200, 'Contract award offer formally accepted');
   } catch (error: any) {
-    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to recommend award', error.code || 'REVERSE_AUCTION_AWARD_ERROR');
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to accept award offer', error.code || 'REVERSE_AUCTION_ACCEPT_AWARD_ERROR');
+  }
+});
+
+router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = await resolveAuctionId(req.params.id);
+    if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+    const auction = await db.auction.findUnique({ where: { id } });
+    if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
+
+    const schema = z.object({
+      reason: z.string().trim().max(1000).optional()
+    });
+    const payload = schema.parse(req.body);
+
+    const winner = await db.auctionParticipant.findFirst({
+      where: {
+        auctionId: id,
+        OR: [
+          ...(auction.winnerSellerId ? [{ sellerUserId: auction.winnerSellerId }, { sellerOrgId: auction.winnerSellerId }] : []),
+          { currentRank: 1 }
+        ]
+      }
+    });
+
+    const isWinningSeller = Boolean(
+      req.user && (
+        req.user.role === 'admin' ||
+        (auction.winnerSellerId && req.user.id === auction.winnerSellerId) ||
+        (winner && (
+          (winner.sellerUserId && req.user.id === winner.sellerUserId) ||
+          (winner.sellerOrgId && req.user.organizationId === winner.sellerOrgId)
+        ))
+      )
+    );
+
+    if (!isWinningSeller) {
+      throw new ApiError(403, 'Only the awarded supplier can decline this award offer', 'FORBIDDEN_AWARD_DECLINE');
+    }
+
+    // Reset auction award state to CLOSED so buyer can award another bidder
+    const updatedAuction = await db.auction.update({
+      where: { id },
+      data: {
+        status: 'CLOSED',
+        statusEnum: 'CLOSED',
+        winnerSellerId: null,
+        remarks: payload.reason ? `Award declined: ${payload.reason}` : 'Award offer declined by supplier'
+      }
+    });
+
+    if (winner) {
+      await db.auctionParticipant.update({
+        where: { id: winner.id },
+        data: {
+          status: 'DECLINED',
+          disqualificationReason: payload.reason || 'Award declined by supplier'
+        }
+      });
+    }
+
+    if (auction.linkedBidId) {
+      const bidAward = await db.procurementBidAward.findFirst({
+        where: {
+          bidId: auction.linkedBidId,
+          sellerId: winner?.sellerUserId || auction.winnerSellerId || 0
+        }
+      });
+      if (bidAward) {
+        await db.procurementBidAward.update({
+          where: { id: bidAward.id },
+          data: {
+            awardStatus: 'DECLINED',
+            remarks: payload.reason || 'Award declined by supplier'
+          }
+        }).catch(() => null);
+      }
+      await db.procurementBid.update({
+        where: { id: auction.linkedBidId },
+        data: { status: 'L1_GENERATED', lifecycleStage: 'EVALUATION' }
+      }).catch(() => null);
+    }
+
+    await writeAuctionEvent(req, id, 'award_declined', `Award offer declined by supplier: ${payload.reason || 'No reason provided'}`, {
+      participantId: winner?.id,
+      reason: payload.reason
+    });
+
+    const buyerUserId = auction.createdByUserId;
+    if (buyerUserId) {
+      await notificationService.notifyUser(buyerUserId, {
+        title: 'Award Offer Declined',
+        message: `Supplier declined the award offer for Reverse Auction "${auction.title || auction.auctionCode || ('RA-' + auction.id)}". Reason: ${payload.reason || 'N/A'}. You may award another qualifying bidder.`,
+        type: 'award_declined',
+        redirectUrl: `/buyer/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
+      }).catch(() => undefined);
+    }
+
+    return apiResponse.success(res, { auction: maskSensitive(updatedAuction) }, 200, 'Award offer declined');
+  } catch (error: any) {
+    return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to decline award offer', error.code || 'REVERSE_AUCTION_DECLINE_AWARD_ERROR');
   }
 });
 
@@ -2239,6 +2685,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
         totalValue: Number(winningAmount),
         currency: auction.currency || 'INR',
         status: 'generated',
+        poStatus: 'ISSUED',
         sourceType: 'auction',
         sourceId: auction.id,
         metadata: {
@@ -2298,13 +2745,13 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       }
     }).catch(() => null);
 
-    // If linked to a procurementBid, mark it as awarded
+    // If linked to a procurementBid, mark it as PO_GENERATED / AWARDED
     if (auction.linkedBidId) {
       await db.procurementBid.update({
         where: { id: auction.linkedBidId },
         data: {
-          status: 'AWARDED',
-          lifecycleStage: 'AWARDED'
+          status: 'PO_GENERATED',
+          lifecycleStage: 'PO_ISSUED'
         }
       }).catch(() => null);
     }
@@ -2318,6 +2765,13 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       isNonL1,
       overrideReason: isNonL1 ? payload.remarks : null
     });
+
+    await notificationService.notifyUser(sellerUserId, {
+      title: 'Purchase Order Issued',
+      message: `Official Purchase Order #${po.poNumber} has been issued for Reverse Auction "${auction.title || auction.auctionCode}". Please accept the PO to commit to fulfillment.`,
+      type: 'purchase_order',
+      redirectUrl: `/seller/orders?orderId=${po.id}`
+    }).catch(() => undefined);
 
     return apiResponse.created(res, {
       success: true,

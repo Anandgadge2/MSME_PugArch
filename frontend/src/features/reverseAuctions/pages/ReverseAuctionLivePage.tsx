@@ -185,9 +185,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       invalidate();
     },
     onError: (err: any) => {
-      const errorMsg = err.message || 'Bid submission failed';
-      setLocalError(errorMsg);
-      toast.error(errorMsg);
+      const rawMsg = String(err.message || 'Bid submission failed');
+      const cleanMsg = rawMsg.includes('\n')
+        ? (rawMsg.split('\n').find(l => l.trim().length > 0 && !l.includes('Invalid') && !l.includes('invocation')) || 'Bid submission failed. Please review your amount and try again.')
+        : rawMsg;
+      setLocalError(cleanMsg);
+      toast.error(cleanMsg);
       invalidate();
       if (err?.details?.maxAllowedBid) {
         setAmount(String(err.details.maxAllowedBid));

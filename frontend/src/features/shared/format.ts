@@ -142,7 +142,18 @@ const toTitleCase = (s: string): string => {
 export const formatCleanLocation = (raw?: string | null): string => {
   if (!raw) return '';
   let str = String(raw).trim();
-  if (!str || str === '—' || str.toLowerCase() === 'location not specified') return '';
+  const lower = str.toLowerCase();
+  if (
+    !str ||
+    str === '—' ||
+    lower === 'location not specified' ||
+    lower.includes('agreed sla') ||
+    lower.includes('delivery within agreed') ||
+    lower.includes('call-off order date') ||
+    lower.includes('as per agreed contract')
+  ) {
+    return '';
+  }
 
   // Strip prefixes like "Office Delivery Address:", "Delivery Location:", etc.
   str = str.replace(/^(?:Office\s+(?:Delivery\s+)?Address|Delivery\s+Location|Delivery\s+Address|Consignee\s+Location|Address)\s*:\s*/i, '');

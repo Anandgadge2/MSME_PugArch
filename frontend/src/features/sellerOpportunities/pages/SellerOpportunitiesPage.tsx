@@ -640,7 +640,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const buyerA = existing.buyer || '';
           const buyerB = opportunity.buyer || '';
-          const isGenericBuyer = (b: string) => !b || b === 'Verified Buyer' || b === 'Buyer organization';
+          const isGenericBuyer = (b: string) => !b || b.trim().toLowerCase() === 'verified buyer' || b.trim().toLowerCase() === 'buyer organization' || b.trim().toLowerCase() === 'buyer details controlled';
           const bestBuyer = isGenericBuyer(buyerA) && !isGenericBuyer(buyerB) ? buyerB : (isGenericBuyer(buyerB) ? buyerA : buyerB);
 
           const categoryA = existing.category || '';
@@ -650,7 +650,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const locA = existing.location || '';
           const locB = opportunity.location || '';
-          const isGenericLoc = (l: string) => !l || l.includes('Location not specified') || l.includes('Delivery within agreed SLA');
+          const isGenericLoc = (l: string) => !l || l.toLowerCase().includes('not specified') || l.toLowerCase().includes('agreed sla') || l.toLowerCase().includes('delivery within') || l.toLowerCase().includes('call-off');
           const bestLoc = isGenericLoc(locA) && !isGenericLoc(locB) ? locB : locA;
 
           const valA = existing.estimatedValue || 0;
@@ -862,7 +862,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           id: `bid-${bid.id}`,
           type: opportunityType,
           title: bid.title || bid.itemName || 'Procurement opportunity',
-          buyer: bid.buyerName,
+          buyer: bid.buyerOrganizationName || bid.buyerOrganization?.organizationName || bid.buyerName || bid.organization?.organizationName || 'Verified Buyer',
           category: bid.category,
           location: bid.location || bid.deliveryLocation || [bid.district, bid.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: effectiveClosingDate,
@@ -1142,9 +1142,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           id: `ra-${auction.id}`,
           type: 'Reverse Auction',
           title: resolvedTitle,
-          buyer: auction.buyerOrgName || auction.buyerName || 'Verified Buyer',
-          category: 'Negotiate Price',
-          location: auction.location || auction.deliveryLocation || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
+          buyer: auction.buyerOrganizationName || auction.buyerOrgName || auction.buyerOrganization?.organizationName || auction.buyerName || auction.buyerUser?.name || 'Verified Buyer',
+          category: auction.category || 'Negotiate Price',
+          location: auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: auction.endTime,
           estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
           discloseEstimatedCost: Boolean(auction.discloseEstimatedCost ?? true),
@@ -1192,9 +1192,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const refNo = formatRefId('RC', rc.id, rawRef);
 
         const reqTitle = meta.requirementTitle || meta.basics?.title || meta.contractTitle || meta.title || rc.title;
-        const buyerName = meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || rc.buyerOrganizationName || 'Verified Buyer';
+        const buyerName = rc.buyerOrganizationName || rc.buyerOrgName || rc.buyerOrganization?.organizationName || rc.buyerName || rc.buyerUser?.name || meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || 'Verified Buyer';
         const catName = meta.contractCategory || meta.category || 'Facility Management & Canteen Services';
         const rawVal = toNumber(meta.estimatedValue || meta.budgetMax || (toNumber(rc.value) > 50000000 ? 1000000 : rc.value));
+
+        const rawRcLoc = rc.deliveryLocation || rc.location || [rc.district, rc.state].filter(Boolean).join(', ') || meta.deliveryLocation || [meta.district, meta.state].filter(Boolean).join(', ') || [meta.city, meta.state].filter(Boolean).join(', ');
+        const isRcLocSla = typeof rawRcLoc === 'string' && (rawRcLoc.toLowerCase().includes('sla') || rawRcLoc.toLowerCase().includes('agreed') || rawRcLoc.toLowerCase().includes('call-off'));
+        const resolvedRcLoc = !isRcLocSla && rawRcLoc ? rawRcLoc : ([rc.district || meta.district, rc.state || meta.state].filter(Boolean).join(', ') || 'Location not specified');
 
         const opportunity: SellerOpportunity = {
           id: `rc-${rc.id}`,
@@ -1202,7 +1206,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: reqTitle && reqTitle.length > 5 ? reqTitle : (rc.title || 'Rate Contract Opportunity'),
           buyer: buyerName,
           category: catName,
-          location: meta.deliveryLocation || meta.deliverySla || [meta.district, meta.state].filter(Boolean).join(', ') || 'Location not specified',
+          location: resolvedRcLoc,
           closingDate: rc.endDate || meta.periodEndDate,
           estimatedValue: rawVal,
           discloseEstimatedCost: Boolean(rc.discloseEstimatedCost ?? meta.discloseEstimatedCost ?? meta.basics?.discloseEstimatedCost ?? false),
@@ -1223,7 +1227,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
           responseCount: Number(rc.participantsCount || rc.responsesCount || 0),
           buyerType: meta.buyerType || meta.buyerOrganizationType || undefined,
-          deliveryLocation: meta.deliverySla,
+          deliveryLocation: !isRcLocSla && rawRcLoc ? rawRcLoc : undefined,
           procurementType: 'RATE_CONTRACT',
           documentsCount: meta.contractDocument ? 1 : 0,
           terms: meta.penaltyClause ? [meta.penaltyClause] : [],
