@@ -22,6 +22,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "react-router-dom": [
+        "./src/lib/next-router-dom.tsx"
       ]
     },
     "allowJs": true,

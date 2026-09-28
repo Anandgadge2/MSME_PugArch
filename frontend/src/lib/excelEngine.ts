@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs';
 import { formatDateTime } from '../features/shared/format';
 
 /**
@@ -48,6 +47,7 @@ const getStatusColor = (status: string) => {
 
 export class ExcelEngine {
   public async generate(config: ExcelDocumentConfig): Promise<Blob> {
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'JSG SMILE MSME Procurement';
     workbook.created = new Date();

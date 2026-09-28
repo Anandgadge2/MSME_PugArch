@@ -77,7 +77,6 @@ import {
 import { api, BASE_URL, readJsonResponse, unwrapApiData } from '../../../lib/api';
 import { authHeaders, unwrap } from '../../shared/apiClient';
 import { downloadCsv } from '../../shared/exportUtils';
-import ExcelJS from 'exceljs';
 import { fetchDeliveryAddresses, createDeliveryAddress, type DeliveryAddressDto } from '../../directPurchase/api';
 import { cleanDeliveryAddress } from '../../shared/format';
 import { useActiveCart } from '../../cart/hooks';
@@ -461,6 +460,7 @@ const readSpreadsheetRows = async (file: File): Promise<string[][]> => {
   const isExcel = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls');
 
   if (isExcel) {
+    const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     const arrayBuffer = await file.arrayBuffer();
     await workbook.xlsx.load(arrayBuffer);
@@ -4813,6 +4813,7 @@ function ItemsDetailsForm({
 
   const handleDownloadItemTemplate = async () => {
     try {
+      const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
       workbook.creator = 'MSME Procurement Portal';
       workbook.created = new Date();

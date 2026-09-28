@@ -25,10 +25,12 @@ async function findAvailablePort(startPort = 3000, maxAttempts = 30) {
 
 async function main() {
   const port = await findAvailablePort(3000);
-  console.log(`[Next.js] Assigned port :${port} -> Launching dev server...`);
+  const useTurbo = process.env.TURBO !== 'false';
+  const turboArg = useTurbo ? '--turbo ' : '';
+  console.log(`[Next.js] Assigned port :${port} -> Launching dev server${useTurbo ? ' (Turbopack ⚡)' : ''}...`);
 
   try {
-    execSync(`npx next dev -p ${port}`, {
+    execSync(`npx next dev ${turboArg}-p ${port}`, {
       stdio: 'inherit',
       cwd: process.cwd(),
       env: { ...process.env, PORT: String(port) }

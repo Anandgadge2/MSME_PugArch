@@ -45,7 +45,15 @@ const getBackendUrl = (): string => {
 const nextConfig: NextConfig = {
   transpilePackages: ["lucide-react"],
   experimental: {
-    optimizePackageImports: ["lucide-react"],
+    optimizePackageImports: [
+      "lucide-react",
+      "recharts",
+      "motion",
+      "clsx",
+      "tailwind-merge",
+      "sonner",
+      "@tanstack/react-query",
+    ],
   },
   // The portal does not use next/image. Keep the server-side libvips/sharp
   // optimization endpoint disabled until the patched sharp line is supported

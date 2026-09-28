@@ -13,13 +13,23 @@ export function DevelopmentAgentation() {
 
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
+    if (typeof window !== 'undefined' && sessionStorage.getItem('agentation_unavailable') === 'true') {
+      return;
+    }
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 200);
 
     fetch('http://localhost:4747/health', { signal: controller.signal })
       .then((response) => setReady(response.ok))
-      .catch(() => setReady(false))
+      .catch(() => {
+        setReady(false);
+        try {
+          sessionStorage.setItem('agentation_unavailable', 'true');
+        } catch {
+          // ignore
+        }
+      })
       .finally(() => window.clearTimeout(timer));
 
     return () => {
