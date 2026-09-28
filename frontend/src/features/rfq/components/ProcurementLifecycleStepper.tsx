@@ -56,6 +56,16 @@ export interface ProcurementLifecycleStepperProps {
   onNavigateDelivery?: () => void;
   onNavigateInvoice?: (invoice?: any) => void;
   onNavigateSettlement?: () => void;
+
+  /** In-page dialog trigger callbacks (replacing router.push redirects) */
+  onOpenPackDialog?: () => void;
+  onOpenDispatchDialog?: () => void;
+  onOpenGrnCreate?: () => void;
+  onOpenCreateInvoice?: (invoiceData?: any) => void;
+  onOpenPaymentModal?: (order?: any) => void;
+  onOpenSettlementModal?: (order?: any) => void;
+  onOpenViewPaymentProof?: (order?: any) => void;
+  fulfillmentPhase?: string;
 }
 
 export const LIFECYCLE_STAGES: StageConfig[] = [
@@ -90,9 +100,9 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     id: 4,
     name: 'Invoicing',
     shortName: 'Invoicing',
-    description: 'GRN-Gated Tax Invoicing',
+    description: 'Tax Invoicing to Accompany Shipment',
     buyerHint: 'Review and approve verified tax invoice',
-    sellerHint: 'Create tax invoice capped to accepted GRN',
+    sellerHint: 'Generate tax invoice to accompany delivery shipment',
     icon: FileText
   },
   {
@@ -100,8 +110,8 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
     name: 'Settlement',
     shortName: 'Settlement',
     description: 'Bank Payment & Contract Close',
-    buyerHint: 'Record UTR transfer & upload bank slip',
-    sellerHint: 'Verify funds receipt & close order',
+    buyerHint: 'Pay online or record UTR & upload payment proof',
+    sellerHint: 'Review payment proof & confirm order settlement',
     icon: ShieldCheck
   }
 ];
@@ -235,7 +245,15 @@ export function ProcurementLifecycleStepper({
   onViewPO,
   onNavigateDelivery,
   onNavigateInvoice,
-  onNavigateSettlement
+  onNavigateSettlement,
+  onOpenPackDialog,
+  onOpenDispatchDialog,
+  onOpenGrnCreate,
+  onOpenCreateInvoice,
+  onOpenPaymentModal,
+  onOpenSettlementModal,
+  onOpenViewPaymentProof,
+  fulfillmentPhase
 }: ProcurementLifecycleStepperProps) {
   const router = useRouter();
 
@@ -355,41 +373,89 @@ export function ProcurementLifecycleStepper({
           Boolean(hasApprovedGrn)
         );
 
-        if (isDeliveryPhase) {
-          const grnApproved = Boolean(hasApprovedGrn) || poStatus === 'grn_approved' || poStatus === 'grn_completed';
-          return {
-            hasAction: true,
-            actionLabel: isBuyer
-              ? (grnApproved ? 'GRN Approved' : 'Inspect GRN')
-              : (grnApproved ? 'View GRN' : 'Track Dispatch'),
-            actionHint: 'View delivery dispatch / GRN inspection details',
-            onClick: () => {
-              if (onNavigateDelivery) onNavigateDelivery();
-              else {
-                const grn = effectiveActiveOrder?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED') ||
-                            effectiveActiveOrder?.grns?.[0] ||
-                            effectiveActiveOrder?.grn;
-                const grnId = grn?.id || effectiveActiveOrder?.grnId;
-                if (grnApproved && grnId) {
-                  router.push(`/grn/${grnId}`);
-                } else {
-                  const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
-                  router.push(isBuyer ? `/buyer/grn${searchQ}` : `/seller/delivery-management${searchQ}`);
-                }
-              }
-            },
-            isPrimary: currentStageId === 3
-          };
-        } else {
+        if (!isDeliveryPhase) {
           return {
             hasAction: false,
             idleStatusText: 'Pending Acceptance'
           };
         }
+
+        const grnApproved = Boolean(hasApprovedGrn) || poStatus === 'grn_approved' || poStatus === 'grn_completed';
+
+        if (!isBuyer) {
+          // SELLER
+          if (fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK' || (!poStatus.includes('dispatch') && !poStatus.includes('delivered') && !grnApproved)) {
+            return {
+              hasAction: true,
+              actionLabel: '📦 Pack Order',
+              actionHint: 'Open packing console to record package dimensions',
+              onClick: () => {
+                if (onOpenPackDialog) onOpenPackDialog();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: true
+            };
+          }
+          if (fulfillmentPhase === 'PACKED') {
+            return {
+              hasAction: true,
+              actionLabel: '🚚 Enter Dispatch',
+              actionHint: 'Enter carrier, tracking LR/AWB, and vehicle details',
+              onClick: () => {
+                if (onOpenDispatchDialog) onOpenDispatchDialog();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: true
+            };
+          }
+          return {
+            hasAction: true,
+            actionLabel: grnApproved ? 'View GRN' : '📍 Track Dispatch',
+            actionHint: 'View carrier dispatch tracking & delivery milestones',
+            onClick: () => {
+              if (onOpenDispatchDialog) onOpenDispatchDialog();
+              else if (onNavigateDelivery) onNavigateDelivery();
+            },
+            isPrimary: false
+          };
+        } else {
+          // BUYER
+          if (grnApproved) {
+            return {
+              hasAction: true,
+              actionLabel: 'GRN Approved ✓',
+              actionHint: 'Goods receipt verified and approved',
+              onClick: onNavigateDelivery,
+              isPrimary: false
+            };
+          }
+          if (fulfillmentPhase === 'DELIVERED_PENDING_GRN' || poStatus === 'delivered') {
+            return {
+              hasAction: true,
+              actionLabel: '📋 Inspect & Create GRN',
+              actionHint: 'Inspect delivered items and create formal GRN',
+              onClick: () => {
+                if (onOpenGrnCreate) onOpenGrnCreate();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: true
+            };
+          }
+          return {
+            hasAction: true,
+            actionLabel: '🚚 Track Shipment',
+            actionHint: 'View carrier dispatch tracking details',
+            onClick: () => {
+              if (onOpenDispatchDialog) onOpenDispatchDialog();
+              else if (onNavigateDelivery) onNavigateDelivery();
+            },
+            isPrimary: false
+          };
+        }
       }
 
       case 4: {
-        // Stage 4: Invoicing
+        // Stage 4: Invoicing (Can be generated post PO acceptance to accompany delivery)
         const allInvoicesList = [
           ...(Array.isArray(invoices) ? invoices : []),
           ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : [])
@@ -402,7 +468,7 @@ export function ProcurementLifecycleStepper({
           const invNo = validInvoice.invoiceNumber || validInvoice.id;
           return {
             hasAction: true,
-            actionLabel: invNo ? `Inv #${invNo}` : 'View Invoice',
+            actionLabel: invNo ? `Inv #${invNo}` : 'View Tax Invoice',
             actionHint: 'Open invoice details dialog',
             onClick: () => {
               if (onNavigateInvoice) onNavigateInvoice(validInvoice);
@@ -416,26 +482,29 @@ export function ProcurementLifecycleStepper({
         } else if (
           !isBuyer &&
           effectiveActiveOrder &&
-          currentStageId >= 3 &&
+          currentStageId >= 2 &&
           ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'grn_approved', 'grn_completed'].includes(
             String(effectiveActiveOrder.status || effectiveActiveOrder.poStatus || '').toLowerCase()
           )
         ) {
-          const amtVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
           return {
             hasAction: true,
-            actionLabel: '⚡ Create Invoice',
-            actionHint: 'Create tax invoice pre-filled from this Purchase Order',
+            actionLabel: '🧾 Create Tax Invoice',
+            actionHint: 'Generate tax invoice to accompany delivery shipment',
             onClick: () => {
-              if (onNavigateInvoice) onNavigateInvoice();
-              else router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amtVal}`);
+              if (onOpenCreateInvoice) onOpenCreateInvoice();
+              else if (onNavigateInvoice) onNavigateInvoice();
+              else {
+                const amtVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+                router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amtVal}`);
+              }
             },
             isPrimary: true
           };
         } else {
           return {
             hasAction: false,
-            idleStatusText: 'GRN Required'
+            idleStatusText: isBuyer ? 'Awaiting Invoice' : 'PO Required'
           };
         }
       }
@@ -454,35 +523,80 @@ export function ProcurementLifecycleStepper({
         });
         const hasPaymentSub = allInvoicesList.some(inv => {
           const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
-          return s === 'PAYMENT_SUBMITTED' || Boolean(inv.paymentReference);
-        });
+          return s === 'PAYMENT_SUBMITTED' || Boolean(inv.paymentReference) || Boolean(inv.paymentSlipFileId);
+        }) || Boolean(effectiveActiveOrder?.paymentSlipFileId) || Boolean((effectiveActiveOrder as any)?.paymentProof);
 
-        const isSettlementActive =
+        const isSettled =
           statusUpper === 'COMPLETED' ||
-          statusUpper === 'PAYMENT_COMPLETED' ||
           poStatusUpper === 'COMPLETED' ||
-          poStatusUpper === 'PAID' ||
-          hasSettled ||
-          hasPaymentSub;
+          hasSettled;
 
-        if (isSettlementActive) {
+        if (isBuyer) {
+          if (isSettled) {
+            return {
+              hasAction: true,
+              actionLabel: 'Contract Settled ✓',
+              actionHint: 'Order completed and settled',
+              onClick: () => {
+                if (onOpenViewPaymentProof) onOpenViewPaymentProof(effectiveActiveOrder);
+                else if (onNavigateSettlement) onNavigateSettlement();
+              },
+              isPrimary: false
+            };
+          }
+          if (hasPaymentSub || poStatusUpper === 'PAID') {
+            return {
+              hasAction: true,
+              actionLabel: '📄 View Payment Proof',
+              actionHint: 'Payment submitted, awaiting seller settlement confirmation',
+              onClick: () => {
+                if (onOpenViewPaymentProof) onOpenViewPaymentProof(effectiveActiveOrder);
+                else if (onNavigateSettlement) onNavigateSettlement();
+              },
+              isPrimary: false
+            };
+          }
+          // Buyer can pay once GRN is approved or in settlement phase
           return {
             hasAction: true,
-            actionLabel: isBuyer ? 'Payment Ledger' : 'Settlement Status',
-            actionHint: 'View UTR transaction and bank settlement record',
+            actionLabel: '💰 Make Payment',
+            actionHint: 'Pay online or record UTR and payment proof',
             onClick: () => {
-              if (onNavigateSettlement) onNavigateSettlement();
-              else {
-                const searchQ = effectivePoNumber ? `?search=${encodeURIComponent(effectivePoNumber)}` : '';
-                router.push(isBuyer ? `/buyer/payments${searchQ}` : `/seller/invoices${searchQ}`);
-              }
+              if (onOpenPaymentModal) onOpenPaymentModal(effectiveActiveOrder);
+              else if (onNavigateSettlement) onNavigateSettlement();
             },
-            isPrimary: currentStageId === 5
+            isPrimary: true
           };
         } else {
+          // SELLER
+          if (isSettled) {
+            return {
+              hasAction: true,
+              actionLabel: 'Contract Settled ✓',
+              actionHint: 'Funds received and contract settled',
+              onClick: () => {
+                if (onOpenViewPaymentProof) onOpenViewPaymentProof(effectiveActiveOrder);
+                else if (onNavigateSettlement) onNavigateSettlement();
+              },
+              isPrimary: false
+            };
+          }
+          // STRICT GATING: Seller ONLY sees settlement actions if buyer has submitted payment!
+          if (hasPaymentSub || poStatusUpper === 'PAID') {
+            return {
+              hasAction: true,
+              actionLabel: '✅ Confirm Settlement',
+              actionHint: 'Inspect payment proof and confirm funds receipt',
+              onClick: () => {
+                if (onOpenSettlementModal) onOpenSettlementModal(effectiveActiveOrder);
+                else if (onNavigateSettlement) onNavigateSettlement();
+              },
+              isPrimary: true
+            };
+          }
           return {
             hasAction: false,
-            idleStatusText: 'Pending Payment'
+            idleStatusText: 'Awaiting Buyer Payment'
           };
         }
       }

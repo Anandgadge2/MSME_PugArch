@@ -51,6 +51,8 @@ import {
   Activity,
   Trophy,
   Target,
+  CreditCard,
+  Receipt,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -68,6 +70,16 @@ import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
 import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
 import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceRegistryModal";
+import { PackedOrderDialog } from "../../delivery/components/PackedOrderDialog";
+import { DispatchDetailsModal } from "../../delivery/components/DispatchDetailsModal";
+import { GrnCreateModal } from "../../grn/components/GrnCreateModal";
+import { CreateInvoiceModal } from "../../invoices/components/CreateInvoiceModal";
+import { RecordOrderPaymentModal } from "../../purchaseOrders/components/RecordOrderPaymentModal";
+import { ConfirmOrderSettlementModal } from "../../purchaseOrders/components/ConfirmOrderSettlementModal";
+import { PaymentReceiptViewModal } from "../../payments/components/PaymentReceiptViewModal";
+import { useDeliveryByPO } from "../../delivery/hooks";
+import { ensureDeliveryForPurchaseOrder } from "../../delivery/api";
+import { postApi } from "../../shared/apiClient";
 import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
@@ -4290,6 +4302,170 @@ export function ProcurementDetailUnifiedView(
     return "Awaiting Supplier Acceptance & Commitment";
   }, [rawOrderStatus, isPOAccepted]);
 
+  // Delivery Data Hook
+  const deliveryQuery = useDeliveryByPO(effectiveActiveOrder?.id);
+  const delivery = deliveryQuery.data;
+  const deliveryStatus = String(delivery?.status || '').toUpperCase();
+
+  // In-Page Lifecycle Dialog States
+  const [isPackDialogOpen, setIsPackDialogOpen] = useState(false);
+  const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
+  const [isGrnCreateOpen, setIsGrnCreateOpen] = useState(false);
+  const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [createInvoiceError, setCreateInvoiceError] = useState<string | null>(null);
+  const [invoiceAmount, setInvoiceAmount] = useState<string>('');
+  const [invoiceGstRate, setInvoiceGstRate] = useState<string>('18');
+  const [invoiceTdsRate, setInvoiceTdsRate] = useState<string>('0');
+  const [invoiceOtherTax, setInvoiceOtherTax] = useState<string>('0');
+  const [invoiceInterstate, setInvoiceInterstate] = useState<boolean>(false);
+
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isConfirmSettlementOpen, setIsConfirmSettlementOpen] = useState(false);
+  const [isViewPaymentProofOpen, setIsViewPaymentProofOpen] = useState(false);
+
+  // Synchronize default invoice amount from effective order
+  useEffect(() => {
+    if (effectiveActiveOrder) {
+      const amt = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+      if (amt && !invoiceAmount) {
+        setInvoiceAmount(String(amt));
+      }
+    }
+  }, [effectiveActiveOrder, activeAward, invoiceAmount]);
+
+  // Pack Order opener: auto-ensures delivery record exists first
+  const handleOpenPackDialog = async () => {
+    if (!effectiveActiveOrder?.id) return;
+    let deliveryRecord = delivery;
+    if (!deliveryRecord) {
+      try {
+        deliveryRecord = await ensureDeliveryForPurchaseOrder(effectiveActiveOrder.id);
+        await deliveryQuery.refetch();
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to initialize delivery record');
+        return;
+      }
+    }
+    setIsPackDialogOpen(true);
+  };
+
+  // Dispatch details opener: auto-ensures delivery record exists first
+  const handleOpenDispatchDialog = async () => {
+    if (!effectiveActiveOrder?.id) return;
+    let deliveryRecord = delivery;
+    if (!deliveryRecord) {
+      try {
+        deliveryRecord = await ensureDeliveryForPurchaseOrder(effectiveActiveOrder.id);
+        await deliveryQuery.refetch();
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to initialize delivery record');
+        return;
+      }
+    }
+    setIsDispatchDialogOpen(true);
+  };
+
+  // In-page invoice creation submit handler
+  const handleCreateInvoiceSubmit = async () => {
+    if (!effectiveActiveOrder?.id) return;
+    const amountNum = Number(invoiceAmount);
+    if (!amountNum || amountNum <= 0) {
+      setCreateInvoiceError('Please enter a valid invoice amount greater than zero.');
+      return;
+    }
+    setIsCreatingInvoice(true);
+    setCreateInvoiceError(null);
+    try {
+      await postApi('/api/invoices', {
+        purchaseOrderId: effectiveActiveOrder.id,
+        amount: amountNum,
+        gstRate: Number(invoiceGstRate) || 18,
+        otherTaxRate: Number(invoiceOtherTax) || 0,
+        tdsRate: Number(invoiceTdsRate) || 0,
+        interstate: invoiceInterstate
+      });
+      toast.success('Tax invoice generated successfully!');
+      setIsCreateInvoiceOpen(false);
+      queryClient.invalidateQueries();
+    } catch (err: any) {
+      setCreateInvoiceError(err?.message || 'Failed to generate tax invoice');
+    } finally {
+      setIsCreatingInvoice(false);
+    }
+  };
+
+  // Compute all invoices & existing invoice for the active order
+  const allOrderInvoices = useMemo(() => [
+    ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+    ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+  ], [effectiveActiveOrder, props.rawBid]);
+
+  const existingTaxInvoice = useMemo(() => (
+    allOrderInvoices.find(
+      (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
+    ) || (effectiveActiveOrder as any)?.invoice || null
+  ), [allOrderInvoices, effectiveActiveOrder]);
+
+  const hasCreatedInvoice = Boolean(
+    existingTaxInvoice ||
+    (effectiveActiveOrder as any)?.invoiceId ||
+    (effectiveActiveOrder as any)?.invoiceNumber ||
+    ['invoiced', 'invoice_submitted', 'payment_initiated', 'paid', 'completed'].includes(rawOrderStatus)
+  );
+
+  // Compute granular fulfillmentPhase state engine
+  const fulfillmentPhase = useMemo<
+    | 'PO_PENDING'
+    | 'PO_ACCEPTED_AWAITING_PACK'
+    | 'PACKED'
+    | 'DISPATCHED'
+    | 'DELIVERED_PENDING_GRN'
+    | 'GRN_APPROVED'
+    | 'PAYMENT_SUBMITTED'
+    | 'SETTLED'
+  >(() => {
+    if (!effectiveActiveOrder) return 'PO_PENDING';
+    const poStatus = String(effectiveActiveOrder.poStatus || effectiveActiveOrder.status || '').toUpperCase();
+
+    // 1. Settled / Completed
+    if (['COMPLETED', 'SETTLED'].includes(poStatus)) return 'SETTLED';
+
+    // 2. Buyer Payment Submitted Check
+    const hasPaymentRecorded = Boolean(
+      effectiveActiveOrder.paymentSlipFileId ||
+      effectiveActiveOrder.paymentSlip ||
+      (effectiveActiveOrder as any).paymentProof ||
+      allOrderInvoices.some((inv: any) =>
+        inv.paymentSlipFileId ||
+        inv.paymentReference ||
+        String(inv.status || inv.invoiceStatus || '').toUpperCase() === 'PAYMENT_SUBMITTED' ||
+        String(inv.status || inv.invoiceStatus || '').toUpperCase() === 'PAID'
+      )
+    );
+    if (hasPaymentRecorded || poStatus === 'PAYMENT_SUBMITTED' || poStatus === 'PAID') {
+      return 'PAYMENT_SUBMITTED';
+    }
+
+    // 3. GRN Approval Check
+    const hasApprovedGrnRecord = Boolean(
+      effectiveActiveOrder.grns?.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+    );
+    if (hasApprovedGrnRecord) return 'GRN_APPROVED';
+
+    // 4. Delivery Status Check
+    if (deliveryStatus === 'DELIVERED' || poStatus === 'DELIVERED') return 'DELIVERED_PENDING_GRN';
+    if (['DISPATCHED', 'IN_TRANSIT'].includes(deliveryStatus) || ['DISPATCHED', 'IN_TRANSIT'].includes(poStatus)) {
+      return 'DISPATCHED';
+    }
+    if (deliveryStatus === 'PACKED' || poStatus === 'PACKED') return 'PACKED';
+
+    // 5. PO Acceptance Check
+    if (isPOAccepted) return 'PO_ACCEPTED_AWAITING_PACK';
+
+    return 'PO_PENDING';
+  }, [effectiveActiveOrder, deliveryStatus, allOrderInvoices, isPOAccepted]);
+
   const handleAcceptPriceMatch = async (awardId: string) => {
     try {
       setIsAcceptingAction(true);
@@ -7822,44 +7998,29 @@ export function ProcurementDetailUnifiedView(
                 router.push("/seller/orders");
               }
             }}
+            fulfillmentPhase={fulfillmentPhase}
+            onOpenPackDialog={handleOpenPackDialog}
+            onOpenDispatchDialog={handleOpenDispatchDialog}
+            onOpenGrnCreate={() => setIsGrnCreateOpen(true)}
+            onOpenCreateInvoice={() => setIsCreateInvoiceOpen(true)}
+            onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
+            onOpenSettlementModal={() => setIsConfirmSettlementOpen(true)}
+            onOpenViewPaymentProof={() => setIsViewPaymentProofOpen(true)}
             onNavigateDelivery={async () => {
-              // Strictly open the GRN view details page (/grn/:id) of this order
-              const grn = effectiveActiveOrder?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED') ||
-                          effectiveActiveOrder?.grns?.[0] ||
-                          effectiveActiveOrder?.grn;
-              let grnId = grn?.id || effectiveActiveOrder?.grnId || effectiveActiveOrder?.grn?.id;
-
-              if (!grnId && effectiveActiveOrder?.id) {
-                try {
-                  const res: any = await getApi(`/api/purchase-orders/${effectiveActiveOrder.id}`);
-                  const poData = res?.data || res;
-                  grnId = poData?.grns?.find((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')?.id ||
-                          poData?.grns?.[0]?.id ||
-                          poData?.grnId ||
-                          poData?.grn?.id;
-                  if (!grnId) {
-                    const eligRes: any = await getApi(`/api/grn/po/${effectiveActiveOrder.id}/eligibility`);
-                    const existingList = eligRes?.data?.existing || eligRes?.existing || [];
-                    if (existingList?.[0]?.id) {
-                      grnId = existingList[0].id;
-                    }
-                  }
-                } catch (err) {
-                  console.warn('Failed to resolve GRN for PO', err);
-                }
-              }
-
-              if (grnId) {
-                router.push(`/grn/${grnId}`);
-                return;
-              }
-
-              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
-              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
               if (isBuyerSide) {
-                router.push(`/buyer/grn${searchParam}`);
+                if (fulfillmentPhase === 'DELIVERED_PENDING_GRN') {
+                  setIsGrnCreateOpen(true);
+                  return;
+                }
+                handleOpenDispatchDialog();
+                return;
               } else {
-                router.push(`/seller/delivery-management${searchParam}`);
+                if (fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK') {
+                  handleOpenPackDialog();
+                  return;
+                }
+                handleOpenDispatchDialog();
+                return;
               }
             }}
             onNavigateInvoice={(inv?: any) => {
@@ -7883,27 +8044,23 @@ export function ProcurementDetailUnifiedView(
               if (isBuyerSide) {
                 router.push("/buyer/invoices");
               } else {
-                const amountVal =
-                  effectiveActiveOrder?.amount ||
-                  effectiveActiveOrder?.totalValue ||
-                  activeAward?.finalAmount ||
-                  0;
-                if (effectiveActiveOrder?.id) {
-                  router.push(
-                    `/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`,
-                  );
-                } else {
-                  router.push("/seller/invoices");
-                }
+                // Seller side: open in-page Create Invoice modal!
+                setIsCreateInvoiceOpen(true);
               }
             }}
             onNavigateSettlement={() => {
-              const poNum = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
-              const searchParam = poNum ? `?search=${encodeURIComponent(poNum)}` : '';
               if (isBuyerSide) {
-                router.push(`/buyer/payments${searchParam}`);
+                if (fulfillmentPhase === 'GRN_APPROVED') {
+                  setIsPaymentModalOpen(true);
+                } else {
+                  setIsViewPaymentProofOpen(true);
+                }
               } else {
-                router.push(`/seller/invoices${searchParam}`);
+                if (fulfillmentPhase === 'PAYMENT_SUBMITTED') {
+                  setIsConfirmSettlementOpen(true);
+                } else {
+                  setIsViewPaymentProofOpen(true);
+                }
               }
             }}
           />
@@ -8127,66 +8284,118 @@ export function ProcurementDetailUnifiedView(
                       <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View PO Copy
                     </Button>
-                    {(() => {
-                      const allInvoices = [
-                        ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
-                        ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
-                      ];
-                      const existingInvoice = allInvoices.find(
-                        (inv: any) => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
-                      ) || (effectiveActiveOrder as any)?.invoice;
-                      const hasInvoiceCreated = Boolean(
-                        existingInvoice ||
-                        (effectiveActiveOrder as any)?.invoiceId ||
-                        (effectiveActiveOrder as any)?.invoiceNumber ||
-                        ['invoiced', 'invoice_submitted', 'payment_initiated', 'paid', 'completed'].includes(
-                          String(effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || '').toLowerCase()
-                        )
-                      );
 
-                      if (hasInvoiceCreated) {
-                        return (
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              const invId = Number(existingInvoice?.id) || (existingInvoice?.invoiceId ? Number(existingInvoice.invoiceId) : null);
-                              setSelectedInvoiceModalId(invId);
-                              setSelectedInvoiceModalData(existingInvoice || null);
-                              setIsTaxInvoiceModalOpen(true);
-                            }}
-                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            View Tax Invoice
-                          </Button>
-                        );
-                      }
+                    {/* Tax Invoice Action: Available post PO-acceptance to accompany delivery */}
+                    {hasCreatedInvoice ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const invId = Number(existingTaxInvoice?.id) || (existingTaxInvoice?.invoiceId ? Number(existingTaxInvoice.invoiceId) : null);
+                          setSelectedInvoiceModalId(invId);
+                          setSelectedInvoiceModalData(existingTaxInvoice || null);
+                          setIsTaxInvoiceModalOpen(true);
+                        }}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-slate-500" />
+                        📄 View Tax Invoice
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsCreateInvoiceOpen(true)}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-300 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-blue-600" />
+                        🧾 Create Tax Invoice
+                      </Button>
+                    )}
 
-                      return (
+                    {/* Stepwise Operational Action based on Fulfillment Phase */}
+                    {fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleOpenPackDialog}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <Package className="h-3.5 w-3.5" />
+                        📦 Pack Order
+                      </Button>
+                    )}
+
+                    {fulfillmentPhase === 'PACKED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleOpenDispatchDialog}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        🚚 Enter Dispatch Details
+                      </Button>
+                    )}
+
+                    {fulfillmentPhase === 'DISPATCHED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleOpenDispatchDialog}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-50 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        <Truck className="h-3.5 w-3.5 text-blue-600" />
+                        📍 View Tracking Info
+                      </Button>
+                    )}
+
+                    {fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                        <span>⏳ Awaiting Buyer Goods Inspection &amp; GRN</span>
+                      </span>
+                    )}
+
+                    {fulfillmentPhase === 'GRN_APPROVED' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                        <span>⏳ Awaiting Buyer Payment &amp; Payment Proof</span>
+                      </span>
+                    )}
+
+                    {/* PAYMENT SUBMITTED: Seller can now view proof and confirm settlement ONCE */}
+                    {fulfillmentPhase === 'PAYMENT_SUBMITTED' && (
+                      <>
                         <Button
                           type="button"
                           size="sm"
-                          onClick={() => {
-                            const amountVal = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
-                            router.push(`/seller/invoices?convertPoId=${effectiveActiveOrder.id}&amount=${amountVal}`);
-                          }}
-                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                          variant="outline"
+                          onClick={() => setIsViewPaymentProofOpen(true)}
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50 shadow-2xs rounded-lg cursor-pointer"
                         >
-                          <FileText className="h-3.5 w-3.5" />
-                          Create Invoice from PO
+                          <Receipt className="h-3.5 w-3.5 text-indigo-600" />
+                          📄 View Payment Proof
                         </Button>
-                      );
-                    })()}
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => router.push("/seller/delivery-management")}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
-                    >
-                      <Truck className="h-3.5 w-3.5" />
-                      Go to Delivery Management
-                    </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => setIsConfirmSettlementOpen(true)}
+                          className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          ✅ Confirm Settlement &amp; Close
+                        </Button>
+                      </>
+                    )}
+
+                    {fulfillmentPhase === 'SETTLED' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        <span>✅ Contract Settled &amp; Closed</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -8529,26 +8738,109 @@ export function ProcurementDetailUnifiedView(
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => setIsReceiptModalOpen(true)}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
-                    >
-                      <FileText className="h-3.5 w-3.5" />
-                      View Purchase Order
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push("/buyer/orders")}
                       className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
                     >
-                      <Truck className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
-                      Manage All Orders
+                      <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
+                      View Purchase Order
                     </Button>
+
+                    {/* View Tax Invoice if seller has generated it */}
+                    {hasCreatedInvoice && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const invId = Number(existingTaxInvoice?.id) || (existingTaxInvoice?.invoiceId ? Number(existingTaxInvoice.invoiceId) : null);
+                          setSelectedInvoiceModalId(invId);
+                          setSelectedInvoiceModalData(existingTaxInvoice || null);
+                          setIsTaxInvoiceModalOpen(true);
+                        }}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-slate-500" />
+                        📄 View Tax Invoice
+                      </Button>
+                    )}
+
+                    {/* Informational during packing */}
+                    {(fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK' || fulfillmentPhase === 'PACKED') && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-800">
+                        <Package className="h-3.5 w-3.5 text-blue-600" />
+                        <span>📦 Seller Preparing &amp; Packing Shipment</span>
+                      </span>
+                    )}
+
+                    {/* Track shipment once dispatched */}
+                    {fulfillmentPhase === 'DISPATCHED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleOpenDispatchDialog}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        🚚 Track Shipment
+                      </Button>
+                    )}
+
+                    {/* Create GRN when delivered */}
+                    {fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsGrnCreateOpen(true)}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <ClipboardCheck className="h-3.5 w-3.5" />
+                        📋 Inspect Goods &amp; Create GRN
+                      </Button>
+                    )}
+
+                    {/* GRN Approved: Single Make Payment CTA */}
+                    {fulfillmentPhase === 'GRN_APPROVED' && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsPaymentModalOpen(true)}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <CreditCard className="h-3.5 w-3.5" />
+                        💰 Pay Now / Upload Payment Proof
+                      </Button>
+                    )}
+
+                    {/* Payment Submitted: Awaiting Seller Confirmation */}
+                    {fulfillmentPhase === 'PAYMENT_SUBMITTED' && (
+                      <>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsViewPaymentProofOpen(true)}
+                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-2xs rounded-lg cursor-pointer"
+                        >
+                          <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                          📄 View Payment Proof
+                        </Button>
+                        <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                          <Clock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>⏳ Awaiting Seller Settlement Confirmation</span>
+                        </span>
+                      </>
+                    )}
+
+                    {/* Settled */}
+                    {fulfillmentPhase === 'SETTLED' && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
+                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                        <span>✅ Contract Settled &amp; Closed</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -8758,6 +9050,115 @@ export function ProcurementDetailUnifiedView(
               onInvoiceApproved={() => {
                 queryClient.invalidateQueries();
               }}
+            />
+          )}
+
+          {isPackDialogOpen && delivery && (
+            <PackedOrderDialog
+              isOpen={isPackDialogOpen}
+              delivery={delivery}
+              onClose={() => setIsPackDialogOpen(false)}
+              onSuccess={() => {
+                setIsPackDialogOpen(false);
+                deliveryQuery.refetch();
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
+          {isDispatchDialogOpen && delivery && (
+            <DispatchDetailsModal
+              isOpen={isDispatchDialogOpen}
+              delivery={delivery}
+              onClose={() => setIsDispatchDialogOpen(false)}
+              onSuccess={() => {
+                setIsDispatchDialogOpen(false);
+                deliveryQuery.refetch();
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
+          {isGrnCreateOpen && (
+            <GrnCreateModal
+              onClose={() => setIsGrnCreateOpen(false)}
+              onCreated={() => {
+                setIsGrnCreateOpen(false);
+                queryClient.invalidateQueries();
+              }}
+              initialPoId={effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : null}
+            />
+          )}
+
+          {isCreateInvoiceOpen && (
+            <CreateInvoiceModal
+              open={isCreateInvoiceOpen}
+              onClose={() => setIsCreateInvoiceOpen(false)}
+              onSubmit={handleCreateInvoiceSubmit}
+              submitting={isCreatingInvoice}
+              error={createInvoiceError}
+              sourceType="po"
+              onSourceTypeChange={() => {}}
+              search=""
+              onSearchChange={() => {}}
+              selectedPurchaseOrderId={effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : null}
+              onSelectPurchaseOrder={() => {}}
+              selectedQuotationId={null}
+              onSelectQuotation={() => {}}
+              acceptedPurchaseOrders={effectiveActiveOrder ? [effectiveActiveOrder] : []}
+              filteredPurchaseOrders={effectiveActiveOrder ? [effectiveActiveOrder] : []}
+              purchaseOrdersLoading={false}
+              selectedPurchaseOrder={effectiveActiveOrder}
+              submittedQuotations={[]}
+              filteredQuotations={[]}
+              quotationsLoading={false}
+              selectedQuotation={null}
+              invoiceAmount={invoiceAmount}
+              onInvoiceAmountChange={setInvoiceAmount}
+              invoiceGstRate={invoiceGstRate}
+              onInvoiceGstRateChange={setInvoiceGstRate}
+              invoiceTdsRate={invoiceTdsRate}
+              onInvoiceTdsRateChange={setInvoiceTdsRate}
+              invoiceOtherTax={invoiceOtherTax}
+              onInvoiceOtherTaxChange={setInvoiceOtherTax}
+              invoiceInterstate={invoiceInterstate}
+              onInvoiceInterstateChange={setInvoiceInterstate}
+            />
+          )}
+
+          {isPaymentModalOpen && (
+            <RecordOrderPaymentModal
+              isOpen={isPaymentModalOpen}
+              onClose={() => setIsPaymentModalOpen(false)}
+              order={effectiveActiveOrder}
+              invoiceId={existingTaxInvoice?.id ? Number(existingTaxInvoice.id) : undefined}
+              onSuccess={() => {
+                setIsPaymentModalOpen(false);
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
+          {isConfirmSettlementOpen && (
+            <ConfirmOrderSettlementModal
+              isOpen={isConfirmSettlementOpen}
+              onClose={() => setIsConfirmSettlementOpen(false)}
+              order={effectiveActiveOrder}
+              invoiceId={existingTaxInvoice?.id ? Number(existingTaxInvoice.id) : undefined}
+              onSuccess={() => {
+                setIsConfirmSettlementOpen(false);
+                queryClient.invalidateQueries();
+              }}
+            />
+          )}
+
+          {isViewPaymentProofOpen && (
+            <PaymentReceiptViewModal
+              isOpen={isViewPaymentProofOpen}
+              onClose={() => setIsViewPaymentProofOpen(false)}
+              orderId={effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : null}
+              invoiceId={existingTaxInvoice?.id ? Number(existingTaxInvoice.id) : null}
+              orderPoNumber={effectiveActiveOrder?.poNumber || null}
             />
           )}
 

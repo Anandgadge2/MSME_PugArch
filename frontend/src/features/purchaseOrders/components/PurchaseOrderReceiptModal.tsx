@@ -1721,7 +1721,7 @@ export function PurchaseOrderReceiptModal({
                     onClick={() => onViewPaymentSlip(order)}
                     className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
                   >
-                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Slip
+                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Proof
                   </Button>
                 );
               }
@@ -1732,7 +1732,7 @@ export function PurchaseOrderReceiptModal({
                     onClick={() => onUploadPaymentSlip(order)}
                     className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
                   >
-                    <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Slip
+                    <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Payment Proof
                   </Button>
                 );
               }

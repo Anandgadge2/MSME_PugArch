@@ -565,10 +565,10 @@ const OrderActionDropdown = ({
                     onViewPaymentSlip?.(order);
                   }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-                  title="View uploaded payment slip"
+                  title="View uploaded payment proof"
                 >
                   <Receipt className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>View Payment Slip</span>
+                  <span>View Payment Proof</span>
                 </button>
               ) : (
                 <button
@@ -578,10 +578,10 @@ const OrderActionDropdown = ({
                     onRecordPayment?.(order);
                   }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-                  title="Record payment details and attach slip"
+                  title="Pay now online or upload payment proof"
                 >
                   <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Record Payment & Slip</span>
+                  <span>Pay / Upload Payment Proof</span>
                 </button>
               )}
             </>
@@ -615,7 +615,7 @@ const OrderActionDropdown = ({
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
                 >
                   <Receipt className="h-3.5 w-3.5 text-indigo-600" />
-                  <span>Payment Slip</span>
+                  <span>View Payment Proof</span>
                 </button>
               )}
             </>
@@ -2853,26 +2853,21 @@ export default function PurchaseOrders() {
                                     setRecordPaymentOrder(target);
                                   }}
                                   className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                  title="Pay online or upload payment proof"
                                 >
-                                  <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Record Payment & Bank Slip
-                                </Button>
-                                <Button
-                                  onClick={() => setUploadProofOrder(viewingOrder)}
-                                  className="h-9 bg-white border border-slate-300 text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                                >
-                                  <Upload className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Upload Slip
+                                  <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Payment Proof
                                 </Button>
                               </>
                             )}
 
-                            {/* View Payment Slip: ONLY visible if slip is uploaded */}
-                            {hasSlip && (
+                            {/* View Payment Proof: ONLY visible if proof is uploaded or payment recorded */}
+                            {(hasSlip || hasPaymentRecorded) && (
                               <Button
                                 variant="outline"
                                 onClick={() => setViewProofOrder(viewingOrder)}
                                 className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                               >
-                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> Payment Slip
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Proof
                               </Button>
                             )}
 
@@ -2895,18 +2890,18 @@ export default function PurchaseOrders() {
                             {approvedGrn && !hasPaymentRecorded && !hasSlip && !isSettled && (
                               <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
                                 <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                <span>Awaiting Buyer Payment & Bank Slip</span>
+                                <span>Awaiting Buyer Payment & Payment Proof</span>
                               </span>
                             )}
 
-                            {/* View Payment Slip: ONLY if slip is actually uploaded */}
-                            {hasSlip && (
+                            {/* View Payment Proof: ONLY if proof is actually uploaded or payment recorded */}
+                            {(hasSlip || hasPaymentRecorded) && (
                               <Button
                                 variant="outline"
                                 onClick={() => setViewProofOrder(viewingOrder)}
                                 className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                               >
-                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
+                                <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Proof
                               </Button>
                             )}
 
@@ -2934,14 +2929,14 @@ export default function PurchaseOrders() {
                           </>
                         )}
 
-                        {/* Admin / Master Admin: View Payment Slip if uploaded */}
-                        {(user?.role === 'admin' || user?.role === 'master_admin') && hasSlip && (
+                        {/* Admin / Master Admin: View Payment Proof if uploaded */}
+                        {(user?.role === 'admin' || user?.role === 'master_admin') && (hasSlip || hasPaymentRecorded) && (
                           <Button
                             variant="outline"
                             onClick={() => setViewProofOrder(viewingOrder)}
                             className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                           >
-                            <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Slip
+                            <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Proof
                           </Button>
                         )}
                       </>
@@ -3006,7 +3001,7 @@ export default function PurchaseOrders() {
           }}
           onSuccess={() => {
             setUploadProofOrder(null);
-            toast.success('Payment slip uploaded successfully. Awaiting verification.');
+            toast.success('Payment proof uploaded successfully. Awaiting verification.');
             reload();
           }}
         />
@@ -3033,7 +3028,7 @@ export default function PurchaseOrders() {
           order={recordPaymentOrder}
           onSuccess={() => {
             setRecordPaymentOrder(null);
-            toast.success('Payment recorded and bank slip uploaded successfully.');
+            toast.success('Payment recorded and payment proof uploaded successfully.');
             reload();
           }}
         />

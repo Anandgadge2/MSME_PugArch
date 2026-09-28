@@ -82,12 +82,12 @@ export function ConfirmOrderSettlementModal({
     }
   };
 
-  const handleOpenSlip = async () => {
+  const handleOpenPaymentProof = async () => {
     if (!paymentSlipFile) return;
     try {
-      await openFileAsset(paymentSlipFile, paymentSlipFile.originalName || 'Bank_Payment_Slip.pdf');
+      await openFileAsset(paymentSlipFile, paymentSlipFile.originalName || 'Payment_Proof_Document.pdf');
     } catch (err: any) {
-      toast.error(err?.message || 'Unable to open bank payment slip');
+      toast.error(err?.message || 'Unable to open payment proof document');
     }
   };
 
@@ -171,15 +171,15 @@ export function ConfirmOrderSettlementModal({
                 {paymentSlipFile && (
                   <div>
                     <span className="text-[10px] font-bold uppercase text-slate-400">
-                      Bank Advice Slip
+                      Payment Proof Document
                     </span>
                     <button
                       type="button"
-                      onClick={handleOpenSlip}
+                      onClick={handleOpenPaymentProof}
                       className="text-xs font-bold text-blue-700 hover:text-blue-900 underline flex items-center gap-1 cursor-pointer mt-0.5"
                     >
                       <ExternalLink className="h-3 w-3" />
-                      View Bank Slip
+                      View Payment Proof
                     </button>
                   </div>
                 )}

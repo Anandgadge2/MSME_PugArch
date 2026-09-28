@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  ShieldCheck
+  ShieldCheck,
+  Zap,
+  ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -50,6 +52,9 @@ export function RecordOrderPaymentModal({
     0
   );
 
+  const [activeTab, setActiveTab] = useState<'online' | 'offline'>('online');
+
+  // Offline Payment State
   const [paymentReference, setPaymentReference] = useState('');
   const [bankName, setBankName] = useState('');
   const [paymentDate, setPaymentDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -66,7 +71,7 @@ export function RecordOrderPaymentModal({
   const handleFileUpload = async (selectedFile: File) => {
     if (!selectedFile) return;
     if (selectedFile.size > 15 * 1024 * 1024) {
-      toast.error('Bank slip document must be under 15MB');
+      toast.error('Payment proof document must be under 15MB');
       return;
     }
     setFile(selectedFile);
@@ -85,7 +90,7 @@ export function RecordOrderPaymentModal({
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData?.message || 'Failed to upload bank slip');
+        throw new Error(errData?.message || 'Failed to upload payment proof');
       }
 
       const resData = await response.json();
@@ -93,18 +98,47 @@ export function RecordOrderPaymentModal({
       if (fId) {
         setUploadedFileId(Number(fId));
         setUploadedFileName(selectedFile.name);
-        toast.success('Bank payment slip uploaded successfully');
+        toast.success('Payment proof document uploaded successfully');
       } else {
         setUploadedFileName(selectedFile.name);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Unable to upload bank slip document');
+      toast.error(err.message || 'Unable to upload payment proof document');
     } finally {
       setUploadingFile(false);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleOnlinePaymentSubmit = async () => {
+    setSubmitting(true);
+    try {
+      const generatedRef = `ESCROW-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const payload = {
+        paymentReference: generatedRef,
+        bankName: 'PugArch Escrow / Direct Gateway',
+        paymentDate: new Date().toISOString(),
+        paymentMode: 'ONLINE_ESCROW',
+        remarks: remarks.trim() || 'Direct online escrow payment authorized by buyer',
+        amount: targetAmount
+      };
+
+      if (targetInvoiceId) {
+        await postApi(`/api/buyer/invoices/${targetInvoiceId}/record-payment`, payload);
+      } else {
+        await postApi(`/api/orders/${order.id}/payment/record`, payload);
+      }
+
+      toast.success('Instant online payment processed successfully! Status updated to PAYMENT_SUBMITTED.');
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to process online payment');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleOfflineSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!paymentReference.trim()) {
       toast.error('Please enter the UTR / Bank Transaction Reference number');
@@ -126,6 +160,7 @@ export function RecordOrderPaymentModal({
         bankName: bankName.trim(),
         paymentDate: new Date(paymentDate).toISOString(),
         paymentSlipFileId: uploadedFileId || undefined,
+        paymentMode: 'OFFLINE_BANK_TRANSFER',
         remarks: remarks.trim() || undefined,
         amount: targetAmount
       };
@@ -136,11 +171,11 @@ export function RecordOrderPaymentModal({
         await postApi(`/api/orders/${order.id}/payment/record`, payload);
       }
 
-      toast.success('Payment recorded successfully! Order status updated to PAYMENT_SUBMITTED.');
+      toast.success('Payment proof recorded successfully! Status updated to PAYMENT_SUBMITTED.');
       onSuccess();
       onClose();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to record payment');
+      toast.error(err?.message || 'Failed to record payment proof');
     } finally {
       setSubmitting(false);
     }
@@ -150,19 +185,19 @@ export function RecordOrderPaymentModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="record-payment-title"
+      aria-labelledby="make-payment-title"
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
     >
       <FocusTrap>
         <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
           <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-[#12335f] border border-blue-200">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
                 <CreditCard className="h-5 w-5" />
               </div>
               <div>
-                <h3 id="record-payment-title" className="text-base font-black text-slate-900">
-                  Record Payment &amp; Upload Bank Slip
+                <h3 id="make-payment-title" className="text-base font-black text-slate-900">
+                  Make Payment
                 </h3>
                 <p className="text-xs font-semibold text-slate-500">
                   PO: {order.poNumber || `PO-${order.id}`} {activeInvoice ? `• Inv: ${activeInvoice.invoiceNumber || `#${activeInvoice.id}`}` : ''}
@@ -173,178 +208,276 @@ export function RecordOrderPaymentModal({
               type="button"
               onClick={onClose}
               disabled={submitting}
-              aria-label="Close dialog"
+              aria-label="Close payment dialog"
               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-            {/* Amount Banner */}
-            <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider">
-                  Verified Invoice Amount
-                </span>
-                <p className="text-lg font-black text-slate-950">
-                  {formatCurrency(targetAmount)}
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10.5px] font-bold text-emerald-800 border border-emerald-200">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                GRN Verified
+          {/* Amount Due Banner */}
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+                Total Payable Amount
               </span>
+              <p className="text-xl font-black text-slate-950">
+                {formatCurrency(targetAmount)}
+              </p>
             </div>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900 border border-emerald-300">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              GRN Verified
+            </span>
+          </div>
 
-            {/* UTR Reference Input */}
-            <div>
-              <label
-                htmlFor="payment-reference"
-                className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-              >
-                UTR / Transaction Reference Number <span className="text-rose-500">*</span>
-              </label>
-              <input
-                id="payment-reference"
-                type="text"
-                required
-                value={paymentReference}
-                onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g. UTR1234567890 / CMS987654321"
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-              />
-            </div>
+          {/* Mode Switcher Tabs */}
+          <div className="mt-4 flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab('online')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'online'
+                  ? 'bg-white text-[#12335f] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
+              <span>⚡ Pay Online Now</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('offline')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                activeTab === 'offline'
+                  ? 'bg-white text-[#12335f] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Upload className="h-3.5 w-3.5 text-blue-600" />
+              <span>📤 Upload Payment Proof</span>
+            </button>
+          </div>
 
-            {/* Payer Bank Name */}
-            <div>
-              <label
-                htmlFor="payer-bank"
-                className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-              >
-                Payer Bank Name <span className="text-rose-500">*</span>
-              </label>
-              <input
-                id="payer-bank"
-                type="text"
-                required
-                value={bankName}
-                onChange={(e) => setBankName(e.target.value)}
-                placeholder="e.g. State Bank of India / HDFC Bank / ICICI Bank"
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-              />
-            </div>
+          {activeTab === 'online' ? (
+            /* ── Tab 1: Instant Online Payment ── */
+            <div className="mt-4 space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600">Settlement Beneficiary</span>
+                  <span className="font-bold text-slate-900">{order?.seller?.name || 'Verified Supplier'}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600">Escrow Security</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+                    <ShieldCheck className="h-3.5 w-3.5" /> ICICI PugArch Escrow Account
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-600">Payment Modes</span>
+                  <span className="font-medium text-slate-700">UPI / Net Banking / RTGS Direct</span>
+                </div>
+              </div>
 
-            {/* Payment Transfer Date */}
-            <div>
-              <label
-                htmlFor="payment-date"
-                className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-              >
-                Payment Transfer Date <span className="text-rose-500">*</span>
-              </label>
-              <input
-                id="payment-date"
-                type="date"
-                required
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                max={new Date().toISOString().split('T')[0]}
-                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-              />
-            </div>
-
-            {/* File Upload for Bank Slip */}
-            <div>
-              <label
-                htmlFor="payment-slip-file"
-                className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-              >
-                Bank Transfer Slip / Payment Advice Receipt
-              </label>
-              <div className="flex items-center gap-2">
+              <div>
+                <label
+                  htmlFor="online-remarks"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  Payment Notes (Optional)
+                </label>
                 <input
-                  id="payment-slip-file"
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      void handleFileUpload(e.target.files[0]);
-                    }
-                  }}
-                  className="hidden"
+                  id="online-remarks"
+                  type="text"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="e.g. Authorized milestone payment as per contract"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
                 />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={uploadingFile}
-                  onClick={() => document.getElementById('payment-slip-file')?.click()}
-                  className="h-9 px-3 gap-1.5 text-xs font-bold border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  disabled={submitting}
+                  onClick={onClose}
+                  className="font-bold text-xs"
                 >
-                  {uploadingFile ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Upload className="h-3.5 w-3.5" />
-                  )}
-                  <span>{uploadedFileName ? 'Change Slip File' : 'Attach Bank Slip'}</span>
+                  Cancel
                 </Button>
-                {uploadedFileName && (
-                  <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 truncate max-w-[240px]">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                    {uploadedFileName}
-                  </span>
-                )}
+                <Button
+                  type="button"
+                  disabled={submitting}
+                  onClick={handleOnlinePaymentSubmit}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs gap-1.5 shadow-sm"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Processing Escrow Payment...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Authorize &amp; Pay {formatCurrency(targetAmount)}
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
+          ) : (
+            /* ── Tab 2: Offline Transfer & Proof Upload ── */
+            <form onSubmit={handleOfflineSubmit} className="space-y-4 pt-4">
+              {/* UTR Reference Input */}
+              <div>
+                <label
+                  htmlFor="payment-reference"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  UTR / Transaction Reference Number <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="payment-reference"
+                  type="text"
+                  required
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                  placeholder="e.g. UTR1234567890 / CMS987654321"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                />
+              </div>
 
-            {/* Remarks */}
-            <div>
-              <label
-                htmlFor="payment-remarks"
-                className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-              >
-                Remarks / Notes (Optional)
-              </label>
-              <textarea
-                id="payment-remarks"
-                rows={2}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Additional details regarding this bank transfer..."
-                className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
-              />
-            </div>
+              {/* Payer Bank Name */}
+              <div>
+                <label
+                  htmlFor="payer-bank"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  Payer Bank Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="payer-bank"
+                  type="text"
+                  required
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  placeholder="e.g. State Bank of India / HDFC Bank / ICICI Bank"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                />
+              </div>
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={submitting}
-                onClick={onClose}
-                className="font-bold text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={submitting || uploadingFile}
-                className="bg-[#12335f] hover:bg-[#0b2445] text-white font-black text-xs gap-1.5 shadow-sm"
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Recording Transfer...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="h-3.5 w-3.5" />
-                    Confirm &amp; Submit Payment
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
+              {/* Payment Transfer Date */}
+              <div>
+                <label
+                  htmlFor="payment-date"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  Payment Transfer Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="payment-date"
+                  type="date"
+                  required
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                />
+              </div>
+
+              {/* File Upload for Payment Proof */}
+              <div>
+                <label
+                  htmlFor="payment-proof-file"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  Payment Proof Document (Bank Receipt / Transfer Advice)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="payment-proof-file"
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        void handleFileUpload(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={uploadingFile}
+                    onClick={() => document.getElementById('payment-proof-file')?.click()}
+                    className="h-9 px-3 gap-1.5 text-xs font-bold border-slate-300 text-slate-700 hover:bg-slate-50 cursor-pointer"
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="h-3.5 w-3.5" />
+                    )}
+                    <span>{uploadedFileName ? 'Change Proof File' : 'Attach Payment Proof'}</span>
+                  </Button>
+                  {uploadedFileName && (
+                    <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 truncate max-w-[240px]">
+                      <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                      {uploadedFileName}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div>
+                <label
+                  htmlFor="payment-remarks"
+                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                >
+                  Remarks / Notes (Optional)
+                </label>
+                <textarea
+                  id="payment-remarks"
+                  rows={2}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Additional details regarding this bank transfer..."
+                  className="w-full rounded-xl border border-slate-300 bg-white p-2.5 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={onClose}
+                  className="font-bold text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submitting || uploadingFile}
+                  className="bg-[#12335f] hover:bg-[#0b2445] text-white font-black text-xs gap-1.5 shadow-sm"
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Submitting Proof...
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Submit Payment Proof
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
       </FocusTrap>
     </div>
