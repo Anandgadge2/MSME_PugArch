@@ -33,6 +33,72 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
   return 'google';
 };
 
+interface CachedPreviewEntry {
+  preview: DocumentPreview;
+  expiresAt: number;
+}
+
+class SignedUrlCacheManager {
+  private cache = new Map<string, CachedPreviewEntry>();
+  private readonly TTL_MS = 15 * 60 * 1000; // 15-minute TTL for cloud signed URLs
+  private readonly MAX_ENTRIES = 250;
+
+  private makeKey(fileId: number | string, hasSession: boolean): string {
+    return `${hasSession ? 'auth' : 'pub'}_${fileId}`;
+  }
+
+  get(fileId: number | string, hasSession: boolean): DocumentPreview | null {
+    const key = this.makeKey(fileId, hasSession);
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.preview;
+  }
+
+  set(fileId: number | string, hasSession: boolean, preview: DocumentPreview): void {
+    if (this.cache.size >= this.MAX_ENTRIES) {
+      const keysToDelete = Array.from(this.cache.keys()).slice(0, 50);
+      keysToDelete.forEach((k) => this.cache.delete(k));
+    }
+    const key = this.makeKey(fileId, hasSession);
+    this.cache.set(key, {
+      preview,
+      expiresAt: Date.now() + this.TTL_MS,
+    });
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+export const signedUrlCache = new SignedUrlCacheManager();
+const inFlightPreviews = new Map<string, Promise<DocumentPreview>>();
+
+const predecodeImage = (url: string) => {
+  if (typeof window === 'undefined' || !url) return;
+  const isImg = url.match(/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i) || url.includes('image/');
+  if (isImg) {
+    const img = new Image();
+    img.src = url;
+    if ('decode' in img) {
+      img.decode().catch(() => undefined);
+    }
+  }
+};
+
+/**
+ * Proactively pre-warms the signed URL and image/PDF stream in the background
+ * during the 150-300ms hover/focus window before the user completes their click.
+ */
+export const prewarmFileAssetPreview = (fileAsset: any, label = 'Document'): void => {
+  if (!fileAsset) return;
+  getFileAssetPreview(fileAsset, label).catch(() => undefined);
+};
+
 export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): Promise<DocumentPreview> => {
   // 1. If local File object is available, create instant local blob
   if (fileAsset?.file instanceof File) {
@@ -79,100 +145,141 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
 
   const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
   const hasSession = Boolean(token || getCookieValue('csrfToken'));
+
+  // Check in-memory cache first for instant (< 1ms) resolution
+  if (fileId) {
+    const cached = signedUrlCache.get(fileId, hasSession);
+    if (cached) {
+      if (cached.mode === 'image') predecodeImage(cached.url);
+      return cached;
+    }
+
+    const inFlightKey = `${hasSession ? 'auth' : 'pub'}_${fileId}`;
+    const inFlight = inFlightPreviews.get(inFlightKey);
+    if (inFlight) {
+      return inFlight;
+    }
+  }
+
   const authHeaders: Record<string, string> = {};
   if (token && token !== 'null' && token !== 'undefined') {
     authHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  // 2. If we have a file ID, fetch direct signed URL first for fast cloud CDN streaming
-  if (fileId) {
-    const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
-    try {
-      const res = await api.fetch(signedUrlEndpoint, {
-        method: 'GET',
-        headers: authHeaders,
-        skipCache: true
-      });
-
-      if (res.ok) {
-        const body = await res.json().catch(() => null);
-        const data = unwrapApiData<any>(body);
-        if (data?.signedUrl) {
-          const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
-          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
-          if (previewUrl && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
-            return {
-              label,
-              url: previewUrl,
-              mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
-            };
-          }
-        }
-      }
-    } catch {
-      // Fallback to viewEndpoint below
-    }
-
-    // Fallback: try viewEndpoint for local files or direct blob streaming
-    const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
-    try {
-      const res = await api.fetch(viewEndpoint, {
-        method: 'GET',
-        headers: authHeaders,
-        skipCache: true
-      });
-
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-        const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        return {
-          label,
-          url: blobUrl,
-          mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
-        };
-      }
-    } catch {
-      // Fallback below
-    }
-  }
-
-  // 3. If fallback URL is present, try fetching its blob or resolving it
-  if (absoluteFallbackUrl) {
-    const isImageOrPdf = /\.(png|jpe?g|webp|gif|svg|pdf)($|\?)/i.test(absoluteFallbackUrl) ||
-      fileAsset?.mimeType?.startsWith('image/') ||
-      fileAsset?.mimeType === 'application/pdf';
-
-    if (isImageOrPdf) {
+  const resolvePreview = async (): Promise<DocumentPreview> => {
+    // 2. If we have a file ID, fetch direct signed URL first for fast cloud CDN streaming
+    if (fileId) {
+      const signedUrlEndpoint = hasSession ? `/api/files/${fileId}/signed-url` : `/api/public/files/${fileId}/signed-url`;
       try {
-        const res = await api.fetch(absoluteFallbackUrl, {
+        const res = await api.fetch(signedUrlEndpoint, {
           method: 'GET',
           headers: authHeaders,
           skipCache: true
         });
+
+        if (res.ok) {
+          const body = await res.json().catch(() => null);
+          const data = unwrapApiData<any>(body);
+          if (data?.signedUrl) {
+            const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
+            const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
+            if (previewUrl && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
+              const result: DocumentPreview = {
+                label,
+                url: previewUrl,
+                mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+              };
+              signedUrlCache.set(fileId, hasSession, result);
+              if (result.mode === 'image') predecodeImage(result.url);
+              return result;
+            }
+          }
+        }
+      } catch {
+        // Fallback to viewEndpoint below
+      }
+
+      // Fallback: try viewEndpoint for local files or direct blob streaming
+      const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+      try {
+        const res = await api.fetch(viewEndpoint, {
+          method: 'GET',
+          headers: authHeaders,
+          skipCache: true
+        });
+
         if (res.ok) {
           const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
           const blob = await res.blob();
           const blobUrl = URL.createObjectURL(blob);
-          return {
+          const result: DocumentPreview = {
             label,
             url: blobUrl,
-            mode: getDocumentPreviewMode(blobUrl, contentType)
+            mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
           };
+          signedUrlCache.set(fileId, hasSession, result);
+          if (result.mode === 'image') predecodeImage(result.url);
+          return result;
         }
       } catch {
-        // Fallback to absolute url directly
+        // Fallback below
       }
     }
 
-    return {
-      label,
-      url: absoluteFallbackUrl,
-      mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
-    };
+    // 3. If fallback URL is present, try fetching its blob or resolving it
+    if (absoluteFallbackUrl) {
+      const isImageOrPdf = /\.(png|jpe?g|webp|gif|svg|pdf)($|\?)/i.test(absoluteFallbackUrl) ||
+        fileAsset?.mimeType?.startsWith('image/') ||
+        fileAsset?.mimeType === 'application/pdf';
+
+      if (isImageOrPdf) {
+        try {
+          const res = await api.fetch(absoluteFallbackUrl, {
+            method: 'GET',
+            headers: authHeaders,
+            skipCache: true
+          });
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const result: DocumentPreview = {
+              label,
+              url: blobUrl,
+              mode: getDocumentPreviewMode(blobUrl, contentType)
+            };
+            if (fileId) signedUrlCache.set(fileId, hasSession, result);
+            if (result.mode === 'image') predecodeImage(result.url);
+            return result;
+          }
+        } catch {
+          // Fallback to absolute url directly
+        }
+      }
+
+      const result: DocumentPreview = {
+        label,
+        url: absoluteFallbackUrl,
+        mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+      };
+      if (fileId) signedUrlCache.set(fileId, hasSession, result);
+      if (result.mode === 'image') predecodeImage(result.url);
+      return result;
+    }
+
+    throw new Error('Document file is not uploaded on server.');
+  };
+
+  if (fileId) {
+    const inFlightKey = `${hasSession ? 'auth' : 'pub'}_${fileId}`;
+    const promise = resolvePreview().finally(() => {
+      inFlightPreviews.delete(inFlightKey);
+    });
+    inFlightPreviews.set(inFlightKey, promise);
+    return promise;
   }
 
-  throw new Error('Document file is not uploaded on server.');
+  return resolvePreview();
 };
 
 export const openFileAsset = async (fileAsset: any, label = 'Document') => {
@@ -241,6 +348,17 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     }
 
     const hasSession = Boolean(token || getCookieValue('csrfToken'));
+    const cached = signedUrlCache.get(fileId, hasSession);
+    if (cached?.url) {
+      if (previewWindow && !previewWindow.closed) {
+        try { previewWindow.opener = null; } catch {}
+        previewWindow.location.href = cached.url;
+      } else {
+        window.open(cached.url, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+
     const authHeaders: Record<string, string> = {};
     if (token && token !== 'null' && token !== 'undefined') {
       authHeaders['Authorization'] = `Bearer ${token}`;
@@ -263,6 +381,11 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         if (data?.signedUrl) {
           const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
           if (isRealSignedUrl) {
+            signedUrlCache.set(fileId, hasSession, {
+              label,
+              url: data.signedUrl,
+              mode: getDocumentPreviewMode(data.signedUrl)
+            });
             if (previewWindow && !previewWindow.closed) {
               try { previewWindow.opener = null; } catch {}
               previewWindow.location.href = data.signedUrl;

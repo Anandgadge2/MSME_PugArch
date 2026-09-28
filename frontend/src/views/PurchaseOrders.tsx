@@ -53,7 +53,7 @@ const moneyPdf = (val: any, currency = 'INR') => {
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
 import { api, readJsonResponse, resolveMediaUrl } from '../lib/api';
-import { openFileAsset } from '../lib/files';
+import { openFileAsset, prewarmFileAssetPreview } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatTime } from '../features/shared/format';
@@ -564,6 +564,14 @@ const OrderActionDropdown = ({
                     onClose();
                     onViewPaymentSlip?.(order);
                   }}
+                  onMouseEnter={() => {
+                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                  }}
+                  onFocus={() => {
+                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                  }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
                   title="View uploaded payment proof"
                 >
@@ -611,6 +619,14 @@ const OrderActionDropdown = ({
                   onClick={() => {
                     onClose();
                     onViewPaymentSlip?.(order);
+                  }}
+                  onMouseEnter={() => {
+                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                  }}
+                  onFocus={() => {
+                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
                   }}
                   className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
                 >
@@ -2865,6 +2881,14 @@ export default function PurchaseOrders() {
                               <Button
                                 variant="outline"
                                 onClick={() => setViewProofOrder(viewingOrder)}
+                                onMouseEnter={() => {
+                                  const proofId = activeInvoice?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFile;
+                                  if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                                }}
+                                onFocus={() => {
+                                  const proofId = activeInvoice?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFile;
+                                  if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                                }}
                                 className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                               >
                                 <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Proof
@@ -2899,6 +2923,14 @@ export default function PurchaseOrders() {
                               <Button
                                 variant="outline"
                                 onClick={() => setViewProofOrder(viewingOrder)}
+                                onMouseEnter={() => {
+                                  const proofId = activeInvoice?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFile;
+                                  if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                                }}
+                                onFocus={() => {
+                                  const proofId = activeInvoice?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFileId || (viewingOrder as any)?.paymentSlipFile;
+                                  if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                                }}
                                 className="h-9 border-slate-200 bg-white text-xs font-bold uppercase tracking-wider text-slate-700 hover:bg-slate-50 rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer"
                               >
                                 <Receipt className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Payment Proof

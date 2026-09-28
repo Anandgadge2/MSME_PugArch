@@ -18,7 +18,7 @@ import { Button } from '../../../components/ui/button';
 import { postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, prewarmFileAssetPreview } from '../../../lib/files';
 
 export interface ConfirmOrderSettlementModalProps {
   isOpen: boolean;
@@ -58,6 +58,17 @@ export function ConfirmOrderSettlementModal({
   const [remarks, setRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !submitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, submitting, onClose]);
+
   if (!isOpen || !order) return null;
 
   const handleConfirm = async () => {
@@ -96,10 +107,10 @@ export function ConfirmOrderSettlementModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-settlement-title"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-100"
     >
       <FocusTrap>
-        <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+        <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 transform-gpu will-change-[transform,opacity] animate-in zoom-in-95 duration-100">
           <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -176,6 +187,8 @@ export function ConfirmOrderSettlementModal({
                     <button
                       type="button"
                       onClick={handleOpenPaymentProof}
+                      onMouseEnter={() => prewarmFileAssetPreview(paymentSlipFile, paymentSlipFile.originalName || 'Payment_Proof_Document.pdf')}
+                      onFocus={() => prewarmFileAssetPreview(paymentSlipFile, paymentSlipFile.originalName || 'Payment_Proof_Document.pdf')}
                       className="text-xs font-bold text-blue-700 hover:text-blue-900 underline flex items-center gap-1 cursor-pointer mt-0.5"
                     >
                       <ExternalLink className="h-3 w-3" />

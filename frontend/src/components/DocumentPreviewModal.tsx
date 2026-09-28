@@ -122,7 +122,7 @@ export function DocumentPreviewModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[99999999] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-[99999999] flex items-center justify-center bg-slate-950/70 p-3 backdrop-blur-sm sm:p-4 animate-in fade-in duration-100 will-change-[opacity]"
       onWheel={handleOverlayWheel}
     >
       <FocusTrap onEscape={onClose} className="w-full max-w-6xl">
@@ -130,7 +130,7 @@ export function DocumentPreviewModal({
           role="dialog"
           aria-modal="true"
           aria-labelledby="doc-preview-title"
-          className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem]"
+          className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl sm:rounded-[2rem] transform-gpu will-change-[transform,opacity] animate-in zoom-in-95 duration-100"
         >
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
             <div className="min-w-0">
@@ -220,6 +220,8 @@ export function DocumentPreviewModal({
                       <img
                         src={resolvedImageSrc}
                         alt={previewDocument.label || 'Document preview'}
+                        loading="eager"
+                        decoding="sync"
                         onLoad={() => setIsImageLoading(false)}
                         onError={handleImageError}
                         style={{

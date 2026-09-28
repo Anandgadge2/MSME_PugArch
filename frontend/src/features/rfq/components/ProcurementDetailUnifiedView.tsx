@@ -62,6 +62,7 @@ import { useAuth } from "../../../hooks/useAuth";
 import {
   openFileAsset,
   getFileAssetPreview,
+  prewarmFileAssetPreview,
   type DocumentPreview,
 } from "../../../lib/files";
 import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
@@ -8373,6 +8374,14 @@ export function ProcurementDetailUnifiedView(
                           size="sm"
                           variant="outline"
                           onClick={() => setIsViewPaymentProofOpen(true)}
+                          onMouseEnter={() => {
+                            const proofId = existingTaxInvoice?.paymentReceiptFileAssetId || (effectiveActiveOrder as any)?.paymentSlipFileId;
+                            if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                          }}
+                          onFocus={() => {
+                            const proofId = existingTaxInvoice?.paymentReceiptFileAssetId || (effectiveActiveOrder as any)?.paymentSlipFileId;
+                            if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                          }}
                           className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50 shadow-2xs rounded-lg cursor-pointer"
                         >
                           <Receipt className="h-3.5 w-3.5 text-indigo-600" />
@@ -8822,6 +8831,14 @@ export function ProcurementDetailUnifiedView(
                           size="sm"
                           variant="outline"
                           onClick={() => setIsViewPaymentProofOpen(true)}
+                          onMouseEnter={() => {
+                            const proofId = existingTaxInvoice?.paymentReceiptFileAssetId || (effectiveActiveOrder as any)?.paymentSlipFileId;
+                            if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                          }}
+                          onFocus={() => {
+                            const proofId = existingTaxInvoice?.paymentReceiptFileAssetId || (effectiveActiveOrder as any)?.paymentSlipFileId;
+                            if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                          }}
                           className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-2xs rounded-lg cursor-pointer"
                         >
                           <Receipt className="h-3.5 w-3.5 text-emerald-600" />

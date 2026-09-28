@@ -38,6 +38,7 @@ import type { DocumentConfig } from '../../../lib/pdfEngine';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
+import { prewarmFileAssetPreview } from '../../../lib/files';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -678,7 +679,7 @@ export function PurchaseOrderReceiptModal({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-[100] flex flex-col bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200 overflow-hidden',
+        'fixed inset-0 z-[100] flex flex-col bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-100 overflow-hidden',
         !isFullscreen && 'p-3 sm:p-6 items-center justify-center'
       )}
       onClick={e => {
@@ -735,7 +736,7 @@ export function PurchaseOrderReceiptModal({
       <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-[880px]")}>
         <div
           className={cn(
-            'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-300 w-full',
+            'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-150 transform-gpu will-change-[transform,opacity] w-full',
             isFullscreen
               ? 'h-full w-full rounded-none'
               : 'h-full rounded-2xl border border-slate-200'
@@ -1715,10 +1716,17 @@ export function PurchaseOrderReceiptModal({
               );
 
               if (hasSlip && onViewPaymentSlip && viewingStatusLower !== 'cancelled') {
+                const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
                 return (
                   <Button
                     variant="outline"
                     onClick={() => onViewPaymentSlip(order)}
+                    onMouseEnter={() => {
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
+                    onFocus={() => {
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
                     className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
                   >
                     <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Proof
