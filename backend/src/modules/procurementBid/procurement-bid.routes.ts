@@ -2075,6 +2075,14 @@ router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('
   return apiResponse.success(res, data, 200, 'Award rejected');
 }));
 
+router.post(['/seller/purchase-orders/:id/reject', '/seller/purchase-orders/:id/decline'], authenticate, requireAccountType('seller', 'shg'), validate({ body: z.object({ reason: z.string().trim().min(5, 'Reason must be at least 5 characters').max(2000) }) }), asyncRoute(async (req, res) => {
+  const targetId = Number(req.params.id);
+  const data = await orderService.rejectPO(req, targetId, req.body.reason);
+  const targetBidId = data?.purchaseOrder?.bidId || (data?.purchaseOrder?.metadata as any)?.bidId || req.body?.bidId;
+  if (targetBidId) await invalidateBidCaches(targetBidId);
+  return apiResponse.success(res, data, 200, 'Purchase Order declined');
+}));
+
 router.post('/orders/:orderId/delivery/update', authenticate, validate({ params: orderIdParamSchema }), asyncRoute(async (req, res) => {
   const data = await orderService.updateOrderDelivery(req, Number(req.params.orderId), req.body || {});
   return apiResponse.success(res, data, 200, 'Delivery updated');

@@ -198,6 +198,14 @@ const formatBidDisplayId = (item: any): string => {
 };
 
 const getParticipationType = (item: any): string => {
+  if (
+    item?.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
+    item?.status === 'REVERSE_AUCTION_ACTIVE' ||
+    item?.hasActiveReverseAuction ||
+    item?.reverseAuctionId
+  ) {
+    return 'Reverse Auction';
+  }
   if (item?.isMarketplaceResponse) {
     const isRfp = String(item.bid?.category || item.bid?.title || '').toLowerCase().includes('proposal') || String(item.bid?.category || '').toLowerCase().includes('rfp');
     return isRfp ? 'RFP' : 'RFQ';
@@ -801,7 +809,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
   const handleAction = (item: any) => {
     const pType = getParticipationType(item);
-    const isReverse = pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE');
+    const isReverse =
+      pType === 'Reverse Auction' ||
+      String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
+      item.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
+      item.status === 'REVERSE_AUCTION_ACTIVE' ||
+      Boolean(item.hasActiveReverseAuction);
     const targetId = item.bid?.id || item.bidId || item.requirementId || item.bid?.bidNumber || item.matchedBidNumber || item.canonicalIdentifier;
 
     if (isReverse) {
@@ -1042,7 +1055,12 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       cell: (item: any) => {
         const pType = getParticipationType(item);
         const isAwardedPo = isAwardedAndPoAccepted(item);
-        const isAuction = pType === 'Reverse Auction' || String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE');
+        const isAuction =
+          pType === 'Reverse Auction' ||
+          String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
+          item.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
+          item.status === 'REVERSE_AUCTION_ACTIVE' ||
+          Boolean(item.hasActiveReverseAuction);
         const isDraftItem = isDraft(item);
 
         return (
@@ -1757,6 +1775,30 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                             </Button>
                           ) : (
                             <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const pType = getParticipationType(item);
+                                const isMobileAuction =
+                                  pType === 'Reverse Auction' ||
+                                  String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
+                                  item.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
+                                  item.status === 'REVERSE_AUCTION_ACTIVE' ||
+                                  Boolean(item.hasActiveReverseAuction);
+                                if (isMobileAuction) {
+                                  return (
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                                      }}
+                                      className="h-8 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer animate-pulse"
+                                      title="Join Live Reverse Auction"
+                                    >
+                                      <Gavel className="h-3.5 w-3.5" /> Live
+                                    </Button>
+                                  );
+                                }
+                                return null;
+                              })()}
                               <Button 
                                 onClick={() => handleAction(item)} 
                                 variant={isAwardedAndPoAccepted(item) ? "outline" : "primary"}

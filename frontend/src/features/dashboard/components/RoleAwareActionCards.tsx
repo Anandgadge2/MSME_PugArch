@@ -219,6 +219,16 @@ function RoleAwareActionCards() {
 
         // ─── Seller baseline tiles (Exactly 8 most critical cards) ───
         {
+            label: 'Live Reverse Auctions',
+            count: data.reverseAuctionsLive || data.reverseAuctionsActive || 0,
+            href: `${sellerPrefix}/bids/submitted`,
+            icon: Gavel,
+            tone: 'rose',
+            show: isSeller && ((data.reverseAuctionsLive || 0) > 0 || (data.reverseAuctionsActive || 0) > 0),
+            priority: true,
+            subtext: 'Bidding floor active'
+        },
+        {
             label: 'New Opportunities',
             count: data.sellerOpportunitiesCount || 0,
             href: `${sellerPrefix}/opportunities`,

@@ -27,6 +27,7 @@ import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
+  const isBuyer = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const pathname = usePathname() || '';
   const router = useRouter();
   const bidId = pathname.split('/')[2];
@@ -548,6 +549,8 @@ export default function BidResultsPage() {
             id: r.id || `res-${idx}`,
             participationId: r.id || idx + 1,
             sellerId: r.sellerId || r.sellerUserId || r.seller?.id || r.sellerUser?.id,
+            sellerOrgId: r.sellerOrgId || r.sellerOrganizationId || r.seller?.organizationId || r.seller?.sellerProfile?.organizationId || r.organizationId || r.sellerOrganization?.id || null,
+            sellerUserId: r.sellerUserId || r.sellerId || r.seller?.id || r.sellerUser?.id || null,
             sellerName: sellerOrg,
             contactPerson: contactPerson,
             sellerEmail: r.sellerEmail || r.sellerUser?.email || r.seller?.email || 'Not provided',
@@ -988,7 +991,7 @@ export default function BidResultsPage() {
             }
 
             if (isAwardAccepted) {
-              if (isThisRowAwarded) {
+              if (isThisRowAwarded && isBuyer) {
                 return (
                   <button
                     onClick={handleGeneratePO}
@@ -1000,8 +1003,8 @@ export default function BidResultsPage() {
                 );
               }
               return (
-                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-2.5 text-[10px] font-semibold" title="Vendor remains on standby under evaluation">
-                  Standby (Under Evaluation)
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 px-2.5 text-[10px] font-semibold" title={isThisRowAwarded ? "Awaiting Purchase Order issuance by Buyer" : "Vendor remains on standby under evaluation"}>
+                  {isThisRowAwarded ? (isBuyer ? "Award Accepted (PO Pending)" : "Award Accepted — Awaiting Buyer PO") : "Standby (Under Evaluation)"}
                 </span>
               );
             }
@@ -1958,16 +1961,22 @@ export default function BidResultsPage() {
                   </div>
                   <div>
                     <h4 className="text-sm font-black text-emerald-950">Contract Award Accepted by Supplier!</h4>
-                    <p className="text-xs text-emerald-700 font-medium">The selected supplier has accepted the award terms. You can now issue the official Purchase Order to initiate fulfillment.</p>
+                    <p className="text-xs text-emerald-700 font-medium">
+                      {isBuyer
+                        ? "The selected supplier has accepted the award terms. You can now issue the official Purchase Order to initiate fulfillment."
+                        : "Your organization has accepted the award terms. The buyer will issue the official Purchase Order to initiate fulfillment."}
+                    </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleGeneratePO}
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-black shadow-xs transition shrink-0 cursor-pointer"
-                >
-                  <FileText className="h-4 w-4" /> Issue Purchase Order Now
-                </button>
+                {isBuyer && (
+                  <button
+                    type="button"
+                    onClick={handleGeneratePO}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-black shadow-xs transition shrink-0 cursor-pointer"
+                  >
+                    <FileText className="h-4 w-4" /> Issue Purchase Order Now
+                  </button>
+                )}
               </div>
             )}
 
@@ -2170,7 +2179,7 @@ export default function BidResultsPage() {
                           }
 
                           if (isAwardAccepted) {
-                            if (isThisRowAwarded) {
+                            if (isThisRowAwarded && isBuyer) {
                               return (
                                 <button
                                   type="button"
@@ -2183,7 +2192,7 @@ export default function BidResultsPage() {
                             }
                             return (
                               <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-semibold">
-                                Standby
+                                {isThisRowAwarded ? (isBuyer ? "Award Accepted" : "Awaiting Buyer PO") : "Standby"}
                               </span>
                             );
                           }
@@ -2513,9 +2522,9 @@ export default function BidResultsPage() {
               : undefined
           }
           submittedVendors={ranking.map((r, idx) => ({
-            sellerOrgId: (r as any).sellerOrgId || (r as any).sellerOrganizationId,
-            sellerUserId: (r as any).sellerUserId || (r as any).sellerId,
-            sellerId: (r as any).sellerId,
+            sellerOrgId: (r as any).sellerOrgId || (r as any).sellerOrganizationId || (r as any).rawParticipation?.sellerOrganizationId || (r as any).rawParticipation?.sellerOrgId || (r as any).rawParticipation?.seller?.organizationId,
+            sellerUserId: (r as any).sellerUserId || (r as any).sellerId || (r as any).rawParticipation?.sellerUserId || (r as any).rawParticipation?.sellerId,
+            sellerId: (r as any).sellerId || (r as any).sellerUserId || (r as any).rawParticipation?.sellerId,
             vendorName: r.sellerName || `Vendor ${idx + 1}`,
             quotedAmount: Number(r.totalPrice || 0),
             offeredQty: String((r as any).offeredQuantity || (r as any).quantity || 1),

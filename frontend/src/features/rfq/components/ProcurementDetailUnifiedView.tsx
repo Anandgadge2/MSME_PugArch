@@ -4021,12 +4021,14 @@ export function ProcurementDetailUnifiedView(
   const [declineModal, setDeclineModal] = useState<{
     show: boolean;
     awardId: string;
-    type: "price_match" | "award";
+    orderId?: string | number;
+    type: "price_match" | "award" | "po";
     reason: string;
     submitting: boolean;
   }>({
     show: false,
     awardId: "",
+    orderId: "",
     type: "price_match",
     reason: "",
     submitting: false,
@@ -4233,7 +4235,6 @@ export function ProcurementDetailUnifiedView(
   const isPOAccepted = Boolean(
     effectiveActiveOrder &&
       (Boolean(effectiveActiveOrder.acceptedAt) ||
-        activeAward?.awardStatus === "ACCEPTED" ||
         localAcceptedPO ||
         [
           "accepted",
@@ -4423,6 +4424,39 @@ export function ProcurementDetailUnifiedView(
       toast.error(err.message || "Failed to accept Purchase Order.");
     } finally {
       setIsAcceptingPO(false);
+    }
+  };
+
+  const handleDeclinePOSubmit = async () => {
+    const poId = declineModal.orderId || effectiveActiveOrder?.id;
+    if (!poId) return;
+    if (!declineModal.reason.trim()) {
+      toast.error("Please provide a reason for declining the Purchase Order.");
+      return;
+    }
+    try {
+      setDeclineModal((prev) => ({ ...prev, submitting: true }));
+      await procurementBidApi.declinePO(
+        poId,
+        declineModal.reason.trim(),
+      );
+      toast.success("Purchase Order declined. The Buyer has been notified.");
+      setDeclineModal({
+        show: false,
+        awardId: "",
+        orderId: "",
+        type: "po",
+        reason: "",
+        submitting: false,
+      });
+      await queryClient.invalidateQueries();
+      queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+      queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+      queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
+      if (typeof window !== "undefined") window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to decline Purchase Order.");
+      setDeclineModal((prev) => ({ ...prev, submitting: false }));
     }
   };
 
@@ -7904,7 +7938,6 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             linkedAuction &&
             !(linkedAuction as any).auctionPlanned &&
-            allowsReverseAuction &&
             ["LIVE", "SCHEDULED"].includes(
               String(
                 linkedAuction.statusEnum || linkedAuction.status || "",
@@ -8011,7 +8044,7 @@ export function ProcurementDetailUnifiedView(
                   <div className="flex flex-wrap items-center gap-3 shrink-0">
                     <Button
                       type="button"
-                      disabled={isAcceptingPO}
+                      disabled={isAcceptingPO || declineModal.submitting}
                       onClick={() => handleAcceptPO(effectiveActiveOrder.id)}
                       className="h-12 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-sm px-6 shadow-xl border border-emerald-300 gap-2 cursor-pointer transition-transform active:scale-95"
                     >
@@ -8021,6 +8054,25 @@ export function ProcurementDetailUnifiedView(
                         <CheckCircle2 className="h-4 w-4 text-slate-950" />
                       )}
                       Accept PO &amp; Commit Delivery
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isAcceptingPO || declineModal.submitting}
+                      onClick={() =>
+                        setDeclineModal({
+                          show: true,
+                          awardId: String(activeAward?.id || ""),
+                          orderId: String(effectiveActiveOrder.id),
+                          type: "po",
+                          reason: "",
+                          submitting: false,
+                        })
+                      }
+                      className="h-12 border-rose-300 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 font-bold text-sm px-5 gap-2 cursor-pointer transition-all"
+                    >
+                      <XCircle className="h-4 w-4 text-rose-300" />
+                      Decline PO
                     </Button>
                   </div>
                 </div>
@@ -8292,40 +8344,35 @@ export function ProcurementDetailUnifiedView(
               </div>
             )}
 
-          {/* Seller: Award Accepted, Ready to Generate PO */}
+          {/* Seller: Award Accepted — Awaiting Buyer Purchase Order Issuance */}
           {!isBuyerSide &&
             isAwardedToMe &&
             activeAward?.awardStatus === "ACCEPTED" &&
             !effectiveActiveOrder && (
-              <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-blue-50/40 to-white p-3 sm:p-3.5 shadow-2xs animate-fadeIn">
+              <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-3 sm:p-3.5 shadow-2xs animate-fadeIn">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                      <CheckCircle2 className="h-4 w-4" />
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
+                      <Clock className="h-4 w-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs sm:text-[13px] font-extrabold text-indigo-950 leading-tight">
-                        Award Acceptance Confirmed — Ready for Purchase Order Generation
+                      <div className="inline-flex items-center gap-1 rounded-md bg-blue-100/80 border border-blue-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 mb-1">
+                        <CheckCircle2 className="h-3 w-3 text-blue-700" />
+                        Award Accepted
+                      </div>
+                      <h4 className="text-xs sm:text-[13px] font-extrabold text-blue-950 leading-tight">
+                        Award Acceptance Confirmed — Awaiting Buyer&apos;s Purchase Order
                       </h4>
-                      <p className="text-[11px] sm:text-xs font-medium text-indigo-800/90 mt-0.5 leading-snug">
-                        You have formally accepted the contract award. Generate the official Purchase Order to review fulfillment terms and commit to order delivery.
+                      <p className="text-[11px] sm:text-xs font-medium text-blue-800/90 mt-0.5 leading-snug">
+                        You have formally accepted the contract award. The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) has been notified to generate and issue the official Purchase Order. You will review and accept the PO once issued.
                       </p>
                     </div>
                   </div>
-                  <div className="shrink-0">
-                    <Button
-                      type="button"
-                      disabled={isIssuingPOFromBanner}
-                      onClick={() => handleGeneratePOFromBanner(activeAward.id)}
-                      className="h-9 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs px-4 shadow-sm border border-indigo-400 gap-1.5 cursor-pointer rounded-lg transition-transform active:scale-95"
-                    >
-                      {isIssuingPOFromBanner ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <FileText className="h-3.5 w-3.5" />
-                      )}
-                      Generate Purchase Order
-                    </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-300 px-3 py-1.5 text-xs font-bold text-blue-900 shadow-2xs">
+                      <Clock className="h-3.5 w-3.5 text-blue-600 animate-pulse" />
+                      Pending Buyer PO Release
+                    </span>
                   </div>
                 </div>
               </div>
@@ -8572,6 +8619,8 @@ export function ProcurementDetailUnifiedView(
                     />
                     {declineModal.type === "price_match"
                       ? "Decline Price-Match Counter-Offer"
+                      : declineModal.type === "po"
+                      ? "Decline Purchase Order"
                       : "Decline Contract Award"}
                   </h3>
                   <button
@@ -8580,6 +8629,7 @@ export function ProcurementDetailUnifiedView(
                       setDeclineModal({
                         show: false,
                         awardId: "",
+                        orderId: "",
                         type: "price_match",
                         reason: "",
                         submitting: false,
@@ -8597,6 +8647,8 @@ export function ProcurementDetailUnifiedView(
                 >
                   {declineModal.type === "price_match"
                     ? "Please provide an explanation for declining this price-match counter-offer. The buyer will be notified and can award L1 or another vendor."
+                    : declineModal.type === "po"
+                    ? "Please provide a reason for declining this Purchase Order. The buyer will be notified and the order will be cancelled."
                     : "Please provide a reason for declining this contract award. The tender will be returned to the buyer for re-evaluation."}
                 </p>
                 <div className="mt-3">
@@ -8617,7 +8669,11 @@ export function ProcurementDetailUnifiedView(
                         reason: e.target.value,
                       }))
                     }
-                    placeholder="e.g. Cannot meet target price due to raw material cost escalation..."
+                    placeholder={
+                      declineModal.type === "po"
+                        ? "e.g. Inability to fulfill delivery within requested timeline or specification mismatch..."
+                        : "e.g. Cannot meet target price due to raw material cost escalation..."
+                    }
                     className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none"
                     aria-required="true"
                   />
@@ -8630,6 +8686,7 @@ export function ProcurementDetailUnifiedView(
                       setDeclineModal({
                         show: false,
                         awardId: "",
+                        orderId: "",
                         type: "price_match",
                         reason: "",
                         submitting: false,
@@ -8647,6 +8704,8 @@ export function ProcurementDetailUnifiedView(
                     onClick={
                       declineModal.type === "price_match"
                         ? handleDeclinePriceMatchSubmit
+                        : declineModal.type === "po"
+                        ? handleDeclinePOSubmit
                         : handleDeclineAwardSubmit
                     }
                     className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black gap-1.5 cursor-pointer"

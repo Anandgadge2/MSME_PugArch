@@ -126,7 +126,12 @@ export function LiveOpportunityRadar() {
           : 5;
         
         const pType = String(bid.procurementType || bid.bidType || '').toUpperCase();
-        const isAuction = pType === 'REVERSE_AUCTION' || pType === 'AUCTION';
+        const isAuction =
+          pType === 'REVERSE_AUCTION' ||
+          pType === 'AUCTION' ||
+          pType.includes('AUCTION') ||
+          bid.status === 'REVERSE_AUCTION_ACTIVE' ||
+          Boolean(bid.hasActiveReverseAuction);
         const isRfq = pType === 'RFQ' || pType.includes('RFQ') || (!pType.includes('TENDER') && !isAuction);
         
         const type: OpportunityItem['type'] = isAuction ? 'Reverse Auction' : isRfq ? 'RFQ' : 'Tender';

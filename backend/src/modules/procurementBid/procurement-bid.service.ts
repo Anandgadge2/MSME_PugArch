@@ -4011,18 +4011,26 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
 export const generatePOForBid = async (req: AuthRequest, bidId: string, body: any = {}) => {
   logger.info({ bidId, user: req.user?.id }, '[GENERATE_PO] Generating Purchase Order');
   const bid = await resolveBid(bidId, {});
-  const sellerUserIds = await getSellerUserIdsForActor(req.user!);
-  const sellerOrgIds = req.user?.organizationId ? [Number(req.user.organizationId)] : [];
-  const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
-  const isBuyerOrAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin' || bid.buyerId === req.user!.id;
+  const isBuyerOrAdmin =
+    req.user?.role === 'admin' ||
+    req.user?.role === 'master_admin' ||
+    bid.buyerId === req.user!.id ||
+    (Boolean(req.user?.organizationId) && bid.buyerOrganizationId === Number(req.user!.organizationId));
+
+  if (!isBuyerOrAdmin) {
+    throw new ApiError(
+      403,
+      'Only the buyer or administrators can generate and issue Purchase Orders. Sellers cannot generate Purchase Orders.',
+      'BUYER_ONLY_ACTION'
+    );
+  }
 
   let award = body?.awardId
     ? await db.procurementBidAward.findFirst({
         where: {
           bidId: bid.id,
           id: Number(body.awardId),
-          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] },
-          ...(isBuyerOrAdmin ? {} : { sellerId: { in: validSellerIds } })
+          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
         },
         include: { participation: true },
         orderBy: { updatedAt: 'desc' }
@@ -4033,8 +4041,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     award = await db.procurementBidAward.findFirst({
       where: {
         bidId: bid.id,
-        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] },
-        ...(isBuyerOrAdmin ? {} : { sellerId: { in: validSellerIds } })
+        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
       },
       include: { participation: true },
       orderBy: { updatedAt: 'desc' }
@@ -4042,7 +4049,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
   }
 
   if (!award) {
-    throw new ApiError(400, 'Cannot generate Purchase Order: No eligible award found for your account on this bid.', 'AWARD_NOT_FOUND');
+    throw new ApiError(400, 'Cannot generate Purchase Order: No eligible award found for this bid.', 'AWARD_NOT_FOUND');
   }
 
   const po = await createOrReuseProcurementPOForAward(req, award, bid);

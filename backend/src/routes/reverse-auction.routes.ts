@@ -1093,6 +1093,61 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       openingL1: currentLowestAmount
     });
 
+    // Notify all enrolled sellers with email and in-app alert
+    for (const part of participantRecords) {
+      const sellerId = part.sellerUserId;
+      if (sellerId) {
+        notificationService.notifyWithEmail(sellerId, {
+          title: '🔥 Live Reverse Auction Floor Opened!',
+          message: `The buyer has initiated a live Reverse Auction for "${procurementTitle}". Opening benchmark: ₹${currentLowestAmount.toLocaleString('en-IN')}. Enter the live room now to submit your lower bids.`,
+          type: 'REVERSE_AUCTION_STARTED',
+          priority: 'high',
+          redirectUrl: `/seller/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
+          emailSubject: `[Action Required] Live Reverse Auction Floor Opened: ${auction.auctionCode || ('RA-' + auction.id)}`,
+          emailHtml: `
+            <div style="padding: 18px 20px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 0 0 6px; color: #1d4ed8; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">Reverse Auction Floor Open</p>
+              <h2 style="margin: 0; color: #1e3a8a; font-size: 20px; line-height: 1.3;">🔥 Reverse Auction #${auction.auctionCode || auction.id} is Live</h2>
+            </div>
+            <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
+              A dynamic Reverse Auction has been initiated for <strong>${procurementTitle}</strong>. All qualified participants can now enter the live floor and place counter-bids.
+            </p>
+            <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+              <tr style="background: #f8fafc;">
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700; width: 40%;">Auction Code</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 14px; font-weight: 800;">${auction.auctionCode || `RA-${auction.id}`}</td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 12px; font-weight: 700;">Opening Ceiling Benchmark</td>
+                <td style="padding: 12px 16px; border-bottom: 1px solid #e2e8f0; color: #059669; font-size: 14px; font-weight: 800;">₹${currentLowestAmount.toLocaleString('en-IN')}</td>
+              </tr>
+            </table>
+          `
+        }).catch(err => logger.warn({ err, sellerId }, '[START_AUCTION] Failed to notify seller'));
+      }
+    }
+
+    // Broadcast realtime WebSocket events
+    try {
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_UPDATED',
+        auctionId: auction.id,
+        status: String(auction.status),
+        timestamp: new Date().toISOString()
+      });
+      if (linkedBid) {
+        broadcastToProcurement(linkedBid.id, {
+          type: 'PROCUREMENT_UPDATED',
+          requirementId: linkedBid.id,
+          procurementId: linkedBid.id,
+          status: 'REVERSE_AUCTION_ACTIVE',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (wsErr) {
+      logger.warn({ wsErr }, '[START_AUCTION] Realtime broadcast error');
+    }
+
     return apiResponse.created(res, maskSensitive(auction), 'Reverse auction started from submitted quotes');
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 400, error.message || 'Unable to start reverse auction from bids', error.code || 'REVERSE_AUCTION_START_ERROR');
@@ -1231,7 +1286,12 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
     if (req.user?.role === 'seller') {
       where.participants = undefined;
       const participantRows = await db.auctionParticipant.findMany({
-        where: { sellerOrgId: req.user.organizationId || -1 },
+        where: {
+          OR: [
+            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
+          ]
+        },
         select: { auctionId: true }
       });
       where.id = { in: participantRows.map((row: any) => row.auctionId) };
@@ -2689,6 +2749,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
         sourceType: 'auction',
         sourceId: auction.id,
         metadata: {
+          bidId: auction.linkedBidId || null,
           auctionId: auction.id,
           auctionCode: auction.auctionCode,
           winningBid: Number(winningAmount),

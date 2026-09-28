@@ -13,7 +13,8 @@ import {
   Loader2,
   Sparkles,
   ExternalLink,
-  Receipt
+  Receipt,
+  XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../hooks/useAuth';
@@ -71,6 +72,9 @@ export default function SellerAwardPoAlertPopup() {
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<'awards' | 'pos'>('awards');
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  const [decliningPoId, setDecliningPoId] = useState<number | null>(null);
+  const [declineReason, setDeclineReason] = useState('');
+  const [isDeclining, setIsDeclining] = useState(false);
 
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
 
@@ -186,6 +190,33 @@ export default function SellerAwardPoAlertPopup() {
       });
     } finally {
       setAcceptingId(null);
+    }
+  };
+
+  const handleDeclinePO = async (poId: number) => {
+    if (!declineReason.trim()) {
+      toast.error('Please enter a reason for declining the Purchase Order.');
+      return;
+    }
+    setIsDeclining(true);
+    try {
+      await postApi(`/api/seller/purchase-orders/${poId}/decline`, {
+        reason: declineReason.trim()
+      });
+      toast.success('Purchase Order Declined', {
+        description: 'The buyer has been notified and the purchase order has been cancelled.'
+      });
+      setDecliningPoId(null);
+      setDeclineReason('');
+      window.dispatchEvent(new CustomEvent('notifications:updated'));
+      window.dispatchEvent(new CustomEvent('orders:updated'));
+      await checkPendingAwardsAndPOs();
+    } catch (err: any) {
+      toast.error('Failed to decline purchase order', {
+        description: err?.message || 'Please try again.'
+      });
+    } finally {
+      setIsDeclining(false);
     }
   };
 
@@ -379,38 +410,96 @@ export default function SellerAwardPoAlertPopup() {
                 </div>
 
                 {/* Actions */}
-                <div className="mt-3 flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={isAccepting}
-                    onClick={() => handleAcceptPO(po)}
-                    className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
-                  >
-                    {isAccepting ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        Accepting...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Accept Purchase Order
-                      </>
-                    )}
-                  </button>
+                {decliningPoId === po.id ? (
+                  <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50/80 p-2.5 animate-fadeIn">
+                    <label
+                      htmlFor={`decline-po-input-${po.id}`}
+                      className="block text-[11px] font-bold text-rose-900 mb-1"
+                    >
+                      Reason for Declining PO:
+                    </label>
+                    <textarea
+                      id={`decline-po-input-${po.id}`}
+                      rows={2}
+                      value={declineReason}
+                      onChange={(e) => setDeclineReason(e.target.value)}
+                      placeholder="e.g. Inability to fulfill delivery timeline..."
+                      className="w-full rounded-lg border border-rose-300 p-2 text-xs font-medium text-slate-900 bg-white focus:outline-rose-500 resize-none"
+                    />
+                    <div className="mt-2 flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDecliningPoId(null);
+                          setDeclineReason('');
+                        }}
+                        disabled={isDeclining}
+                        className="rounded-lg px-2.5 py-1 text-xs font-bold text-slate-600 hover:bg-slate-200"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeclinePO(po.id)}
+                        disabled={isDeclining || !declineReason.trim()}
+                        className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-3 py-1 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-50"
+                      >
+                        {isDeclining ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <XCircle className="h-3 w-3" />
+                        )}
+                        Confirm Decline
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={isAccepting || isDeclining}
+                      onClick={() => handleAcceptPO(po)}
+                      className="flex-1 inline-flex h-9 items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {isAccepting ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Accepting...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Accept PO
+                        </>
+                      )}
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleDismissSession();
-                      router.push(`/seller/orders?orderId=${po.id}`);
-                    }}
-                    className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 hover:text-[#0b2447]"
-                  >
-                    <span>View PO</span>
-                    <ExternalLink className="h-3 w-3" />
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      disabled={isAccepting || isDeclining}
+                      onClick={() => {
+                        setDecliningPoId(po.id);
+                        setDeclineReason('');
+                      }}
+                      className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-rose-300 bg-rose-50 px-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      <span>Decline</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleDismissSession();
+                        router.push(`/seller/orders?orderId=${po.id}`);
+                      }}
+                      className="inline-flex h-9 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 hover:text-[#0b2447]"
+                    >
+                      <span>View</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

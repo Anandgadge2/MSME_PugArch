@@ -13,7 +13,8 @@ import {
   Landmark,
   FileCheck,
   CheckCircle2,
-  Package
+  Package,
+  Gavel
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
@@ -23,7 +24,7 @@ import { api, unwrapApiData } from '../../../lib/api';
 
 interface ActionItem {
   id: string;
-  type: 'rfq' | 'dispatch' | 'factoring' | 'clarification';
+  type: 'rfq' | 'dispatch' | 'factoring' | 'clarification' | 'auction';
   title: string;
   subtitle: string;
   badge: string;
@@ -66,6 +67,21 @@ export function UrgentActionsInbox() {
         actionHref: `${prefix}/onboarding`,
         actionLabel: 'Review Profile',
         icon: MessageSquare
+      });
+    }
+
+    const liveAuctionCount = summaryData?.reverseAuctionsLive || summaryData?.reverseAuctionsActive || 0;
+    if (liveAuctionCount > 0) {
+      items.push({
+        id: 'act-live-auction',
+        type: 'auction',
+        title: `${liveAuctionCount} Live Reverse Auction${liveAuctionCount > 1 ? 's' : ''} in Progress`,
+        subtitle: 'Buyer has commenced dynamic reverse bidding. Submit your competitive quotes before the round closes.',
+        badge: 'Live Auction',
+        badgeTone: 'bg-red-50 text-red-700 border-red-200 animate-pulse',
+        actionHref: `${prefix}/bids/submitted`,
+        actionLabel: 'Enter Floor',
+        icon: Gavel
       });
     }
 

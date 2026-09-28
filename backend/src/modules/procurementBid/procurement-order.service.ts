@@ -655,8 +655,17 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
     expectedDelivery: body.expectedDelivery
   });
 
-  const bidId = po.bidId || (po.metadata as any)?.bidId;
-  const awardId = (po.metadata as any)?.awardId || po.sourceId;
+  let bidId = po.bidId || (po.metadata as any)?.bidId;
+  const awardId = (po.metadata as any)?.awardId || (po.sourceType === 'procurement_bid_award' ? po.sourceId : null);
+
+  if (!bidId && awardId) {
+    const awardRecord = await db.procurementBidAward.findUnique({ where: { id: Number(awardId) }, select: { bidId: true } }).catch(() => null);
+    if (awardRecord?.bidId) bidId = awardRecord.bidId;
+  }
+  if (!bidId && po.sourceType === 'auction' && po.sourceId) {
+    const auctionRecord = await db.auction.findUnique({ where: { id: Number(po.sourceId) }, select: { linkedBidId: true } }).catch(() => null);
+    if (auctionRecord?.linkedBidId) bidId = auctionRecord.linkedBidId;
+  }
 
   const result = await db.$transaction(async (tx: any) => {
     const updatedPO = await tx.purchaseOrder.update({
@@ -792,6 +801,100 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
   });
 
   return { award: updatedAward, purchaseOrderId: po.id, delivery: updatedDelivery };
+};
+
+export const rejectPO = async (req: AuthRequest, orderId: number, reason: string) => {
+  const po = await loadProcurementOrder(req.user!, orderId);
+  if (!isAdmin(req.user) && po.sellerId !== req.user!.id) {
+    const sellerIds = await getSellerUserIdsForActor(req.user!);
+    if (!sellerIds.includes(po.sellerId)) {
+      throw new ApiError(403, 'Seller access required to decline purchase order', 'FORBIDDEN_ROLE');
+    }
+  }
+
+  const statusLower = String(po.status || '').toLowerCase();
+  if (['accepted', 'in_fulfillment', 'delivered', 'completed', 'paid'].includes(statusLower)) {
+    throw new ApiError(400, 'Cannot decline a purchase order that has already been accepted or is in fulfillment.', 'INVALID_STATUS');
+  }
+
+  let bidId = po.bidId || (po.metadata as any)?.bidId;
+  const awardId = (po.metadata as any)?.awardId || (po.sourceType === 'procurement_bid_award' ? po.sourceId : null);
+
+  if (!bidId && awardId) {
+    const awardRecord = await db.procurementBidAward.findUnique({ where: { id: Number(awardId) }, select: { bidId: true } }).catch(() => null);
+    if (awardRecord?.bidId) bidId = awardRecord.bidId;
+  }
+  if (!bidId && po.sourceType === 'auction' && po.sourceId) {
+    const auctionRecord = await db.auction.findUnique({ where: { id: Number(po.sourceId) }, select: { linkedBidId: true } }).catch(() => null);
+    if (auctionRecord?.linkedBidId) bidId = auctionRecord.linkedBidId;
+  }
+
+  const updated = await db.$transaction(async (tx: any) => {
+    const updatedPO = await tx.purchaseOrder.update({
+      where: { id: po.id },
+      data: {
+        status: 'cancelled',
+        poStatus: 'CANCELLED',
+        metadata: {
+          ...(typeof po.metadata === 'object' ? po.metadata : {}),
+          declineReason: reason,
+          declinedAt: now()
+        }
+      }
+    });
+
+    if (po.deliveryTrackings?.[0]?.id) {
+      await tx.deliveryTracking.update({
+        where: { id: po.deliveryTrackings[0].id },
+        data: { status: 'CANCELLED', remarks: `PO declined by supplier: ${reason}` }
+      }).catch(() => null);
+    }
+
+    if (awardId && !isNaN(Number(awardId))) {
+      await tx.procurementBidAward.update({
+        where: { id: Number(awardId) },
+        data: {
+          awardStatus: 'REJECTED',
+          remarks: reason
+        }
+      }).catch(() => undefined);
+    }
+
+    if (bidId && !isNaN(Number(bidId))) {
+      // 1. Mark declined participation
+      await tx.procurementBidParticipation.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: po.sellerId
+        },
+        data: {
+          finalStatus: 'PO_DECLINED'
+        }
+      });
+
+      // 2. Return bid status to AWARD_RECOMMENDED / EVALUATION so buyer can select L2/alternative
+      await tx.procurementBid.update({
+        where: { id: Number(bidId) },
+        data: {
+          status: 'AWARD_RECOMMENDED',
+          lifecycleStage: 'EVALUATION'
+        }
+      });
+    }
+
+    return updatedPO;
+  });
+
+  await procurementOrderAudit(req, 'PO_DECLINED', 'PurchaseOrder', po.id, { reason, bidId, awardId });
+
+  await notificationService.notifyUser(po.buyerId, {
+    title: 'Purchase Order Declined by Supplier',
+    message: `Supplier has declined Purchase Order #${po.poNumber}. Reason: ${reason}. You may re-award to an alternate qualified vendor or renegotiate.`,
+    type: 'purchase_order',
+    redirectUrl: bidId ? `/bids/${bidId}` : `/buyer/orders?orderId=${po.id}`
+  }).catch(() => undefined);
+
+  return { purchaseOrder: updated, message: 'Purchase Order declined successfully' };
 };
 
 export const updateOrderDelivery = async (req: AuthRequest, orderId: number, body: any) => {
