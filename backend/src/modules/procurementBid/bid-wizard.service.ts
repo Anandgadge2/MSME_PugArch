@@ -496,8 +496,6 @@ const transformDraftToProcurementBidPayload = async (draft: any, buyerId: number
         msePreference: step6.msePreference ?? false,
         blacklistingDeclarationRequired: step6.blacklistingDeclarationRequired ?? true,
         conflictOfInterestDeclarationRequired: step6.conflictOfInterestDeclarationRequired ?? true,
-        pbgRequired: step6.pbgRequired ?? false,
-        pbgPercentage: step6.pbgPercentage || null,
         paymentTerms: step7.paymentTerms || null,
         gstInvoiceRequired: step7.gstInvoiceRequired ?? true,
         advancePaymentAllowed: step7.advancePaymentAllowed ?? false,

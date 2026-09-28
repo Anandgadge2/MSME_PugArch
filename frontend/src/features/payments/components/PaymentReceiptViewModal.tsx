@@ -131,7 +131,7 @@ export function PaymentReceiptViewModal({
 }: PaymentReceiptViewModalProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
-  const isSellerOrFinancier = !isAdmin && (user?.role === 'seller' || (user?.role as string) === 'financier');
+  const isSeller = !isAdmin && user?.role === 'seller';
 
   const [activeTab, setActiveTab] = useState<PaymentReceiptTab>(initialTab);
   const [fetchedPayment, setFetchedPayment] = useState<any | null>(initialPayment || null);
@@ -1268,8 +1268,8 @@ export function PaymentReceiptViewModal({
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Seller / Financier Verification Buttons (Admin is strictly View-Only) */}
-            {isSellerOrFinancier && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
+            {/* Seller Verification Buttons (Admin is strictly View-Only) */}
+            {isSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
               <>
                 <Button
                   type="button"

@@ -3,7 +3,7 @@
  */
 import { deleteApi, getApi, patchApi, postApi } from '../shared/apiClient';
 
-export type MessageRole = 'buyer' | 'seller' | 'admin' | 'master_admin' | 'financier' | 'shg' | string;
+export type MessageRole = 'buyer' | 'seller' | 'admin' | 'master_admin' | 'shg' | string;
 
 export interface MessageUserDto {
     id: number;

@@ -48,8 +48,6 @@ export type RateContractMetadata = {
   priceVariationClause: string;
   securityDepositRequired: boolean;
   securityDepositAmount: number;
-  pbgRequired: boolean;
-  pbgAmount: number;
   approvalWorkflow: string;
   contractDocument: { fileName: string };
   activeState: string;

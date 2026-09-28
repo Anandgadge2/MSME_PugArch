@@ -4,6 +4,7 @@ import path from 'path';
 import { Prisma } from '@prisma/client';
 import https from 'https';
 import { z } from 'zod';
+import sharp from 'sharp';
 import prisma from '../lib/prisma.js';
 import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
@@ -1018,7 +1019,7 @@ const normalizeToCanonicalMethod = (rawMethod: unknown): string => {
     'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'RFQ', 'RFP', 'RFI',
     'SEALED_TENDER', 'OPEN_TENDER', 'LIMITED_TENDER', 'TWO_PACKET_BID',
     'REVERSE_AUCTION', 'BID_WITH_REVERSE_AUCTION', 'RATE_CONTRACT',
-    'REPEAT_ORDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE',
+    'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE',
     'BOQ_BASED_BID'
   ].includes(str)) {
     return str;
@@ -1034,8 +1035,6 @@ const normalizeToCanonicalMethod = (rawMethod: unknown): string => {
       return 'RFI';
     case 'SINGLE_TENDER':
       return 'SINGLE_SOURCE';
-    case 'PAC_BID':
-      return 'PAC';
     case 'BOQ_BID':
     case 'BOQ':
       return 'BOQ_BASED_BID';
@@ -1084,7 +1083,6 @@ const procurementMethodCodeFor = (value: unknown) => {
     case 'OPEN_TENDER':
     case 'LIMITED_TENDER':
     case 'TWO_PACKET_BID':
-    case 'PAC':
     case 'BOQ_BASED_BID':
     default:
       return 'TENDER';
@@ -1285,7 +1283,7 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   // Timeline validations for tender-family, BOQ, PAC, rate-contract, and bid-with-reverse-auction methods
   const timelineMethodSlugs = [
     'open-tender', 'sealed-tender', 'limited-tender', 'two-packet-bid',
-    'boq-based-bid', 'pac', 'rate-contract',
+    'boq-based-bid', 'rate-contract',
     'rfp', 'bid-with-reverse-auction', 'emergency-purchase'
   ];
   if (timelineMethodSlugs.includes(methodSlug)) {
@@ -1298,9 +1296,6 @@ const validateProcurementDraftForSubmit = (draft: any) => {
     if (tender.financialEvaluationDate && tender.technicalEvaluationDate && !isAfter(tender.financialEvaluationDate, tender.technicalEvaluationDate)) {
       throw new ApiError(400, 'Financial opening date must be after technical opening date', 'PROCUREMENT_DATE_INVALID');
     }
-  }
-  if (rules.performanceSecurity && Number(tender.performanceSecurityAmount || 0) <= 0) {
-    throw new ApiError(400, 'ePBG / performance security amount is required when enabled', 'PROCUREMENT_EPBG_REQUIRED');
   }
   if (methodSlug === 'rfp' && clean(tender.scopeOfWork || basics.justification || draft.description).length < 10) {
     throw new ApiError(400, 'RFP requires a scope of work or detailed justification', 'PROCUREMENT_SCOPE_REQUIRED');
@@ -1500,8 +1495,6 @@ const rateContractConfigSchema = z.object({
   maxPenaltyCapPercentage: z.coerce.number().min(0).max(100).default(10),
   securityDepositRequired: z.coerce.boolean().default(false),
   securityDepositAmount: z.coerce.number().nonnegative().default(0),
-  pbgRequired: z.coerce.boolean().default(false),
-  pbgAmount: z.coerce.number().nonnegative().default(0),
   approvalWorkflow: z.string().trim().max(200).optional().default('Finance + Procurement'),
   contractDocument: z.object({
     fileAssetId: z.coerce.number().int().positive().optional().nullable(),
@@ -1560,8 +1553,6 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     maxPenaltyCapPercentage: raw.maxPenaltyCapPercentage !== undefined ? Number(raw.maxPenaltyCapPercentage) : penaltyTerms.maxCapPercent,
     securityDepositRequired: Boolean(raw.securityDepositRequired ?? false),
     securityDepositAmount: Number(raw.securityDepositAmount ?? payload.terms?.securityDeposit ?? 0),
-    pbgRequired: Boolean(raw.pbgRequired ?? payload.terms?.pbgRequired ?? false),
-    pbgAmount: Number(raw.pbgAmount ?? payload.terms?.securityDeposit ?? 0),
     approvalWorkflow: raw.approvalWorkflow || payload.approval?.workflow || 'Finance + Procurement',
     contractDocument: raw.contractDocument || null
   };
@@ -1588,9 +1579,6 @@ const validateRateContractConfigForDraft = (configInput: Record<string, unknown>
   }
   if (config.securityDepositRequired && config.securityDepositAmount <= 0) {
     throw new ApiError(400, 'Security deposit amount is required when security deposit is enabled', 'RATE_CONTRACT_SECURITY_DEPOSIT_REQUIRED');
-  }
-  if (config.pbgRequired && config.pbgAmount <= 0) {
-    throw new ApiError(400, 'PBG amount is required when PBG is enabled', 'RATE_CONTRACT_PBG_REQUIRED');
   }
   return config;
 };
@@ -3179,12 +3167,59 @@ const RAW_MIME_TYPES: Record<string, string> = {
   '.txt': 'text/plain'
 };
 
+/**
+ * Optionally resize/reformat an image buffer via Sharp when query params are present.
+ * Supports: ?w=WIDTH&h=HEIGHT&q=QUALITY&fmt=webp|avif
+ * Returns { buffer, contentType } with the processed (or original) buffer.
+ */
+async function optimizeImageBuffer(
+  buffer: Buffer,
+  contentType: string,
+  query: Record<string, any>
+): Promise<{ buffer: Buffer; contentType: string }> {
+  const targetWidth = parseInt(query.w as string) || 0;
+  const targetHeight = parseInt(query.h as string) || 0;
+  const targetQuality = Math.min(100, Math.max(1, parseInt(query.q as string) || 80));
+  const targetFormat = (query.fmt as string || '').toLowerCase();
+  const isImage = /^image\/(jpeg|png|webp|avif|gif|tiff)/.test(contentType);
+
+  if (!isImage || (!targetWidth && !targetHeight && !targetFormat)) {
+    return { buffer, contentType };
+  }
+
+  try {
+    let pipeline = sharp(buffer);
+    if (targetWidth || targetHeight) {
+      pipeline = pipeline.resize(targetWidth || undefined, targetHeight || undefined, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      });
+    }
+    if (targetFormat === 'webp') {
+      pipeline = pipeline.webp({ quality: targetQuality });
+      contentType = 'image/webp';
+    } else if (targetFormat === 'avif') {
+      pipeline = pipeline.avif({ quality: targetQuality });
+      contentType = 'image/avif';
+    } else if (contentType === 'image/jpeg') {
+      pipeline = pipeline.jpeg({ quality: targetQuality, mozjpeg: true });
+    } else if (contentType === 'image/png') {
+      pipeline = pipeline.png({ quality: targetQuality });
+    }
+    const optimized = await pipeline.toBuffer();
+    return { buffer: optimized, contentType };
+  } catch {
+    // If Sharp fails, return original buffer
+    return { buffer, contentType };
+  }
+}
+
 router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
   const rawKey = req.params.key;
   if (!rawKey) throw new ApiError(400, 'Key is required', 'KEY_REQUIRED');
 
   const ext = path.extname(rawKey).toLowerCase();
-  const contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
+  let contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
   const cacheControl = rawKey.startsWith('categories/photos/') && req.query.v
     ? 'public, max-age=31536000, s-maxage=31536000, immutable'
     : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
@@ -3196,11 +3231,12 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     const [exists] = await file.exists();
     if (exists) {
       const [buffer] = await file.download();
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Length', buffer.length);
+      const optimized = await optimizeImageBuffer(buffer, contentType, req.query);
+      res.setHeader('Content-Type', optimized.contentType);
+      res.setHeader('Content-Length', optimized.buffer.length);
       res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      return res.end(buffer);
+      return res.end(optimized.buffer);
     }
   } catch {}
 
@@ -3212,11 +3248,12 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     if (response.ok) {
       const buffer = Buffer.from(await response.arrayBuffer());
       const headerContentType = response.headers.get('content-type') || contentType;
-      res.setHeader('Content-Type', headerContentType);
-      res.setHeader('Content-Length', buffer.length);
+      const optimized = await optimizeImageBuffer(buffer, headerContentType, req.query);
+      res.setHeader('Content-Type', optimized.contentType);
+      res.setHeader('Content-Length', optimized.buffer.length);
       res.setHeader('Cache-Control', cacheControl);
       res.setHeader('Access-Control-Allow-Origin', '*');
-      return res.end(buffer);
+      return res.end(optimized.buffer);
     }
   } catch {}
 
@@ -3231,11 +3268,12 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     for (const localPath of candidatePaths) {
       if (fs.existsSync(localPath)) {
         const buffer = await fs.promises.readFile(localPath);
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', buffer.length);
+        const optimized = await optimizeImageBuffer(buffer, contentType, req.query);
+        res.setHeader('Content-Type', optimized.contentType);
+        res.setHeader('Content-Length', optimized.buffer.length);
         res.setHeader('Cache-Control', cacheControl);
         res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.end(buffer);
+        return res.end(optimized.buffer);
       }
     }
   } catch {}
@@ -3264,17 +3302,19 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
         userAgent: req.headers['user-agent']
       });
       if (file?.buffer) {
-        res.setHeader('Content-Type', file.contentType || contentType);
-        res.setHeader('Content-Length', file.buffer.length);
+        const optimized = await optimizeImageBuffer(file.buffer, file.contentType || contentType, req.query);
+        res.setHeader('Content-Type', optimized.contentType);
+        res.setHeader('Content-Length', optimized.buffer.length);
         res.setHeader('Cache-Control', cacheControl);
         res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.end(file.buffer);
+        return res.end(optimized.buffer);
       }
     }
   } catch {}
 
   throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));
+
 
 router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const { id } = parse(idParams, req.params);
@@ -5496,7 +5536,7 @@ router.get('/procurement/drafts', authenticate, authorize('buyer'), asyncRoute(a
         if (filterMethod === 'DIRECT_PURCHASE') return false;
         if (filterMethod === 'RFQ') return false;
         if (filterMethod === 'TENDER') {
-          return ['PRODUCT_BID', 'SERVICE_BID', 'CUSTOM_BID', 'BOQ_BID', 'PAC_BID'].includes(normalizedType);
+          return ['PRODUCT_BID', 'SERVICE_BID', 'CUSTOM_BID', 'BOQ_BID'].includes(normalizedType);
         }
         return true;
       }
@@ -7761,8 +7801,8 @@ router.get('/tenders', authenticate, asyncRoute(async (req, res) => {
             {
               NOT: {
                 OR: [
-                  { procurementType: { in: ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'] } },
-                  { bidType: { in: ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'] } }
+                  { procurementType: { in: ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
+                  { bidType: { in: ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } }
                 ]
               }
             },
@@ -13116,7 +13156,6 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Budget & Sanction', pr.budgetSanction),
       detailSection('Payment Authority', pr.paymentAuthority),
       detailSection('Price Reasonability', pr.priceReasonability),
-      detailSection('PAC / Justification', pr.pacJustification),
       detailSection('Warnings & Declarations', { ...(pr.warnings as any || {}), ...(pr.declarations as any || {}) }),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 

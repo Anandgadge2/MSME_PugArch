@@ -236,8 +236,6 @@ type RateContractConfig = {
   maxPenaltyCapPercentage: number;
   securityDepositRequired: boolean;
   securityDepositAmount: number;
-  pbgRequired: boolean;
-  pbgAmount: number;
   approvalWorkflow: string;
   contractDocument: {
     fileAssetId: number | null;
@@ -347,10 +345,7 @@ type Draft = {
     advanceAllowed: boolean;
     retentionAmount: number;
     securityDeposit: number;
-    emdRequired: boolean;
-    emdAmount: number;
     documentFee: number;
-    pbgRequired: boolean;
   };
   requiredDocs: DocumentRow[];
   evaluation: {
@@ -760,8 +755,6 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   maxPenaltyCapPercentage: 10,
   securityDepositRequired: false,
   securityDepositAmount: 0,
-  pbgRequired: false,
-  pbgAmount: 0,
   approvalWorkflow: 'Finance + Procurement',
   contractDocument: {
     fileAssetId: null,
@@ -893,8 +886,6 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       penaltyClause: base.penaltyClause || draft.terms.penaltyClause,
       securityDepositRequired: false,
       securityDepositAmount: 0,
-      pbgRequired: false,
-      pbgAmount: 0,
       approvalWorkflow: base.approvalWorkflow || draft.approval.workflow || 'Finance + Procurement',
     },
   };
@@ -1089,10 +1080,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     advanceAllowed: false,
     retentionAmount: 0,
     securityDeposit: 0,
-    emdRequired: false,
-    emdAmount: 0,
     documentFee: 0,
-    pbgRequired: false,
   },
   requiredDocs: defaultRequiredDocs(type),
   evaluation: {
@@ -1597,10 +1585,6 @@ export default function CreateProcurementPage() {
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
     list.push({ label: 'Delivery terms are required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
-    // PBG check commented out as requested
-    // if (d.terms.pbgRequired) {
-    //   list.push({ label: 'ePBG / Performance security amount must be greater than 0 if required', ok: d.terms.securityDeposit > 0, severity: 'error', stepIdx: 6 });
-    // }
 
     // Step 7 Documents - Errors
     list.push({ label: 'At least one required document must be checklist', ok: d.requiredDocs.length > 0, severity: 'error', stepIdx: 7 });
@@ -1632,7 +1616,7 @@ export default function CreateProcurementPage() {
     }
 
     // Info (Sourcing Overrides)
-    const customDocs = d.requiredDocs.filter(doc => !['PAN Card', 'GST Certificate', 'MSME Certificate', 'Bid Security / Exemption Certificate', 'Technical Proposal', 'Proprietary Article Certificate', 'Sanction Letter'].includes(doc.name));
+    const customDocs = d.requiredDocs.filter(doc => !['PAN Card', 'GST Certificate', 'MSME Certificate', 'Technical Proposal', 'Sanction Letter'].includes(doc.name));
     customDocs.forEach(c => {
       list.push({ label: `Custom document checklist added: "${c.name}"`, ok: true, severity: 'info' });
     });
@@ -1736,8 +1720,6 @@ export default function CreateProcurementPage() {
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
       if (!d.terms.deliveryTerms) return false;
-      // PBG check commented out as requested
-      // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) return false;
     } else if (stepIdx === 7) {
       if (d.requiredDocs.length === 0) return false;
     } else if (stepIdx === 8) {
@@ -2056,11 +2038,6 @@ export default function CreateProcurementPage() {
         toast.error('Delivery terms are required.');
         return false;
       }
-      // PBG check commented out as requested
-      // if (d.terms.pbgRequired && d.terms.securityDeposit <= 0) {
-      //   toast.error('PBG Amount / Performance Security amount is required when enabled.');
-      //   return false;
-      // }
     } else if (stepIdx === 7) {
       // Step 7 Documents
       if (d.requiredDocs.length === 0) {
@@ -2997,7 +2974,7 @@ function BasicsStepForm({
                         required: true,
                         fileType: 'pdf',
                         maxSize: 5,
-                        instructions: 'Upload official emergency procurement approval note or PAC justification.'
+                        instructions: 'Upload official emergency procurement approval note.'
                       }
                     ];
                   }
@@ -8496,7 +8473,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   tender.evaluationMethod = chosenEvaluationMethod;
 
   const rules = {
-    performanceSecurity: draft.terms.pbgRequired,
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
     auctionConfig: auctionConfigPayload,

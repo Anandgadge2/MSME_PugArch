@@ -3,8 +3,7 @@ export const ACCOUNT_TYPE_IDS = {
   SUPERADMIN: 1,
   SELLER: 2,
   BUYER: 3,
-  SHG: 4,
-  FINANCIER: 5
+  SHG: 4
 } as const;
 
 export const legacyRoleToAccountType = (role?: string | null) => {
@@ -17,8 +16,6 @@ export const legacyRoleToAccountType = (role?: string | null) => {
       return { accountType: 'SELLER', accountTypeId: ACCOUNT_TYPE_IDS.SELLER };
     case 'shg':
       return { accountType: 'SHG', accountTypeId: ACCOUNT_TYPE_IDS.SHG };
-    case 'financier':
-      return { accountType: 'FINANCIER', accountTypeId: ACCOUNT_TYPE_IDS.FINANCIER };
     case 'buyer':
     default:
       return { accountType: 'BUYER', accountTypeId: ACCOUNT_TYPE_IDS.BUYER };

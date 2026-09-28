@@ -3,7 +3,6 @@ export type ProcurementMethodCode =
   | 'L1_PURCHASE'
   | 'BID_FROM_CART'
   | 'RA_FROM_CART'
-  | 'PAC_PROCUREMENT'
   | 'SINGLE_SOURCE'
   | 'REPEAT_ORDER';
 
@@ -12,7 +11,6 @@ export interface ProcurementModeSettingsDto {
   l1PurchaseMaxValue: number;
   bidMinValue: number;
   raRecommendedMinValue: number;
-  pacApprovalRequired: boolean;
   internalApprovalRequired: boolean;
   demandSplitLookbackDays: number;
   demandSplitSimilarityThreshold: number;
@@ -31,7 +29,6 @@ export interface CartEvaluationResult {
   itemCount: number;
   l1Required: boolean;
   bidRequired: boolean;
-  pacRequired: boolean;
   demandSplittingRisk: boolean;
   priceReasonabilityRisk: boolean;
   warnings: string[];

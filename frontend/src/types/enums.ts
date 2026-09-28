@@ -62,7 +62,6 @@ export const CanonicalProcurementMethod = {
   RATE_CONTRACT: 'RATE_CONTRACT',
   REPEAT_ORDER: 'REPEAT_ORDER',
   SINGLE_SOURCE: 'SINGLE_SOURCE',
-  PAC: 'PAC',
   EMERGENCY_PURCHASE: 'EMERGENCY_PURCHASE',
   BOQ_BASED_BID: 'BOQ_BASED_BID',
 } as const;
@@ -84,13 +83,12 @@ export const CANONICAL_METHOD_LABELS: Record<string, string> = {
   RATE_CONTRACT: 'Rate Contract',
   REPEAT_ORDER: 'Repeat Order',
   SINGLE_SOURCE: 'Single Source',
-  PAC: 'PAC / Proprietary',
   EMERGENCY_PURCHASE: 'Emergency Purchase',
   BOQ_BASED_BID: 'BOQ Based Bid',
 };
 
 export const EXCEPTION_PROCUREMENT_METHODS = new Set([
-  'PAC', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE',
+  'SINGLE_SOURCE', 'EMERGENCY_PURCHASE',
 ]);
 
 export const isExceptionProcurement = (method: string): boolean =>

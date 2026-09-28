@@ -123,7 +123,7 @@ export default function ProcurementReportPage() {
                         <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                             <p className="text-[10px] font-black uppercase tracking-widest text-blue-700">Interpretation</p>
                             <p className="mt-1 text-xs font-semibold text-slate-700">
-                                Reports show exact canonical procurement methods across all entities. Exception procurement (PAC, Single Source, Emergency) is flagged separately for audit compliance.
+                                Reports show exact canonical procurement methods across all entities. Exception procurement (Single Source, Emergency) is flagged separately for audit compliance.
                             </p>
                         </div>
                     </>

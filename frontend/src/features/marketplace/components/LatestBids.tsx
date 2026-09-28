@@ -35,7 +35,8 @@ function BuyerLogoIcon({ name, logoUrl }: { name?: string; logoUrl?: string | nu
             <span className="flex h-5 w-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white p-0.5 border border-slate-200 shadow-2xs">
                 <img
                     src={resolvedUrl}
-                    alt={`${name || 'Buyer'} logo`}
+                    alt=""
+                    aria-hidden="true"
                     onError={() => setImgErr(true)}
                     className="h-full w-full object-contain rounded-full"
                     loading="lazy"
@@ -450,7 +451,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                         link = sellerRoutes.detail('RATE_CONTRACT', displayId);
                     } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
                         link = sellerRoutes.detail('RFQ', displayId);
-                    } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
+                    } else if (['RFP', 'SINGLE_SOURCE'].includes(method)) {
                         link = sellerRoutes.detail('RFP', displayId);
                     } else if (method === 'OPEN_TENDER' || method.includes('OPEN')) {
                         link = sellerRoutes.detail('OPEN_TENDER', displayId);

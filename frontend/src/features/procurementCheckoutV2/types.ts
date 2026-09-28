@@ -3,7 +3,6 @@ export type ProcurementMethodCode =
   | 'L1_PURCHASE'
   | 'BID_FROM_CART'
   | 'RA_FROM_CART'
-  | 'PAC_PROCUREMENT'
   | 'SINGLE_SOURCE'
   | 'REPEAT_ORDER';
 
@@ -16,7 +15,6 @@ export interface CartEvaluation {
   itemCount: number;
   l1Required: boolean;
   bidRequired: boolean;
-  pacRequired: boolean;
   demandSplittingRisk: boolean;
   priceReasonabilityRisk: boolean;
   warnings: string[];
@@ -27,7 +25,6 @@ export interface CartEvaluation {
 export interface CheckoutFormData {
   selectedMethod: ProcurementMethodCode | '';
   l1ComparisonId?: number;
-  pacJustification?: Record<string, unknown>;
   demandSplittingConfirmation: boolean;
   buyerDetails: Record<string, unknown>;
   consigneeDetails: Record<string, unknown>;

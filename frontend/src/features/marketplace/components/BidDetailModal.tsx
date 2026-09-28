@@ -325,10 +325,6 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.evaluation || 'L1 Lowest Price'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Performance Security:</span>{' '}
-                                                    <span className="font-bold text-slate-800">{requirement.payload.rules.performanceSecurity ? 'Yes' : 'No'}</span>
-                                                </div>
-                                                <div>
                                                     <span className="text-slate-400 font-semibold">Reverse Auction:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.reverseAuctionIntent ? 'Yes' : 'No'}</span>
                                                 </div>

@@ -239,13 +239,10 @@ export const step6Schema = z.object({
   similarWorkCount: z.coerce.number().nonnegative().optional(),
   bidderDocuments: z.array(z.string()).min(1, 'Bidder documents are required'),
   msePreference: yesNoBoolean,
-  makeInIndiaPreference: yesNoBoolean,
-  pbgRequired: yesNoBoolean,
-  pbgPercentage: z.coerce.number().nonnegative().optional(),
   blacklistingDeclarationRequired: yesNoBoolean,
   conflictOfInterestDeclarationRequired: yesNoBoolean,
   technicalPacket: technicalPacketSchema.optional()
-}).refine(data => !data.pbgRequired || Number(data.pbgPercentage || 0) > 0, { path: ['pbgPercentage'], message: 'PBG percentage is required' });
+});
 
 export const financialPacketSchema = z.object({
   financialQuoteFormat: z.enum(['ITEM_WISE', 'TOTAL_BOQ', 'PERCENTAGE', 'LOT_WISE']),

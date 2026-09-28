@@ -120,7 +120,6 @@ export function useProcurementCheckout() {
       const result = await evaluateCartProcurementMode({
         cartId: cart.id,
         selectedMethod,
-        proprietary: selectedMethod === 'PAC_PROCUREMENT',
       });
       setEvaluation(result);
       return result;

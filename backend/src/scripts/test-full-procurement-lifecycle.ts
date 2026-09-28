@@ -125,8 +125,8 @@ async function runFullLifecycleTest() {
         console.log(`  ✓ Purchase Order Status: ${updatedPo.status}`);
         passedSteps++;
 
-        // Step 8: EMD & Escrow Payment Transaction
-        console.log('\n[Step 8/9] Processing Escrow Payment & EMD Hold...');
+        // Step 8: Escrow Payment Transaction
+        console.log('\n[Step 8/9] Processing Escrow Payment...');
         const payment = await prisma.paymentTransaction.create({
             data: {
                 referenceId: `PAY-2026-${String(Math.floor(Math.random() * 89999) + 10000).padStart(5, '0')}`,

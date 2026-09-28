@@ -296,8 +296,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     quantity: (cMeta.itemRateSchedule || []).reduce((sum: number, it: any) => sum + (Number(it.estimatedAnnualQuantity) || 0), 0) || undefined,
     unit: cMeta.itemRateSchedule?.[0]?.unitOfMeasure || 'Units',
     buyerOrganization: (contractData as any).buyerOrganization || { organizationName: cMeta.buyerOrganizationName || 'Verified Buyer' },
-    isEmdRequired: false,
-    emdAmount: 0,
     allowReverseAuction: false,
   } : null;
 
@@ -332,8 +330,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     quantity: reqObj.quantity || bid?.quantity,
     unit: reqObj.unit || bid?.unit,
     buyerOrganization: reqObj.buyerOrganization || bid?.buyerOrganization,
-    isEmdRequired: reqObj.isEmdRequired ?? reqObj.payload?.isEmdRequired ?? bid?.isEmdRequired,
-    emdAmount: reqObj.emdAmount ?? reqObj.payload?.emdAmount ?? bid?.emdAmount,
   } : contractAsRcData ? contractAsRcData : isBidActualRc && bid ? {
     id: bid.id || bid.sourceId,
     subject: bid.title,
@@ -357,8 +353,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     buyerOrganization: bid.buyerOrganization || { organizationName: bid.buyerOrganizationName },
     visibility: bid.visibility,
     allowReverseAuction: false,
-    isEmdRequired: bid.isEmdRequired,
-    emdAmount: bid.emdAmount,
     evaluationMethod: [
       bid.technicalPacket?.evaluation?.method,
       bid.technicalPacket?.evaluation?.evaluationMethod,
@@ -540,10 +534,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const paymentTermsText = rcData.paymentTerms || terms.paymentTerms || rateContractConfig.paymentTerms || null;
   const securityDepositRequired = rateContractConfig.securityDepositRequired;
   const securityDepositAmount = rateContractConfig.securityDepositAmount;
-  const pbgRequired = rateContractConfig.pbgRequired;
-  const pbgAmount = rateContractConfig.pbgAmount;
-  const emdRequired = rcData.isEmdRequired || terms.emdRequired;
-  const emdAmount = rcData.emdAmount || terms.emdAmount;
 
   /* ── Description / Scope ── */
   const displayScope = rcData.description || basics.description || rateContractConfig.contractDescription || null;

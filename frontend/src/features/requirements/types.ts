@@ -14,7 +14,6 @@ export type CanonicalProcurementMethod =
     | 'RATE_CONTRACT'
     | 'REPEAT_ORDER'
     | 'SINGLE_SOURCE'
-    | 'PAC'
     | 'EMERGENCY_PURCHASE'
     | 'BOQ_BASED_BID';
 export type RequirementStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'CONVERTED_TO_TENDER' | 'CLOSED';

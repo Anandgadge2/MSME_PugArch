@@ -1,7 +1,7 @@
 /**
  * Open Tender Isolated Business Logic Handler
  * 
- * Manages validation, public tender bidding, EMD qualification, multi-stage evaluation
+ * Manages validation, public tender bidding, multi-stage evaluation
  * (technical + financial), and formal tender awards specifically for Open Tenders.
  * Changes here will NEVER affect RFP or RFQ.
  */

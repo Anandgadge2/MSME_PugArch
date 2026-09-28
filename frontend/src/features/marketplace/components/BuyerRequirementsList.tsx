@@ -387,7 +387,7 @@ export function BuyerRequirementsList({
             return sellerRoutes.detail('RATE_CONTRACT', sourceId);
         } else if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
             return sellerRoutes.detail('RFQ', sourceId);
-        } else if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
+        } else if (['RFP', 'SINGLE_SOURCE'].includes(method)) {
             return sellerRoutes.detail('RFP', sourceId);
         } else if (method === 'OPEN_TENDER' || method.includes('OPEN') || title.includes('OPEN TENDER')) {
             return sellerRoutes.detail('OPEN_TENDER', sourceId);
@@ -709,7 +709,7 @@ export function BuyerRequirementsList({
                             )}
 
                             {/* View Mode Toggle */}
-                            <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 ml-auto shrink-0" aria-label="Display mode">
+                            <div role="group" className="inline-flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 ml-auto shrink-0" aria-label="Display mode">
                                 <button
                                     type="button"
                                     onClick={() => setViewMode('grid')}

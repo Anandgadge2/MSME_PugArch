@@ -2268,7 +2268,7 @@ export const extendBidSchedule = async (
       steps: [
         'If you have already submitted your bid: Your quotation remains securely recorded and sealed. You may review or revise it at any time before the new deadline.',
         `If you have not yet submitted: Complete your technical and financial submission through the official portal before ${revisedDeadlineStr}.`,
-        'Ensure all required statutory compliance documents, schedule sheets, and BG / EMD confirmations are attached.'
+        'Ensure all required statutory compliance documents and schedule sheets are attached.'
       ]
     },
     actionButton: {

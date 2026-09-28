@@ -106,8 +106,6 @@ model User {
   idempotencyKeys                    IdempotencyKey[]
   buyerInvoices                      Invoice[]                               @relation("BuyerInvoices")
   sellerInvoices                     Invoice[]                               @relation("SellerInvoices")
-  financierFactoring                 InvoiceFactoring[]                      @relation("FinancierFactoring")
-  sellerFactoring                    InvoiceFactoring[]                      @relation("SellerFactoring")
   kycAuditLogs                       KycAuditLog[]
   kycAuthSessions                    KycAuthSession[]
   l1ComparisonsCreated               L1Comparison[]                          @relation("L1ComparisonBuyer")
@@ -2670,7 +2668,6 @@ model Invoice {
   invoiceFile        FileAsset?           @relation("InvoiceFile", fields: [invoiceFileId], references: [id])
   purchaseOrder      PurchaseOrder        @relation(fields: [purchaseOrderId], references: [id])
   seller             User                 @relation("SellerInvoices", fields: [sellerId], references: [id])
-  factoring          InvoiceFactoring?
   items              InvoiceItem[]
   milestonePayments  MilestonePayment[]
   paymentSettlements PaymentSettlement[]  @relation("PaymentSettlementInvoice")
@@ -4048,28 +4045,6 @@ model MarketplaceInteraction {
   @@index([createdAt])
 }
 
-model InvoiceFactoring {
-  id              Int      @id @default(autoincrement())
-  invoiceId       Int      @unique
-  sellerId        Int
-  financierId     Int?
-  status          String   @default("INITIATED")
-  requestedAmount Decimal  @db.Decimal(18, 2)
-  factoredAmount  Decimal? @db.Decimal(18, 2)
-  feeAmount       Decimal? @db.Decimal(18, 2)
-  discountRate    Decimal? @db.Decimal(18, 2)
-  repaymentAmount Decimal? @db.Decimal(18, 2)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  financier       User?    @relation("FinancierFactoring", fields: [financierId], references: [id], onDelete: Restrict)
-  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  seller          User     @relation("SellerFactoring", fields: [sellerId], references: [id])
-
-  @@index([status])
-  @@index([sellerId])
-  @@index([financierId])
-}
-
 model AddressGroup {
   id               Int               @id @default(autoincrement())
   buyerId          Int
@@ -4141,7 +4116,6 @@ model ProcurementRequest {
   priceReasonability Json?
   termsDocuments     Json?
   l1ComparisonId     Int?
-  pacJustification   Json?
   warnings           Json?
   declarations       Json?
   submittedAt        DateTime?
@@ -4169,7 +4143,6 @@ model ProcurementModeSetting {
   l1PurchaseMaxValue                        Decimal       @default(500000) @db.Decimal(18, 2)
   bidMinValue                               Decimal       @default(500001) @db.Decimal(18, 2)
   raRecommendedMinValue                     Decimal       @default(500001) @db.Decimal(18, 2)
-  pacApprovalRequired                       Boolean       @default(true)
   internalApprovalRequired                  Boolean       @default(true)
   demandSplitLookbackDays                   Int           @default(90)
   demandSplitSimilarityThreshold            Decimal       @default(0.8) @db.Decimal(5, 4)
@@ -4402,7 +4375,6 @@ enum BidType {
   BOQ_BID
   BID_WITH_RA
   REVERSE_AUCTION
-  PAC_BID
 }
 
 enum DraftStatus {

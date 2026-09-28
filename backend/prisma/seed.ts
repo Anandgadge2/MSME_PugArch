@@ -15,8 +15,7 @@ const roles = [
   ['SELLER', 'Seller', 'Seller organization user'],
   ['FINANCE_OFFICER', 'Finance Officer', 'Invoice, payment, and escrow operations'],
   ['AUDITOR', 'Auditor', 'Read-only audit and compliance review'],
-  ['SUPPORT_AGENT', 'Support Agent', 'Support, grievance, and dispute triage'],
-  ['FINANCIER', 'Financier', 'Financing partner for invoice factoring / bill discounting']
+  ['SUPPORT_AGENT', 'Support Agent', 'Support, grievance, and dispute triage']
 ] as const;
 
 const permissions = [
@@ -74,8 +73,7 @@ const rolePermissionCodes: Record<string, string[]> = {
   SELLER: ['seller.catalogue.create', 'bid.submit', 'delivery.update', 'invoice.submit', 'dispute.manage'],
   FINANCE_OFFICER: ['invoice.verify', 'payment.initiate', 'escrow.release', 'audit.view'],
   AUDITOR: ['audit.view', 'admin.reports.view', 'compliance.review', 'fraud.review'],
-  SUPPORT_AGENT: ['dispute.manage', 'compliance.review'],
-  FINANCIER: []
+  SUPPORT_AGENT: ['dispute.manage', 'compliance.review']
 };
 
 const complianceRules = [
@@ -154,8 +152,7 @@ async function main() {
     [ACCOUNT_TYPE_IDS.SUPERADMIN, 'SUPERADMIN', 'Superadmin / Collector', 'District or collector administrator'],
     [ACCOUNT_TYPE_IDS.SELLER, 'SELLER', 'Seller', 'Seller organization account'],
     [ACCOUNT_TYPE_IDS.BUYER, 'BUYER', 'Buyer', 'Buyer organization account'],
-    [ACCOUNT_TYPE_IDS.SHG, 'SHG', 'SHG', 'Self-help group account'],
-    [ACCOUNT_TYPE_IDS.FINANCIER, 'FINANCIER', 'Financier', 'Financing partner account']
+    [ACCOUNT_TYPE_IDS.SHG, 'SHG', 'SHG', 'Self-help group account']
   ] as const;
 
   for (const [id, code, name, description] of accountTypes) {

@@ -44,7 +44,6 @@ export function deriveMethodPrefix(method?: string | null, rawRef?: string | nul
       m.includes('CART') ||
       m.includes('CHECKOUT') ||
       m.includes('CATALOG') ||
-      m.includes('PAC') ||
       m.includes('L1')
     ) return 'DP';
     if (m.includes('AUCTION') || m === 'RA') return 'RA';

@@ -47,7 +47,7 @@ export default function CheckoutWizardLayout({
     <div className="mx-auto max-w-7xl space-y-4">
       <div className="border-b border-slate-200 pb-4">
         <h1 className="text-xl font-black text-slate-950">Procurement Checkout Wizard</h1>
-        <p className="text-xs text-slate-500">Select Direct Purchase, L1, Bid/RA, or PAC based on cart value and rules.</p>
+        <p className="text-xs text-slate-500">Select Direct Purchase, L1, or Bid/RA based on cart value and rules.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[240px_1fr]">

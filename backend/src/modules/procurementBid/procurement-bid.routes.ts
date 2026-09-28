@@ -673,7 +673,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             penaltyClause: meta.penaltyClause || srcPayload?.terms?.penaltyClause || '',
             withdrawal: srcPayload?.terms?.withdrawal ?? (srcPayload?.schedule?.allowWithdrawal ?? null),
             revision: srcPayload?.terms?.revision ?? (srcPayload?.schedule?.allowRevision ?? null),
-            pbgRequired: Boolean(meta.pbgRequired),
           },
           vendors: {
             selection: srcPayload?.vendors?.selection || (meta.supplierSelectionStrategy ? meta.supplierSelectionStrategy : 'Open'),
@@ -710,8 +709,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             penaltyClause: meta.penaltyClause || '',
             securityDepositRequired: Boolean(meta.securityDepositRequired),
             securityDepositAmount: meta.securityDepositAmount ? Number(meta.securityDepositAmount) : 0,
-            pbgRequired: Boolean(meta.pbgRequired),
-            pbgAmount: meta.pbgAmount ? Number(meta.pbgAmount) : 0,
             contractDocument: meta.contractDocument || null,
           },
           documents: contractDocs,

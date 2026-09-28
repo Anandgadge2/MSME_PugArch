@@ -528,8 +528,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerSubmittedProposals,
                 sellerReceivedRfqs,
                 buyerProcurementActiveBids,
-                buyerProcurementTotalSpent,
-                sellerInvoiceFactoring
+                buyerProcurementTotalSpent
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -668,21 +667,6 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             where: { ...buyerRecordWhere, sourceType: 'procurement_bid_award', status: { not: 'cancelled' } },
                             _sum: { amount: true }
                         }).then(r => Number(r._sum.amount || 0)).catch(() => 0)
-                        : Promise.resolve(0),
-                    // Invoice factoring available/active count
-                    isSeller
-                        ? Promise.all([
-                            prisma.invoice.count({
-                                where: {
-                                    ...sellerRecordWhere,
-                                    OR: [{ status: 'approved' }, { invoiceStatus: 'APPROVED' }],
-                                    factoring: null
-                                }
-                            }).catch(() => 0),
-                            (prisma as any).invoiceFactoring.count({
-                                where: { invoice: sellerRecordWhere }
-                            }).catch(() => 0)
-                        ]).then(([inv, fac]) => inv + fac).catch(() => 0)
                         : Promise.resolve(0)
             ]);
 
@@ -705,7 +689,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         { technicalPacket: { path: ['vendors', 'invitedSellers'], array_contains: value } },
                         { technicalPacket: { path: ['qualifiedVendors'], array_contains: value } }
                     ]));
-                    const restrictedProcurementMethods = ['DIRECT_PURCHASE', 'L1_PURCHASE', 'PROPRIETARY', 'NOMINATION', 'PAC'];
+                    const restrictedProcurementMethods = ['DIRECT_PURCHASE', 'L1_PURCHASE', 'PROPRIETARY', 'NOMINATION'];
                     const privateBidPredicate = {
                         OR: [
                             { visibility: 'PRIVATE' as const },
@@ -887,7 +871,6 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerRateContractsCount: sellerOppsData.rateContracts,
                 reverseAuctionsLive: sellerOppsData.auctions,
                 reverseAuctionInvites: sellerOppsData.auctions,
-                invoiceFactoringCount: sellerInvoiceFactoring,
                 orgRole
             };
         },

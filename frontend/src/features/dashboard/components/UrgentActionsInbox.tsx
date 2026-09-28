@@ -10,7 +10,6 @@ import {
   CreditCard, 
   MessageSquare, 
   ArrowRight,
-  Landmark,
   FileCheck,
   CheckCircle2,
   Package,
@@ -24,7 +23,7 @@ import { api, unwrapApiData } from '../../../lib/api';
 
 interface ActionItem {
   id: string;
-  type: 'rfq' | 'dispatch' | 'factoring' | 'clarification' | 'auction';
+  type: 'rfq' | 'dispatch' | 'clarification' | 'auction';
   title: string;
   subtitle: string;
   badge: string;
@@ -112,21 +111,6 @@ export function UrgentActionsInbox() {
         actionHref: `${prefix}/orders`,
         actionLabel: 'View Orders',
         icon: Truck
-      });
-    }
-
-    const factoringCount = summaryData?.invoiceFactoringCount || 0;
-    if (factoringCount > 0) {
-      items.push({
-        id: 'act-fac',
-        type: 'factoring',
-        title: `${factoringCount} Invoices Eligible for TReDS Early Payout`,
-        subtitle: 'Unlock 24-hour invoice discounting on approved buyer purchase orders.',
-        badge: 'Fast Liquidity',
-        badgeTone: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        actionHref: '/factoring',
-        actionLabel: 'Get Paid Early',
-        icon: Landmark
       });
     }
 

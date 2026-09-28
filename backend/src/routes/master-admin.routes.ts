@@ -91,7 +91,7 @@ const checkNotMasterAdmin = async (id: number, res: Response): Promise<boolean> 
   return true;
 };
 
-const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'financier', 'shg']);
+const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'shg']);
 const allowedUserStatuses = new Set(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']);
 const allowedVerificationStatuses = new Set(['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'FAILED', 'MANUAL_REVIEW_REQUIRED', 'EXPIRED']);
 const allowedOrganizationTypes = new Set(['MSME', 'PROPRIETORSHIP', 'PARTNERSHIP', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'TRUST', 'SOCIETY', 'STARTUP', 'NGO', 'EDUCATIONAL_INSTITUTION', 'GOVERNMENT', 'PSU']);
@@ -397,7 +397,6 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     if (invoiceIds.length > 0) {
       await rawSql('MilestonePayment_inv', `DELETE FROM "MilestonePayment" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
       await rawSql('InvoiceItem', `DELETE FROM "InvoiceItem" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
-      await rawSql('InvoiceFactoring_inv', `DELETE FROM "InvoiceFactoring" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
       await rawSql('PaymentSettlement_nullify_i', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
       await rawSql('PaymentSettlement_inv', `DELETE FROM "PaymentSettlement" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
       await rawSql('PaymentTransaction_nullify_inv', `UPDATE "PaymentTransaction" SET "invoiceId" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
@@ -490,7 +489,6 @@ export const permanentlyDeleteUser = async (req: AuthRequest | null, id: number,
     await rawSql('BuyerRating', `DELETE FROM "BuyerRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
     await rawSql('ComplianceViolation', `DELETE FROM "ComplianceViolation" WHERE "userId" ${uIn}`);
     await rawSql('FraudAlert', `DELETE FROM "FraudAlert" WHERE "userId" ${uIn} OR "reviewedById" ${uIn}`);
-    await rawSql('InvoiceFactoring_u', `DELETE FROM "InvoiceFactoring" WHERE "sellerId" ${uIn} OR "financierId" ${uIn}`);
 
     await rawSql('CatalogueImportError', `DELETE FROM "CatalogueImportError" WHERE "batchId" IN (${catBatchSub})`);
     await rawSql('CatalogueImportBatch', `DELETE FROM "CatalogueImportBatch" WHERE "sellerId" ${uIn}`);
@@ -2505,7 +2503,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       if (invoiceIds.length > 0) {
         await rawSql('MilestonePayment_inv', `DELETE FROM "MilestonePayment" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('InvoiceItem', `DELETE FROM "InvoiceItem" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
-        await rawSql('InvoiceFactoring_inv', `DELETE FROM "InvoiceFactoring" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('PaymentSettlement_nullify_i', `UPDATE "PaymentSettlement" SET "invoiceVerifiedById" = NULL, "approvedById" = NULL, "releasedById" = NULL, "rejectedById" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('PaymentSettlement_inv', `DELETE FROM "PaymentSettlement" WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
         await rawSql('PaymentTransaction_nullify_inv', `UPDATE "PaymentTransaction" SET "invoiceId" = NULL WHERE "invoiceId" ${sqlIn(invoiceIds)}`);
@@ -2603,7 +2600,6 @@ router.delete('/master-admin/organizations/:id/cascade', ...masterOnly, requireP
       await rawSql('SupplierRating', `DELETE FROM "SupplierRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
       await rawSql('BuyerRating', `DELETE FROM "BuyerRating" WHERE "buyerId" ${uIn} OR "sellerId" ${uIn}`);
       await rawSql('ComplianceViolation', `DELETE FROM "ComplianceViolation" WHERE "userId" ${uIn}`);
-      await rawSql('InvoiceFactoring_u', `DELETE FROM "InvoiceFactoring" WHERE "sellerId" ${uIn} OR "financierId" ${uIn}`);
 
       // --- Catalogue imports ---
       await rawSql('CatalogueImportError', `DELETE FROM "CatalogueImportError" WHERE "batchId" IN (${catBatchSub})`);

@@ -1417,32 +1417,8 @@ export const deliveryService = {
         where: { deliveryTrackingId: id }
       });
       
-      let redirectMetadata = {};
-      let updatedRemarks = body.remarks;
-      
-      if (settlement?.invoiceId) {
-        const factoring = await tx.invoiceFactoring.findUnique({
-          where: { invoiceId: settlement.invoiceId }
-        });
-        
-        if (factoring && factoring.status === 'DISBURSED') {
-          await tx.invoiceFactoring.update({
-            where: { invoiceId: settlement.invoiceId },
-            data: { status: 'SETTLED' }
-          });
-          
-          redirectMetadata = {
-            factored: true,
-            factoringId: factoring.id,
-            financierId: factoring.financierId,
-            originalSellerId: factoring.sellerId,
-            discountRate: factoring.discountRate,
-            feeAmount: factoring.feeAmount
-          };
-          
-          updatedRemarks = `[Invoice Factored - Settled to Financier] ${body.remarks || ''}`.trim();
-        }
-      }
+      const redirectMetadata = {};
+      const updatedRemarks = body.remarks;
 
       await tx.paymentSettlement.update({
         where: { deliveryTrackingId: id },

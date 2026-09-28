@@ -13,8 +13,8 @@ interface User {
   name: string;
   email: string;
   mobile?: string;
-  role: 'seller' | 'buyer' | 'shg' | 'admin' | 'master_admin' | 'financier';
-  accountType?: 'MASTER_ADMIN' | 'SUPERADMIN' | 'SELLER' | 'BUYER' | 'SHG' | 'FINANCIER';
+  role: 'seller' | 'buyer' | 'shg' | 'admin' | 'master_admin';
+  accountType?: 'MASTER_ADMIN' | 'SUPERADMIN' | 'SELLER' | 'BUYER' | 'SHG';
   accountTypeId?: number;
   isDualRole?: boolean;
   registrationStatus?: 'incomplete' | 'completed';

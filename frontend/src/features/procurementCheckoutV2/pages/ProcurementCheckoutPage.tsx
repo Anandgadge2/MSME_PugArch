@@ -68,7 +68,7 @@ export default function ProcurementCheckoutPage() {
 
   const method = wizard.formData.selectedMethod;
   const canPlaceOrder = method === 'DIRECT_PURCHASE' || method === 'L1_PURCHASE';
-  const canConvertBid = method === 'BID_FROM_CART' || method === 'RA_FROM_CART' || method === 'PAC_PROCUREMENT';
+  const canConvertBid = method === 'BID_FROM_CART' || method === 'RA_FROM_CART';
 
   return (
     <CheckoutWizardLayout

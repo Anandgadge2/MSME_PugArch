@@ -467,15 +467,15 @@ export const convertCartToBidDraft = async (
   const request = await getProcurementRequestForOrg(requestId, organizationId, buyerId);
   validateBudgetSanction(request);
 
-  if (!['BID_FROM_CART', 'RA_FROM_CART', 'PAC_PROCUREMENT'].includes(request.selectedMethod || '')) {
-    throw new ApiError(409, 'Request is not configured for bid/RA/PAC conversion.', 'INVALID_METHOD');
+  if (!['BID_FROM_CART', 'RA_FROM_CART'].includes(request.selectedMethod || '')) {
+    throw new ApiError(409, 'Request is not configured for bid/RA conversion.', 'INVALID_METHOD');
   }
 
   const cartSnap = request.cartSnapshot as { items?: unknown[]; totalValue?: number } | null;
   const draft = await prisma.bidWizardDraft.create({
     data: {
       buyerId,
-      bidType: request.selectedMethod === 'RA_FROM_CART' ? 'REVERSE_AUCTION' : request.selectedMethod === 'PAC_PROCUREMENT' ? 'PAC_BID' : 'PRODUCT_BID',
+      bidType: request.selectedMethod === 'RA_FROM_CART' ? 'REVERSE_AUCTION' : 'PRODUCT_BID',
       currentStep: 4,
       formData: {
         fromCart: true,
@@ -485,7 +485,6 @@ export const convertCartToBidDraft = async (
         step4: { items: cartSnap?.items || [] },
         step5: request.deliveryDetails || {},
         estimatedValue: cartSnap?.totalValue,
-        pacJustification: request.pacJustification,
         step7: request.termsDocuments || {},
       },
       draftStatus: 'DRAFT',

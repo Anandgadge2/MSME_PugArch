@@ -1740,8 +1740,8 @@ export default function SubmitQuotationPage() {
       const key = label.toLowerCase();
       if (!label) return;
 
-      // Internal PAC/administrative documents are buyer justifications, not supplier compliance
-      const isInternalBuyerDoc = key.includes('emergency approval') || key.includes('pac justification') || key.includes('competent authority approval');
+      // Internal administrative documents are buyer justifications, not supplier compliance
+      const isInternalBuyerDoc = key.includes('emergency approval') || key.includes('competent authority approval');
       const effectiveRequired = isInternalBuyerDoc ? false : required;
 
       if (seen.has(key)) {

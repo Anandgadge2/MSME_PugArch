@@ -100,20 +100,9 @@ export const validateStep = (
       if (!price.priceReasonabilityRemarks) {
         errors.priceReasonabilityRemarks = 'Remarks are required for Direct Purchase';
       }
-    } else if (method === 'PAC_PROCUREMENT' || method === 'SINGLE_SOURCE') {
+    } else if (method === 'SINGLE_SOURCE') {
       if (!price.priceReasonabilityRemarks) {
-        errors.priceReasonabilityRemarks = `Remarks are mandatory for ${method === 'PAC_PROCUREMENT' ? 'PAC' : 'Single Source'}`;
-      }
-      // Check for PAC justification document in termsDocuments
-      const docs = Array.isArray((form.termsDocuments as any)?.documents) ? (form.termsDocuments as any).documents : [];
-      const hasPacDoc = docs.some((d: any) =>
-        d.documentType === 'PAC Certificate' ||
-        d.documentType === 'Proprietary Article Certificate' ||
-        d.documentType === 'Other Supporting Document' ||
-        d.documentType === 'Approval Document'
-      );
-      if (!hasPacDoc) {
-        errors.pacCertificate = `${method === 'PAC_PROCUREMENT' ? 'PAC' : 'Single Source'} justification document is required (upload in Step 7)`;
+        errors.priceReasonabilityRemarks = 'Remarks are mandatory for Single Source';
       }
     } else if (method === 'REPEAT_ORDER') {
       if (!price.lastPurchasePrice) {

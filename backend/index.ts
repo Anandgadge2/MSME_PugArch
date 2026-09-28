@@ -5815,11 +5815,11 @@ app.get('/api/admin/stats', authenticate, authorizeAdmin, async (req, res) => {
 });
 
 // --- Secure Messaging ---
-app.get('/api/messages/users/search', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin', 'financier', 'shg'), async (req: AuthRequest, res) => {
+app.get('/api/messages/users/search', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin', 'shg'), async (req: AuthRequest, res) => {
   try {
     const q = sanitizePortalText(String(req.query.q || '').trim(), 80);
     const role = String(req.query.role || '').trim();
-    const allowedRoles = ['buyer', 'seller', 'admin', 'financier', 'shg'];
+    const allowedRoles = ['buyer', 'seller', 'admin', 'shg'];
     const where: any = {
       id: { not: Number(req.user?.id) },
       role: { not: 'master_admin' },
@@ -5958,7 +5958,7 @@ app.post('/api/conversations', authenticate, authorize('buyer', 'seller', 'admin
       return res.status(400).json({ message: 'Valid buyer and seller are required' });
     }
 
-    const allowedUserRoles = ['buyer', 'seller', 'admin', 'master_admin', 'shg', 'financier'];
+    const allowedUserRoles = ['buyer', 'seller', 'admin', 'master_admin', 'shg'];
     const buyer = await prisma.user.findFirst({
       where: { id: buyerId, role: { in: allowedUserRoles as any } },
       select: conversationUserSelect

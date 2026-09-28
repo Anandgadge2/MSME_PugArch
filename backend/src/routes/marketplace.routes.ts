@@ -546,8 +546,8 @@ const loadLatestProcurementBids = async (take = 6) => {
                 approvalStatus: 'APPROVED',
                 status: { in: ['OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'] },
                 NOT: [
-                    { procurementType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'] } },
-                    { bidType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'] } }
+                    { procurementType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
+                    { bidType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } }
                 ]
             },
             orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
@@ -687,7 +687,7 @@ const loadLatestRequirements = async (take = 6) => {
     const decoratedLegacy = (legacyRequirements || [])
         .filter((reqItem: any) => {
             const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
+            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
             const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
             return !isRestricted && !isLimitedRfq;
         })
@@ -2750,7 +2750,7 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             const currentUserId = req.user?.id ? Number(req.user.id) : null;
             const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
                 const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
+                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
                 const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
                 
                 if (isRestricted || isLimitedRfq) {
@@ -2964,7 +2964,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
 
         const currentUserId = req.user?.id ? Number(req.user.id) : null;
         const method = requirement.canonicalMethod || requirement.procurementMethod || '';
-        const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'PAC', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
+        const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
         const isLimitedRfq = method.toUpperCase() === 'RFQ' && requirement.payload && typeof requirement.payload === 'object' && (requirement.payload as any).rfqType === 'LIMITED';
         
         if (isRestricted || isLimitedRfq) {

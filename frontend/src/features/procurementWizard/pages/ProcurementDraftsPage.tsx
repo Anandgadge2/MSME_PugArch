@@ -62,7 +62,6 @@ const METHOD_CONFIGS_MAP: Record<string, { title: string; accent: string; icon: 
   'boq': { title: 'OpenTender', accent: 'border-amber-200 bg-amber-50/80 text-amber-700', icon: Gavel },
   'custom-product': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: Package },
   'custom-service': { title: 'RFQ', accent: 'border-blue-200 bg-blue-50/80 text-blue-700', icon: Layers },
-  'pac': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
   'rate-contract': { title: 'Rate Contract', accent: 'border-teal-200 bg-teal-50/80 text-teal-700', icon: Tag },
   'limited': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
   'limited-tender': { title: 'Limited Tender', accent: 'border-orange-200 bg-orange-50/80 text-orange-700', icon: ShieldCheck },
@@ -370,7 +369,7 @@ export default function ProcurementDraftsPage() {
         slug.includes('rfp') ||
         slug.includes('auction') ||
         slug.includes('rate-contract') ||
-        ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+        ['tender', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
       ) {
         tenderBid++;
       }
@@ -419,7 +418,7 @@ export default function ProcurementDraftsPage() {
             slug.includes('rfp') ||
             slug.includes('auction') ||
             slug.includes('rate-contract') ||
-            ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
+            ['tender', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(slug)
           );
         });
       }
@@ -436,7 +435,7 @@ export default function ProcurementDraftsPage() {
 
     if (methodFilter) {
       if (methodFilter === 'tender-bid') {
-        list = list.filter(d => ['tender', 'pac', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(d.methodSlug));
+        list = list.filter(d => ['tender', 'boq', 'reverse-auction', 'custom-product', 'custom-service'].includes(d.methodSlug));
       } else if (methodFilter === 'l1-rfq') {
         list = list.filter(d => d.methodSlug === 'rfq' || d.methodSlug === 'l1-comparison');
       } else {
@@ -1478,7 +1477,7 @@ function DraftDetailView({
   if (['tender', 'open-tender', 'open_tender', 'boq'].includes(methodSlug)) {
     procurementType = 'OPEN_TENDER';
     procurementLabel = 'Open Tender';
-  } else if (['limited', 'limited-tender', 'limited_tender', 'pac'].includes(methodSlug)) {
+  } else if (['limited', 'limited-tender', 'limited_tender'].includes(methodSlug)) {
     procurementType = 'LIMITED_TENDER';
     procurementLabel = 'Limited Tender';
   } else if (['rate-contract', 'rate_contract', 'rate_contract_tender'].includes(methodSlug)) {

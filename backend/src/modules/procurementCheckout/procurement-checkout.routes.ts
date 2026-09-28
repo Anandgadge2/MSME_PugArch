@@ -37,7 +37,6 @@ const checkoutInitSchema = z.object({
   selectedMethod: z.string().min(1),
   justification: z.string().optional(),
   l1ComparisonId: z.number().int().positive().optional(),
-  pacJustification: z.record(z.string(), z.unknown()).optional(),
   demandSplittingConfirmation: z.boolean().optional(),
   buyerDetails: z.record(z.string(), z.unknown()).optional(),
   consigneeDetails: z.record(z.string(), z.unknown()).optional(),
@@ -61,7 +60,6 @@ router.post(
       selectedMethod: body.selectedMethod,
       justification: body.justification,
       l1ComparisonId: body.l1ComparisonId,
-      pacJustification: body.pacJustification,
       demandSplittingConfirmation: body.demandSplittingConfirmation,
     });
 

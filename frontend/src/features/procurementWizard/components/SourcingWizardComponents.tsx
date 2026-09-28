@@ -852,7 +852,7 @@ export function DocumentRequirementBuilder({
             </div>
             <button
               type="button"
-              onClick={() => onAddCustomDoc('Emergency Approval Note', true, 'Upload official emergency procurement approval note or PAC justification.')}
+              onClick={() => onAddCustomDoc('Emergency Approval Note', true, 'Upload official emergency procurement approval note.')}
               className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shrink-0 shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 cursor-pointer"
             >
               + Add Emergency Approval Doc

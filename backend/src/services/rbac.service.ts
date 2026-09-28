@@ -22,7 +22,7 @@ const accountTypeCode = (accountType: unknown) => {
 };
 
 export const getAccountTypeForUser = (user: { role?: string; accountType?: unknown; accountTypeId?: number | null }) => {
-  if (user.role && ['seller', 'shg', 'buyer', 'admin', 'master_admin', 'financier'].includes(user.role)) {
+  if (user.role && ['seller', 'shg', 'buyer', 'admin', 'master_admin'].includes(user.role)) {
     return legacyRoleToAccountType(user.role);
   }
   const code = accountTypeCode(user.accountType);

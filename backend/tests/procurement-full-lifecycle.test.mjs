@@ -252,3 +252,38 @@ test('15. Simplified Portal Architecture: Zero Award Splitting, No Auto-PO, Sequ
   assert.match(routes, /\/seller\/procurement-bids\/:bidId\/generate-po/);
 });
 
+test('16. PAC, TReDS (Factoring/Financier), and PBG Complete Elimination: Zero dead code, models, or routes', () => {
+  const schema = read('prisma/schema.prisma');
+  const routesIndex = read('src/routes/index.ts');
+  const dynamicRbac = read('src/constants/dynamic-rbac.ts');
+  const permissions = read('src/constants/permissions.ts');
+  const frontendAuth = read('../frontend/src/types/auth.ts');
+  const frontendEnums = read('../frontend/src/types/enums.ts');
+  const createProcurementPage = read('../frontend/src/features/procurementWizard/pages/CreateProcurementPage.tsx');
+
+  // Verify InvoiceFactoring model and relations do not exist in Prisma schema
+  assert.doesNotMatch(schema, /\bmodel InvoiceFactoring\b/);
+  assert.doesNotMatch(schema, /\bfinancierFactoring\b/);
+  assert.doesNotMatch(schema, /\bsellerFactoring\b/);
+  assert.doesNotMatch(schema, /\bPAC_BID\b/);
+  assert.doesNotMatch(schema, /\bpacJustification\b/);
+  assert.doesNotMatch(schema, /\bpacApprovalRequired\b/);
+
+  // Verify factoring routes are not mounted and file is removed
+  assert.doesNotMatch(routesIndex, /\bfactoringRoutes\b/);
+  assert.equal(existsSync(new URL('../src/routes/factoring.routes.ts', import.meta.url)), false);
+
+  // Verify FINANCIER role is eliminated from RBAC and Auth types
+  assert.doesNotMatch(dynamicRbac, /\bFINANCIER\b/);
+  assert.doesNotMatch(permissions, /\bfinancier\b/);
+  assert.doesNotMatch(frontendAuth, /\bfinancier\b/);
+  assert.doesNotMatch(frontendAuth, /\bFINANCIER\b/);
+
+  // Verify PAC is eliminated from frontend canonical enums
+  assert.doesNotMatch(frontendEnums, /PAC:\s*['"]PAC['"]/);
+
+  // Verify PBG fields are eliminated from frontend wizard draft terms
+  assert.doesNotMatch(createProcurementPage, /\bpbgRequired\b/);
+  assert.doesNotMatch(createProcurementPage, /\bpbgAmount\b/);
+});
+

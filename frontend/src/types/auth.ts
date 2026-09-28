@@ -3,8 +3,8 @@ export type AuthUser = {
   _id?: number;
   name: string;
   email: string;
-  role: 'admin' | 'buyer' | 'seller' | 'shg' | 'master_admin' | 'financier';
-  accountType?: 'MASTER_ADMIN' | 'SUPERADMIN' | 'SELLER' | 'BUYER' | 'SHG' | 'FINANCIER';
+  role: 'admin' | 'buyer' | 'seller' | 'shg' | 'master_admin';
+  accountType?: 'MASTER_ADMIN' | 'SUPERADMIN' | 'SELLER' | 'BUYER' | 'SHG';
   accountTypeId?: number;
   organizationId?: number | null;
   districtId?: number | null;

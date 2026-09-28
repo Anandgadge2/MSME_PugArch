@@ -44,7 +44,6 @@ router.post(
       organizationId: orgId,
       buyerId: req.user!.id,
       selectedMethod: body.selectedMethod,
-      proprietary: body.proprietary,
       buyerJustification: body.buyerJustification,
     });
     return res.json({ success: true, data: result });
@@ -63,7 +62,6 @@ router.post(
       selectedMethod: body.selectedMethod,
       justification: body.justification,
       l1ComparisonId: body.l1ComparisonId,
-      pacJustification: body.pacJustification,
       demandSplittingConfirmation: body.demandSplittingConfirmation,
     });
     await auditLog({

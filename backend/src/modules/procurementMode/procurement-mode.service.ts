@@ -9,7 +9,6 @@ const DEFAULT_SETTINGS: ProcurementModeSettingsDto = {
   l1PurchaseMaxValue: 500000,
   bidMinValue: 500001,
   raRecommendedMinValue: 500001,
-  pacApprovalRequired: true,
   internalApprovalRequired: true,
   demandSplitLookbackDays: 90,
   demandSplitSimilarityThreshold: 0.8,
@@ -24,7 +23,6 @@ export const toSettingsDto = (row: {
   l1PurchaseMaxValue: unknown;
   bidMinValue: unknown;
   raRecommendedMinValue: unknown;
-  pacApprovalRequired: boolean;
   internalApprovalRequired: boolean;
   demandSplitLookbackDays: number;
   demandSplitSimilarityThreshold: unknown;
@@ -37,7 +35,6 @@ export const toSettingsDto = (row: {
   l1PurchaseMaxValue: Number(row.l1PurchaseMaxValue),
   bidMinValue: Number(row.bidMinValue),
   raRecommendedMinValue: Number(row.raRecommendedMinValue),
-  pacApprovalRequired: row.pacApprovalRequired,
   internalApprovalRequired: row.internalApprovalRequired,
   demandSplitLookbackDays: row.demandSplitLookbackDays,
   demandSplitSimilarityThreshold: Number(row.demandSplitSimilarityThreshold),
@@ -156,7 +153,6 @@ export const evaluateCartProcurementMode = async (params: {
   organizationId: number;
   buyerId: number;
   selectedMethod?: string;
-  proprietary?: boolean;
   buyerJustification?: string;
 }): Promise<CartEvaluationResult> => {
   const settings = await getProcurementModeSettings(params.organizationId);
@@ -171,18 +167,11 @@ export const evaluateCartProcurementMode = async (params: {
     warnings.push('Possible demand splitting detected. Similar purchases in the lookback period may exceed bid threshold.');
   }
 
-  const pacRequired = Boolean(params.proprietary);
-  if (pacRequired) {
-    warnings.push('Proprietary/OEM-specific purchase requires PAC justification and approval.');
-    requiredDocuments.push('PAC Certificate', 'Competent Authority Approval');
-    requiredApprovals.push('PAC_APPROVAL');
-  }
-
   let recommendedMethod: ProcurementMethodCode = 'DIRECT_PURCHASE';
   const allowedMethods: ProcurementMethodCode[] = [];
   const blockedMethods: ProcurementMethodCode[] = [];
 
-  if (cartValue <= settings.directPurchaseMaxValue && sellerCount === 1 && itemCount <= 5 && !pacRequired) {
+  if (cartValue <= settings.directPurchaseMaxValue && sellerCount === 1 && itemCount <= 5) {
     allowedMethods.push('DIRECT_PURCHASE');
     recommendedMethod = 'DIRECT_PURCHASE';
   } else {
@@ -190,7 +179,7 @@ export const evaluateCartProcurementMode = async (params: {
     warnings.push('Direct Purchase not allowed for this cart value, seller count, or item complexity.');
   }
 
-  if (cartValue <= settings.l1PurchaseMaxValue && !pacRequired) {
+  if (cartValue <= settings.l1PurchaseMaxValue) {
     allowedMethods.push('L1_PURCHASE');
     if (recommendedMethod === 'DIRECT_PURCHASE' && (sellerCount > 1 || cartValue > settings.directPurchaseMaxValue)) {
       recommendedMethod = 'L1_PURCHASE';
@@ -216,11 +205,6 @@ export const evaluateCartProcurementMode = async (params: {
     if (cartValue >= settings.raRecommendedMinValue * 1.2) {
       recommendedMethod = 'RA_FROM_CART';
     }
-  }
-
-  if (pacRequired) {
-    allowedMethods.push('PAC_PROCUREMENT');
-    recommendedMethod = 'PAC_PROCUREMENT';
   }
 
   // Always allow Single Source as selectable method
@@ -254,7 +238,6 @@ export const evaluateCartProcurementMode = async (params: {
     itemCount,
     l1Required,
     bidRequired,
-    pacRequired,
     demandSplittingRisk,
     priceReasonabilityRisk,
     warnings,
@@ -270,7 +253,6 @@ export const confirmProcurementMethod = async (params: {
   selectedMethod: string;
   justification?: string;
   l1ComparisonId?: number;
-  pacJustification?: Record<string, unknown>;
   demandSplittingConfirmation?: boolean;
 }) => {
   const evaluation = await evaluateCartProcurementMode({
@@ -278,7 +260,6 @@ export const confirmProcurementMethod = async (params: {
     organizationId: params.organizationId,
     buyerId: params.buyerId,
     selectedMethod: params.selectedMethod,
-    proprietary: params.selectedMethod === 'PAC_PROCUREMENT',
   });
 
   if (!evaluation.allowedMethods.includes(params.selectedMethod as ProcurementMethodCode)) {
@@ -309,7 +290,6 @@ export const confirmProcurementMethod = async (params: {
         items: cart.items,
         totalValue: cartValue,
       },
-      pacJustification: params.pacJustification || undefined,
       l1ComparisonId: params.l1ComparisonId || undefined,
       warnings: evaluation.warnings,
       declarations: params.justification ? { methodJustification: params.justification } : undefined,

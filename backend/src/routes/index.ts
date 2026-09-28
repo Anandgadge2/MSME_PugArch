@@ -21,7 +21,6 @@ import procurementBidRoutes from '../modules/procurementBid/procurement-bid.rout
 import bidWizardRoutes from '../modules/procurementBid/bid-wizard.routes.js';
 import aadhaarKycRoutes from '../modules/kyc/aadhaar-kyc.routes.js';
 import { aiRoutes } from './ai.routes.js';
-import factoringRoutes from './factoring.routes.js';
 import { buyerShowcaseRouter } from './buyer-showcase.routes.js';
 import prisma from '../lib/prisma.js';
 import addressRoutes from './address.routes.js';
@@ -111,7 +110,6 @@ router.use('/buyer/bid-wizard', bidWizardRoutes);
 router.use('/', procurementBidRoutes);
 router.use('/', reverseAuctionRoutes);
 router.use('/', aadhaarKycRoutes);
-router.use('/', factoringRoutes);
 router.use('/buyer-showcase', buyerShowcaseRouter);
 router.use('/ai', aiRoutes);
 router.use('/', addressRoutes);

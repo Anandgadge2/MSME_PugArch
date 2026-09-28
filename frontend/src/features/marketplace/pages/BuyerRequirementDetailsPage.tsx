@@ -156,7 +156,7 @@ const getDetailRoute = (requirement: any): string | null => {
     return sellerRoutes.detail('RFQ', sourceId);
   }
   // RFP-type methods
-  if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(method)) {
+  if (['RFP', 'SINGLE_SOURCE'].includes(method)) {
     return sellerRoutes.detail('RFP', sourceId);
   }
   // Tender-type methods
@@ -174,7 +174,7 @@ const getDetailRoute = (requirement: any): string | null => {
 const getActionLabel = (method: string): string => {
   const m = method.toUpperCase();
   if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(m)) return 'Submit Quotation';
-  if (['RFP', 'SINGLE_SOURCE', 'PAC'].includes(m)) return 'Submit Proposal';
+  if (['RFP', 'SINGLE_SOURCE'].includes(m)) return 'Submit Proposal';
   if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(m)) return 'Participate in Tender';
   if (m === 'REVERSE_AUCTION') return 'Join Auction';
   return 'Submit Response';
@@ -611,7 +611,6 @@ const BuyerRequirementDetailsPage = () => {
                   {payload.tender?.bidStartDate && <DetailRow icon={Calendar} label="Bid Start" value={formatDateTime(payload.tender.bidStartDate)} />}
                   {payload.tender?.bidClosingDate && <DetailRow icon={Calendar} label="Bid Closing" value={formatDateTime(payload.tender.bidClosingDate)} />}
                   {payload.tender?.technicalEvaluationDate && <DetailRow icon={Calendar} label="Technical Opening" value={formatDateTime(payload.tender.technicalEvaluationDate)} />}
-                  {payload.tender?.performanceSecurityAmount ? <DetailRow icon={Shield} label="Performance Security" value={formatMoney(payload.tender.performanceSecurityAmount)} /> : null}
                 </div>
               </div>
             )}

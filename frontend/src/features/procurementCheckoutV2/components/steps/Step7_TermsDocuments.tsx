@@ -26,7 +26,6 @@ const DOCUMENT_CATEGORIES = [
   },
   { key: 'Approval Document', label: 'Approval Document', description: 'Administrative approval or sanction order' },
   { key: 'L1 Comparison Sheet', label: 'L1 Comparison Sheet', description: 'L1 price comparison document' },
-  { key: 'PAC Certificate', label: 'PAC Certificate', description: 'Proprietary Article Certificate' },
   { key: 'Technical Specification', label: 'Technical Specification', description: 'Technical specification or scope of work' },
   { key: 'Other Supporting Document', label: 'Other Supporting Documents', description: 'Any other relevant procurement documents' },
 ];
@@ -192,7 +191,7 @@ export default function Step7_TermsDocuments({
       <div className="border-t border-slate-200 pt-5">
         <h3 className="mb-1 text-sm font-black text-slate-900">Upload Procurement Documents</h3>
         <p className="mb-4 text-xs text-slate-500">
-          Upload terms and conditions, approval, L1 comparison, PAC, technical specification, and other supporting documents.
+          Upload terms and conditions, approval, L1 comparison, technical specification, and other supporting documents.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           {DOCUMENT_CATEGORIES.map(cat => {

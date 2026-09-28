@@ -5,7 +5,6 @@ import type { CartEvaluation, CheckoutFormData, ProcurementRequestDto } from './
 export const evaluateCartProcurementMode = (payload: {
   cartId: number;
   selectedMethod?: string;
-  proprietary?: boolean;
   buyerJustification?: string;
 }) => postApi<CartEvaluation>('/api/procurement-mode/evaluate-cart', payload);
 
@@ -14,7 +13,6 @@ export const confirmProcurementMethod = (payload: {
   selectedMethod: string;
   justification?: string;
   l1ComparisonId?: number;
-  pacJustification?: Record<string, unknown>;
   demandSplittingConfirmation?: boolean;
 }) => postApi<{ procurementRequestId: number; checkoutDraftId: number; evaluation: CartEvaluation }>(
   '/api/procurement-mode/confirm',
