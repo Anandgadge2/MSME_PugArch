@@ -18,7 +18,8 @@ import { Button } from '../../../components/ui/button';
 import { postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
-import { openFileAsset, prewarmFileAssetPreview } from '../../../lib/files';
+import { openFileAsset, getFileAssetPreview, prewarmFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 
 export interface ConfirmOrderSettlementModalProps {
   isOpen: boolean;
@@ -57,9 +58,13 @@ export function ConfirmOrderSettlementModal({
 
   const [remarks, setRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   React.useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setPreviewDocument(null);
+      return;
+    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !submitting) {
         onClose();
@@ -95,8 +100,18 @@ export function ConfirmOrderSettlementModal({
 
   const handleOpenPaymentProof = async () => {
     if (!paymentSlipFile) return;
+    const fileName = paymentSlipFile.originalName || paymentSlipFile.fileName || 'Payment_Proof_Document.pdf';
     try {
-      await openFileAsset(paymentSlipFile, paymentSlipFile.originalName || 'Payment_Proof_Document.pdf');
+      try {
+        const prev = await getFileAssetPreview(paymentSlipFile, fileName);
+        if (prev && prev.url) {
+          setPreviewDocument(prev);
+          return;
+        }
+      } catch (previewErr) {
+        console.warn('[ConfirmOrderSettlementModal] In-app preview resolution failed, trying openFileAsset:', previewErr);
+      }
+      await openFileAsset(paymentSlipFile, fileName);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to open payment proof document');
     }
@@ -258,6 +273,14 @@ export function ConfirmOrderSettlementModal({
           </div>
         </div>
       </FocusTrap>
+
+      {/* Full In-App Document Preview Modal */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          previewDocument={previewDocument}
+          onClose={() => setPreviewDocument(null)}
+        />
+      )}
     </div>
   );
 }

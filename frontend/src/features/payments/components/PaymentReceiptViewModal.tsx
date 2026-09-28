@@ -31,7 +31,8 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Button } from '../../../components/ui/button';
 import { useAuth } from '../../../hooks/useAuth';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, getFileAssetPreview, prewarmFileAssetPreview, type DocumentPreview } from '../../../lib/files';
+import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { cn } from '../../../lib/utils';
 import { printHtmlContent } from '../../../utils/printUtils';
 
@@ -144,6 +145,7 @@ export function PaymentReceiptViewModal({
   const [copiedUtr, setCopiedUtr] = useState(false);
   const [copiedRef, setCopiedRef] = useState(false);
   const [previewingFile, setPreviewingFile] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
 
   const [linkedPo, setLinkedPo] = useState<any | null>(null);
   const [linkedInvoice, setLinkedInvoice] = useState<any | null>(null);
@@ -178,6 +180,7 @@ export function PaymentReceiptViewModal({
       setRejectReason('');
       setCopiedUtr(false);
       setCopiedRef(false);
+      setPreviewDocument(null);
       return;
     }
 
@@ -460,31 +463,70 @@ export function PaymentReceiptViewModal({
   const status = String(resolvedProof?.status || activePayment?.status || 'UPLOADED').toUpperCase();
 
   const handleOpenFile = async () => {
-    const resolvedUrl =
-      resolvedProof?.receiptFileUrl ||
-      (resolvedProof?.receiptFileId ? `/api/files/${resolvedProof.receiptFileId}/view` : null);
+    let fileId: number | null =
+      resolvedProof?.receiptFileId ||
+      proof?.receiptFileId ||
+      activePayment?.metadata?.receiptFileId ||
+      activePayment?.metadata?.offlineProofId ||
+      null;
 
-    if (!resolvedUrl && !resolvedProof?.receiptFileId) {
+    let resolvedUrl =
+      resolvedProof?.receiptFileUrl ||
+      proof?.receiptFileUrl ||
+      activePayment?.metadata?.receiptFileUrl ||
+      (fileId ? `/api/files/${fileId}/view` : null);
+
+    if (!fileId && resolvedUrl) {
+      const match = String(resolvedUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
+      if (match && match[1]) {
+        fileId = Number(match[1]);
+      }
+    }
+
+    if (!resolvedUrl && !fileId) {
       toast.error('No attached receipt file found');
       return;
     }
+
     const fileName =
       resolvedProof?.receiptFileName ||
+      proof?.receiptFileName ||
+      activePayment?.metadata?.receiptFileName ||
       (resolvedUrl && !resolvedUrl.startsWith('/api/files/')
         ? resolvedUrl.split('/').pop() || 'Payment_Proof_Document'
         : 'Payment_Proof_Document');
 
+    const mimeType =
+      resolvedProof?.receiptFileMimeType ||
+      proof?.receiptFileMimeType ||
+      activePayment?.metadata?.receiptFileMimeType ||
+      undefined;
+
     setPreviewingFile(true);
     try {
-      // Authenticated document opener: openFileAsset({ id: proof.receiptFileId, fileUrl: proof.receiptFileUrl
-      await openFileAsset(
-        {
-          id: resolvedProof?.receiptFileId || proof?.receiptFileId,
-          fileUrl: resolvedUrl || proof?.receiptFileUrl || undefined,
-          mimeType: resolvedProof?.receiptFileMimeType || undefined
-        },
+      const fileTarget = {
+        id: fileId,
+        fileAssetId: fileId,
+        fileUrl: resolvedUrl || undefined,
+        url: resolvedUrl || undefined,
+        mimeType,
+        originalName: fileName,
         fileName
-      );
+      };
+
+      // 1. Prioritize in-app DocumentPreviewModal (guaranteed seamless preview, no popup blocker friction)
+      try {
+        const preview = await getFileAssetPreview(fileTarget, fileName);
+        if (preview && preview.url) {
+          setPreviewDocument(preview);
+          return;
+        }
+      } catch (previewErr) {
+        console.warn('[PaymentReceiptViewModal] In-app preview resolution failed, trying openFileAsset:', previewErr);
+      }
+
+      // 2. Fallback to openFileAsset
+      await openFileAsset(fileTarget, fileName);
     } catch (err: any) {
       toast.error(err?.message || 'Unable to open payment receipt document');
     } finally {
@@ -1028,6 +1070,34 @@ export function PaymentReceiptViewModal({
                         type="button"
                         onClick={handleOpenFile}
                         disabled={previewingFile}
+                        onMouseEnter={() => {
+                          const targetId = resolvedProof?.receiptFileId || proof?.receiptFileId;
+                          if (targetId) {
+                            prewarmFileAssetPreview(
+                              {
+                                id: targetId,
+                                fileAssetId: targetId,
+                                fileUrl: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl,
+                                url: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl
+                              },
+                              resolvedProof?.receiptFileName || 'Official_Payment_Slip'
+                            );
+                          }
+                        }}
+                        onFocus={() => {
+                          const targetId = resolvedProof?.receiptFileId || proof?.receiptFileId;
+                          if (targetId) {
+                            prewarmFileAssetPreview(
+                              {
+                                id: targetId,
+                                fileAssetId: targetId,
+                                fileUrl: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl,
+                                url: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl
+                              },
+                              resolvedProof?.receiptFileName || 'Official_Payment_Slip'
+                            );
+                          }
+                        }}
                         className="h-8.5 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold px-3.5 rounded-xl shadow-xs gap-1.5 cursor-pointer"
                       >
                         {previewingFile ? (
@@ -1317,6 +1387,14 @@ export function PaymentReceiptViewModal({
           </div>
         </div>
       </div>
+
+      {/* Full In-App Document Preview Modal */}
+      {previewDocument && (
+        <DocumentPreviewModal
+          previewDocument={previewDocument}
+          onClose={() => setPreviewDocument(null)}
+        />
+      )}
     </div>
   );
 }

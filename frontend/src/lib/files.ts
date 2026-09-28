@@ -336,26 +336,42 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
   }
 
   try {
+    const navigateWindowSafely = (targetUrl: string) => {
+      if (!targetUrl) return;
+      if (previewWindow && !previewWindow.closed) {
+        try {
+          previewWindow.location.href = targetUrl;
+          try { previewWindow.opener = null; } catch {}
+          return;
+        } catch {
+          // If direct href assignment fails, fallback below
+        }
+      }
+      try {
+        const a = document.createElement('a');
+        a.href = targetUrl;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try { document.body.removeChild(a); } catch {}
+        }, 100);
+      } catch {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      }
+    };
+
     if (!fileId) {
       if (!absoluteFallbackUrl) throw new Error('Document file is not uploaded on server.');
-      if (previewWindow && !previewWindow.closed) {
-        try { previewWindow.opener = null; } catch {}
-        previewWindow.location.href = absoluteFallbackUrl;
-      } else {
-        window.open(absoluteFallbackUrl, '_blank', 'noopener,noreferrer');
-      }
+      navigateWindowSafely(absoluteFallbackUrl);
       return;
     }
 
     const hasSession = Boolean(token || getCookieValue('csrfToken'));
     const cached = signedUrlCache.get(fileId, hasSession);
     if (cached?.url) {
-      if (previewWindow && !previewWindow.closed) {
-        try { previewWindow.opener = null; } catch {}
-        previewWindow.location.href = cached.url;
-      } else {
-        window.open(cached.url, '_blank', 'noopener,noreferrer');
-      }
+      navigateWindowSafely(cached.url);
       return;
     }
 
@@ -380,18 +396,14 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         const data = unwrapApiData<any>(body);
         if (data?.signedUrl) {
           const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
-          if (isRealSignedUrl) {
+          const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || getAbsoluteApiUrl(data.signedUrl) || data.signedUrl);
+          if (previewUrl && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://') || previewUrl.startsWith('/'))) {
             signedUrlCache.set(fileId, hasSession, {
               label,
-              url: data.signedUrl,
-              mode: getDocumentPreviewMode(data.signedUrl)
+              url: previewUrl,
+              mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
             });
-            if (previewWindow && !previewWindow.closed) {
-              try { previewWindow.opener = null; } catch {}
-              previewWindow.location.href = data.signedUrl;
-            } else {
-              window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
-            }
+            navigateWindowSafely(previewUrl);
             return;
           }
         }
@@ -415,12 +427,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
     if (!res || !res.ok) {
       const fallbackTarget = absoluteFallbackUrl || (fileId ? getAbsoluteApiUrl(`/api/files/${fileId}/view${token ? `?token=${encodeURIComponent(token)}` : ''}`) : '');
       if (fallbackTarget) {
-        if (previewWindow && !previewWindow.closed) {
-          try { previewWindow.opener = null; } catch {}
-          previewWindow.location.href = fallbackTarget;
-        } else {
-          window.open(fallbackTarget, '_blank', 'noopener,noreferrer');
-        }
+        navigateWindowSafely(fallbackTarget);
         return;
       }
       throw new Error('Document file is not uploaded on server.');
@@ -475,7 +482,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
         previewWindow.location.href = url;
       }
     } else {
-      window.open(url, '_blank', 'noopener,noreferrer');
+      navigateWindowSafely(url);
     }
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (err) {
