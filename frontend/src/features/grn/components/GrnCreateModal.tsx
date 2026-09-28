@@ -2,7 +2,7 @@
  * GrnCreateModal — pick a PO, then enter line item receive/accept/reject quantities.
  */
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Plus, Trash2, X } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -125,7 +125,12 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
         return null;
     };
 
-    const handleSubmit = async () => {
+    const canDirectApprove = Boolean(
+        eligibility.data?.canDirectApprove ??
+        (eligibility.data?.requiresApprovalWorkflow === false)
+    );
+
+    const handleSubmit = async (directApprove = false) => {
         const err = validate();
         if (err) { toast.error(err); return; }
 
@@ -135,6 +140,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                     purchaseOrderId: selectedPoId!,
                     remarks: remarks.trim() || undefined,
                     inspectionNote: inspectionNote.trim() || undefined,
+                    directApprove,
                     items: items.map(it => ({
                         purchaseOrderItemId: it.purchaseOrderItemId,
                         itemName: it.itemName.trim(),
@@ -146,7 +152,11 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                         unitOfMeasure: it.unitOfMeasure
                     }))
                 }),
-                { loading: 'Creating GRN...', success: 'GRN created', error: 'Failed to create GRN' }
+                {
+                    loading: directApprove ? 'Creating and approving GRN...' : 'Creating GRN draft...',
+                    success: directApprove ? 'GRN created & approved successfully' : 'GRN draft created successfully',
+                    error: 'Failed to create GRN'
+                }
             );
             if (result) onCreated(result);
         } catch {
@@ -295,12 +305,67 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                     )}
                 </div>
 
-                <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex justify-end gap-2">
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={createMut.isPending || !selectedPoId || eligibility.data?.canCreate === false} className="bg-[#12335f] text-white">
-                        {createMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                        Create GRN
-                    </Button>
+                <div className="border-t border-slate-200 bg-slate-50 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="w-full sm:w-auto">
+                        {canDirectApprove ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                1-Step Approval Enabled (Sole Approver)
+                            </span>
+                        ) : (
+                            <span className="text-[11px] font-medium text-slate-500">
+                                Multi-member review workflow active
+                            </span>
+                        )}
+                    </div>
+                    <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={onClose}
+                            disabled={createMut.isPending}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => handleSubmit(false)}
+                            disabled={createMut.isPending || !selectedPoId || eligibility.data?.canCreate === false}
+                            className="border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-bold"
+                        >
+                            Save as Draft
+                        </Button>
+                        {canDirectApprove ? (
+                            <Button
+                                type="button"
+                                onClick={() => handleSubmit(true)}
+                                disabled={createMut.isPending || !selectedPoId || eligibility.data?.canCreate === false}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm"
+                            >
+                                {createMut.isPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                )}
+                                Approve & Finalize GRN
+                            </Button>
+                        ) : (
+                            <Button
+                                type="button"
+                                onClick={() => handleSubmit(false)}
+                                disabled={createMut.isPending || !selectedPoId || eligibility.data?.canCreate === false}
+                                className="bg-[#12335f] hover:bg-[#0e2a4f] text-white text-xs font-bold shadow-sm"
+                            >
+                                {createMut.isPending ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Plus className="mr-2 h-4 w-4" />
+                                )}
+                                Submit for Review
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

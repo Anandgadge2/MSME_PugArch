@@ -1338,72 +1338,94 @@ export default function PurchaseOrders() {
       buyerReg.stampUrl || (order.buyerId === user?.id || isBuyer ? (currentUserReg.stampUrl || lsStamp) : null)
     );
 
-    const config: DocumentConfig = {
-      documentTitle: 'PURCHASE ORDER',
-      documentNumber: order.poNumber || `PO-${order.id}`,
-      dateStr: formatTimestamp(order.createdAt || new Date()),
+    const { generateOfficialPurchaseOrderPdf } = await import('../features/purchaseOrders/lib/purchaseOrderPdfGenerator');
+
+    const poDate = order.createdAt ? new Date(order.createdAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const dueDate = order.expectedDelivery ? new Date(order.expectedDelivery).toISOString().slice(0, 10) : poDate;
+    const trackingNumber = (order.deliveryTrackings && order.deliveryTrackings[0]?.trackingNumber) || 'Pending Dispatch';
+    const metaBase = Number(order.metadata?.baseAmount || order.metadata?.taxableAmount || 0);
+    const metaGst = Number(order.metadata?.gstAmount || 0);
+    const rawGstRate = Number(order.metadata?.gstRate || 18);
+    const grandTotal = totalValue || subtotal;
+    const actualTaxable = metaBase > 0 && metaGst > 0 ? metaBase : (grandTotal > 0 ? Math.round((grandTotal / (1 + rawGstRate / 100)) * 100) / 100 : subtotal);
+    const taxAmount = metaBase > 0 && metaGst > 0 ? metaGst : Math.max(0, Math.round((grandTotal - actualTaxable) * 100) / 100);
+
+    const buyerState = buyerGstin && buyerGstin !== 'N/A' ? buyerGstin.slice(0, 2) : '';
+    const sellerState = sellerGstin && sellerGstin !== 'N/A' ? sellerGstin.slice(0, 2) : '';
+    const isInterstate = Boolean(buyerState && sellerState && buyerState !== sellerState);
+    const taxLabel = isInterstate ? `IGST (${rawGstRate}%)` : `TAX / GST (${rawGstRate}%)`;
+
+    const doc = await generateOfficialPurchaseOrderPdf({
+      poNumber: order.poNumber || `PO-${order.id}`,
+      poDate,
+      dueDate,
       status: readableStatus(order.status),
+      shipVia: order.deliveryType ? readableStatus(order.deliveryType) : 'Standard Ground Logistics',
+      trackingNumber,
+      paymentTerms: order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
       issuerName: buyerOrgName !== 'N/A' ? buyerOrgName : (sellerOrg !== 'N/A' ? sellerOrg : 'Enterprise Procurement'),
       issuerSubtitle: 'Official Purchase Order Document',
-      issuerLogo: effectiveSellerLogo || effectiveBuyerLogo,
-      sellerSignatureUrl: effectiveSellerSignature,
-      sellerStampUrl: effectiveSellerStamp,
-      buyerSignatureUrl: effectiveBuyerSignature,
-      buyerStampUrl: effectiveBuyerStamp,
-      parties: [
-        {
-          title: 'Ship To / Buyer',
-          name: buyerOrgName,
-          email: buyer.email || buyerReg.email || 'N/A',
-          phone: buyer.mobile || buyerReg.mobile || 'N/A',
-          gstin: buyerGstin,
-          address: buyerAddress,
-          logoUrl: effectiveBuyerLogo,
-        },
-        {
-          title: 'Vendor / Seller',
-          name: sellerOrg,
-          email: seller.email || sellerReg.email || 'N/A',
-          phone: seller.mobile || sellerReg.mobile || 'N/A',
-          gstin: sellerGstin,
-          address: sellerAddress,
-          logoUrl: effectiveSellerLogo,
-          details: [sellerUdyam ? `Udyam Reg. No.: ${sellerUdyam}` : `Seller Ref: #${order.sellerId || 'N/A'}`]
-        }
-      ],
-      infoGrid: {
-        'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Pay on Invoice',
-        'Delivery Type': order.deliveryType ? readableStatus(order.deliveryType) : 'Standard delivery',
-        'Acknowledged At': order.acceptedAt ? formatTimestamp(order.acceptedAt) : 'Pending / Not recorded',
-        'PO Reference': `ID ${order.id}`,
-        'PO Title': order.title || 'N/A',
-        'Expected Delivery': formatDate(order.expectedDelivery)
+      issuerLogoUrl: effectiveBuyerLogo || effectiveSellerLogo,
+      buyer: {
+        name: buyerOrgName,
+        contactName: buyer.name && buyer.name !== buyerOrgName ? buyer.name : undefined,
+        address: buyerAddress,
+        gstin: buyerGstin,
+        pan: buyerReg.pan || 'N/A',
+        phone: buyer.mobile || buyerReg.mobile || 'N/A',
+        email: buyer.email || buyerReg.email || 'N/A',
+        logoUrl: effectiveBuyerLogo,
+        stampUrl: effectiveBuyerStamp,
+        signatureUrl: effectiveBuyerSignature,
       },
-      tableHeaders: ['#', 'Description of Goods / Services', 'Qty', 'Rate', 'Line Total'],
-      tableData: tableData.map(row => [row[0], row[1], row[2], moneyPdf(row[3]), moneyPdf(row[4])]),
+      seller: {
+        name: sellerOrg,
+        contactName: seller.name && seller.name !== sellerOrg ? seller.name : undefined,
+        address: sellerAddress,
+        udyamNumber: sellerUdyam || undefined,
+        gstin: sellerGstin,
+        pan: sellerReg.pan || 'N/A',
+        phone: seller.mobile || sellerReg.mobile || 'N/A',
+        email: seller.email || sellerReg.email || 'N/A',
+        logoUrl: effectiveSellerLogo,
+        stampUrl: effectiveSellerStamp,
+        signatureUrl: effectiveSellerSignature,
+      },
+      items: items.map((it: any, idx: number) => ({
+        itemIndex: idx + 1,
+        productCode: it.product?.code || (it.productId ? `PRD-${it.productId}` : `SKU-${idx + 101}`),
+        name: it.itemName || it.name || order.title || `Item ${idx + 1}`,
+        specs: it.description || (it.product?.brand ? `Brand: ${it.product.brand}` : ''),
+        hsn: it.hsnCode || it.hsn || it.product?.hsnCode || order.metadata?.hsnCode || order.metadata?.hsn || sellerReg?.hsnCode || 'N/A',
+        quantity: Number(it.quantity || 1),
+        unit: it.unitOfMeasure || it.unit || 'Nos',
+        unitPrice: Number(it.unitPrice || 0) || (Number(it.totalAmount || totalValue) / Math.max(Number(it.quantity || 1), 1)),
+        total: Number(it.totalAmount || (Number(it.quantity || 1) * Number(it.unitPrice || 0)) || totalValue),
+      })),
       financials: {
-        subtotal: subtotal,
-        grandTotal: totalValue || subtotal
+        subtotal: actualTaxable,
+        shipping: 0,
+        taxAmount,
+        taxLabel,
+        grandTotal,
       },
       notes: [
-        '1. This document is generated from the MSME enterprise procurement workflow and must be read with linked GRN, invoice and payment records.',
-        '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
-        '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
-      ]
-    };
+        '1. Delivery must strictly adhere to agreed specifications and timeline.',
+        '2. Invoice raised must contain this Purchase Order Number and Date.',
+        `3. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
+        ...(order.metadata?.notes ? [`4. ${order.metadata.notes}`] : []),
+      ],
+    });
 
-    const engine = new PdfEngine('p');
-    const doc = await engine.generate(config);
-    
-    const filename = `${order.poNumber || `PO-${order.id}`}-procurement-invoice.pdf`;
+    const filename = `${order.poNumber || `PO-${order.id}`}.pdf`;
     if (mode === 'print') {
       doc.autoPrint();
       window.open(doc.output('bloburl'), '_blank');
-      toast.success('Invoice opened for printing');
+      toast.success('Purchase Order opened for printing');
       return;
     }
     doc.save(filename);
-    toast.success('Detailed invoice PDF generated');
+    toast.success('Purchase Order PDF downloaded');
   };
 
   const handleClearFilters = () => {

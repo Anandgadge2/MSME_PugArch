@@ -315,7 +315,7 @@ export function ConsentManagementCard() {
             For data correction, consent withdrawal disputes, or DPDP compliance queries, reach our nodal officer:
           </p>
           <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-slate-700 font-bold">
-            <span className="inline-flex items-center gap-1.5 text-slate-600"><Mail className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" /> grievance@jsgsmile.in</span>
+            <span className="inline-flex items-center gap-1.5 text-slate-600"><Mail className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" /> jsgsmileportal@gmail.com</span>
             <span className="inline-flex items-center gap-1.5 text-slate-600"><Phone className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" /> 1800-120-MSME (Mon-Fri 9:00 AM - 6:00 PM IST)</span>
           </div>
         </div>

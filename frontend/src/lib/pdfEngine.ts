@@ -156,7 +156,36 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
   if (rawUrl.startsWith('data:image/')) return rawUrl;
 
   const targetUrl = resolveMediaUrl(rawUrl) || rawUrl;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  // 1. FAST PATH: Check if an image with this URL is already loaded and rendered in the DOM
+  try {
+    const allImages = Array.from(document.querySelectorAll('img'));
+    const matchedImg = allImages.find(img => {
+      const src = img.getAttribute('src') || img.src || '';
+      return src === rawUrl || src === targetUrl || (targetUrl.length > 5 && src.includes(targetUrl)) || (rawUrl.length > 5 && src.includes(rawUrl));
+    });
+
+    if (matchedImg && matchedImg.complete && matchedImg.naturalWidth > 0 && matchedImg.naturalHeight > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = matchedImg.naturalWidth;
+      canvas.height = matchedImg.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(matchedImg, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl && dataUrl.startsWith('data:image/png;base64,') && dataUrl.length > 100) {
+          return dataUrl;
+        }
+      }
+    }
+  } catch {
+    // DOM canvas extraction threw (e.g. cross-origin taint); continue to network fetch
+  }
+
+  // 2. NETWORK FETCH: Respect session cookies without sending invalid placeholder JWTs
+  const rawToken = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+  const isRealJwt = rawToken && !['cookie-session', 'null', 'undefined'].includes(rawToken.trim());
+  const token = isRealJwt ? rawToken.trim() : null;
 
   let authUrl = targetUrl.startsWith('/') ? `${window.location.origin}${targetUrl}` : targetUrl;
   if (token && (authUrl.includes('/api/files/') || authUrl.includes('/api/public/files/')) && !authUrl.includes('token=')) {
@@ -164,7 +193,6 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
     authUrl = `${authUrl}${sep}token=${encodeURIComponent(token)}`;
   }
 
-  // 1. First attempt: fetch -> blob -> readAsDataURL -> draw onto canvas to guarantee standard PNG
   try {
     const fetchHeaders: Record<string, string> = {};
     if (token) {
@@ -189,7 +217,6 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
         });
 
         if (rawDataUrl) {
-          // Normalize to canvas PNG to guarantee compatibility with jsPDF addImage
           const pngDataUrl = await new Promise<string | null>((resolve) => {
             try {
               const img = new Image();
@@ -220,7 +247,7 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
     console.warn('loadImageAsDataUrl fetch failed, attempting canvas fallback:', err);
   }
 
-  // 2. Second attempt: HTML Image + Canvas fallback with crossOrigin
+  // 3. FALLBACK: HTML Image with crossOrigin
   return new Promise((resolve) => {
     try {
       const img = new Image();
@@ -242,7 +269,26 @@ export async function loadImageAsDataUrl(url: string | null | undefined): Promis
           resolve(null);
         }
       };
-      img.onerror = () => resolve(null);
+      img.onerror = () => {
+        // Retry once without crossOrigin in case backend does not send CORS header
+        const fallbackImg = new Image();
+        fallbackImg.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = fallbackImg.naturalWidth || 300;
+            canvas.height = fallbackImg.naturalHeight || 100;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(fallbackImg, 0, 0);
+              resolve(canvas.toDataURL('image/png'));
+              return;
+            }
+          } catch {}
+          resolve(null);
+        };
+        fallbackImg.onerror = () => resolve(null);
+        fallbackImg.src = authUrl;
+      };
       img.src = authUrl;
     } catch {
       resolve(null);

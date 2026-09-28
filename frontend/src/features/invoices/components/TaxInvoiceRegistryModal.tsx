@@ -112,25 +112,40 @@ export function TaxInvoiceRegistryModal({
 
   // Fetch full invoice details
   useEffect(() => {
-    if (!isOpen || !invoiceId) return;
+    if (!isOpen) return;
 
-    // If initial data is provided and has items/seller, we can use it
-    if (initialInvoiceData && (initialInvoiceData.items || initialInvoiceData.seller)) {
+    // Seed preview with initial data if provided
+    if (initialInvoiceData) {
       setInvoice(initialInvoiceData);
+    }
+
+    const effectiveId = invoiceId || initialInvoiceData?.id;
+    if (!effectiveId) {
       setLoading(false);
       return;
     }
 
     let isMounted = true;
     const fetchInvoice = async () => {
-      setLoading(true);
+      // Only show spinner if we don't have initial items
+      if (!initialInvoiceData?.items?.length) {
+        setLoading(true);
+      }
       try {
-        const data = await getApi<any>(`/api/invoices/${invoiceId}`, true);
+        const data = await getApi<any>(`/api/invoices/${effectiveId}`, true);
         if (isMounted && data) {
-          setInvoice(data);
+          // Merge full fetched relations into invoice state
+          setInvoice(prev => ({
+            ...(prev || {}),
+            ...data,
+            // Ensure purchaseOrder, seller, buyer are preserved/augmented
+            purchaseOrder: data.purchaseOrder || prev?.purchaseOrder,
+            seller: data.seller || prev?.seller,
+            buyer: data.buyer || prev?.buyer
+          }));
         }
       } catch (err: any) {
-        if (isMounted) {
+        if (isMounted && !initialInvoiceData) {
           toast.error(err?.message || 'Failed to load invoice details.');
         }
       } finally {
@@ -177,34 +192,50 @@ export function TaxInvoiceRegistryModal({
     }
 
     const totalVal = Number(invoice.totalAmount || invoice.amount || 0);
-    const taxableVal = Number(invoice.taxableAmount || totalVal);
-    const totalTaxVal = Number(invoice.totalTaxAmount || 0);
+    const taxableVal = Number(invoice.taxableAmount || (totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0));
+    const totalTaxVal = Number(invoice.totalTaxAmount || (totalVal > taxableVal ? Number((totalVal - taxableVal).toFixed(2)) : 0));
 
     const details = invoice.items || invoice.purchaseOrder?.items || [];
     const items: TaxInvoiceItem[] = details.length > 0
-      ? details.map((it: any, idx: number) => ({
-          srNo: idx + 1,
-          description: it.itemName || it.description || 'MSME Goods / Services Delivery',
-          hsn: it.hsnCode || '84719000',
-          qty: Number(it.quantity || 1),
-          unit: it.unitOfMeasure || 'Unit',
-          priceUnit: Number(it.unitPrice || (it.taxableAmount || totalVal)),
-          amount: Number(it.totalAmount || it.taxableAmount || (Number(it.unitPrice || 0) * Number(it.quantity || 1)))
-        }))
+      ? details.map((it: any, idx: number) => {
+          const qty = Number(it.quantity || 1);
+          let taxableAmt = Number(it.taxableAmount || 0);
+          let unitPrice = Number(it.unitPrice || 0);
+
+          // Prevent 10x inflation if unitPrice was stored as full lot total
+          if (qty > 1 && totalVal > 0 && (unitPrice * qty) > (totalVal * 1.5)) {
+            unitPrice = Number((unitPrice / qty).toFixed(2));
+            taxableAmt = Number((unitPrice * qty).toFixed(2));
+          } else if (!taxableAmt && unitPrice > 0) {
+            taxableAmt = Number((unitPrice * qty).toFixed(2));
+          } else if (taxableAmt > 0 && (!unitPrice || unitPrice === taxableAmt)) {
+            unitPrice = Number((taxableAmt / qty).toFixed(2));
+          }
+
+          return {
+            srNo: idx + 1,
+            description: it.itemName || it.description || invoice.purchaseOrder?.title || 'Goods / Services',
+            hsn: it.hsnCode || it.hsn || it.product?.hsnCode || '-',
+            qty,
+            unit: it.unitOfMeasure || 'Unit',
+            priceUnit: unitPrice || (taxableAmt / Math.max(qty, 1)),
+            amount: taxableAmt || (unitPrice * qty)
+          };
+        })
       : [{
           srNo: 1,
-          description: invoice.purchaseOrder?.title || 'Contract Deliverables',
-          hsn: '84719000',
+          description: invoice.purchaseOrder?.title || 'Goods / Services',
+          hsn: '-',
           qty: 1,
           priceUnit: taxableVal,
-          amount: totalVal || taxableVal
+          amount: taxableVal
         }];
 
     let computedTaxable = 0;
     items.forEach(it => {
       computedTaxable += Number(it.amount) || 0;
     });
-    const finalSubtotal = computedTaxable > 0 ? computedTaxable : taxableVal;
+    const finalSubtotal = computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : taxableVal;
 
     const formatAddress = (...parts: (string | null | undefined)[]) => {
       const valid = parts.filter(
@@ -213,42 +244,70 @@ export function TaxInvoiceRegistryModal({
       return valid.length > 0 ? valid.map(p => p!.trim()).join(', ') : '';
     };
 
-    const sellerOrg = invoice.seller?.organization;
-    const sellerProfile = invoice.seller?.sellerProfile;
-    const sellerReg = invoice.seller?.registrationDetails as any;
+    const sellerUser = invoice.seller || invoice.purchaseOrder?.seller;
+    const sellerOrg = sellerUser?.organization;
+    const sellerProfile = sellerUser?.sellerProfile;
+    const sellerReg = (sellerUser?.registrationDetails as any) || {};
 
-    const sellerName = sellerProfile?.businessName || sellerOrg?.organizationName || sellerProfile?.nameAsInPan || invoice.seller?.name || 'Seller Organization';
-    const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerProfile?.corporateAddress || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || sellerReg?.address || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || '';
-    const sellerGstin = sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerOrg?.gstin || sellerReg?.gstin || sellerReg?.gst || '';
-    const sellerPhone = invoice.seller?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || '';
-    const sellerEmail = invoice.seller?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || '';
-    const sellerCin = sellerOrg?.cinNumber || sellerReg?.cinNumber || sellerReg?.cin || sellerProfile?.cinNumber || '';
+    const sellerName = sellerOrg?.organizationName || sellerProfile?.businessName || sellerReg?.businessName || sellerReg?.companyName || sellerProfile?.nameAsInPan || sellerUser?.name || 'N/A';
+    const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerReg?.registeredOfficeAddress || sellerReg?.address || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || 'N/A';
+    const sellerGstin = sellerOrg?.gstin || sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerReg?.gstin || sellerReg?.gstDetails?.gstin || sellerReg?.gst || '';
+    const sellerPhone = sellerUser?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || '';
+    const sellerEmail = sellerUser?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || '';
+    const sellerCin = sellerOrg?.cinNumber || sellerProfile?.cinNumber || sellerProfile?.cin || sellerReg?.cin || '';
 
-    const buyerOrg = invoice.buyer?.organization;
-    const buyerProfile = invoice.buyer?.buyerProfile;
-    const buyerReg = invoice.buyer?.registrationDetails as any;
+    const sellerLogo = sellerReg?.logoUrl || sellerOrg?.profile?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/view` : null) || logoUrl || null;
+    const sellerStamp = sellerReg?.stampUrl || stampUrl || null;
+    const sellerSignature = sellerReg?.signatureUrl || signatureUrl || null;
 
-    const billToName = buyerProfile?.departmentName || buyerProfile?.businessName || buyerOrg?.organizationName || invoice.buyer?.name || 'Buyer Organization';
-    const billToAddress = buyerProfile?.registeredAddress || buyerProfile?.corporateAddress || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || buyerReg?.address || '';
-    const billToPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.panNumber || '';
-    const billToGstin = buyerOrg?.gstin || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '';
+    const buyerUser = invoice.buyer || invoice.purchaseOrder?.buyer;
+    const buyerOrg = buyerUser?.organization;
+    const buyerProfile = buyerUser?.buyerProfile;
+    const buyerReg = (buyerUser?.registrationDetails as any) || {};
 
     const poDeliv = invoice.purchaseOrder?.deliveryAddress;
-    const shipToName = poDeliv?.recipientName || buyerOrg?.organizationName || billToName;
-    const shipToAddress = poDeliv
-      ? formatAddress(poDeliv.addressLine1, poDeliv.addressLine2, poDeliv.city, poDeliv.state, poDeliv.pincode, poDeliv.country || 'INDIA')
-      : billToAddress;
+    const billToName = buyerOrg?.organizationName || buyerProfile?.businessName || buyerProfile?.organizationName || buyerReg?.businessName || buyerReg?.companyName || buyerUser?.name || 'N/A';
+    const billToAddress = poDeliv
+      ? (typeof poDeliv === 'string' ? poDeliv : formatAddress(poDeliv.addressLine1, poDeliv.addressLine2, poDeliv.city, poDeliv.state, poDeliv.pincode, poDeliv.country || 'INDIA'))
+      : (buyerProfile?.registeredAddress || buyerOrg?.address || buyerReg?.officeZoneName || buyerReg?.address || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || 'N/A');
+    const billToPan = buyerOrg?.panNumber || buyerProfile?.pan || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.orgPan || '';
+    const billToGstin = buyerOrg?.gstin || buyerProfile?.gst || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '';
 
-    const bankName = sellerProfile?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerReg?.bankName || 'State Bank of India';
-    const accountNo = sellerProfile?.bankAccountNo || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerReg?.bankAccountNo || '••••••••1234';
-    const ifscCode = sellerProfile?.bankIfsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerReg?.bankIfsc || 'SBIN0001234';
-    const accountName = sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
+    const shipToName = (typeof poDeliv === 'object' && poDeliv?.recipientName) || buyerOrg?.organizationName || billToName;
+    const shipToAddress = billToAddress;
+
+    const bankName = sellerReg?.bankDetails?.bankName || sellerReg?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerProfile?.bankName || 'State Bank of India';
+    const accountNo = sellerReg?.bankDetails?.accountNumber || sellerReg?.accountNumber || sellerProfile?.bankAccounts?.[0]?.accountNumberMasked || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerProfile?.bankAccountNo || 'N/A';
+    const ifscCode = sellerReg?.bankDetails?.ifscCode || sellerReg?.ifscCode || sellerProfile?.bankAccounts?.[0]?.ifsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerProfile?.bankIfsc || 'N/A';
+    const accountName = sellerReg?.bankDetails?.accountHolderName || sellerReg?.accountHolderName || sellerProfile?.bankAccounts?.[0]?.holderName || sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
+
+    // Detect interstate based on GSTIN codes or different states
+    const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
+    const buyerGstinCode = (billToGstin || '').trim().substring(0, 2);
+    const hasDifferentGstCodes = /^\d{2}$/.test(sellerGstinCode) && /^\d{2}$/.test(buyerGstinCode) && sellerGstinCode !== buyerGstinCode;
+    const hasDifferentStates = Boolean(
+      (sellerProfile?.state || sellerReg?.state) &&
+      (buyerProfile?.state || buyerReg?.state) &&
+      String(sellerProfile?.state || sellerReg?.state).trim().toLowerCase() !== String(buyerProfile?.state || buyerReg?.state).trim().toLowerCase()
+    );
+    const isInterstate = Boolean(invoice.interstate || Number(invoice.igstAmount) > 0 || hasDifferentGstCodes || hasDifferentStates);
+
+    const buyerStateName = buyerProfile?.state || buyerReg?.state || (buyerGstinCode === '21' ? 'Odisha' : 'Other State');
+    const placeOfSupply = isInterstate
+      ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
+      : `${sellerProfile?.state || sellerReg?.state || 'Maharashtra'} - State (CGST + SGST)`;
+
+    const cgstAmount = isInterstate ? undefined : (Number(invoice.cgstAmount) || Math.round(finalSubtotal * 0.09 * 100) / 100);
+    const sgstAmount = isInterstate ? undefined : (Number(invoice.sgstAmount) || Math.round(finalSubtotal * 0.09 * 100) / 100);
+    const igstAmount = isInterstate ? (Number(invoice.igstAmount) || totalTaxVal || Math.round(finalSubtotal * 0.18 * 100) / 100) : undefined;
+    const computedTotal = isInterstate ? Math.round((finalSubtotal + (igstAmount || 0)) * 100) / 100 : Math.round((finalSubtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100;
+    const totalAmount = totalVal > 0 && Math.abs(totalVal - computedTotal) < (computedTotal * 0.1) ? totalVal : computedTotal;
 
     return {
       copyType,
       invoiceNumber: invoice.invoiceNumber || `INV-${invoice.id}`,
       dateStr: formatDate(invoice.createdAt) || formatDate(new Date()),
-      placeOfSupply: invoice.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+      placeOfSupply,
       seller: {
         name: sellerName,
         address: sellerAddress,
@@ -256,9 +315,9 @@ export function TaxInvoiceRegistryModal({
         phone: sellerPhone,
         email: sellerEmail,
         cin: sellerCin,
-        logoUrl: sellerOrg?.profile?.logoUrl || sellerReg?.logoUrl || logoUrl || null,
-        stampUrl: sellerReg?.stampUrl || stampUrl || null,
-        signatureUrl: sellerReg?.signatureUrl || signatureUrl || null
+        logoUrl: sellerLogo,
+        stampUrl: sellerStamp,
+        signatureUrl: sellerSignature
       },
       billTo: {
         name: billToName,
@@ -273,13 +332,13 @@ export function TaxInvoiceRegistryModal({
       items,
       subtotal: finalSubtotal,
       cgstRate: 9,
-      cgstAmount: !invoice.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      cgstAmount,
       sgstRate: 9,
-      sgstAmount: !invoice.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      sgstAmount,
       igstRate: 18,
-      igstAmount: invoice.interstate ? (totalTaxVal || finalSubtotal * 0.18) : undefined,
+      igstAmount,
       otherTaxAmount: Number(invoice.otherTaxAmount || 0),
-      totalAmount: totalVal || (finalSubtotal + (totalTaxVal || finalSubtotal * 0.18)),
+      totalAmount,
       bankDetails: {
         bankName,
         accountNo,

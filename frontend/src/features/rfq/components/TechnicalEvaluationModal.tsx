@@ -349,7 +349,7 @@ export function TechnicalEvaluationModal({
           /Model[:\s]+([^\n,;]+)/i,
         )?.[1]
       : null,
-    "Standard",
+    "—",
   );
 
   const makeBrand = firstValid(
@@ -370,7 +370,7 @@ export function TechnicalEvaluationModal({
     rawPart.brand,
     firstLine.makeBrand,
     firstLine.brand,
-    "Standard / As Quoted",
+    "—",
   );
 
   const techSpecs = firstValid(
@@ -408,23 +408,35 @@ export function TechnicalEvaluationModal({
     detailsData.deliveryTimeline,
     respData.deliveryTimeline,
     ackData.deliveryTimeline,
+    descData.deliveryTimeline,
     rawPart.deliveryTimeline,
     firstLine.deliveryTimeline,
-    "As per RFQ schedule",
+    "—",
   );
+
+  const totalLineQty = lineItems.reduce(
+    (sum: number, it: any) => sum + (Number(it.quantity) || 0),
+    0,
+  );
+  const primaryUnit = lineItems[0]?.unit || participation.unit || "";
+  const calculatedQtyStr =
+    totalLineQty > 0
+      ? `${totalLineQty}${primaryUnit ? ` ${primaryUnit}` : ""}`
+      : null;
 
   const offeredQty = firstValid(
     participation.offeredQuantity,
-    participation.quantity,
+    participation.quantity
+      ? `${participation.quantity}${participation.unit ? ` ${participation.unit}` : ""}`
+      : null,
     detailsData.offeredQuantity,
     respData.offeredQuantity,
     ackData.offeredQuantity,
+    descData.offeredQuantity,
+    descData.quantity,
     rawPart.offeredQuantity,
-    lineItems.reduce(
-      (sum: number, it: any) => sum + (Number(it.quantity) || 0),
-      0,
-    ) || null,
-    "As Specified",
+    calculatedQtyStr,
+    "—",
   );
 
   const message = firstValid(

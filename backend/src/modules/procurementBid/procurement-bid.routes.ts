@@ -26,8 +26,11 @@ export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
       keysToInvalidate.add(String(bidOrId));
     } else if (bidOrId && typeof bidOrId === 'object') {
       if (bidOrId.id) keysToInvalidate.add(String(bidOrId.id));
+      if (bidOrId.bidId) keysToInvalidate.add(String(bidOrId.bidId));
       if (bidOrId.bidNumber) keysToInvalidate.add(String(bidOrId.bidNumber));
       if (bidOrId.sourceId) keysToInvalidate.add(String(bidOrId.sourceId));
+      if (bidOrId.purchaseOrder?.bidId) keysToInvalidate.add(String(bidOrId.purchaseOrder.bidId));
+      if (bidOrId.award?.bidId) keysToInvalidate.add(String(bidOrId.award.bidId));
       const sourceReqId = (bidOrId.technicalPacket as any)?.sourceRequirementId || (bidOrId.technicalPacket as any)?.requirementId;
       if (sourceReqId) keysToInvalidate.add(String(sourceReqId));
     }
@@ -146,7 +149,11 @@ const financialQuoteSchema = z.object({
   model: z.string().trim().max(160).optional(),
   offeredItemDescription: z.string().trim().max(20000).optional(),
   lineItems: z.string().optional(),
-  responseData: z.string().optional()
+  responseData: z.string().optional(),
+  deliveryTimeline: z.string().trim().max(250).optional(),
+  terms: z.string().trim().max(2000).optional(),
+  paymentTerms: z.string().trim().max(2000).optional(),
+  offeredQuantity: z.union([z.string(), z.number()]).optional(),
 });
 
 const clarificationSchema = z.object({

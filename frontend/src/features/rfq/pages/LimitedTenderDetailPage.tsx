@@ -149,25 +149,31 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     router.push(`/bids/${bid.id || requestId}/participate`);
   };
 
-  const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
+  const participationsList = [
+    ...(bid?.myParticipation ? [bid.myParticipation] : []),
+    ...(Array.isArray(bid?.participations) ? bid.participations : []),
+    ...(Array.isArray(reqObj?.participations) ? reqObj.participations : []),
+    ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
+  ];
 
-  const ownParticipation = participationsList.find((p: any) =>
-    currentUser && (
-      (currentUser.id && (
-        Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
-        Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id)
-      )) ||
-      (currentUser.organizationId && (
-        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.organizationId)
-      )) ||
-      (currentUser.sellerProfile?.id && (
-        Number(p.sellerProfileId || p.sellerId) === Number(currentUser.sellerProfile.id)
-      )) ||
-      (currentUser.sellerProfile?.organizationId && (
-        Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
-      ))
-    )
-  );
+  const ownParticipation =
+    participationsList.find((p: any) =>
+      currentUser && (
+        (currentUser.id && (
+          Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
+          Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id)
+        )) ||
+        (currentUser.organizationId && (
+          Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.organizationId)
+        )) ||
+        (currentUser.sellerProfile?.id && (
+          Number(p.sellerProfileId || p.sellerId) === Number(currentUser.sellerProfile.id)
+        )) ||
+        (currentUser.sellerProfile?.organizationId && (
+          Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
+        ))
+      )
+    ) || bid?.myParticipation || null;
 
   const isOwnSubmitted = Boolean(
     ownParticipation &&

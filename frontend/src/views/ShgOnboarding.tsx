@@ -559,7 +559,7 @@ function SellerBackedShgPage({ section }: { section: string }) {
       <ShgSectionLayout title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
         <div className="grid gap-4 md:grid-cols-3">
           <SupportCard icon={Phone} title="Call Helpdesk" text="1800-123-4567" href="tel:18001234567" />
-          <SupportCard icon={Mail} title="Email Support" text="support@jsgsmile.in" href="mailto:support@jsgsmile.in" />
+          <SupportCard icon={Mail} title="Email Support" text="jsgsmileportal@gmail.com" href="mailto:jsgsmileportal@gmail.com" />
           <SupportCard icon={BookOpen} title="Portal Help" text="Procedures, policies, and documentation guidance" href="/help" />
         </div>
         <Card>
@@ -699,7 +699,7 @@ function ShgDashboardSection({ section, profile, progress }: { section: string; 
   if (section === 'support') {
     return (
       <ShgSectionLayout title="SHG Support" description="Get help with onboarding, documents, catalogue listings, orders, and payments.">
-        <div className="grid gap-4 md:grid-cols-3"><SupportCard icon={Phone} title="Call Helpdesk" text="1800-123-4567" href="tel:18001234567" /><SupportCard icon={Mail} title="Email Support" text="support@jsgsmile.in" href="mailto:support@jsgsmile.in" /><SupportCard icon={BookOpen} title="Portal Help" text="Procedures, policies, and documentation guidance" href="/help" /></div>
+        <div className="grid gap-4 md:grid-cols-3"><SupportCard icon={Phone} title="Call Helpdesk" text="1800-123-4567" href="tel:18001234567" /><SupportCard icon={Mail} title="Email Support" text="jsgsmileportal@gmail.com" href="mailto:jsgsmileportal@gmail.com" /><SupportCard icon={BookOpen} title="Portal Help" text="Procedures, policies, and documentation guidance" href="/help" /></div>
       </ShgSectionLayout>
     );
   }

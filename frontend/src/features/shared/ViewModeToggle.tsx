@@ -64,7 +64,7 @@ export function ViewModeToggle({
                 aria-label="List view"
                 aria-pressed={value === 'list'}
                 className={cn(
-                    'flex items-center justify-center rounded-md transition-all',
+                    'flex items-center justify-center rounded-md transition-all cursor-pointer touch-manipulation select-none active:scale-95',
                     buttonSize,
                     value === 'list' ? activeClass : inactiveClass
                 )}
@@ -77,7 +77,7 @@ export function ViewModeToggle({
                 aria-label="Grid view"
                 aria-pressed={value === 'grid'}
                 className={cn(
-                    'flex items-center justify-center rounded-md transition-all',
+                    'flex items-center justify-center rounded-md transition-all cursor-pointer touch-manipulation select-none active:scale-95',
                     buttonSize,
                     value === 'grid' ? activeClass : inactiveClass
                 )}

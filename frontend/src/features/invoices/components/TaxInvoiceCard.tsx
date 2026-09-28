@@ -89,8 +89,8 @@ export function TaxInvoiceCard({
   const displayItems = items.length > 0 ? items : [
     {
       srNo: 1,
-      description: 'MSME Goods / Services Delivery',
-      hsn: '84719000',
+      description: 'Goods / Services',
+      hsn: '-',
       qty: 1,
       priceUnit: subtotal || totalAmount,
       amount: subtotal || totalAmount
@@ -110,16 +110,20 @@ export function TaxInvoiceCard({
         {/* Left: Seller Information */}
         <div className="space-y-1">
           <h2 className="text-base font-black text-slate-950 tracking-tight">
-            {seller.name || 'PugArch Technology Pvt Ltd'}
+            {seller.name || '-'}
           </h2>
-          <p className="text-xs text-slate-800 leading-tight font-medium max-w-md whitespace-pre-line">
-            {seller.address || 'L-18,Laxman Nagar,Manewada,Nagpur,440034'}
-          </p>
-          <p className="text-xs font-bold text-slate-900">
-            GST NO: <span className="font-mono">{seller.gstin || '27AAOCP3437H1Z4'}</span>
-          </p>
-          <p className="text-xs font-semibold text-slate-800">{seller.phone || '7887858594'}</p>
-          <p className="text-xs font-semibold text-slate-800">{seller.email || 'Info@pugarch.in'}</p>
+          {seller.address && (
+            <p className="text-xs text-slate-800 leading-tight font-medium max-w-md whitespace-pre-line">
+              {seller.address}
+            </p>
+          )}
+          {seller.gstin && (
+            <p className="text-xs font-bold text-slate-900">
+              GST NO: <span className="font-mono">{seller.gstin}</span>
+            </p>
+          )}
+          {seller.phone && <p className="text-xs font-semibold text-slate-800">{seller.phone}</p>}
+          {seller.email && <p className="text-xs font-semibold text-slate-800">{seller.email}</p>}
         </div>
 
         {/* Right: Company Logo & CIN */}
@@ -151,9 +155,11 @@ export function TaxInvoiceCard({
               </div>
             )}
           </div>
-          <p className="text-[11px] font-bold text-slate-900 tracking-wide font-mono mt-1">
-            CIN : {seller.cin || 'U62013MH2023PTC416118'}
-          </p>
+          {seller.cin && (
+            <p className="text-[11px] font-bold text-slate-900 tracking-wide font-mono mt-1">
+              CIN : {seller.cin}
+            </p>
+          )}
         </div>
       </div>
 
@@ -168,15 +174,15 @@ export function TaxInvoiceCard({
       <div className="grid grid-cols-1 md:grid-cols-2 border-b-2 border-slate-900">
         <div className="p-2.5 px-4 border-b md:border-b-0 md:border-r-2 border-slate-900 space-y-0.5">
           <p className="font-bold text-xs">
-            INV No: <span className="font-mono font-black">{invoiceNumber || 'PUG2026I1404001'}</span>
+            INV No: <span className="font-mono font-black">{invoiceNumber || '-'}</span>
           </p>
           <p className="font-bold text-xs">
-            Date: <span className="font-semibold">{dateStr || '14-04-2026'}</span>
+            Date: <span className="font-semibold">{dateStr || '-'}</span>
           </p>
         </div>
         <div className="p-2.5 px-4 flex items-center">
           <p className="font-bold text-xs">
-            Place Of Supply : <span className="font-semibold">{placeOfSupply || 'Maharashtra(27)'}</span>
+            Place Of Supply : <span className="font-semibold">{placeOfSupply || '-'}</span>
           </p>
         </div>
       </div>
@@ -188,16 +194,22 @@ export function TaxInvoiceCard({
           <p className="font-black text-xs uppercase tracking-wider text-slate-950 underline decoration-slate-400 underline-offset-2">
             Bill To
           </p>
-          <p className="font-black text-xs text-slate-900">{billTo.name || 'Rattan India Power Limited'}</p>
-          <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-line">
-            {billTo.address || 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra'}
-          </p>
-          <p className="text-[11px] font-bold text-slate-900">
-            PAN No: <span className="font-mono font-semibold">{billTo.pan || 'AALCS2063D'}</span>
-          </p>
-          <p className="text-[11px] font-bold text-slate-900">
-            GST No: <span className="font-mono font-semibold">{billTo.gstin || '27AALCS2063D1ZG'}</span>
-          </p>
+          <p className="font-black text-xs text-slate-900">{billTo.name || '-'}</p>
+          {billTo.address && (
+            <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-line">
+              {billTo.address}
+            </p>
+          )}
+          {billTo.pan && (
+            <p className="text-[11px] font-bold text-slate-900">
+              PAN No: <span className="font-mono font-semibold">{billTo.pan}</span>
+            </p>
+          )}
+          {billTo.gstin && (
+            <p className="text-[11px] font-bold text-slate-900">
+              GST No: <span className="font-mono font-semibold">{billTo.gstin}</span>
+            </p>
+          )}
         </div>
 
         {/* Right Column: Ship To */}
@@ -205,10 +217,12 @@ export function TaxInvoiceCard({
           <p className="font-black text-xs uppercase tracking-wider text-slate-950 underline decoration-slate-400 underline-offset-2">
             Ship To
           </p>
-          <p className="font-black text-xs text-slate-900">{shipTo.name || billTo.name || 'RattanIndia Power Limited'}</p>
-          <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-line">
-            {shipTo.address && shipTo.address.trim() !== 'INDIA' ? shipTo.address : (billTo.address || 'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA')}
-          </p>
+          <p className="font-black text-xs text-slate-900">{shipTo.name || billTo.name || '-'}</p>
+          {(shipTo.address || billTo.address) && (
+            <p className="text-[11px] font-medium text-slate-700 leading-relaxed whitespace-pre-line">
+              {shipTo.address && shipTo.address.trim() !== 'INDIA' ? shipTo.address : (billTo.address || '-')}
+            </p>
+          )}
         </div>
       </div>
 
@@ -235,7 +249,7 @@ export function TaxInvoiceCard({
                   <p className="font-black text-slate-900">{item.description}</p>
                 </td>
                 <td className="p-3 text-center font-mono font-bold text-slate-800 border-r-2 border-slate-900 align-top">
-                  {item.hsn || '84719000'}
+                  {item.hsn || '-'}
                 </td>
                 <td className="p-3 text-center font-bold border-r-2 border-slate-900 align-top">
                   {item.qty ? `${item.qty}${item.unit ? ` ${item.unit}` : ''}` : '-'}
@@ -277,7 +291,7 @@ export function TaxInvoiceCard({
           </div>
         </div>
 
-        {igstAmount && igstAmount > 0 ? (
+        {(Number(igstAmount) || 0) > 0 ? (
           <div className="flex justify-end border-b border-slate-900">
             <div className="w-full md:w-80 flex">
               <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900">
@@ -313,7 +327,7 @@ export function TaxInvoiceCard({
           </>
         )}
 
-        {otherTaxAmount && otherTaxAmount > 0 && (
+        {(Number(otherTaxAmount) || 0) > 0 && (
           <div className="flex justify-end border-b border-slate-900">
             <div className="w-full md:w-80 flex">
               <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900">
@@ -366,7 +380,7 @@ export function TaxInvoiceCard({
         {/* Right Side: Stamp & Signature */}
         <div className="p-4 flex flex-col items-end justify-between min-h-[125px] relative">
           <p className="text-[11px] font-bold text-slate-900 text-right w-full">
-            For <span className="font-black">{seller.name || 'Seller Enterprise'}</span>
+            {seller.name ? <>For <span className="font-black">{seller.name}</span></> : null}
           </p>
 
           <div

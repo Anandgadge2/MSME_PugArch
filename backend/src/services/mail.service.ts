@@ -284,7 +284,7 @@ export const sendAdminWelcomeEmail = async (params: SendAdminWelcomeEmailParams)
     const loginUrl = `${portalUrl}/login`;
     const resetUrl = `${portalUrl}/forgot-password`;
     const portalName = 'JSG SMILE Procurement Portal';
-    const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.gov.in';
+    const fromEmail = env.SMTP_USER || 'jsgsmileportal@gmail.com';
     const fromName = 'JSG SMILE District Administration';
 
     const roleTitle = String(role || 'ADMIN').toUpperCase().replace(/_/g, ' ');
@@ -383,7 +383,7 @@ export const sendSubUserInvitationEmail = async (
   const portalUrl = getPublicPortalUrl().replace(/\/+$/, '');
   const loginUrl = `${portalUrl}/login`;
   const fromName = 'JSG SMILE Procurement Administration';
-  const fromEmail = env.SMTP_USER || 'no-reply@jsgsmile.odisha.gov.in';
+  const fromEmail = env.SMTP_USER || 'jsgsmileportal@gmail.com';
   const subject = `[JSG SMILE] Account Activation Credentials — Sub-User for ${organizationName}`;
 
   console.log(`\n========================================`);

@@ -3,7 +3,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
 import { env } from '../../config/env.js';
-import { notificationService, escapeHtml } from '../../services/notification.service.js';
+import { notificationService, escapeHtml, resolveSellerOrgName } from '../../services/notification.service.js';
 import { deliveryService, type DeliveryActor } from '../delivery/delivery.service.js';
 import { initiatePayment } from '../payments/payment.service.js';
 import { auditLog } from '../audit/audit.service.js';
@@ -74,9 +74,39 @@ const updateBidStatus = async (tx: any, bidId: number, newStatus: string, action
   });
 };
 
+const userProfileSelect = {
+  id: true,
+  name: true,
+  email: true,
+  mobile: true,
+  role: true,
+  registrationDetails: true,
+  organizationId: true,
+  organization: {
+    select: {
+      id: true,
+      organizationName: true,
+      gstin: true,
+      panNumber: true,
+      udyamNumber: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      pincode: true,
+      verificationStatus: true,
+      organizationLogoFileId: true,
+      profile: { select: { logoUrl: true } },
+      logoFile: { select: { id: true, url: true, fileUrl: true } }
+    }
+  },
+  buyerProfile: true,
+  sellerProfile: true
+};
+
 const poInclude = {
-  buyer: { select: { id: true, name: true, email: true, organizationId: true, organization: { select: { id: true, organizationName: true, verificationStatus: true } } } },
-  seller: { select: { id: true, name: true, email: true, organizationId: true, organization: { select: { id: true, organizationName: true, verificationStatus: true } } } },
+  buyer: { select: userProfileSelect },
+  seller: { select: userProfileSelect },
   items: true,
   deliveryTrackings: { orderBy: { createdAt: 'desc' }, include: { events: { orderBy: { occurredAt: 'desc' }, take: 12 }, documents: { include: { fileAsset: true } }, acceptance: true, settlement: true } },
   grns: { orderBy: { createdAt: 'desc' }, include: { items: true, documents: { include: { fileAsset: true } } } },
@@ -269,9 +299,37 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
   logger.info({ finalBuyerId, sellerId: participation.sellerId }, '[CREATE_PO] Resolved buyer and seller for PO');
 
   const awardedAmount = money(award.awardedAmount || participation.totalAmount || participation.quotedAmount || 0);
-  const gstRate = money(participation.gstPercentage || 0);
-  const baseAmount = money(participation.quotedAmount || awardedAmount);
+  const parsedQty = typeof bid.quantity === 'number' ? bid.quantity : (parseInt(String(bid.quantity || '1'), 10) || 1);
+  const qty = parsedQty > 0 ? parsedQty : 1;
+
+  // Inspect participation quotation line items for exact quoted rate, tax, and HSN:
+  const firstAckItem = (participation.acknowledgement as any)?.lineItems?.[0];
+  const ackUnitPrice = Number(firstAckItem?.unitPrice || firstAckItem?.unitRate || 0);
+  const ackGstPercent = Number(firstAckItem?.gstPercent ?? firstAckItem?.gstRate ?? participation.gstPercentage ?? 18);
+  const ackHsn = firstAckItem?.hsnCode || firstAckItem?.hsn || firstAckItem?.hsn_sac_code || null;
+
+  const gstRate = ackGstPercent > 0 ? money(ackGstPercent) : 18;
+
+  let baseAmount: number;
+  let unitPrice: number;
+  if (ackUnitPrice > 0) {
+    unitPrice = money(ackUnitPrice);
+    baseAmount = money(unitPrice * qty);
+  } else if (participation.quotedAmount && Number(participation.quotedAmount) > 0 && Number(participation.quotedAmount) < awardedAmount) {
+    baseAmount = money(participation.quotedAmount);
+    unitPrice = money(baseAmount / qty);
+  } else if (gstRate > 0) {
+    baseAmount = money(awardedAmount / (1 + gstRate / 100));
+    unitPrice = money(baseAmount / qty);
+  } else {
+    baseAmount = awardedAmount;
+    unitPrice = money(baseAmount / qty);
+  }
   const gstAmount = money(awardedAmount - baseAmount);
+
+  const bidItems = Array.isArray(bid.items) ? bid.items : (bid.technicalPacket?.items || bid.technicalPacket?.boq || []);
+  const firstItem = (bidItems && bidItems[0]) || {};
+  const extractedHsn = ackHsn || firstItem.hsn || firstItem.hsnCode || firstItem.hsn_sac_code || firstItem.hsnSacCode || firstItem.sac || bid.hsnCode || bid.hsn || null;
 
   const result = await db.$transaction(async (tx: any) => {
     const po = await tx.purchaseOrder.create({
@@ -302,10 +360,14 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
           sellerOrganizationName: participation.seller?.organization?.organizationName || participation.seller?.name || 'Seller Organization',
           itemName: bid.category || bid.title || 'Procurement Item',
           description: participation.offeredItemDescription || bid.description || '',
-          quantity: bid.quantity || 1,
+          quantity: qty,
           unit: bid.unit || 'Nos',
+          hsnCode: extractedHsn,
+          hsn: extractedHsn,
+          unitPrice,
           awardedAmount,
           baseAmount,
+          taxableAmount: baseAmount,
           gstRate,
           gstAmount,
           totalAmount: awardedAmount,
@@ -319,9 +381,9 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
           create: [{
             itemName: bid.category || bid.title || 'Procurement Item',
             description: participation.offeredItemDescription || bid.description || '',
-            quantity: typeof bid.quantity === 'number' ? bid.quantity : (parseInt(String(bid.quantity || '1'), 10) || 1),
+            quantity: qty,
             unitOfMeasure: bid.unit || 'Nos',
-            unitPrice: baseAmount,
+            unitPrice: unitPrice,
             taxRate: gstRate,
             totalAmount: awardedAmount
           }]
@@ -746,9 +808,11 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
 
   await procurementOrderAudit(req, 'PO_ACCEPTED', 'PurchaseOrder', po.id, { body });
 
+  const sellerOrgName = await resolveSellerOrgName(po.sellerId || req.user?.id);
+
   await notificationService.notifyUser(po.buyerId, {
     title: 'Purchase Order Accepted',
-    message: `Seller has accepted Purchase Order #${po.poNumber}. Fulfillment has officially begun.`,
+    message: `${sellerOrgName} has accepted Purchase Order #${po.poNumber}. Fulfillment has officially begun.`,
     type: 'purchase_order',
     redirectUrl: `/buyer/orders?orderId=${po.id}`
   }).catch(() => undefined);
@@ -772,9 +836,11 @@ export const acceptSellerAward = async (req: AuthRequest, awardId: number, body:
   await updateBidStatus(db, award.bidId, 'IN_PROGRESS', 'SELLER_AWARD_ACCEPTED', req);
   await procurementOrderAudit(req, 'SELLER_AWARD_ACCEPTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po?.id });
   
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(award.bid.buyerId, {
     title: 'Purchase Order Accepted',
-    message: `Seller has accepted the purchase order for "${award.bid.title}".`,
+    message: `${sellerOrgName} has accepted the purchase order for "${award.bid.title}".`,
     type: 'purchase_order',
     redirectUrl: `/buyer/orders?orderId=${po?.id}`
   });
@@ -793,9 +859,11 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
   await updateBidStatus(db, award.bidId, 'CANCELLED', 'SELLER_AWARD_REJECTED', req);
   await procurementOrderAudit(req, 'SELLER_AWARD_REJECTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po.id, reason });
   
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(award.bid.buyerId, {
     title: 'Purchase Order Rejected',
-    message: `Seller has rejected the purchase order for "${award.bid.title}". Reason: ${reason}`,
+    message: `${sellerOrgName} has rejected the purchase order for "${award.bid.title}". Reason: ${reason}`,
     type: 'purchase_order',
     redirectUrl: `/buyer/orders?orderId=${po.id}`
   });

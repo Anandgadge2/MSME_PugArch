@@ -213,17 +213,21 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     return <RfqDetailPage initialData={initialData || bidData || reqData} />;
   }
 
-  const participationsList = bid.participations || reqObj.participations || reqObj.responses || [];
+  const participationsList = [
+    ...(bid?.myParticipation ? [bid.myParticipation] : []),
+    ...(Array.isArray(bid?.participations) ? bid.participations : []),
+    ...(Array.isArray(reqObj?.participations) ? reqObj.participations : []),
+    ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
+  ];
 
-  const ownParticipation = participationsList.find(
-    (p: any) =>
-      p?.supplierId === currentUser?.id ||
-      p?.sellerId === currentUser?.id ||
-      p?.vendorId === currentUser?.id ||
-      p?.sellerOrgId === currentUser?.organizationId ||
-      p?.organizationId === currentUser?.organizationId
-  );
-  const ownResponse = ownParticipation?.response || ownParticipation?.quotation || ownParticipation?.proposal;
+  const ownParticipation =
+    participationsList.find(
+      (p: any) =>
+        Number(p?.supplierId || p?.sellerId || p?.vendorId || p?.sellerUserId || p?.seller?.id) === Number(currentUser?.id) ||
+        (currentUser?.organizationId &&
+          Number(p?.sellerOrgId || p?.organizationId || p?.sellerOrganizationId || p?.seller?.organizationId) === Number(currentUser.organizationId)),
+    ) || bid?.myParticipation || null;
+  const ownResponse = ownParticipation?.response || ownParticipation?.quotation || ownParticipation?.proposal || ownParticipation;
   const isOwnSubmitted = Boolean(
     (ownParticipation && String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED') ||
     (ownResponse && String(ownResponse.submissionStatus || ownResponse.status || '').toUpperCase() === 'SUBMITTED')

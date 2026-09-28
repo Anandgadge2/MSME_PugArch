@@ -1093,7 +1093,7 @@ export default function Dashboard() {
                       <p className="text-[9px] font-medium text-slate-500 mt-0.5 leading-snug">Support team is available for onboarding assistance.</p>
                       <button
                         type="button"
-                        onClick={() => toast.info('Support request noted. Email support@msme-portal.gov.in.')}
+                        onClick={() => toast.info('Support request noted. Email jsgsmileportal@gmail.com.')}
                         className="mt-1 text-[#12335f] font-bold uppercase text-[9px] hover:underline"
                       >
                         Contact Support →

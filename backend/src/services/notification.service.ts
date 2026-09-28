@@ -25,6 +25,35 @@ export interface NotifyOpts {
   };
 }
 
+export const resolveSellerOrgName = async (sellerId?: number | string | null): Promise<string> => {
+  if (!sellerId) return 'Seller';
+  try {
+    const numId = Number(sellerId);
+    if (!numId || isNaN(numId)) return 'Seller';
+    const seller = await db.user.findUnique({
+      where: { id: numId },
+      select: {
+        name: true,
+        companyName: true,
+        organization: { select: { organizationName: true } },
+        sellerProfile: { select: { businessName: true, companyName: true } }
+      }
+    });
+    if (!seller) return 'Seller';
+    const name = (
+      seller.organization?.organizationName ||
+      seller.sellerProfile?.businessName ||
+      seller.sellerProfile?.companyName ||
+      seller.companyName ||
+      seller.name ||
+      'Seller'
+    ).trim();
+    return name || 'Seller';
+  } catch {
+    return 'Seller';
+  }
+};
+
 interface EmailOpts {
   subject: string;
   html: string;
@@ -96,17 +125,12 @@ export const buildNotificationEmailHtml = (opts: {
         isHighlight: true
       },
       {
-        label: 'Priority Level',
-        value: priority.toUpperCase(),
-        color: opts.priority === 'urgent' ? '#b91c1c' : opts.priority === 'high' ? '#b45309' : '#1e3a8a',
-        isHighlight: true
-      },
-      {
         label: 'Official Portal Gateway',
         value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>`
       }
     ],
     stepInstructions: opts.stepInstructions,
+    helpdeskEmail: 'jsgsmileportal@gmail.com',
     actionButton: {
       label: opts.redirectUrl ? 'Open Details in Portal' : 'Access JSG SMILE Portal',
       url: actionUrl

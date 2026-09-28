@@ -953,6 +953,11 @@ export const deliveryService = {
     const delivery = await loadDeliveryForStatusUpdate(id);
     ensureRole(delivery, actor, ['seller', 'admin']);
     ensureNotTerminal(delivery);
+    // Prevent re-packing once already packed or further along
+    const alreadyPastPack = ['PACKED', 'READY_FOR_PICKUP', 'PICKUP_SCHEDULED', 'PICKED_UP', 'DISPATCHED', 'IN_TRANSIT', 'AT_HUB', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ACCEPTED', 'COMPLETED'];
+    if (alreadyPastPack.includes(String(delivery.status))) {
+      throw new ApiError(409, `Order is already ${delivery.status} — packing cannot be repeated`, 'DELIVERY_ALREADY_PACKED');
+    }
     const updated = await db.$transaction(tx =>
       transitionStatus(tx, delivery, 'PACKED', actor, {
         remarks: body.remarks,

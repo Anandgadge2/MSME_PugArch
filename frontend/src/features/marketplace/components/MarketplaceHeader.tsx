@@ -1025,26 +1025,26 @@ export function MarketplaceHeader({ user }: Props) {
                     {/* Dark frosted backdrop */}
                     <div
                         onClick={() => setMobileMenuOpen(false)}
-                        className="fixed inset-0 bg-[#07172e]/60 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
+                        className="fixed inset-0 bg-[#07172e]/65 backdrop-blur-sm transition-opacity duration-300 animate-in fade-in"
                         aria-hidden="true"
                     />
 
                     {/* Sliding Sheet Panel */}
-                    <div className="relative w-[88vw] max-w-[340px] bg-white h-full shadow-2xl flex flex-col z-10 overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
+                    <div className="relative w-[90vw] max-w-[360px] bg-slate-50 h-full shadow-2xl flex flex-col z-10 overflow-hidden animate-in slide-in-from-right duration-300 ease-out">
                         {/* Branded Drawer Header */}
-                        <div className="bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f] p-4 text-white flex items-center justify-between shadow-md shrink-0">
+                        <div className="bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f] p-4 text-white flex items-center justify-between shadow-md shrink-0 border-b-2 border-amber-400/80">
                             <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 min-w-0">
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm">
-                                    <img src="/logoo.png" alt="" aria-hidden="true" width={36} height={36} className="h-full w-full object-contain" />
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm ring-1 ring-white/20">
+                                    <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} className="h-full w-full object-contain" />
                                 </div>
                                 <div className="min-w-0 leading-tight">
-                                    <p className="truncate text-sm font-black tracking-tight text-white">JsgSMILE</p>
-                                    <p className="truncate text-[9px] font-bold text-slate-300">MSME Marketplace</p>
+                                    <p className="truncate text-base font-black tracking-tight text-white">JsgSMILE</p>
+                                    <p className="truncate text-[10px] font-bold text-amber-300">MSME Marketplace</p>
                                 </div>
                             </Link>
                             <button
                                 onClick={() => setMobileMenuOpen(false)}
-                                className="flex min-h-[40px] min-w-[40px] h-10 w-10 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md active:scale-90 transition-all"
+                                className="flex min-h-[40px] min-w-[40px] h-10 w-10 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 text-white border border-white/25 backdrop-blur-md active:scale-90 transition-all cursor-pointer"
                                 aria-label="Close menu"
                             >
                                 <X className="h-5 w-5" />
@@ -1052,36 +1052,37 @@ export function MarketplaceHeader({ user }: Props) {
                         </div>
 
                         {/* Drawer Search with Live Suggestion Chips */}
-                        <div className="p-3 bg-slate-50/95 border-b border-slate-100 shrink-0 space-y-2">
+                        <div className="p-3 bg-white border-b border-slate-200/80 shrink-0 space-y-2.5">
                             <form
                                 role="search"
                                 onSubmit={(e) => {
                                     e.preventDefault();
                                     executeSearch(searchQ);
                                 }}
-                                className="flex items-center h-10 rounded-full border border-slate-200 bg-white px-3 shadow-2xs focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all"
+                                className="flex items-center h-10 rounded-full border border-slate-300 bg-slate-50/70 px-3 shadow-2xs focus-within:bg-white focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] transition-all"
                             >
-                                <Search className="h-4 w-4 text-slate-400 mr-2 shrink-0" />
+                                <Search className="h-4 w-4 text-slate-500 mr-2 shrink-0" />
                                 <input
                                     type="text"
                                     value={searchQ}
                                     onChange={e => setSearchQ(e.target.value)}
                                     placeholder="Search products, services, sellers..."
-                                    className="flex-1 min-w-0 bg-transparent text-xs font-medium outline-none text-slate-800 placeholder:text-slate-400"
+                                    className="flex-1 min-w-0 bg-transparent text-xs font-semibold outline-none text-slate-900 placeholder:text-slate-500"
                                     aria-label="Mobile marketplace search"
                                 />
                                 {searchQ && (
                                     <button
                                         type="button"
                                         onClick={() => setSearchQ('')}
-                                        className="h-5 w-5 mr-1 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700"
+                                        className="h-5 w-5 mr-1 flex items-center justify-center rounded-full text-slate-500 hover:text-slate-800"
+                                        aria-label="Clear search"
                                     >
                                         ✕
                                     </button>
                                 )}
                                 <button
                                     type="submit"
-                                    className="h-7 px-3 rounded-full bg-[#0b2447] text-white text-[10px] font-black uppercase hover:bg-[#12335f] transition-all shrink-0 shadow-xs"
+                                    className="h-7 px-3.5 rounded-full bg-[#0b2447] text-white text-[11px] font-black uppercase tracking-wide hover:bg-[#12335f] transition-all shrink-0 shadow-xs cursor-pointer active:scale-95"
                                 >
                                     Go
                                 </button>
@@ -1097,7 +1098,7 @@ export function MarketplaceHeader({ user }: Props) {
                                             setSearchQ(chip);
                                             executeSearch(chip);
                                         }}
-                                        className="shrink-0 px-2.5 py-1 rounded-full border border-slate-200 bg-white text-[10px] font-semibold text-slate-600 active:bg-blue-50"
+                                        className="shrink-0 px-3 py-1 rounded-full border border-slate-200 bg-white text-[11px] font-bold text-slate-700 shadow-2xs hover:border-[#0b2447] hover:text-[#0b2447] active:bg-blue-50 transition-all cursor-pointer"
                                     >
                                         {chip}
                                     </button>
@@ -1108,176 +1109,191 @@ export function MarketplaceHeader({ user }: Props) {
                         {/* Drawer Scrollable Content */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
                             {!user ? (
-                                <div className="space-y-2.5">
-                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">Account Access</p>
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-1.5 px-1">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                                        <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">Account Access</p>
+                                    </div>
 
                                     {/* Primary Login Card */}
                                     <Link
                                         href="/login"
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-[#0b2447] to-[#12335f] text-white text-xs font-bold shadow-md shadow-[#0b2447]/15 hover:shadow-lg transition-all active:scale-98"
+                                        className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-[#0b2447] via-[#0f3460] to-[#164075] text-white text-xs font-black shadow-md shadow-[#0b2447]/20 hover:shadow-lg transition-all active:scale-98 border border-white/10 group"
                                     >
-                                        <div className="flex items-center gap-2.5">
-                                            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-white/15 text-white">
-                                                <LogIn className="h-3.5 w-3.5 text-amber-300" />
+                                        <div className="flex items-center gap-3">
+                                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                                                <LogIn className="h-4 w-4" />
                                             </span>
-                                            <span>Login to Account</span>
+                                            <div>
+                                                <span className="block text-xs font-black text-white">Login to Account</span>
+                                                <span className="block text-[10px] font-medium text-slate-300">Access buyer &amp; seller dashboards</span>
+                                            </div>
                                         </div>
-                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
+                                        <ArrowRight className="h-4 w-4 text-amber-300 transition-transform duration-200 group-hover:translate-x-0.5 shrink-0" />
                                     </Link>
 
                                     {/* Registration Section */}
-                                    <div className="space-y-1.5 pt-1.5">
-                                        <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1">New Registration</p>
+                                    <div className="space-y-2 pt-1">
+                                        <div className="flex items-center gap-1.5 px-1">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                                            <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">New Registration</p>
+                                        </div>
                                         {signupOptions.map((opt, idx) => {
                                             const iconColor = idx === 0
-                                                ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                ? 'bg-blue-100 text-blue-800 border border-blue-200'
                                                 : idx === 1
-                                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                    : 'bg-purple-50 text-purple-600 border border-purple-100';
+                                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                    : 'bg-purple-100 text-purple-800 border border-purple-200';
 
                                             return (
                                                 <Link
                                                     key={opt.href}
                                                     href={opt.href}
                                                     onClick={() => setMobileMenuOpen(false)}
-                                                    className="flex items-center gap-3 p-2.5 rounded-2xl border border-slate-100 bg-white hover:bg-slate-50/80 hover:border-slate-200 transition-all active:scale-98 shadow-2xs"
+                                                    className="flex items-center gap-3 p-3 rounded-xl border border-slate-200/90 bg-white hover:bg-blue-50/40 hover:border-blue-300 transition-all active:scale-98 shadow-2xs group"
                                                 >
-                                                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${iconColor}`}>
+                                                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-bold ${iconColor}`}>
                                                         {opt.icon}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="text-xs font-extrabold text-slate-900 truncate">{opt.label}</p>
-                                                        <p className="text-[10px] font-medium text-slate-400 truncate">{opt.desc}</p>
+                                                        <p className="text-xs sm:text-[13px] font-black text-slate-900 group-hover:text-blue-700 transition-colors leading-snug">{opt.label}</p>
+                                                        <p className="text-[11px] font-medium text-slate-600 leading-tight mt-0.5">{opt.desc}</p>
                                                     </div>
-                                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 shrink-0" />
+                                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                                                 </Link>
                                             );
                                         })}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="space-y-2">
-                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/40 border border-blue-100/60 flex items-center gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0b2447] text-white font-black text-sm">
+                                <div className="space-y-2.5">
+                                    <div className="p-3.5 rounded-xl bg-white border border-blue-200/70 shadow-2xs flex items-center gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#0b2447] text-white font-black text-sm ring-2 ring-blue-500/20">
                                             {user.name ? user.name[0]?.toUpperCase() : 'U'}
                                         </div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-xs font-black text-slate-900 truncate">{user.name || 'Account User'}</p>
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{user.role || 'Member'}</p>
+                                            <p className="text-xs font-black text-slate-900 leading-snug">{user.name || 'Account User'}</p>
+                                            <span className="inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/60 uppercase tracking-wider">{user.role || 'Member'}</span>
                                         </div>
                                     </div>
                                     <Link
                                         href="/dashboard"
                                         onClick={() => setMobileMenuOpen(false)}
-                                        className="flex items-center justify-between p-3 rounded-2xl bg-[#0b2447] text-white text-xs font-bold shadow-md shadow-[#0b2447]/15"
+                                        className="flex items-center justify-between p-3.5 rounded-xl bg-gradient-to-r from-[#0b2447] to-[#12335f] text-white text-xs font-black shadow-md shadow-[#0b2447]/15 group"
                                     >
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2.5">
                                             <User className="h-4 w-4 text-amber-300" />
                                             <span>Go to Dashboard</span>
                                         </div>
-                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300" />
+                                        <ArrowRight className="h-4 w-4 text-amber-300 group-hover:translate-x-0.5 transition-transform" />
                                     </Link>
                                 </div>
                             )}
 
                             {/* Navigation Quick Links */}
-                            <div className="space-y-1 pt-3 border-t border-slate-100">
-                                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 mb-1.5">Explore Marketplace</p>
+                            <div className="space-y-1.5 pt-3 border-t border-slate-200">
+                                <div className="flex items-center gap-1.5 px-1 mb-2">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-cyan-600" />
+                                    <p className="text-[11px] font-black uppercase tracking-wider text-slate-700">Explore Marketplace</p>
+                                </div>
 
                                 <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <Layers className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-blue-100/80">
+                                            <Layers className="h-4 w-4" />
                                         </span>
-                                        <span>All Products & Categories</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">All Products &amp; Categories</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
 
                                 <Link
                                     href="/marketplace/products"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <ShoppingBag className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-amber-100/80">
+                                            <ShoppingBag className="h-4 w-4" />
                                         </span>
-                                        <span>Browse Products</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">Browse Products</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
 
                                 <Link
                                     href="/marketplace/services"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <Building2 className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-50 text-teal-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-teal-100/80">
+                                            <Building2 className="h-4 w-4" />
                                         </span>
-                                        <span>Browse Services</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">Browse Services</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
 
                                 <Link
                                     href="/marketplace/sellers"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <Store className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-indigo-100/80">
+                                            <Store className="h-4 w-4" />
                                         </span>
-                                        <span>Verified Suppliers</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">Verified Suppliers</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
 
                                 <Link
                                     href="/marketplace/buyers"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <Briefcase className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-50 text-sky-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-sky-100/80">
+                                            <Briefcase className="h-4 w-4" />
                                         </span>
-                                        <span>Enterprise Buyers</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">Enterprise Buyers</span>
                                     </span>
-                                    <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                 </Link>
 
                                 <Link
                                     href="/marketplace/requirements"
                                     onClick={() => setMobileMenuOpen(false)}
-                                    className="flex items-center justify-between p-2.5 rounded-2xl text-xs font-bold text-slate-700 hover:bg-blue-50/60 hover:text-[#0b2447] transition-all group"
+                                    className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200/80 bg-white text-xs sm:text-[13px] font-bold text-slate-800 hover:bg-blue-50/70 hover:border-blue-300 hover:text-[#0b2447] transition-all group shadow-2xs"
                                 >
                                     <span className="flex items-center gap-2.5">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[#0b2447] group-hover:bg-[#0b2447] group-hover:text-white transition-colors">
-                                            <FileText className="h-3.5 w-3.5" />
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 group-hover:bg-[#0b2447] group-hover:text-white transition-colors border border-emerald-100/80">
+                                            <FileText className="h-4 w-4" />
                                         </span>
-                                        <span>Active Requirements</span>
+                                        <span className="text-slate-800 group-hover:text-[#0b2447] transition-colors">Active Requirements</span>
                                     </span>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-[#0b2447] transition-colors" />
+                                    <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black">
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                                            Live
+                                        </span>
+                                        <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-[#0b2447] group-hover:translate-x-0.5 transition-all" />
                                     </div>
                                 </Link>
                             </div>
                         </div>
 
                         {/* Drawer Footer */}
-                        <div className="p-3.5 border-t border-slate-100 bg-slate-50/90 text-center shrink-0">
-                            <p className="text-[10px] font-bold text-slate-500">Official MSME Portal · Jharsuguda District</p>
-                            <p className="text-[9px] text-slate-400 mt-0.5">Government of Odisha Initiative</p>
+                        <div className="p-3.5 border-t border-slate-200 bg-white text-center shrink-0">
+                            <p className="text-[11px] font-black text-slate-800">Official MSME Portal · Jharsuguda District</p>
+                            <p className="text-[10px] font-medium text-slate-600 mt-0.5">Government of Odisha Initiative</p>
                         </div>
                     </div>
                 </div>,

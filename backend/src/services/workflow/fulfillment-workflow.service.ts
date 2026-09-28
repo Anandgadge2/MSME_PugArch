@@ -245,28 +245,109 @@ export const fulfillmentWorkflow = {
     const po = await assertPOAccess(actor, input.purchaseOrderId);
     if (actor.role !== 'admin' && po.sellerId !== actor.id) throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
     const gstRate = input.gstRate ?? 18;
-    // po.amount is GST-inclusive (base + tax). When no explicit amount is given,
-    // derive the taxable base from PO line items (unitPrice is always excl. GST).
+    const poGross = Number(po.amount || po.totalValue || 0);
+    const metaBase = Number(po.metadata?.baseAmount || po.metadata?.taxableAmount || po.metadata?.quotationPricing?.subtotal || 0);
+
+    // Prevent double-taxation:
+    // If input.amount is provided and matches the gross PO amount, the caller passed the gross total.
+    // In that case, extract the true taxable base (base = gross / (1 + gstRate / 100)).
     let baseAmount: number;
     if (input.amount != null) {
-      baseAmount = input.amount;
+      if (poGross > 0 && Math.abs(input.amount - poGross) < 1 && gstRate > 0) {
+        baseAmount = metaBase > 0 ? metaBase : roundMoney(input.amount / (1 + gstRate / 100));
+      } else {
+        baseAmount = input.amount;
+      }
+    } else if (metaBase > 0) {
+      baseAmount = metaBase;
     } else if (po.items?.length) {
-      baseAmount = roundMoney(po.items.reduce((sum: number, item: any) => sum + Number(item.quantity) * Number(item.unitPrice), 0));
+      const rawItemsSum = po.items.reduce((sum: number, item: any) => {
+        const qty = Number(item.quantity || 1);
+        let uPrice = Number(item.unitPrice || 0);
+        if (qty > 1 && (uPrice * qty) > (poGross * 1.2)) {
+          uPrice = uPrice / qty;
+        }
+        return sum + (qty * uPrice);
+      }, 0);
+      baseAmount = rawItemsSum > 0 && rawItemsSum <= poGross ? roundMoney(rawItemsSum) : roundMoney(poGross / (1 + gstRate / 100));
     } else {
-      // Fallback: reverse-calculate from GST-inclusive po.amount
-      baseAmount = roundMoney(Number(po.amount) / (1 + gstRate / 100));
+      baseAmount = roundMoney(poGross / (1 + gstRate / 100));
     }
-    const taxes = taxBreakup(baseAmount, input);
+    // Auto-detect interstate if not explicitly specified
+    let isInterstate = input.interstate;
+    if (isInterstate === undefined) {
+      try {
+        const [sellerUser, buyerUser] = await Promise.all([
+          db.user.findUnique({
+            where: { id: po.sellerId },
+            select: { registrationDetails: true, organization: { select: { state: true, gstin: true } } }
+          }),
+          db.user.findUnique({
+            where: { id: po.buyerId },
+            select: { registrationDetails: true, organization: { select: { state: true, gstin: true } } }
+          })
+        ]);
+        const sReg = (sellerUser?.registrationDetails as any) || {};
+        const bReg = (buyerUser?.registrationDetails as any) || {};
+        const sGstin = sReg.gstin || sellerUser?.organization?.gstin || '';
+        const bGstin = bReg.gstin || buyerUser?.organization?.gstin || '';
+        const sState = sReg.state || sellerUser?.organization?.state || '';
+        const bState = bReg.state || buyerUser?.organization?.state || '';
+
+        const sCode = sGstin.trim().substring(0, 2);
+        const bCode = bGstin.trim().substring(0, 2);
+        if (/^\d{2}$/.test(sCode) && /^\d{2}$/.test(bCode)) {
+          isInterstate = sCode !== bCode;
+        } else if (sState && bState) {
+          isInterstate = sState.trim().toLowerCase() !== bState.trim().toLowerCase();
+        }
+      } catch {}
+    }
+
+    const taxes = taxBreakup(baseAmount, { ...input, interstate: isInterstate });
     // Build line items from PO items when caller doesn't provide them
     let itemsData: { create: Array<Record<string, unknown>> } | undefined;
     if (input.items?.length) {
-      itemsData = { create: input.items };
+      itemsData = {
+        create: input.items.map((it: any) => {
+          const qty = Number(it.quantity || 1);
+          let unitPrice = Number(it.unitPrice || 0);
+          if (qty > 1 && poGross > 0 && (unitPrice * qty) > (poGross * 1.2)) {
+            unitPrice = roundMoney(unitPrice / qty);
+          }
+          let itemTaxable = Number(it.taxableAmount || (unitPrice > 0 ? unitPrice * qty : 0));
+          if (qty > 1 && itemTaxable > (poGross * 1.2)) {
+            itemTaxable = roundMoney(itemTaxable / qty);
+          }
+          const itemTaxRate = Number(it.taxRate ?? gstRate);
+          const itemTax = roundMoney(itemTaxable * itemTaxRate / 100);
+          return {
+            purchaseOrderItemId: it.purchaseOrderItemId || it.id,
+            productId: it.productId || null,
+            itemName: it.itemName || it.description || 'Order Item',
+            description: it.description || '',
+            quantity: qty,
+            unitOfMeasure: it.unitOfMeasure || 'units',
+            unitPrice: unitPrice,
+            taxableAmount: itemTaxable,
+            taxAmount: itemTax,
+            totalAmount: roundMoney(itemTaxable + itemTax)
+          };
+        })
+      };
     } else if (po.items?.length) {
       itemsData = {
         create: po.items.map((item: any) => {
-          const qty = Number(item.quantity);
-          const unitPrice = Number(item.unitPrice);
-          const itemTaxable = roundMoney(qty * unitPrice);
+          const qty = Number(item.quantity || 1);
+          let unitPrice = Number(item.unitPrice || 0);
+          // Protect against legacy bug where unitPrice was set to entire lot total:
+          if (qty > 1 && poGross > 0 && (unitPrice * qty) > (poGross * 1.2)) {
+            unitPrice = roundMoney(unitPrice / qty);
+          }
+          let itemTaxable = roundMoney(qty * unitPrice);
+          if (qty > 1 && itemTaxable > (poGross * 1.2)) {
+            itemTaxable = roundMoney(itemTaxable / qty);
+          }
           const itemTaxRate = Number(item.taxRate ?? gstRate);
           const itemTax = roundMoney(itemTaxable * itemTaxRate / 100);
           return {
@@ -275,7 +356,7 @@ export const fulfillmentWorkflow = {
             description: item.description || '',
             quantity: item.quantity,
             unitOfMeasure: item.unitOfMeasure || 'units',
-            unitPrice: item.unitPrice,
+            unitPrice: unitPrice,
             taxableAmount: itemTaxable,
             taxAmount: itemTax,
             totalAmount: roundMoney(itemTaxable + itemTax)
@@ -300,6 +381,7 @@ export const fulfillmentWorkflow = {
           totalTaxAmount: taxes.totalTaxAmount,
           tdsAmount: taxes.tdsAmount,
           metadata: {
+            interstate: isInterstate,
             otherTaxRate: taxes.otherTaxRate,
             otherTaxAmount: taxes.otherTaxAmount
           },
@@ -330,6 +412,8 @@ export const fulfillmentWorkflow = {
             name: true,
             email: true,
             mobile: true,
+            registrationDetails: true,
+            organizationId: true,
             sellerProfile: true,
             organization: { include: { profile: true } }
           }
@@ -340,6 +424,8 @@ export const fulfillmentWorkflow = {
             name: true,
             email: true,
             mobile: true,
+            registrationDetails: true,
+            organizationId: true,
             buyerProfile: true,
             organization: { include: { profile: true } }
           }

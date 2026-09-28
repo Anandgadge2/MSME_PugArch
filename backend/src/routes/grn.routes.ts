@@ -106,7 +106,8 @@ const createGrnSchema = z.object({
     purchaseOrderId: z.coerce.number().int().positive(),
     remarks: z.string().trim().max(2000).optional(),
     inspectionNote: z.string().trim().max(2000).optional(),
-    items: z.array(grnItemSchema).min(1).max(100)
+    items: z.array(grnItemSchema).min(1).max(100),
+    directApprove: z.boolean().optional().default(false)
 });
 
 const updateGrnSchema = z.object({
@@ -144,6 +145,7 @@ const assertPoOwnership = async (poId: number, organizationId?: number, userId?:
         where: { id: poId },
         select: {
             id: true,
+            poNumber: true,
             buyerId: true,
             sellerId: true,
             status: true,
@@ -196,6 +198,44 @@ const hasSeparateGrnApprover = async (organizationId: number, currentUserId: num
             }
             return false;
         });
+    } catch {
+        return false;
+    }
+};
+
+const userCanApproveGrn = async (organizationId: number, user: any): Promise<boolean> => {
+    try {
+        if (!user || user.role === 'admin' || user.role === 'master_admin') return false;
+
+        const separateApproverExists = await hasSeparateGrnApprover(organizationId, user.id);
+        // Single-user / sole-approver org: creator has full authority to directly approve
+        if (!separateApproverExists) return true;
+
+        // In a multi-user org, check if user has approver role or permission
+        const myMembership = await prisma.orgMembership.findFirst({
+            where: { organizationId, userId: user.id, isActive: true },
+            include: {
+                customRole: {
+                    include: {
+                        permissions: {
+                            where: {
+                                permissionKey: { in: ['grn.approve', 'GRN_APPROVE', 'GRN.APPROVE'] },
+                                allowed: true
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        if (!myMembership) return false;
+        if (['ORG_ADMIN', 'TECHNICAL_OFFICER', 'LOGISTICS_OFFICER'].includes(myMembership.orgRole)) {
+            return true;
+        }
+        if (myMembership.customRole && myMembership.customRole.permissions && myMembership.customRole.permissions.length > 0) {
+            return true;
+        }
+        return false;
     } catch {
         return false;
     }
@@ -260,13 +300,21 @@ router.get(
 
         const hasSubmitted = existing.some(g => g.status !== 'DRAFT');
         const canCreate = !isAdmin && !hasSubmitted && !existing.some(g => g.status === 'APPROVED');
+        const separateApproverExists = !isAdmin && req.user?.organizationId
+            ? await hasSeparateGrnApprover(req.user.organizationId, userId(req))
+            : false;
+        const canDirectApprove = !isAdmin && req.user?.organizationId
+            ? await userCanApproveGrn(req.user.organizationId, req.user)
+            : false;
 
         ok(res, {
             poId,
             poStatus: po.status,
             canCreate,
             hasSubmitted,
-            existing
+            existing,
+            requiresApprovalWorkflow: separateApproverExists,
+            canDirectApprove
         });
     })
 );
@@ -288,7 +336,15 @@ router.post(
         ensureOrg(req);
         const body = createGrnSchema.parse(req.body);
 
-        await assertPoOwnership(body.purchaseOrderId, orgId(req), userId(req));
+        const po = await assertPoOwnership(body.purchaseOrderId, orgId(req), userId(req));
+
+        const canApprove = await userCanApproveGrn(orgId(req), req.user!);
+        const isDirectApprove = Boolean(body.directApprove && canApprove);
+
+        const hasRejection = body.items.some(i => Number(i.rejectedQty) > 0);
+        const initialStatus = isDirectApprove
+            ? (hasRejection ? 'PARTIAL' : 'APPROVED')
+            : 'DRAFT';
 
         const grnNumber = await generateGrnNumber();
         const grn = await prisma.goodsReceiptNote.create({
@@ -297,7 +353,9 @@ router.post(
                 purchaseOrderId: body.purchaseOrderId,
                 receivedById: userId(req),
                 organizationId: orgId(req),
-                status: 'DRAFT',
+                status: initialStatus,
+                approvedById: isDirectApprove ? userId(req) : null,
+                approvedAt: isDirectApprove ? new Date() : null,
                 remarks: body.remarks,
                 inspectionNote: body.inspectionNote,
                 items: { create: body.items }
@@ -305,17 +363,49 @@ router.post(
             include: grnIncludes
         });
 
-        await auditLog({
-            actorUserId: userId(req),
-            actorRole: req.user!.role,
-            action: 'grn.created',
-            entityType: 'grn',
-            entityId: grn.id,
-            ipAddress: req.ip,
-            metadata: { poId: body.purchaseOrderId, itemCount: body.items.length }
-        });
+        if (isDirectApprove) {
+            try {
+                const sellerId = po?.sellerId;
+                if (sellerId) {
+                    await notificationService.notify(sellerId, {
+                        title: hasRejection ? 'GRN partially approved' : 'GRN approved',
+                        message: `${grnNumber} for PO ${po?.poNumber || ''} has been verified and ${hasRejection ? 'partially approved with rejections' : 'approved'}. You may now raise an invoice.`,
+                        type: 'grn_approved',
+                        priority: 'medium',
+                        redirectUrl: '/seller/orders'
+                    });
+                }
+            } catch { /* non-fatal */ }
 
-        ok(res, grn, 201);
+            await auditLog({
+                actorUserId: userId(req),
+                actorRole: req.user!.role,
+                action: 'grn.created_and_approved',
+                entityType: 'grn',
+                entityId: grn.id,
+                ipAddress: req.ip,
+                metadata: {
+                    poId: body.purchaseOrderId,
+                    itemCount: body.items.length,
+                    status: initialStatus,
+                    hasRejection,
+                    directApproval: true
+                }
+            });
+        } else {
+            await auditLog({
+                actorUserId: userId(req),
+                actorRole: req.user!.role,
+                action: 'grn.created',
+                entityType: 'grn',
+                entityId: grn.id,
+                ipAddress: req.ip,
+                metadata: { poId: body.purchaseOrderId, itemCount: body.items.length }
+            });
+        }
+
+        const separateApproverExists = await hasSeparateGrnApprover(orgId(req), userId(req));
+        ok(res, { ...grn, requiresApprovalWorkflow: separateApproverExists }, 201);
     })
 );
 

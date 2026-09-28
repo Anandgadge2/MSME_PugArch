@@ -197,19 +197,25 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
 
   const ownParticipation: any = user?.role === 'seller'
-    ? (bidData?.participations || []).find((p: any) =>
-        Number(p.sellerId) === Number(user?.id) ||
-        (user?.organizationId && p.seller?.organizationId === user.organizationId)
-      )
+    ? [
+        ...(bidData?.myParticipation ? [bidData.myParticipation] : []),
+        ...(Array.isArray(bidData?.participations) ? bidData.participations : [])
+      ].find((p: any) =>
+        Number(p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id) === Number(user?.id) ||
+        (user?.organizationId && (
+          Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id) === Number(user.organizationId)
+        ))
+      ) || bidData?.myParticipation || null
     : null;
 
   const ownResponse = reqData?.ownResponse || bidReqData?.ownResponse || (ownParticipation ? {
+    ...ownParticipation,
     status: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
     submissionStatus: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
     createdAt: ownParticipation.createdAt,
     updatedAt: ownParticipation.updatedAt || ownParticipation.createdAt,
     submittedAt: ownParticipation.submittedAt || null,
-    offeredPrice: ownParticipation.offeredPrice || ownParticipation.responseData?.offeredPrice,
+    offeredPrice: ownParticipation.offeredPrice || ownParticipation.quotedAmount || ownParticipation.totalAmount || ownParticipation.responseData?.offeredPrice,
     offeredQuantity: ownParticipation.offeredQuantity || ownParticipation.responseData?.offeredQuantity,
     deliveryTimeline: ownParticipation.deliveryTimeline || ownParticipation.responseData?.deliveryTimeline,
     terms: ownParticipation.terms || ownParticipation.responseData?.terms,
@@ -258,8 +264,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     })),
     location: (cMeta.deliveryLocation && !cMeta.deliveryLocation.toLowerCase().includes('sla') ? cMeta.deliveryLocation : null) || [cMeta.district, cMeta.state].filter(Boolean).join(', ') || 'Location as agreed in call-off orders',
     requirementNumber: contractData.contractNumber || cMeta.requirementNumber,
-    paymentTerms: cMeta.paymentTerms || 'Standard Payment Terms',
-    deliveryTerms: cMeta.deliverySla || 'Standard Delivery SLA',
+    paymentTerms: cMeta.paymentTerms || '—',
+    deliveryTerms: cMeta.deliverySla || '—',
     payload: {
       basics: {
         title: cMeta.contractTitle || contractData.title,

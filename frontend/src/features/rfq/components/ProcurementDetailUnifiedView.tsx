@@ -74,6 +74,7 @@ import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceReg
 import { PackedOrderDialog } from "../../delivery/components/PackedOrderDialog";
 import { DispatchDetailsModal } from "../../delivery/components/DispatchDetailsModal";
 import { GrnCreateModal } from "../../grn/components/GrnCreateModal";
+import { useGrnEligibility } from "../../grn/hooks";
 import { CreateInvoiceModal } from "../../invoices/components/CreateInvoiceModal";
 import { RecordOrderPaymentModal } from "../../purchaseOrders/components/RecordOrderPaymentModal";
 import { ConfirmOrderSettlementModal } from "../../purchaseOrders/components/ConfirmOrderSettlementModal";
@@ -3975,6 +3976,7 @@ export function ProcurementDetailUnifiedView(
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
+  const [locallyAcceptedAwardIds, setLocallyAcceptedAwardIds] = useState<Set<string>>(new Set());
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isTaxInvoiceModalOpen, setIsTaxInvoiceModalOpen] = useState(false);
   const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
@@ -4117,8 +4119,23 @@ export function ProcurementDetailUnifiedView(
     currentOrgId,
   ]);
 
+  const verifiedOwnResponse = React.useMemo(() => {
+    if (!props.ownResponse) return null;
+    const currentBidId = props.rawBid?.id || (props as any)?.bidId;
+    const currentReqId = (props as any)?.requirementId || (props as any)?.sourceRequirementId;
+    if (props.ownResponse.bidId && currentBidId && Number(props.ownResponse.bidId) !== Number(currentBidId)) {
+      return null;
+    }
+    if (props.ownResponse.requirementId && currentReqId && Number(props.ownResponse.requirementId) !== Number(currentReqId)) {
+      if (!props.ownResponse.bidId || !currentBidId || Number(props.ownResponse.bidId) !== Number(currentBidId)) {
+        return null;
+      }
+    }
+    return props.ownResponse;
+  }, [props.ownResponse, props.rawBid?.id, (props as any)?.bidId, (props as any)?.requirementId, (props as any)?.sourceRequirementId]);
+
   const effectiveMyParticipation =
-    props.ownParticipation || props.ownResponse || myParticipation;
+    props.ownParticipation || verifiedOwnResponse || myParticipation;
   const isSellerParticipated = Boolean(
     props.hasSubmittedProposal || effectiveMyParticipation,
   );
@@ -4151,7 +4168,7 @@ export function ProcurementDetailUnifiedView(
       })
     : null;
 
-  const activeAward =
+  const rawActiveAward =
     myAward ||
     rawAwards.find(
       (a: any) =>
@@ -4162,6 +4179,18 @@ export function ProcurementDetailUnifiedView(
     ) ||
     rawAwards[0] ||
     null;
+
+  const activeAward = React.useMemo(() => {
+    if (!rawActiveAward) return null;
+    const isAcceptedLocally =
+      (rawActiveAward.id && locallyAcceptedAwardIds.has(String(rawActiveAward.id))) ||
+      (rawActiveAward.bidId && locallyAcceptedAwardIds.has(String(rawActiveAward.bidId))) ||
+      locallyAcceptedAwardIds.has(String(targetId));
+    if (isAcceptedLocally) {
+      return { ...rawActiveAward, awardStatus: "ACCEPTED" };
+    }
+    return rawActiveAward;
+  }, [rawActiveAward, locallyAcceptedAwardIds, targetId]);
 
   const isAwardedToMe = Boolean(
     activeAward &&
@@ -4312,6 +4341,7 @@ export function ProcurementDetailUnifiedView(
   const [isPackDialogOpen, setIsPackDialogOpen] = useState(false);
   const [isDispatchDialogOpen, setIsDispatchDialogOpen] = useState(false);
   const [isGrnCreateOpen, setIsGrnCreateOpen] = useState(false);
+  const [localCreatedGrn, setLocalCreatedGrn] = useState<any | null>(null);
   const [isCreateInvoiceOpen, setIsCreateInvoiceOpen] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [createInvoiceError, setCreateInvoiceError] = useState<string | null>(null);
@@ -4325,10 +4355,71 @@ export function ProcurementDetailUnifiedView(
   const [isConfirmSettlementOpen, setIsConfirmSettlementOpen] = useState(false);
   const [isViewPaymentProofOpen, setIsViewPaymentProofOpen] = useState(false);
 
+  // GRN Eligibility Query for effective order
+  const grnEligibilityQuery = useGrnEligibility(
+    effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : undefined
+  );
+  const grnEligibility = grnEligibilityQuery.data;
+
+  // Granular Goods Receipt Note (GRN) Resolution
+  const resolvedGrnList = useMemo(() => {
+    const list: any[] = [];
+    if (localCreatedGrn) list.push(localCreatedGrn);
+    if (Array.isArray(effectiveActiveOrder?.grns)) list.push(...effectiveActiveOrder.grns);
+    if (Array.isArray(delivery?.purchaseOrder?.grns)) list.push(...delivery.purchaseOrder.grns);
+    if (Array.isArray((delivery as any)?.grns)) list.push(...(delivery as any).grns);
+    if (Array.isArray(grnEligibility?.existing)) list.push(...grnEligibility.existing);
+    if ((effectiveActiveOrder as any)?.grn) list.push((effectiveActiveOrder as any).grn);
+
+    const map = new Map<string | number, any>();
+    for (const g of list) {
+      if (g) {
+        const key = g.id || g.grnNumber;
+        if (key) {
+          if (!map.has(key)) map.set(key, g);
+          else map.set(key, { ...map.get(key), ...g });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }, [localCreatedGrn, effectiveActiveOrder?.grns, delivery, grnEligibility]);
+
+  const activeGrn = resolvedGrnList[0] || null;
+
+  const hasApprovedGrn = useMemo(() => {
+    return Boolean(
+      resolvedGrnList.some((g: any) => {
+        const st = String(g.status || '').toUpperCase();
+        return st === 'APPROVED' || st === 'COMPLETED' || st === 'PARTIAL';
+      }) ||
+      ['grn_approved', 'grn_completed', 'inspection_accepted'].includes(rawOrderStatus) ||
+      (effectiveActiveOrder?.status && ['grn_approved', 'grn_completed'].includes(String(effectiveActiveOrder.status).toLowerCase())) ||
+      (effectiveActiveOrder?.poStatus && ['grn_approved', 'grn_completed'].includes(String(effectiveActiveOrder.poStatus).toLowerCase()))
+    );
+  }, [resolvedGrnList, rawOrderStatus, effectiveActiveOrder]);
+
+  const hasCreatedGrn = useMemo(() => {
+    return Boolean(
+      hasApprovedGrn ||
+      activeGrn ||
+      resolvedGrnList.length > 0 ||
+      grnEligibility?.hasSubmitted ||
+      (grnEligibility?.existing && grnEligibility.existing.length > 0) ||
+      Boolean((effectiveActiveOrder as any)?.grnId) ||
+      ['grn_created', 'grn_pending', 'grn_completed', 'grn_approved'].includes(rawOrderStatus)
+    );
+  }, [hasApprovedGrn, activeGrn, resolvedGrnList, grnEligibility, effectiveActiveOrder, rawOrderStatus]);
+
   // Synchronize default invoice amount from effective order
   useEffect(() => {
     if (effectiveActiveOrder) {
-      const amt = effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0;
+      const orderMeta = (effectiveActiveOrder as any).metadata;
+      const taxableBase = Number(orderMeta?.baseAmount || orderMeta?.taxableAmount || 0);
+      let amt = taxableBase;
+      if (!amt) {
+        const gross = Number(effectiveActiveOrder.amount || effectiveActiveOrder.totalValue || activeAward?.finalAmount || 0);
+        amt = gross > 0 ? Number((gross / 1.18).toFixed(2)) : 0;
+      }
       if (amt && !invoiceAmount) {
         setInvoiceAmount(String(amt));
       }
@@ -4422,6 +4513,7 @@ export function ProcurementDetailUnifiedView(
     | 'PACKED'
     | 'DISPATCHED'
     | 'DELIVERED_PENDING_GRN'
+    | 'GRN_CREATED'
     | 'GRN_APPROVED'
     | 'PAYMENT_SUBMITTED'
     | 'SETTLED'
@@ -4449,10 +4541,14 @@ export function ProcurementDetailUnifiedView(
     }
 
     // 3. GRN Approval Check
-    const hasApprovedGrnRecord = Boolean(
-      effectiveActiveOrder.grns?.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
-    );
-    if (hasApprovedGrnRecord) return 'GRN_APPROVED';
+    if (hasApprovedGrn || ['GRN_APPROVED', 'GRN_COMPLETED'].includes(poStatus)) {
+      return 'GRN_APPROVED';
+    }
+
+    // 3b. GRN Created Check (DRAFT / SUBMITTED / PENDING APPROVAL)
+    if (hasCreatedGrn || poStatus === 'GRN_CREATED' || poStatus === 'GRN_PENDING') {
+      return 'GRN_CREATED';
+    }
 
     // 4. Delivery Status Check
     if (deliveryStatus === 'DELIVERED' || poStatus === 'DELIVERED') return 'DELIVERED_PENDING_GRN';
@@ -4465,7 +4561,32 @@ export function ProcurementDetailUnifiedView(
     if (isPOAccepted) return 'PO_ACCEPTED_AWAITING_PACK';
 
     return 'PO_PENDING';
-  }, [effectiveActiveOrder, deliveryStatus, allOrderInvoices, isPOAccepted]);
+  }, [effectiveActiveOrder, deliveryStatus, allOrderInvoices, isPOAccepted, hasApprovedGrn, hasCreatedGrn]);
+
+  // Listen for external award acceptance (e.g. from pop-up or another window)
+  useEffect(() => {
+    const handleAwardAcceptedEvent = (e: any) => {
+      const detail = e.detail;
+      if (
+        !detail ||
+        String(detail.bidId) === String(targetId) ||
+        (activeAward?.id && String(detail.awardId) === String(activeAward.id))
+      ) {
+        const idToAdd = String(detail?.awardId || activeAward?.id || targetId);
+        setLocallyAcceptedAwardIds((prev) => new Set(prev).add(idToAdd).add(String(targetId)));
+        void queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+        void queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+        void queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+        void queryClient.invalidateQueries({ queryKey: ["procurement-active-order"] });
+      }
+    };
+    window.addEventListener("award:accepted", handleAwardAcceptedEvent);
+    window.addEventListener("orders:updated", handleAwardAcceptedEvent);
+    return () => {
+      window.removeEventListener("award:accepted", handleAwardAcceptedEvent);
+      window.removeEventListener("orders:updated", handleAwardAcceptedEvent);
+    };
+  }, [targetId, activeAward?.id, queryClient]);
 
   const handleAcceptPriceMatch = async (awardId: string) => {
     try {
@@ -4474,8 +4595,10 @@ export function ProcurementDetailUnifiedView(
       toast.success(
         "Price-match counter-offer accepted! You have won the contract allocation.",
       );
-      queryClient.invalidateQueries();
-      if (typeof window !== "undefined") window.location.reload();
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      window.dispatchEvent(new CustomEvent("orders:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to accept price-match counter-offer.");
     } finally {
@@ -4506,8 +4629,10 @@ export function ProcurementDetailUnifiedView(
         reason: "",
         submitting: false,
       });
-      queryClient.invalidateQueries();
-      if (typeof window !== "undefined") window.location.reload();
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      window.dispatchEvent(new CustomEvent("orders:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to decline counter-offer.");
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
@@ -4521,10 +4646,15 @@ export function ProcurementDetailUnifiedView(
       toast.success(
         "Bid award accepted! Buyer will now issue the Purchase Order.",
       );
-      await queryClient.invalidateQueries();
-      setTimeout(() => {
-        if (typeof window !== "undefined") window.location.reload();
-      }, 700);
+      const effId = String(awardId || activeAward?.id || targetId);
+      setLocallyAcceptedAwardIds((prev) => new Set(prev).add(effId).add(String(targetId)));
+      window.dispatchEvent(new CustomEvent("award:accepted", { detail: { bidId: targetId, awardId: effId } }));
+      window.dispatchEvent(new CustomEvent("orders:updated", { detail: { bidId: targetId, awardId: effId } }));
+      window.dispatchEvent(new CustomEvent("notifications:updated"));
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-active-order"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to accept award.");
     } finally {
@@ -4553,10 +4683,10 @@ export function ProcurementDetailUnifiedView(
         reason: "",
         submitting: false,
       });
-      await queryClient.invalidateQueries();
-      setTimeout(() => {
-        if (typeof window !== "undefined") window.location.reload();
-      }, 700);
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      window.dispatchEvent(new CustomEvent("orders:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to decline award.");
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
@@ -4630,7 +4760,7 @@ export function ProcurementDetailUnifiedView(
       queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
       queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
       queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
-      if (typeof window !== "undefined") window.location.reload();
+      window.dispatchEvent(new CustomEvent("orders:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to decline Purchase Order.");
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
@@ -6814,8 +6944,8 @@ export function ProcurementDetailUnifiedView(
           lineItems: props.rawBid?.lineItems || props.items || [],
           documents: props.rawBid?.documents || [],
           submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
-          deliveryTimeline: props.rawBid?.deliveryTimeline || "Standard",
-          paymentTerms: props.rawBid?.paymentTerms || "Standard Payment Terms",
+          deliveryTimeline: props.rawBid?.deliveryTimeline || "—",
+          paymentTerms: props.rawBid?.paymentTerms || "—",
         };
     }
     setSelectedQuotationForReview(targetPart);
@@ -6857,8 +6987,11 @@ export function ProcurementDetailUnifiedView(
       setAwardingParticipation(null);
       setAwardJustification("");
       setAwardRemarks("");
-      queryClient.invalidateQueries();
-      if (typeof window !== "undefined") window.location.reload();
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      window.dispatchEvent(new CustomEvent("notifications:updated"));
+      window.dispatchEvent(new CustomEvent("orders:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to offer contract award.");
     } finally {
@@ -7132,54 +7265,42 @@ export function ProcurementDetailUnifiedView(
         header: "Offered Qty & Delivery",
         width: "w-[12%]",
         cell: (participation) => {
-          const rawQty = Number(
-            participation.offeredQuantity ??
-              participation.quantity ??
-              participation.responseData?.offeredQuantity ??
-              0,
+          const details = extractQuotationDetails(
+            participation,
+            defaultRequirementQuantity,
+            defaultRequirementUnit,
           );
-          const hasCustomQty = Number.isFinite(rawQty) && rawQty > 0;
-          const finalQty = hasCustomQty ? rawQty : defaultRequirementQuantity;
-          const uom = defaultRequirementUnit || "Nos";
           const qtyText =
-            finalQty > 0
-              ? `${finalQty.toLocaleString("en-IN")} ${uom}`
-              : "As specified in RFQ";
+            details.offeredQty !== "—"
+              ? details.offeredQty
+              : defaultRequirementQuantity > 0
+                ? `${defaultRequirementQuantity.toLocaleString("en-IN")} ${defaultRequirementUnit || "Nos"}`
+                : "—";
 
-          const rawDelivery = (
-            participation.deliveryTimeline ||
-            participation.responseData?.deliveryTimeline ||
-            ""
-          ).trim();
-          const hasCustomDelivery =
-            rawDelivery && rawDelivery.toLowerCase() !== "standard";
-          const deliveryText = hasCustomDelivery
-            ? rawDelivery
-            : defaultProcurementDeliverySchedule || "Standard";
-
-          const formatDelivery = (val: string) => {
-            if (!val || val === "—" || val.toLowerCase() === "standard") {
-              return "Standard Schedule";
-            }
-            const trimmed = val.trim();
-            if (/^\d+$/.test(trimmed)) {
-              const n = Number(trimmed);
-              return `${n} ${n === 1 ? "Day" : "Days"} Delivery`;
-            }
-            if (/^\d+\s*(d|day|days)$/i.test(trimmed)) {
-              return `${trimmed} Delivery`;
-            }
-            return trimmed;
-          };
+          const deliveryText =
+            details.deliveryTimeline !== "—"
+              ? details.deliveryTimeline
+              : defaultProcurementDeliverySchedule &&
+                  !["standard", "as per rfq schedule"].includes(
+                    defaultProcurementDeliverySchedule.toLowerCase(),
+                  )
+                ? defaultProcurementDeliverySchedule
+                : "—";
 
           return (
             <div className="text-slate-600 min-w-0 pr-1">
-              <p className="font-semibold text-xs text-slate-900 truncate">
+              <p
+                className="font-semibold text-xs text-slate-900 truncate"
+                title={qtyText}
+              >
                 {qtyText}
               </p>
-              <p className="text-[10.5px] font-medium text-slate-500 flex items-center gap-1 mt-0.5 whitespace-nowrap">
+              <p
+                className="text-[10.5px] font-medium text-slate-500 flex items-center gap-1 mt-0.5 whitespace-nowrap"
+                title={deliveryText}
+              >
                 <Truck className="h-3 w-3 text-slate-400 shrink-0" />
-                <span>{formatDelivery(deliveryText)}</span>
+                <span>{deliveryText}</span>
               </p>
             </div>
           );
@@ -7952,11 +8073,9 @@ export function ProcurementDetailUnifiedView(
             activeAward={activeAward}
             purchaseOrders={rawOrders}
             activeOrder={effectiveActiveOrder}
-            hasApprovedGrn={Boolean(
-              effectiveActiveOrder?.grns?.some(
-                (g: any) => String(g.status || "").toUpperCase() === "APPROVED",
-              ),
-            )}
+            hasApprovedGrn={hasApprovedGrn}
+            hasCreatedGrn={hasCreatedGrn}
+            activeGrn={activeGrn}
             invoices={
               effectiveActiveOrder?.invoices || props.rawBid?.invoices || []
             }
@@ -8003,13 +8122,25 @@ export function ProcurementDetailUnifiedView(
             onOpenPackDialog={handleOpenPackDialog}
             onOpenDispatchDialog={handleOpenDispatchDialog}
             onOpenGrnCreate={() => setIsGrnCreateOpen(true)}
+            onViewGrn={(grn) => {
+              const gid = grn?.id || activeGrn?.id;
+              if (gid) {
+                router.push(`/grn/${gid}`);
+              } else {
+                router.push("/grn");
+              }
+            }}
             onOpenCreateInvoice={() => setIsCreateInvoiceOpen(true)}
             onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
             onOpenSettlementModal={() => setIsConfirmSettlementOpen(true)}
             onOpenViewPaymentProof={() => setIsViewPaymentProofOpen(true)}
             onNavigateDelivery={async () => {
+              if (activeGrn?.id) {
+                router.push(`/grn/${activeGrn.id}`);
+                return;
+              }
               if (isBuyerSide) {
-                if (fulfillmentPhase === 'DELIVERED_PENDING_GRN') {
+                if (fulfillmentPhase === 'DELIVERED_PENDING_GRN' && !hasCreatedGrn) {
                   setIsGrnCreateOpen(true);
                   return;
                 }
@@ -8037,7 +8168,12 @@ export function ProcurementDetailUnifiedView(
                 // Strictly open Tax Invoice Registry dialog box with NO page redirection (buyer & seller)
                 const invId = Number(existingInv.id) || (existingInv.invoiceId ? Number(existingInv.invoiceId) : null);
                 setSelectedInvoiceModalId(invId);
-                setSelectedInvoiceModalData(existingInv);
+                setSelectedInvoiceModalData({
+                  ...existingInv,
+                  buyer: existingInv.buyer || effectiveActiveOrder?.buyer || (props.rawBid as any)?.buyer,
+                  seller: existingInv.seller || effectiveActiveOrder?.seller || (props.rawBid as any)?.awardedSeller,
+                  purchaseOrder: existingInv.purchaseOrder || effectiveActiveOrder
+                });
                 setIsTaxInvoiceModalOpen(true);
                 return;
               }
@@ -8294,7 +8430,12 @@ export function ProcurementDetailUnifiedView(
                         onClick={() => {
                           const invId = Number(existingTaxInvoice?.id) || (existingTaxInvoice?.invoiceId ? Number(existingTaxInvoice.invoiceId) : null);
                           setSelectedInvoiceModalId(invId);
-                          setSelectedInvoiceModalData(existingTaxInvoice || null);
+                          setSelectedInvoiceModalData(existingTaxInvoice ? {
+                            ...existingTaxInvoice,
+                            buyer: existingTaxInvoice.buyer || effectiveActiveOrder?.buyer || (props.rawBid as any)?.buyer,
+                            seller: existingTaxInvoice.seller || effectiveActiveOrder?.seller || (props.rawBid as any)?.awardedSeller,
+                            purchaseOrder: existingTaxInvoice.purchaseOrder || effectiveActiveOrder
+                          } : null);
                           setIsTaxInvoiceModalOpen(true);
                         }}
                         className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-md cursor-pointer"
@@ -8343,26 +8484,49 @@ export function ProcurementDetailUnifiedView(
                       <Button
                         type="button"
                         size="sm"
-                        variant="outline"
                         onClick={handleOpenDispatchDialog}
-                        className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-50 shadow-2xs rounded-md cursor-pointer"
+                        className="h-7 px-3 gap-1.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-md cursor-pointer transition-transform active:scale-95"
                       >
-                        <Truck className="h-3.5 w-3.5 text-blue-600" />
-                        📍 View Tracking Info
+                        <Truck className="h-3.5 w-3.5" />
+                        🔄 Update Status
                       </Button>
                     )}
 
-                    {fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
+                    {(hasCreatedGrn || hasApprovedGrn || Boolean(activeGrn)) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const grnId = activeGrn?.id || (effectiveActiveOrder as any)?.grnId;
+                          if (grnId) router.push(`/grn/${grnId}`);
+                          else router.push('/grn');
+                        }}
+                        className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50 shadow-2xs rounded-md cursor-pointer"
+                      >
+                        <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        View GRN {activeGrn?.grnNumber ? `#${activeGrn.grnNumber}` : ''}
+                      </Button>
+                    )}
+
+                    {!hasCreatedGrn && !hasApprovedGrn && fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
                       <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
                         <Clock className="h-3 w-3 text-amber-600" />
                         <span>⏳ Awaiting Buyer Goods Inspection &amp; GRN</span>
                       </span>
                     )}
 
-                    {fulfillmentPhase === 'GRN_APPROVED' && (
+                    {hasCreatedGrn && !hasApprovedGrn && (
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-800">
+                        <Clock className="h-3 w-3 text-blue-600" />
+                        <span>📋 Buyer Submitted GRN — Inspection Under Verification</span>
+                      </span>
+                    )}
+
+                    {hasApprovedGrn && fulfillmentPhase !== 'PAYMENT_SUBMITTED' && fulfillmentPhase !== 'SETTLED' && (
                       <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
                         <Clock className="h-3 w-3 text-amber-600" />
-                        <span>⏳ Awaiting Buyer Payment &amp; Payment Proof</span>
+                        <span>⏳ GRN Verified — Awaiting Buyer Payment &amp; Payment Proof</span>
                       </span>
                     )}
 
@@ -8766,7 +8930,12 @@ export function ProcurementDetailUnifiedView(
                         onClick={() => {
                           const invId = Number(existingTaxInvoice?.id) || (existingTaxInvoice?.invoiceId ? Number(existingTaxInvoice.invoiceId) : null);
                           setSelectedInvoiceModalId(invId);
-                          setSelectedInvoiceModalData(existingTaxInvoice || null);
+                          setSelectedInvoiceModalData(existingTaxInvoice ? {
+                            ...existingTaxInvoice,
+                            buyer: existingTaxInvoice.buyer || effectiveActiveOrder?.buyer || (props.rawBid as any)?.buyer,
+                            seller: existingTaxInvoice.seller || effectiveActiveOrder?.seller || (props.rawBid as any)?.awardedSeller,
+                            purchaseOrder: existingTaxInvoice.purchaseOrder || effectiveActiveOrder
+                          } : null);
                           setIsTaxInvoiceModalOpen(true);
                         }}
                         className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
@@ -8797,8 +8966,28 @@ export function ProcurementDetailUnifiedView(
                       </Button>
                     )}
 
-                    {/* Create GRN when delivered */}
-                    {fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
+                    {/* View GRN if already created or approved */}
+                    {(hasCreatedGrn || hasApprovedGrn || Boolean(activeGrn)) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const grnId = activeGrn?.id || (effectiveActiveOrder as any)?.grnId;
+                          if (grnId) {
+                            router.push(`/grn/${grnId}`);
+                          } else {
+                            router.push('/grn');
+                          }
+                        }}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-white text-emerald-800 hover:bg-emerald-50 border border-emerald-300 shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                      >
+                        <ClipboardCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        📋 View GRN {activeGrn?.grnNumber ? `#${activeGrn.grnNumber}` : ""}
+                      </Button>
+                    )}
+
+                    {/* Create GRN when delivered AND no GRN created yet */}
+                    {!hasCreatedGrn && !hasApprovedGrn && fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
                       <Button
                         type="button"
                         size="sm"
@@ -8810,8 +8999,16 @@ export function ProcurementDetailUnifiedView(
                       </Button>
                     )}
 
+                    {/* If GRN created but pending approval, show status indicator */}
+                    {hasCreatedGrn && !hasApprovedGrn && (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                        <span>📋 GRN Recorded — Awaiting Verification / Approval</span>
+                      </span>
+                    )}
+
                     {/* GRN Approved: Single Make Payment CTA */}
-                    {fulfillmentPhase === 'GRN_APPROVED' && (
+                    {(fulfillmentPhase === 'GRN_APPROVED' || (hasApprovedGrn && fulfillmentPhase !== 'PAYMENT_SUBMITTED' && fulfillmentPhase !== 'SETTLED')) && (
                       <Button
                         type="button"
                         size="sm"
@@ -9087,11 +9284,15 @@ export function ProcurementDetailUnifiedView(
             <DispatchDetailsModal
               isOpen={isDispatchDialogOpen}
               delivery={delivery}
+              isBuyer={isBuyerSide}
               onClose={() => setIsDispatchDialogOpen(false)}
               onSuccess={() => {
-                setIsDispatchDialogOpen(false);
                 deliveryQuery.refetch();
                 queryClient.invalidateQueries();
+              }}
+              onOpenGrnCreate={() => {
+                setIsDispatchDialogOpen(false);
+                setIsGrnCreateOpen(true);
               }}
             />
           )}
@@ -9099,9 +9300,14 @@ export function ProcurementDetailUnifiedView(
           {isGrnCreateOpen && (
             <GrnCreateModal
               onClose={() => setIsGrnCreateOpen(false)}
-              onCreated={() => {
+              onCreated={(createdGrn) => {
                 setIsGrnCreateOpen(false);
-                queryClient.invalidateQueries();
+                if (createdGrn) {
+                  setLocalCreatedGrn(createdGrn);
+                }
+                void grnEligibilityQuery.refetch();
+                void deliveryQuery.refetch();
+                void queryClient.invalidateQueries();
               }}
               initialPoId={effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : null}
             />
@@ -9663,7 +9869,7 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label="View your submitted quotation"
+                    aria-label="Jump to your submitted quotation on page"
                     onClick={() => {
                       if (
                         isReverseAuctionType &&
@@ -9672,26 +9878,39 @@ export function ProcurementDetailUnifiedView(
                       ) {
                         props.onSubmitClick();
                       } else {
-                        handleOpenMyQuotationModal();
+                        setActiveTab("clarifications");
+                        setTimeout(() => {
+                          const targetEl =
+                            document.getElementById("my-submitted-quotation-card") ||
+                            document.getElementById("tabpanel-clarifications") ||
+                            document.getElementById("tabs-navigation-section");
+                          if (targetEl) {
+                            targetEl.scrollIntoView({
+                              behavior: "smooth",
+                              block: "center",
+                            });
+                          }
+                        }, 50);
                       }
                     }}
                     className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
                   >
-                    <Eye
-                      className="h-3.5 w-3.5 text-slate-600"
+                    <FileText
+                      className="h-3.5 w-3.5 text-blue-600"
                       aria-hidden="true"
                     />
                     <span>
                       {isRfqType
-                        ? "View My Quotation"
+                        ? "Quotation Submitted"
                         : isRateContractType
-                          ? "View My Rate Proposal"
+                          ? "Rate Proposal Submitted"
                           : isReverseAuctionType
                             ? isBiddingClosed
                               ? "View Auction Results"
                               : "Live Bid Console"
-                            : "View My Proposal"}
+                            : "Proposal Submitted"}
                     </span>
+                    <ChevronDown className="h-3 w-3 text-slate-400" />
                   </Button>
                 )}
                 {!isBuyerOrAdmin &&
@@ -11404,6 +11623,23 @@ export function ProcurementDetailUnifiedView(
                   isBidAwarded={isBidAwarded}
                   canAward={false}
                   isBuyer={Boolean(isBuyerSide || isBuyerOrAdmin)}
+                  isOwnQuotation={Boolean(
+                    (!isBuyerSide && !isBuyerOrAdmin) ||
+                    (currentUserId &&
+                      String(
+                        selectedQuotationForReview?.sellerUserId ||
+                          selectedQuotationForReview?.sellerId ||
+                          selectedQuotationForReview?.seller?.id ||
+                          selectedQuotationForReview?.sellerUser?.id,
+                      ) === String(currentUserId)) ||
+                    (currentOrgId &&
+                      String(
+                        selectedQuotationForReview?.sellerOrganizationId ||
+                          selectedQuotationForReview?.sellerOrganization?.id ||
+                          selectedQuotationForReview?.seller?.organizationId ||
+                          selectedQuotationForReview?.sellerOrgId,
+                      ) === String(currentOrgId))
+                  )}
                   onOpenCompare={
                     isBuyerSide || isBuyerOrAdmin
                       ? () => {
@@ -11566,7 +11802,7 @@ export function ProcurementDetailUnifiedView(
               {!isBuyerOrAdmin && (
                 <div className="space-y-4">
                   {isSellerParticipated ? (
-                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+                    <div id="my-submitted-quotation-card" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
                         <div>
                           <div className="flex items-center gap-2">
@@ -11823,6 +12059,458 @@ export function ProcurementDetailUnifiedView(
   );
 }
 
+export function extractQuotationDetails(
+  participation: any,
+  defaultReqQty?: number,
+  defaultReqUnit?: string,
+) {
+  if (!participation) {
+    return {
+      lineItems: [],
+      docs: [],
+      sellerOrg: "—",
+      contactPerson: "—",
+      email: "—",
+      phone: "—",
+      quotedAmount: 0,
+      baseAmount: 0,
+      taxAmount: 0,
+      gstPercentage: 0,
+      offeredQty: "—",
+      deliveryTimeline: "—",
+      paymentTerms: "—",
+      deliveryTerms: "—",
+      warranty: "—",
+      makeBrand: "—",
+      model: "—",
+      techSpecs: "",
+      complianceStatement: "",
+      complianceRemarks: "",
+      statusStr: "SUBMITTED",
+      techStatus: "PENDING",
+      techScore: undefined,
+      techRemarks: undefined,
+      submittedAt: undefined,
+      message: "",
+    };
+  }
+
+  // 1. Gather all line items candidates
+  const candList = [
+    participation.lineItems,
+    participation.items,
+    participation.lineQuotes,
+    participation.responseData?.lineItems,
+    participation.responseData?.items,
+    participation.responseData?.lineQuotes,
+    participation.responseData?.boqTable,
+    participation.details?.lineItems,
+    participation.details?.items,
+    participation.quotation?.lineItems,
+    participation.quotation?.items,
+    participation.acknowledgement?.responseData?.lineItems,
+    participation.acknowledgement?.responseData?.lineQuotes,
+    participation.acknowledgement?.lineItems,
+    participation.acknowledgement?.items,
+    participation.boqTable,
+  ];
+  let lineItems: any[] = [];
+  for (const arr of candList) {
+    if (Array.isArray(arr) && arr.length > lineItems.length) {
+      lineItems = arr;
+    }
+  }
+
+  // 2. Parse JSON descriptions if any
+  let descData: Record<string, any> = {};
+  const rawDesc =
+    participation.offeredItemDescription ||
+    participation.message ||
+    participation.responseData?.message;
+  if (
+    typeof rawDesc === "string" &&
+    (rawDesc.trim().startsWith("{") || rawDesc.trim().startsWith("["))
+  ) {
+    try {
+      descData = JSON.parse(rawDesc);
+    } catch {}
+  }
+
+  const ackData =
+    participation.acknowledgement &&
+    typeof participation.acknowledgement === "object" &&
+    !Array.isArray(participation.acknowledgement)
+      ? (participation.acknowledgement as Record<string, any>)
+      : {};
+  const respData =
+    participation.responseData &&
+    typeof participation.responseData === "object" &&
+    !Array.isArray(participation.responseData)
+      ? (participation.responseData as Record<string, any>)
+      : {};
+
+  const first = (...vals: any[]) =>
+    vals.find(
+      (v) =>
+        v !== undefined &&
+        v !== null &&
+        String(v).trim() !== "" &&
+        String(v).trim() !== "—",
+    );
+
+  const firstItem = lineItems[0] || {};
+  const techOffer =
+    descData.technicalOffer ||
+    respData.technicalOffer ||
+    ackData.technicalOffer ||
+    {};
+
+  // Supplier Organization Identity
+  const sellerOrg =
+    participation.sellerOrgName ||
+    participation.sellerOrganization?.organizationName ||
+    participation.seller?.sellerProfile?.organizationName ||
+    participation.seller?.organization?.organizationName ||
+    participation.sellerProfile?.organizationName ||
+    participation.companyName ||
+    participation.sellerName ||
+    participation.seller?.name ||
+    participation.sellerUser?.name ||
+    (participation.sellerId ||
+    participation.sellerUserId ||
+    (participation.id && !String(participation.id).startsWith("id-"))
+      ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
+      : "Supplier Partner");
+
+  const contactPerson =
+    participation.sellerName ||
+    participation.contactPerson ||
+    participation.seller?.name ||
+    participation.sellerUser?.name ||
+    "—";
+
+  const email =
+    first(
+      participation.sellerEmail,
+      participation.seller?.email,
+      participation.sellerUser?.email,
+      respData.sellerEmail,
+      ackData.sellerEmail,
+      descData.sellerEmail,
+    ) || "—";
+
+  const phone =
+    first(
+      participation.sellerPhone,
+      participation.seller?.mobile,
+      participation.seller?.phone,
+      participation.sellerUser?.mobile,
+      participation.sellerUser?.phone,
+      respData.sellerMobile,
+      ackData.sellerMobile,
+      descData.sellerMobile,
+    ) || "—";
+
+  // Financials & Taxes
+  const quotedAmount = Number(
+    first(
+      participation.totalAmount,
+      participation.quotedAmount,
+      participation.offeredPrice,
+      respData.totalAmount,
+      respData.quotedAmount,
+      respData.totalPrice,
+      ackData.totalAmount,
+      0,
+    ),
+  );
+
+  const gstPercentage = Number(
+    first(
+      participation.gstPercentage,
+      participation.gstPercent,
+      respData.gstPercentage,
+      respData.gstPercent,
+      ackData.gstPercentage,
+      descData.gstPercentage,
+      firstItem.gstPercent,
+      firstItem.gstPercentage,
+      0,
+    ),
+  );
+
+  let baseAmount = 0;
+  if (lineItems.length > 0) {
+    baseAmount = lineItems.reduce((acc, it) => {
+      const p = Number(
+        it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
+      );
+      const q = Number(it.quantity ?? it.qty ?? 1);
+      return acc + p * q;
+    }, 0);
+  }
+  if (!baseAmount && quotedAmount > 0) {
+    if (gstPercentage > 0) {
+      baseAmount =
+        Math.round((quotedAmount / (1 + gstPercentage / 100)) * 100) / 100;
+    } else {
+      baseAmount = quotedAmount;
+    }
+  }
+  const taxAmount = Math.max(0, quotedAmount - baseAmount);
+
+  // Make / Brand & Model
+  const makeBrand =
+    first(
+      participation.makeBrand,
+      descData.makeBrand,
+      respData.makeBrand,
+      ackData.makeBrand,
+      techOffer.makeBrand,
+      firstItem.makeBrand,
+      firstItem.brand,
+      participation.brand,
+    ) || "—";
+
+  const model =
+    first(
+      participation.model,
+      descData.model,
+      respData.model,
+      ackData.model,
+      techOffer.model,
+      firstItem.model,
+    ) || "—";
+
+  // Offered Quantity Resolution (Zero Dummy Fallback)
+  const rawExplicitQty = first(
+    participation.offeredQuantity,
+    participation.quantity,
+    descData.offeredQuantity,
+    respData.offeredQuantity,
+    ackData.offeredQuantity,
+  );
+  let offeredQty = "—";
+  if (
+    rawExplicitQty != null &&
+    String(rawExplicitQty).trim() !== "" &&
+    String(rawExplicitQty).toLowerCase() !== "as specified" &&
+    String(rawExplicitQty).toLowerCase() !== "standard"
+  ) {
+    const num = Number(rawExplicitQty);
+    if (!isNaN(num) && num > 0) {
+      const uom =
+        firstItem.unitOfMeasure || firstItem.unit || defaultReqUnit || "Nos";
+      offeredQty = `${num.toLocaleString("en-IN")} ${uom}`;
+    } else {
+      offeredQty = String(rawExplicitQty);
+    }
+  } else if (lineItems.length > 0) {
+    const totalLineQty = lineItems.reduce(
+      (sum, it) => sum + (Number(it.quantity ?? it.qty) || 0),
+      0,
+    );
+    const uom =
+      firstItem.unitOfMeasure || firstItem.unit || defaultReqUnit || "Nos";
+    if (lineItems.length === 1 && totalLineQty > 0) {
+      offeredQty = `${totalLineQty.toLocaleString("en-IN")} ${uom}`;
+    } else if (totalLineQty > 0) {
+      offeredQty = `${totalLineQty.toLocaleString("en-IN")} ${uom} (${lineItems.length} items)`;
+    } else {
+      offeredQty = `${lineItems.length} line item(s)`;
+    }
+  } else if (defaultReqQty && defaultReqQty > 0) {
+    offeredQty = `${defaultReqQty.toLocaleString("en-IN")} ${defaultReqUnit || "Nos"}`;
+  }
+
+  // Delivery Timeline SLA (Zero Dummy Fallback)
+  const rawDel = first(
+    participation.deliveryTimeline,
+    descData.deliveryTimeline,
+    respData.deliveryTimeline,
+    ackData.deliveryTimeline,
+    techOffer.deliveryTimeline,
+    firstItem.deliveryTimeline,
+    firstItem.deliveryRequirement,
+    firstItem.deliverySchedule,
+    participation.deliveryDays ? `${participation.deliveryDays} Days` : undefined,
+    respData.deliveryDays ? `${respData.deliveryDays} Days` : undefined,
+  );
+  let deliveryTimeline = "—";
+  if (
+    rawDel &&
+    !["standard", "standard terms", "standard schedule", "as specified"].includes(
+      String(rawDel).toLowerCase().trim(),
+    )
+  ) {
+    const trimmed = String(rawDel).trim();
+    if (/^\d+$/.test(trimmed)) {
+      deliveryTimeline = `${trimmed} Days`;
+    } else {
+      deliveryTimeline = trimmed;
+    }
+  }
+
+  // Payment Terms (Zero Dummy Fallback)
+  const rawPay = first(
+    participation.terms,
+    participation.paymentTerms,
+    descData.terms,
+    descData.paymentTerms,
+    respData.paymentTerms,
+    respData.terms,
+    ackData.paymentTerms,
+    ackData.terms,
+    descData.rfqNotes,
+    descData.notes,
+    respData.rfqNotes,
+    participation.rfqNotes,
+  );
+  let paymentTerms = "—";
+  if (
+    rawPay &&
+    !["standard", "standard terms", "standard payment terms", "as specified"].includes(
+      String(rawPay).toLowerCase().trim(),
+    )
+  ) {
+    paymentTerms = String(rawPay).trim();
+  } else if (
+    ackData.acceptedTerms === true ||
+    participation.acceptedTerms === true
+  ) {
+    paymentTerms = "RFQ terms accepted in full";
+  }
+
+  const deliveryTerms = deliveryTimeline !== "—" ? deliveryTimeline : "—";
+
+  // Warranty
+  const warranty =
+    first(
+      participation.warrantyDetails,
+      descData.warrantyDetails,
+      respData.warrantyDetails,
+      ackData.warrantyDetails,
+      techOffer.warrantyDetails,
+      firstItem.warrantyDetails,
+      firstItem.warranty,
+    ) || "—";
+
+  // Technical Specifications & Deviations
+  const techSpecs =
+    first(
+      participation.technicalSpecifications,
+      participation.specifications,
+      descData.technicalSpecifications,
+      techOffer.offeredItemDescription,
+      respData.technicalSpecifications,
+      ackData.technicalSpecifications,
+      firstItem.specifications,
+      firstItem.offeredSpecifications,
+      participation.offeredItemDescription &&
+        !String(participation.offeredItemDescription).startsWith("{")
+        ? participation.offeredItemDescription
+        : undefined,
+    ) || "";
+
+  const complianceStatement =
+    first(
+      participation.complianceStatement,
+      respData.complianceStatement,
+      ackData.complianceStatement,
+      descData.complianceStatement,
+      firstItem.complianceStatus,
+    ) || "";
+
+  const complianceRemarks =
+    first(
+      participation.complianceRemarks,
+      descData.complianceRemarks,
+      techOffer.complianceRemarks,
+      firstItem.complianceRemarks,
+      participation.deviation,
+      descData.deviation,
+      techOffer.deviation,
+      firstItem.deviation,
+    ) || "";
+
+  const message =
+    first(
+      participation.offeredItemDescription &&
+        !String(participation.offeredItemDescription).startsWith("{")
+        ? participation.offeredItemDescription
+        : undefined,
+      participation.message,
+      respData.message,
+      ackData.offeredItemDescription,
+    ) || "";
+
+  // Submission Timestamps & Evaluation
+  const submittedAt =
+    participation.submittedAt ||
+    participation.createdAt ||
+    participation.updatedAt;
+
+  const statusStr = String(
+    participation.submissionStatus || participation.status || "Submitted",
+  ).toUpperCase();
+
+  const techStatus = String(
+    participation.technicalStatus ||
+      respData.technicalStatus ||
+      ackData.technicalStatus ||
+      "PENDING",
+  ).toUpperCase();
+
+  const techRemarks =
+    participation.technicalRemarks ||
+    respData.technicalRemarks ||
+    ackData.technicalRemarks;
+
+  const techScore =
+    participation.technicalScore ??
+    respData.technicalScore ??
+    participation.score;
+
+  // Documents
+  const docs: any[] =
+    Array.isArray(participation.documents) && participation.documents.length
+      ? participation.documents
+      : Array.isArray(respData.documents) && respData.documents.length
+        ? respData.documents
+        : Array.isArray(ackData.documents) && ackData.documents.length
+          ? ackData.documents
+          : [];
+
+  return {
+    lineItems,
+    docs,
+    sellerOrg,
+    contactPerson,
+    email,
+    phone,
+    quotedAmount,
+    baseAmount,
+    taxAmount,
+    gstPercentage,
+    offeredQty,
+    deliveryTimeline,
+    paymentTerms,
+    deliveryTerms,
+    warranty,
+    makeBrand,
+    model,
+    techSpecs,
+    complianceStatement,
+    complianceRemarks,
+    statusStr,
+    techStatus,
+    techScore,
+    techRemarks,
+    submittedAt,
+    message,
+  };
+}
+
 interface SellerQuotationReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -11835,6 +12523,7 @@ interface SellerQuotationReviewModalProps {
   isBidAwarded?: boolean;
   canAward?: boolean;
   isBuyer?: boolean;
+  isOwnQuotation?: boolean;
   onAwardVendor?: (participation: any) => void;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
@@ -11852,6 +12541,7 @@ export function SellerQuotationReviewModal({
   isBidAwarded,
   canAward,
   isBuyer,
+  isOwnQuotation,
   onAwardVendor,
   onOpenCompare,
   onOpenTechnicalEvaluation,
@@ -11862,7 +12552,11 @@ export function SellerQuotationReviewModal({
     string | number | null
   >(null);
 
-  const isFinancialSealed = Boolean(isTwoPacketMode && !isFinancialStageOpened);
+  // Financials are ONLY sealed for Buyers/Evaluators during Stage 1 technical scrutiny in a 2-packet procurement.
+  // The quoting seller who submitted the quotation must ALWAYS see their own submitted financial details, unit rates, GST, and totals!
+  const isFinancialSealed = Boolean(
+    !isOwnQuotation && isBuyer && isTwoPacketMode && !isFinancialStageOpened
+  );
 
   const handleViewAttachment = async (doc: any, docName: string) => {
     const rawUrl =
@@ -12122,7 +12816,20 @@ export function SellerQuotationReviewModal({
               </div>
             );
           }
-          const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+          const gst =
+            item.gstPercent != null
+              ? Number(item.gstPercent)
+              : item.gstPercentage != null
+                ? Number(item.gstPercentage)
+                : item.gstRate != null
+                  ? Number(item.gstRate)
+                  : item.gst != null
+                    ? Number(item.gst)
+                    : participation?.gstPercentage != null
+                      ? Number(participation.gstPercentage)
+                      : participation?.gstPercent != null
+                        ? Number(participation.gstPercent)
+                        : 18;
           return (
             <div className="pt-0.5">
               <span className="tabular-nums font-semibold text-slate-700 text-xs">
@@ -12152,10 +12859,20 @@ export function SellerQuotationReviewModal({
             item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
           );
           const q = Number(item.quantity ?? item.qty ?? 1);
-          const gst = item.gstPercent != null ? Number(item.gstPercent) : 18;
+          const gst = Number(
+            item.gstPercent ??
+              item.gstPercentage ??
+              item.gstRate ??
+              item.gst ??
+              participation?.gstPercentage ??
+              participation?.gstPercent ??
+              18,
+          );
           const tot =
-            item.lineTotal != null || item.totalAmount != null
-              ? Number(item.lineTotal ?? item.totalAmount)
+            item.lineTotal != null ||
+            item.totalAmount != null ||
+            item.totalPrice != null
+              ? Number(item.lineTotal ?? item.totalAmount ?? item.totalPrice)
               : uPrice * q * (1 + gst / 100);
           return (
             <div className="pt-0.5">
@@ -12171,163 +12888,71 @@ export function SellerQuotationReviewModal({
         },
       },
     ],
-    [isFinancialSealed, previewLoadingId],
+    [isFinancialSealed, previewLoadingId, participation],
   );
 
   if (!isOpen || !participation) return null;
 
-  const sellerOrg =
-    participation.sellerOrgName ||
-    participation.sellerOrganization?.organizationName ||
-    participation.seller?.sellerProfile?.organizationName ||
-    participation.seller?.organization?.organizationName ||
-    participation.sellerProfile?.organizationName ||
-    participation.companyName ||
-    participation.sellerName ||
-    participation.seller?.name ||
-    participation.sellerUser?.name ||
-    (participation.sellerId ||
-    participation.sellerUserId ||
-    (participation.id && !String(participation.id).startsWith("id-"))
-      ? `Supplier #${participation.sellerId || participation.sellerUserId || participation.id}`
-      : "Supplier Partner");
-
-  const contactPerson =
-    participation.sellerName ||
-    participation.contactPerson ||
-    participation.seller?.name ||
-    participation.sellerUser?.name ||
-    "N/A";
-  const email =
-    participation.sellerEmail ||
-    participation.seller?.email ||
-    participation.sellerUser?.email ||
-    "N/A";
-  const phone =
-    participation.sellerPhone ||
-    participation.seller?.mobile ||
-    participation.seller?.phone ||
-    participation.sellerUser?.mobile ||
-    participation.sellerUser?.phone ||
-    "N/A";
-
-  const quotedAmount = Number(
-    participation.totalAmount ||
-      participation.quotedAmount ||
-      participation.offeredPrice ||
-      0,
+  const details = useMemo(
+    () => extractQuotationDetails(participation),
+    [participation],
   );
-  const offeredQty =
-    participation.offeredQuantity ||
-    participation.quantity ||
-    participation.responseData?.offeredQuantity ||
-    participation.acknowledgement?.offeredQuantity ||
-    "As Specified";
-  const deliveryTimeline =
-    participation.deliveryTimeline ||
-    participation.responseData?.deliveryTimeline ||
-    participation.acknowledgement?.deliveryTimeline ||
-    "Standard";
-  const paymentTerms =
-    participation.terms ||
-    participation.responseData?.paymentTerms ||
-    participation.acknowledgement?.paymentTerms ||
-    "Standard Payment Terms";
-  const makeBrand =
-    participation.makeBrand ||
-    participation.responseData?.makeBrand ||
-    participation.acknowledgement?.makeBrand ||
-    participation.brand ||
-    "—";
-  const model =
-    participation.model ||
-    participation.responseData?.model ||
-    participation.acknowledgement?.model ||
-    "—";
-  const techSpecs =
-    participation.technicalSpecifications ||
-    participation.specifications ||
-    participation.responseData?.technicalSpecifications ||
-    participation.responseData?.specifications ||
-    participation.acknowledgement?.technicalSpecifications ||
-    participation.acknowledgement?.specifications ||
-    (participation.offeredItemDescription &&
-    participation.offeredItemDescription !== participation.message
-      ? participation.offeredItemDescription
-      : "") ||
-    (participation.responseData?.offeredItemDescription &&
-    participation.responseData?.offeredItemDescription !==
-      participation.responseData?.message
-      ? participation.responseData?.offeredItemDescription
-      : "") ||
-    "";
-  const complianceStatement =
-    participation.complianceStatement ||
-    participation.responseData?.complianceStatement ||
-    participation.acknowledgement?.complianceStatement ||
-    "";
-  const submittedAt =
-    participation.submittedAt ||
-    participation.createdAt ||
-    participation.updatedAt;
-  const statusStr = String(
-    participation.submissionStatus || participation.status || "Submitted",
-  ).toUpperCase();
-  const techStatus = String(
-    participation.technicalStatus ||
-      participation.responseData?.technicalStatus ||
-      participation.acknowledgement?.technicalStatus ||
-      "PENDING",
-  ).toUpperCase();
-  const techRemarks =
-    participation.technicalRemarks ||
-    participation.responseData?.technicalRemarks ||
-    participation.acknowledgement?.technicalRemarks;
-  const techScore =
-    participation.technicalScore ??
-    participation.responseData?.technicalScore ??
-    participation.score;
 
-  const candList = [
-    participation.lineItems,
-    participation.items,
-    participation.lineQuotes,
-    participation.responseData?.lineItems,
-    participation.responseData?.items,
-    participation.responseData?.lineQuotes,
-    participation.responseData?.boqTable,
-    participation.details?.lineItems,
-    participation.details?.items,
-    participation.quotation?.lineItems,
-    participation.quotation?.items,
-    participation.acknowledgement?.responseData?.lineItems,
-    participation.acknowledgement?.responseData?.lineQuotes,
-    participation.acknowledgement?.lineItems,
-    participation.acknowledgement?.items,
-    participation.boqTable,
-  ];
-  let lineItems: any[] = [];
-  for (const arr of candList) {
-    if (Array.isArray(arr) && arr.length > lineItems.length) {
-      lineItems = arr;
-    }
-  }
-  const docs: any[] =
-    Array.isArray(participation.documents) && participation.documents.length
-      ? participation.documents
-      : Array.isArray(participation.responseData?.documents) &&
-          participation.responseData.documents.length
-        ? participation.responseData.documents
-        : Array.isArray(participation.acknowledgement?.documents) &&
-            participation.acknowledgement.documents.length
-          ? participation.acknowledgement.documents
-          : [];
-  const message =
-    participation.offeredItemDescription ||
-    participation.message ||
-    participation.responseData?.message ||
-    participation.acknowledgement?.offeredItemDescription ||
-    "";
+  const {
+    sellerOrg,
+    contactPerson,
+    email,
+    phone,
+    quotedAmount: rawQuotedAmount,
+    baseAmount,
+    taxAmount,
+    gstPercentage,
+    offeredQty,
+    deliveryTimeline,
+    paymentTerms,
+    deliveryTerms,
+    warranty,
+    makeBrand,
+    model,
+    techSpecs,
+    complianceStatement,
+    complianceRemarks,
+    statusStr,
+    techStatus,
+    techScore,
+    techRemarks,
+    submittedAt,
+    lineItems,
+    docs,
+    message,
+  } = details;
+
+  const calculatedTotal = useMemo(() => {
+    return lineItems.reduce((acc: number, it: any) => {
+      const uPrice = Number(
+        it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
+      );
+      const q = Number(it.quantity ?? it.qty ?? 1);
+      const gst = Number(
+        it.gstPercent ??
+          it.gstPercentage ??
+          it.gstRate ??
+          it.gst ??
+          gstPercentage ??
+          18,
+      );
+      const lineTot =
+        it.lineTotal != null ||
+        it.totalAmount != null ||
+        it.totalPrice != null
+          ? Number(it.lineTotal ?? it.totalAmount ?? it.totalPrice)
+          : uPrice * q * (1 + gst / 100);
+      return acc + (isNaN(lineTot) ? 0 : lineTot);
+    }, 0);
+  }, [lineItems, gstPercentage]);
+
+  const quotedAmount = rawQuotedAmount > 0 ? rawQuotedAmount : calculatedTotal;
+  const effectiveTotalAmount = quotedAmount;
 
   const handleDownloadQuotationPdf = async () => {
     try {
@@ -12402,11 +13027,20 @@ export function SellerQuotationReviewModal({
                 item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
               );
               const q = Number(item.quantity ?? item.qty ?? 1);
-              const gst =
-                item.gstPercent != null ? Number(item.gstPercent) : 18;
+              const gst = Number(
+                item.gstPercent ??
+                  item.gstPercentage ??
+                  item.gstRate ??
+                  item.gst ??
+                  participation?.gstPercentage ??
+                  participation?.gstPercent ??
+                  18,
+              );
               const tot =
-                item.lineTotal != null || item.totalAmount != null
-                  ? Number(item.lineTotal ?? item.totalAmount)
+                item.lineTotal != null ||
+                item.totalAmount != null ||
+                item.totalPrice != null
+                  ? Number(item.lineTotal ?? item.totalAmount ?? item.totalPrice)
                   : uPrice * q * (1 + gst / 100);
               return [
                 String(idx + 1),
@@ -12428,13 +13062,13 @@ export function SellerQuotationReviewModal({
                 String(offeredQty),
                 isFinancialSealed
                   ? "Sealed (Stage 2)"
-                  : quotedAmount > 0
-                    ? moneyPdf(quotedAmount)
+                  : effectiveTotalAmount > 0
+                    ? moneyPdf(effectiveTotalAmount)
                     : "Sealed Rate",
               ],
             ],
         financials: {
-          grandTotal: isFinancialSealed ? 0 : quotedAmount,
+          grandTotal: isFinancialSealed ? 0 : effectiveTotalAmount,
         },
         terms: message ? [`Supplier Remarks: ${message}`] : [],
         footerNote:
@@ -12529,8 +13163,8 @@ export function SellerQuotationReviewModal({
                       <Lock className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
                       Sealed (Stage 2)
                     </span>
-                  ) : quotedAmount > 0 ? (
-                    `₹${quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+                  ) : effectiveTotalAmount > 0 ? (
+                    `₹${effectiveTotalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
                   ) : (
                     "Rates On File"
                   )}
@@ -12673,27 +13307,6 @@ export function SellerQuotationReviewModal({
                       )}
                     </div>
                   </div>
-                  {isBuyer && onOpenTechnicalEvaluation && !isBidAwarded && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        onOpenTechnicalEvaluation(participation);
-                      }}
-                      className={`font-bold text-xs shadow-xs cursor-pointer ${
-                        techStatus === "QUALIFIED"
-                          ? "border border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-50"
-                          : techStatus === "DISQUALIFIED"
-                            ? "border border-rose-300 bg-white text-rose-800 hover:bg-rose-50"
-                            : "bg-blue-600 text-white hover:bg-blue-700"
-                      }`}
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                      {techStatus === "PENDING"
-                        ? "Evaluate Technical Packet"
-                        : "Update Technical Evaluation"}
-                    </Button>
-                  )}
                 </div>
               </div>
             )}
@@ -12745,9 +13358,9 @@ export function SellerQuotationReviewModal({
                       <span className="font-bold text-indigo-700 inline-flex items-center gap-1">
                         <Lock className="h-3 w-3 text-indigo-500" /> Sealed (Stage 2)
                       </span>
-                    ) : quotedAmount > 0 ? (
+                    ) : effectiveTotalAmount > 0 ? (
                       <span className="font-black text-emerald-700">
-                        ₹{quotedAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                        ₹{effectiveTotalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                       </span>
                     ) : (
                       <span className="text-slate-500">Rates On File</span>
@@ -12821,6 +13434,17 @@ export function SellerQuotationReviewModal({
                   </div>
                 )}
 
+                {warranty && warranty !== "—" && (
+                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                      Warranty &amp; Guarantee Terms:
+                    </span>
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700 break-words">
+                      {warranty}
+                    </p>
+                  </div>
+                )}
+
                 {message && message !== techSpecs && (
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
                     <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
@@ -12869,9 +13493,9 @@ export function SellerQuotationReviewModal({
                           <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
                             <Lock className="h-3 w-3 text-indigo-500" /> Commercial Bid Sealed (Stage 2)
                           </span>
-                        ) : quotedAmount > 0 ? (
+                        ) : effectiveTotalAmount > 0 ? (
                           <span className="text-emerald-700 font-black">
-                            ₹{quotedAmount.toLocaleString("en-IN", {
+                            ₹{effectiveTotalAmount.toLocaleString("en-IN", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
                             })}
@@ -13017,23 +13641,6 @@ export function SellerQuotationReviewModal({
                   </Button>
                 )}
 
-                {/* Evaluate Bid / Technical Packet button for both single and two-packet mode */}
-                {onOpenTechnicalEvaluation && !isBidAwarded && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      onOpenTechnicalEvaluation(participation);
-                    }}
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs shadow-xs cursor-pointer"
-                  >
-                    <ShieldCheck className="h-3.5 w-3.5 mr-1.5" />
-                    {techStatus === "PENDING"
-                      ? "Evaluate Bid (Qualify / Disqualify)"
-                      : "Update Evaluation Decision"}
-                  </Button>
-                )}
-
                 {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
                 <Button
                   type="button"
@@ -13141,25 +13748,52 @@ export function QuotationComparisonModal({
       0,
   );
 
+  const enrichedSorted = useMemo(() => {
+    return sorted.map((p, idx) => {
+      const details = extractQuotationDetails(p);
+      const isL1 = idx === 0 && lowestPrice > 0;
+      const amount =
+        details.quotedAmount > 0
+          ? details.quotedAmount
+          : Number(p.totalAmount || p.quotedAmount || p.offeredPrice || 0);
+      const variance = amount - lowestPrice;
+      const variancePct =
+        lowestPrice > 0 ? (variance / lowestPrice) * 100 : 0;
+      return {
+        raw: p,
+        details,
+        isL1,
+        amount,
+        variance,
+        variancePct,
+      };
+    });
+  }, [sorted, lowestPrice]);
+
+  const secondLowest = enrichedSorted[1]?.amount || 0;
+  const l1Spread = secondLowest > lowestPrice ? secondLowest - lowestPrice : 0;
+  const l1SpreadPct =
+    secondLowest > 0 ? (l1Spread / secondLowest) * 100 : 0;
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-fadeIn">
-      <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
+      <div className="flex max-h-[92vh] w-full max-w-6xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-blue-100 border border-blue-200 px-2.5 py-0.5 text-[10px] font-black uppercase text-blue-800 flex items-center gap-1">
-                <Layers className="h-3 w-3" /> L1 Commercial Comparison Matrix
+                <Layers className="h-3 w-3" /> L1 Commercial &amp; Technical Comparison Matrix
               </span>
               <span className="text-xs font-bold text-slate-400">
-                {sorted.length} Proposals Submitted
+                {enrichedSorted.length} Proposals Submitted
               </span>
             </div>
             <h2 className="text-lg font-black text-slate-900 mt-0.5">
               Supplier Quotations Side-by-Side Comparison
             </h2>
             {procurementTitle && (
-              <p className="text-xs font-semibold text-slate-500 truncate max-w-lg">
+              <p className="text-xs font-semibold text-slate-500 truncate max-w-xl">
                 Procurement: {procurementTitle}
               </p>
             )}
@@ -13167,7 +13801,8 @@ export function QuotationComparisonModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-200/70 hover:text-slate-700 transition-all cursor-pointer"
+            aria-label="Close comparison modal"
           >
             <X className="h-5 w-5" />
           </button>
@@ -13175,31 +13810,31 @@ export function QuotationComparisonModal({
 
         {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-          {/* Top L1 Highlight Metric */}
+          {/* Top L1 Highlight Metric Banner */}
           {lowestPrice > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 shadow-2xs">
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
-                  <Award className="h-5 w-5" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                  <Award className="h-6 w-6" />
                 </div>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                    L1 Lowest Quoted Price
+                    L1 Lowest Quoted Price (incl. GST)
                   </p>
-                  <p className="text-lg font-black text-emerald-950">
-                    ₹{lowestPrice.toLocaleString("en-IN")}
+                  <p className="text-xl font-black text-emerald-950">
+                    ₹{lowestPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="rounded-full bg-emerald-200/80 px-2.5 py-1 text-xs font-black text-emerald-900 uppercase">
-                  L1 Supplier:{" "}
-                  {sorted[0]?.seller?.sellerProfile?.organizationName ||
-                    sorted[0]?.seller?.organization?.organizationName ||
-                    sorted[0]?.sellerOrganization?.organizationName ||
-                    sorted[0]?.seller?.name ||
-                    sorted[0]?.sellerUser?.name ||
-                    "L1 Bidder"}
+
+              <div className="flex flex-wrap items-center gap-2">
+                {l1Spread > 0 && (
+                  <span className="rounded-full bg-emerald-100 border border-emerald-300 px-3 py-1 text-xs font-bold text-emerald-900">
+                    📉 L1 is ₹{l1Spread.toLocaleString("en-IN", { maximumFractionDigits: 0 })} ({l1SpreadPct.toFixed(1)}%) below L2
+                  </span>
+                )}
+                <span className="rounded-full bg-emerald-200/90 border border-emerald-300 px-3 py-1 text-xs font-black text-emerald-950 uppercase">
+                  L1 Supplier: {enrichedSorted[0]?.details.sellerOrg}
                 </span>
               </div>
             </div>
@@ -13208,194 +13843,484 @@ export function QuotationComparisonModal({
           {/* Matrix Table */}
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+              <table className="w-full min-w-[760px] border-collapse text-left text-xs">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-100/80 font-black text-slate-600 uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5 border-r border-slate-200 w-[200px] bg-slate-100">
+                  <tr className="border-b border-slate-200 bg-slate-100/90 font-black text-slate-600 uppercase tracking-wider text-[10px]">
+                    <th className="p-3.5 border-r border-slate-200 w-[220px] bg-slate-100 sticky left-0 z-10">
                       Comparison Parameter
                     </th>
-                    {sorted.map((r, i) => {
-                      const amount = Number(
-                        r.totalAmount || r.quotedAmount || r.offeredPrice || 0,
-                      );
-                      const isL1 = i === 0 && lowestPrice > 0;
-                      const sellerOrg =
-                        r.seller?.sellerProfile?.organizationName ||
-                        r.seller?.organization?.organizationName ||
-                        r.sellerOrganization?.organizationName ||
-                        r.seller?.name ||
-                        r.sellerUser?.name ||
-                        `Supplier #${r.sellerId || r.sellerUserId}`;
-
-                      return (
-                        <th
-                          key={r.id || i}
-                          className={`p-3.5 border-r border-slate-200 text-center min-w-[200px] ${isL1 ? "bg-emerald-50/70" : ""}`}
-                        >
-                          <div className="font-extrabold text-slate-950 text-xs">
-                            {sellerOrg}
-                          </div>
-                          <div className="mt-1 flex items-center justify-center gap-1">
-                            <span
-                              className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-black uppercase ${
-                                isL1
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-slate-200 text-slate-700"
-                              }`}
-                            >
-                              {isL1 ? "L1 - Lowest Quote" : `L${i + 1}`}
-                            </span>
-                          </div>
-                        </th>
-                      );
-                    })}
+                    {enrichedSorted.map((item, i) => (
+                      <th
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center min-w-[210px] ${item.isL1 ? "bg-emerald-50/80" : ""}`}
+                      >
+                        <div className="font-extrabold text-slate-950 text-xs break-words" title={item.details.sellerOrg}>
+                          {item.details.sellerOrg}
+                        </div>
+                        <div className="mt-1 flex items-center justify-center gap-1">
+                          <span
+                            className={`inline-block rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase ${
+                              item.isL1
+                                ? "bg-emerald-600 text-white shadow-2xs"
+                                : "bg-slate-200 text-slate-700"
+                            }`}
+                          >
+                            {item.isL1 ? "L1 - Lowest Quote" : `L${i + 1}`}
+                          </span>
+                        </div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 font-semibold text-slate-700">
-                  {/* Quoted Total Amount */}
-                  <tr className="bg-slate-50/50">
-                    <td className="p-3.5 border-r border-slate-200 font-black text-slate-900">
-                      Total Quoted Amount (INR)
+                <tbody className="divide-y divide-slate-200 font-medium text-slate-700">
+                  {/* Category 1: Commercial & Pricing Breakdown */}
+                  <tr className="bg-blue-50/60 border-t-2 border-blue-200">
+                    <td
+                      colSpan={enrichedSorted.length + 1}
+                      className="px-3.5 py-2 font-black text-[10.5px] uppercase tracking-wider text-blue-900 flex items-center gap-1.5"
+                    >
+                      <IndianRupee className="h-3.5 w-3.5 text-blue-700" />
+                      1. Commercial &amp; Pricing Breakdown
                     </td>
-                    {sorted.map((r, i) => {
-                      const amount = Number(
-                        r.totalAmount || r.quotedAmount || r.offeredPrice || 0,
-                      );
-                      const isL1 = i === 0 && lowestPrice > 0;
-                      return (
-                        <td
-                          key={r.id || i}
-                          className={`p-3.5 border-r border-slate-200 text-center font-black text-sm ${isL1 ? "bg-emerald-50 text-emerald-950 font-black" : "text-slate-900"}`}
-                        >
-                          {amount > 0
-                            ? `₹${amount.toLocaleString("en-IN")}`
-                            : "Sealed / Rates On File"}
-                        </td>
-                      );
-                    })}
                   </tr>
 
-                  {/* Offered Quantity */}
-                  <tr>
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                      Offered Quantity
+                  {/* Total Quoted Amount */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-black text-slate-900 sticky left-0 bg-slate-50 z-10">
+                      Total Quoted Amount (incl. GST)
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-black text-sm tabular-nums ${
+                          item.isL1 ? "bg-emerald-50 text-emerald-950" : "text-slate-900"
+                        }`}
                       >
-                        {r.offeredQuantity || r.quantity || "As Specified"}
+                        {item.amount > 0 ? (
+                          `₹${item.amount.toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`
+                        ) : (
+                          <span className="text-slate-400 font-semibold">Sealed / Rates On File</span>
+                        )}
                       </td>
                     ))}
                   </tr>
 
-                  {/* Delivery Timeline */}
-                  <tr className="bg-slate-50/50">
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                      Delivery Timeline
+                  {/* Price Variance vs L1 Benchmark */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Price Variance vs. L1
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/40" : ""}`}
                       >
-                        {r.deliveryTimeline ||
-                          r.responseData?.deliveryTimeline ||
-                          "Standard"}
+                        {item.isL1 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-black text-emerald-800">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            L1 Benchmark (Lowest)
+                          </span>
+                        ) : item.amount > 0 && lowestPrice > 0 ? (
+                          <span className="text-xs font-bold text-slate-700">
+                            +₹{item.variance.toLocaleString("en-IN", { maximumFractionDigits: 0 })}{" "}
+                            <span className="text-rose-600 font-extrabold text-[11px]">
+                              (+{item.variancePct.toFixed(1)}%)
+                            </span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Base Amount (excl. GST) */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Base Value (excl. GST)
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center tabular-nums ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.baseAmount > 0 ? (
+                          `₹${item.details.baseAmount.toLocaleString("en-IN", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Applicable GST % & Tax Amount */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Applicable GST &amp; Tax Value
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center tabular-nums ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.taxAmount > 0 ? (
+                          <span>
+                            {item.details.gstPercentage}%{" "}
+                            <span className="text-slate-500 font-normal">
+                              (₹{item.details.taxAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })})
+                            </span>
+                          </span>
+                        ) : item.details.gstPercentage > 0 ? (
+                          `${item.details.gstPercentage}%`
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Category 2: Scope, Quantity & Delivery SLA */}
+                  <tr className="bg-amber-50/60 border-t-2 border-amber-200">
+                    <td
+                      colSpan={enrichedSorted.length + 1}
+                      className="px-3.5 py-2 font-black text-[10.5px] uppercase tracking-wider text-amber-900 flex items-center gap-1.5"
+                    >
+                      <Truck className="h-3.5 w-3.5 text-amber-700" />
+                      2. Scope, Quantity &amp; Fulfillment SLA
+                    </td>
+                  </tr>
+
+                  {/* Offered Scope & Quantity */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Offered Scope &amp; Quantity
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-bold text-slate-900 ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.offeredQty !== "—" ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Package className="h-3 w-3 text-slate-400" />
+                            {item.details.offeredQty}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Promised Delivery Timeline */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Promised Delivery Timeline SLA
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.deliveryTimeline !== "—" ? (
+                          <span className="font-bold text-slate-800 flex items-center justify-center gap-1">
+                            <Clock className="h-3 w-3 text-blue-600 shrink-0" />
+                            {item.details.deliveryTimeline}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
 
                   {/* Payment Terms */}
-                  <tr>
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                      Payment Terms
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Payment &amp; Commercial Terms
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center truncate max-w-[180px]"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center max-w-[200px] truncate ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                        title={item.details.paymentTerms}
                       >
-                        {r.terms ||
-                          r.responseData?.paymentTerms ||
-                          "Standard Terms"}
+                        {item.details.paymentTerms !== "—" ? (
+                          <span className="font-semibold text-slate-800">
+                            {item.details.paymentTerms}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
 
-                  {/* Brand / Make Offered */}
-                  <tr className="bg-slate-50/50">
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
+                  {/* Warranty & Guarantee */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Warranty &amp; Guarantee Terms
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center max-w-[200px] truncate ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                        title={item.details.warranty}
+                      >
+                        {item.details.warranty !== "—" ? (
+                          <span className="font-semibold text-slate-800">
+                            {item.details.warranty}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Category 3: Technical Specifications & Compliance */}
+                  <tr className="bg-purple-50/60 border-t-2 border-purple-200">
+                    <td
+                      colSpan={enrichedSorted.length + 1}
+                      className="px-3.5 py-2 font-black text-[10.5px] uppercase tracking-wider text-purple-900 flex items-center gap-1.5"
+                    >
+                      <Tag className="h-3.5 w-3.5 text-purple-700" />
+                      3. Technical Specifications &amp; Compliance
+                    </td>
+                  </tr>
+
+                  {/* Make / Brand */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
                       Brand / Make Offered
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-bold text-slate-900 ${item.isL1 ? "bg-emerald-50/40" : ""}`}
                       >
-                        {r.makeBrand ||
-                          r.responseData?.makeBrand ||
-                          "As per specification"}
+                        {item.details.makeBrand !== "—" ? (
+                          item.details.makeBrand
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
 
-                  {/* Submitted Date */}
+                  {/* Model / Ref No */}
                   <tr>
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                      Submission Date & Time
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Model / Part Reference No
                     </td>
-                    {sorted.map((r, i) => {
-                      const dt = r.submittedAt || r.createdAt || r.updatedAt;
-                      return (
-                        <td
-                          key={r.id || i}
-                          className="p-3.5 border-r border-slate-200 text-center text-slate-500 font-medium"
-                        >
-                          {dt ? formatDateTime(dt) : "—"}
-                        </td>
-                      );
-                    })}
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-bold text-slate-800 ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.model !== "—" ? (
+                          item.details.model
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* Status */}
-                  <tr className="bg-slate-50/50">
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
+                  {/* Technical Specifications */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Offered Technical Specifications
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center max-w-[220px] truncate ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                        title={item.details.techSpecs}
+                      >
+                        {item.details.techSpecs ? (
+                          <span className="text-slate-800 font-medium">
+                            {item.details.techSpecs}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">—</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Technical Compliance Statement */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Technical Compliance Statement
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.complianceStatement === "WITH_DEVIATION" ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                            ⚠ Minor Deviation
+                          </span>
+                        ) : item.details.complianceStatement === "ALTERNATIVE_OFFERED" ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10px] font-bold text-purple-800">
+                            ✦ Alternative Offered
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            100% Compliant
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Stage 1 Technical Scrutiny Status */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Stage 1 Technical Scrutiny
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.techStatus === "QUALIFIED" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100/80 px-2.5 py-0.5 text-[10px] font-black text-emerald-900">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                            Qualified
+                          </span>
+                        ) : item.details.techStatus === "DISQUALIFIED" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2.5 py-0.5 text-[10px] font-black text-rose-900">
+                            <XCircle className="h-3 w-3 text-rose-700" />
+                            Disqualified
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold text-amber-800">
+                            <Clock className="h-3 w-3 text-amber-600" />
+                            Pending Review
+                          </span>
+                        )}
+                        {item.details.techScore != null && (
+                          <span className="block text-[10px] font-bold text-slate-500 mt-0.5">
+                            Score: {item.details.techScore}/100
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Category 4: Submission Record & Integrity */}
+                  <tr className="bg-slate-100 border-t-2 border-slate-300">
+                    <td
+                      colSpan={enrichedSorted.length + 1}
+                      className="px-3.5 py-2 font-black text-[10.5px] uppercase tracking-wider text-slate-700 flex items-center gap-1.5"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-slate-600" />
+                      4. Submission Record &amp; Integrity
+                    </td>
+                  </tr>
+
+                  {/* Quoted Line Items Breakdown */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Line Items Quoted
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-semibold text-slate-700 ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.lineItems.length > 0 ? (
+                          `${item.details.lineItems.length} line item(s)`
+                        ) : (
+                          "Single offer item"
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Attached Documents */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
+                      Proposal Documents
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center font-semibold text-slate-700 ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.docs.length > 0 ? (
+                          <span className="text-blue-700 font-bold">
+                            {item.details.docs.length} file(s) attached
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-medium">None</span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Submission Date & Time */}
+                  <tr className="bg-slate-50/40">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-slate-50 z-10">
+                      Submission Date &amp; Time
+                    </td>
+                    {enrichedSorted.map((item, i) => (
+                      <td
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center text-slate-600 font-medium ${item.isL1 ? "bg-emerald-50/40" : ""}`}
+                      >
+                        {item.details.submittedAt ? formatDateTime(item.details.submittedAt) : "—"}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* Quotation Status */}
+                  <tr>
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600 sticky left-0 bg-white z-10">
                       Quotation Status
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/40" : ""}`}
                       >
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase text-emerald-800">
-                          {r.submissionStatus || r.status || "SUBMITTED"}
+                          {item.details.statusStr}
                         </span>
                       </td>
                     ))}
                   </tr>
 
                   {/* Actions */}
-                  <tr>
-                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                      Action
+                  <tr className="bg-slate-50/80">
+                    <td className="p-3.5 border-r border-slate-200 font-bold text-slate-700 sticky left-0 bg-slate-100 z-10">
+                      Quotation Actions
                     </td>
-                    {sorted.map((r, i) => (
+                    {enrichedSorted.map((item, i) => (
                       <td
-                        key={r.id || i}
-                        className="p-3.5 border-r border-slate-200 text-center"
+                        key={item.raw.id || i}
+                        className={`p-3.5 border-r border-slate-200 text-center ${item.isL1 ? "bg-emerald-50/60" : ""}`}
                       >
                         <Button
                           type="button"
                           size="sm"
                           onClick={() => {
                             onClose();
-                            onSelectQuotationReview?.(r);
+                            onSelectQuotationReview?.(item.raw);
                           }}
-                          className="h-7 text-[11px] font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white"
+                          className="h-7 text-[11px] font-extrabold bg-[#12335f] hover:bg-[#0b2445] text-white shadow-2xs cursor-pointer"
                         >
-                          <Eye className="h-3 w-3 mr-1" />
+                          <Eye className="h-3.5 w-3.5 mr-1" />
                           View Details
                         </Button>
                       </td>

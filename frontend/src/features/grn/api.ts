@@ -68,6 +68,9 @@ export interface GrnEligibility {
     poStatus: string;
     canCreate: boolean;
     existing: Array<{ id: number; status: GrnStatus; grnNumber: string }>;
+    hasSubmitted?: boolean;
+    requiresApprovalWorkflow?: boolean;
+    canDirectApprove?: boolean;
 }
 
 export const fetchGrns = (status?: GrnStatus) => {
@@ -80,8 +83,13 @@ export const fetchGrnById = (id: number) => getApi<GrnDto>(`/api/grn/${id}`);
 export const fetchGrnEligibility = (poId: number) =>
     getApi<GrnEligibility>(`/api/grn/po/${poId}/eligibility`);
 
-export const createGrn = (data: { purchaseOrderId: number; remarks?: string; inspectionNote?: string; items: Omit<GrnItemDto, 'id' | 'grnId'>[] }) =>
-    postApi<GrnDto>('/api/grn', data);
+export const createGrn = (data: {
+    purchaseOrderId: number;
+    remarks?: string;
+    inspectionNote?: string;
+    items: Omit<GrnItemDto, 'id' | 'grnId'>[];
+    directApprove?: boolean;
+}) => postApi<GrnDto>('/api/grn', data);
 
 export const updateGrn = (id: number, data: Partial<{ remarks: string; inspectionNote: string; items: Omit<GrnItemDto, 'id' | 'grnId'>[] }>) =>
     putApi<GrnDto>(`/api/grn/${id}`, data);

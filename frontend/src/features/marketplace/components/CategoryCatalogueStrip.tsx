@@ -48,7 +48,7 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
     };
 
     const cardInner = (
-        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-2xl sm:rounded-3xl bg-slate-100">
+        <div className="relative flex h-full w-full flex-col justify-end overflow-hidden rounded-xl sm:rounded-3xl bg-slate-100">
             {/* Background Image with eager high-priority loading for visible cards */}
             <img
                 src={imgSrc}
@@ -71,13 +71,13 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
             {/* Ambient 3D Glass Light Sweep */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
 
-            {/* Lower side whitish shade overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/75 via-[4%] to-transparent transition-opacity duration-300" />
+            {/* Lower side whitish shade overlay with high-contrast mobile legibility */}
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/95 via-45% to-transparent sm:via-white/75 sm:via-[4%] transition-opacity duration-300" />
             
             {/* Category Name with subtle 3D lift */}
-            <div className="relative z-10 w-full p-3 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
+            <div className="relative z-10 w-full px-2 py-2 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
                 <span className={cn(
-                    "block w-full text-xs sm:text-[13px] font-black leading-tight line-clamp-2 transition-colors duration-300",
+                    "block w-full text-[11px] sm:text-[13px] font-extrabold sm:font-black leading-snug line-clamp-2 transition-colors duration-300",
                     selected
                         ? "text-blue-700 font-black"
                         : "text-slate-900 group-hover:text-blue-700"
@@ -89,7 +89,7 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
     );
 
     const containerClassName = cn(
-        'group relative flex flex-col bg-white rounded-2xl sm:rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-center cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-[0_28px_60px_-15px_rgba(15,23,42,0.35),0_12px_28px_-8px_rgba(37,99,235,0.25)] hover:-translate-y-2 hover:scale-[1.05] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/30 hover:z-50 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5]',
+        'group relative flex flex-col bg-white rounded-xl sm:rounded-3xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] transform-gpu origin-center cursor-pointer border border-slate-200/80 shadow-sm hover:shadow-[0_28px_60px_-15px_rgba(15,23,42,0.35),0_12px_28px_-8px_rgba(37,99,235,0.25)] hover:-translate-y-2 hover:scale-[1.05] hover:border-blue-400 hover:ring-2 hover:ring-blue-400/30 hover:z-50 w-full aspect-[16/11] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5]',
         selected && 'shadow-xl ring-2 ring-blue-500 border-blue-400 scale-[1.02] z-10'
     );
 
@@ -171,7 +171,7 @@ function CategoryCatalogueStripSkeleton({ title, subtitle, className }: { title:
     return (
         <section
             className={cn(
-                'relative overflow-visible py-12 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
+                'relative overflow-visible py-8 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
                 className
             )}
             id="categories"
@@ -179,7 +179,7 @@ function CategoryCatalogueStripSkeleton({ title, subtitle, className }: { title:
             aria-label="Loading Category catalogue"
         >
             <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
-                <div className="mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="mb-5 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
@@ -197,13 +197,13 @@ function CategoryCatalogueStripSkeleton({ title, subtitle, className }: { title:
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2.5 sm:gap-4.5">
                     {Array.from({ length: 14 }).map((_, index) => (
                         <div
                             key={index}
-                            className="relative flex flex-col bg-slate-200/50 rounded-2xl sm:rounded-3xl border border-slate-200/70 w-full aspect-[4/5] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5] overflow-hidden animate-pulse p-3.5 justify-end"
+                            className="relative flex flex-col bg-slate-200/50 rounded-xl sm:rounded-3xl border border-slate-200/70 w-full aspect-[16/11] sm:aspect-square md:aspect-[4/5] xl:aspect-[4/5] overflow-hidden animate-pulse p-2 sm:p-3.5 justify-end"
                         >
-                            <div className="h-4 bg-slate-300/60 rounded-md w-3/4 mx-auto" />
+                            <div className="h-3.5 bg-slate-300/60 rounded-md w-3/4 mx-auto" />
                         </div>
                     ))}
                 </div>
@@ -273,14 +273,14 @@ export function CategoryCatalogueStrip({
         <section
             ref={sectionRef}
             className={cn(
-                'relative overflow-visible py-12 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
+                'relative overflow-visible py-8 sm:py-16 border-y border-slate-200/70 bg-gradient-to-b from-blue-50/60 via-slate-50/80 to-blue-50/40',
                 className
             )}
             id="categories"
         >
             <div className="relative mx-auto max-w-[1680px] px-4 sm:px-6 2xl:px-8">
                 {/* Header Section */}
-                <div className="mb-7 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="mb-5 sm:mb-9 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
@@ -309,7 +309,7 @@ export function CategoryCatalogueStrip({
 
                 {/* Suggestion B: Products vs Services Scope Switcher Tabs */}
                 {ENABLE_SUGGESTION_B_SCOPE_TABS && (
-                    <div className="mb-6 flex flex-wrap items-center gap-2 sm:gap-2.5" role="tablist" aria-label="Filter categories by products or services">
+                    <div className="mb-5 sm:mb-6 flex flex-wrap items-center gap-2 sm:gap-2.5" role="tablist" aria-label="Filter categories by products or services">
                         <button
                             type="button"
                             role="tab"
@@ -317,7 +317,7 @@ export function CategoryCatalogueStrip({
                             aria-selected={scopeFilter === 'ALL'}
                             onClick={() => handleScopeChange('ALL')}
                             className={cn(
-                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                "inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
                                 scopeFilter === 'ALL'
                                     ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
                                     : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
@@ -340,7 +340,7 @@ export function CategoryCatalogueStrip({
                             aria-selected={scopeFilter === 'PRODUCT'}
                             onClick={() => handleScopeChange('PRODUCT')}
                             className={cn(
-                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                "inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
                                 scopeFilter === 'PRODUCT'
                                     ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
                                     : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
@@ -363,7 +363,7 @@ export function CategoryCatalogueStrip({
                             aria-selected={scopeFilter === 'SERVICE'}
                             onClick={() => handleScopeChange('SERVICE')}
                             className={cn(
-                                "inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
+                                "inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]/30",
                                 scopeFilter === 'SERVICE'
                                     ? "bg-[#0b2447] text-white shadow-md ring-2 ring-[#0b2447]/20"
                                     : "bg-white text-slate-700 hover:bg-slate-100/90 border border-slate-200/90 hover:border-slate-300"
@@ -382,7 +382,7 @@ export function CategoryCatalogueStrip({
                 )}
 
                 {/* Clean, Non-Scrolling Responsive Grid Layout */}
-                <div role="tabpanel" id="category-panel" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
+                <div role="tabpanel" id="category-panel" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2.5 sm:gap-4.5">
                     {displayedCategories.map((category, index) => {
                         const selected = String(selectedCategoryId || '') === String(category.id);
                         return (

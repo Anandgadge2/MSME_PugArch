@@ -1116,6 +1116,7 @@ function ActionDialog({ kind, delivery, onClose }: { kind: string; delivery: Del
             <DispatchDetailsModal
                 isOpen={true}
                 delivery={delivery}
+                isBuyer={false}
                 onClose={onClose}
                 onSuccess={onClose}
             />
@@ -1674,6 +1675,18 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                             (poNo && i.invoiceNumber?.includes(poNo))
                         ) || list[0];
                         if (match) {
+                            if (match.id) {
+                                try {
+                                    const detailRes = await api.fetch(`/api/invoices/${match.id}`);
+                                    if (detailRes.ok) {
+                                        const detailData = await detailRes.json();
+                                        setFetchedInvoice(detailData?.invoice || detailData);
+                                        return;
+                                    }
+                                } catch {
+                                    // fallback to match
+                                }
+                            }
                             setFetchedInvoice(match);
                         }
                     }
@@ -1697,48 +1710,68 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
         const dateRaw = fetchedInvoice?.createdAt || po?.invoices?.[0]?.createdAt;
         const dateStr = formatDate(dateRaw || new Date());
 
-        const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || po?.amount || 0);
+        const poVal = Number(po?.amount ?? (po as any)?.totalValue ?? delivery.purchaseOrder?.amount ?? 0);
+        const totalVal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || poVal || 0);
+
+        const formatAddress = (...parts: (string | null | undefined)[]) => {
+            const valid = parts.filter(
+                p => p && typeof p === 'string' && p.trim().length > 0 && p.trim() !== 'null' && p.trim() !== 'undefined'
+            );
+            return valid.length > 0 ? valid.map(p => p!.trim()).join(', ') : '';
+        };
 
         const sellerUser = fetchedInvoice?.seller || po?.seller;
         const sellerOrg = (sellerUser as any)?.organization || (sellerUser as any)?.sellerProfile?.organization;
-        const sellerProfile = sellerOrg?.profile || (sellerUser as any)?.organizationProfile || (sellerUser as any)?.sellerProfile;
+        const sellerProfile = (sellerUser as any)?.sellerProfile || sellerOrg?.profile || (sellerUser as any)?.organizationProfile;
         const sellerReg = (sellerUser as any)?.registrationDetails || {};
 
-        const sellerName = sellerOrg?.organizationName || sellerOrg?.name || (sellerUser as any)?.organizationName || sellerUser?.name || 'N/A';
-        const sellerEmail = sellerUser?.email || sellerReg?.email || undefined;
-        const sellerPhone = sellerUser?.mobile || sellerReg?.phone || sellerReg?.mobile || undefined;
-        const sellerAddress = sellerOrg?.address || sellerProfile?.address || sellerReg?.address || (sellerUser as any)?.address || 'N/A';
-        const sellerGstin = sellerOrg?.gstin || sellerProfile?.gstin || sellerReg?.gstin || undefined;
-        const sellerCin = sellerOrg?.cin || sellerProfile?.cin || sellerReg?.cin || undefined;
+        const sellerName = sellerOrg?.organizationName || sellerProfile?.businessName || sellerReg?.businessName || sellerReg?.companyName || sellerProfile?.nameAsInPan || sellerUser?.name || 'N/A';
+        const sellerEmail = sellerUser?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || undefined;
+        const sellerPhone = sellerUser?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || undefined;
+        const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerReg?.registeredOfficeAddress || sellerReg?.address || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || 'N/A';
+        const sellerGstin = sellerOrg?.gstin || sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerReg?.gstin || sellerReg?.gstDetails?.gstin || sellerReg?.gst || undefined;
+        const sellerCin = sellerOrg?.cinNumber || sellerOrg?.cin || sellerProfile?.cinNumber || sellerProfile?.cin || sellerReg?.cin || undefined;
 
-        const resolvedSellerLogo = logoUrl || sellerProfile?.logoUrl || sellerReg?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/download` : null);
+        const resolvedSellerLogo = logoUrl || sellerReg?.logoUrl || sellerOrg?.profile?.logoUrl || (sellerOrg?.organizationLogoFileId ? `/api/files/${sellerOrg.organizationLogoFileId}/view` : null) || null;
         const resolvedSellerStamp = stampUrl || sellerReg?.stampUrl || null;
         const resolvedSellerSig = signatureUrl || sellerReg?.signatureUrl || null;
 
         const buyerUser = fetchedInvoice?.buyer || po?.buyer;
         const buyerOrg = (buyerUser as any)?.organization || (buyerUser as any)?.buyerProfile?.organization;
-        const buyerProfile = buyerOrg?.profile || (buyerUser as any)?.organizationProfile || (buyerUser as any)?.buyerProfile;
+        const buyerProfile = (buyerUser as any)?.buyerProfile || buyerOrg?.profile || (buyerUser as any)?.organizationProfile;
         const buyerReg = (buyerUser as any)?.registrationDetails || {};
 
-        const buyerName = buyerOrg?.organizationName || buyerOrg?.name || (buyerUser as any)?.organizationName || buyerUser?.name || 'N/A';
-        const buyerAddress = po?.deliveryAddress || buyerOrg?.address || buyerProfile?.address || buyerReg?.address || (buyerUser as any)?.address || 'N/A';
-        const buyerPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerReg?.pan || undefined;
-        const buyerGstin = buyerOrg?.gstin || buyerProfile?.gstin || buyerReg?.gstin || undefined;
+        const poDeliv = (po?.deliveryAddress as any);
+        const buyerName = buyerOrg?.organizationName || buyerProfile?.businessName || buyerProfile?.organizationName || buyerReg?.businessName || buyerReg?.companyName || buyerUser?.name || 'N/A';
+        const buyerAddress = poDeliv
+            ? (typeof poDeliv === 'string' ? poDeliv : formatAddress(poDeliv?.addressLine1, poDeliv?.addressLine2, poDeliv?.city, poDeliv?.state, poDeliv?.pincode, poDeliv?.country || 'INDIA'))
+            : (buyerProfile?.registeredAddress || buyerOrg?.address || buyerReg?.officeZoneName || buyerReg?.address || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || 'N/A');
+        const buyerPan = buyerOrg?.panNumber || buyerProfile?.pan || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.orgPan || undefined;
+        const buyerGstin = buyerOrg?.gstin || buyerProfile?.gst || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || undefined;
 
-        const bankName = sellerReg?.bankName || sellerProfile?.bankName || 'N/A';
-        const accountNo = sellerReg?.accountNumber || sellerProfile?.accountNumber || sellerReg?.accountNo || 'N/A';
-        const ifscCode = sellerReg?.ifscCode || sellerProfile?.ifscCode || 'N/A';
+        const bankName = sellerReg?.bankDetails?.bankName || sellerReg?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerProfile?.bankName || 'Kotak Mahindra Bank';
+        const accountNo = sellerReg?.bankDetails?.accountNumber || sellerReg?.accountNumber || sellerProfile?.bankAccounts?.[0]?.accountNumberMasked || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerProfile?.bankAccountNo || 'N/A';
+        const ifscCode = sellerReg?.bankDetails?.ifscCode || sellerReg?.ifscCode || sellerProfile?.bankAccounts?.[0]?.ifsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerProfile?.bankIfsc || 'N/A';
+        const accountName = sellerReg?.bankDetails?.accountHolderName || sellerReg?.accountHolderName || sellerProfile?.bankAccounts?.[0]?.holderName || sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
 
-        const rawItems: any[] = po?.items || [];
+        const rawItems: any[] = fetchedInvoice?.items || po?.items || [];
         const items: TaxInvoiceItem[] = rawItems.length > 0
             ? rawItems.map((item, idx) => {
                 const qty = Number(item.quantity || 1);
-                const price = Number(item.unitPrice || 0);
-                const amount = Number(item.totalAmount || qty * price || totalVal);
+                let price = Number(item.unitPrice || 0);
+                let amount = Number(item.taxableAmount || item.totalAmount || (qty * price) || totalVal);
+                if (qty > 1 && totalVal > 0 && (price * qty) > (totalVal * 1.5)) {
+                    price = Number((price / qty).toFixed(2));
+                    amount = Number((price * qty).toFixed(2));
+                } else if (!amount && price > 0) {
+                    amount = Number((price * qty).toFixed(2));
+                } else if (amount > 0 && (!price || price === amount)) {
+                    price = Number((amount / qty).toFixed(2));
+                }
                 return {
                     srNo: idx + 1,
-                    description: item.itemName || po?.title || 'Order Item',
-                    hsn: '84719000',
+                    description: item.itemName || item.description || po?.title || 'Order Item',
+                    hsn: (item as any).hsnCode || (item as any).hsn || '-',
                     qty,
                     priceUnit: price || (amount / Math.max(qty, 1)),
                     amount
@@ -1748,24 +1781,45 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                 {
                     srNo: 1,
                     description: po?.title || `Purchase Order #${delivery.purchaseOrderId}`,
-                    hsn: '84719000',
+                    hsn: '-',
                     qty: 1,
-                    priceUnit: totalVal,
-                    amount: totalVal
+                    priceUnit: totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0,
+                    amount: totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0
                 }
             ];
 
-        const subtotal = Number(fetchedInvoice?.taxableAmount) || items.reduce((sum, item) => sum + Number(item.amount || 0), 0) || totalVal;
-        const cgstAmount = Number(fetchedInvoice?.cgstAmount) || Math.round(subtotal * 0.09 * 100) / 100;
-        const sgstAmount = Number(fetchedInvoice?.sgstAmount) || Math.round(subtotal * 0.09 * 100) / 100;
-        const igstAmount = Number(fetchedInvoice?.igstAmount) || undefined;
-        const grandTotal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount) || Math.round((subtotal + cgstAmount + sgstAmount) * 100) / 100;
+        let computedTaxable = 0;
+        items.forEach(it => {
+            computedTaxable += Number(it.amount) || 0;
+        });
+        const subtotal = computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : Number(fetchedInvoice?.taxableAmount || (totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0));
+
+        // Interstate detection based on GSTIN codes or different registered states
+        const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
+        const buyerGstinCode = (buyerGstin || '').trim().substring(0, 2);
+        const hasDifferentGstCodes = /^\d{2}$/.test(sellerGstinCode) && /^\d{2}$/.test(buyerGstinCode) && sellerGstinCode !== buyerGstinCode;
+        const hasDifferentStates = Boolean(
+            (sellerProfile?.state || sellerReg?.state) &&
+            (buyerProfile?.state || buyerReg?.state) &&
+            String(sellerProfile?.state || sellerReg?.state).trim().toLowerCase() !== String(buyerProfile?.state || buyerReg?.state).trim().toLowerCase()
+        );
+        const isInterstate = Boolean(fetchedInvoice?.interstate || Number(fetchedInvoice?.igstAmount) > 0 || hasDifferentGstCodes || hasDifferentStates);
+
+        const buyerStateName = buyerProfile?.state || buyerReg?.state || (buyerGstinCode === '21' ? 'Odisha' : 'Other State');
+        const placeOfSupply = isInterstate
+            ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
+            : `${sellerProfile?.state || sellerReg?.state || 'Maharashtra'} - State (CGST + SGST)`;
+
+        const cgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.cgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
+        const sgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.sgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
+        const igstAmount = isInterstate ? (Number(fetchedInvoice?.igstAmount) || Math.round(subtotal * 0.18 * 100) / 100) : undefined;
+        const grandTotal = isInterstate ? Math.round((subtotal + (igstAmount || 0)) * 100) / 100 : Math.round((subtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100;
 
         return {
             copyType,
             invoiceNumber: invNo,
             dateStr,
-            placeOfSupply: fetchedInvoice?.interstate ? 'Other State (IGST)' : (sellerOrg?.state || 'State Registered'),
+            placeOfSupply,
             seller: {
                 name: sellerName,
                 address: sellerAddress,
@@ -1789,18 +1843,18 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             },
             items,
             subtotal,
-            cgstRate: 9,
+            cgstRate: isInterstate ? undefined : 9,
             cgstAmount,
-            sgstRate: 9,
+            sgstRate: isInterstate ? undefined : 9,
             sgstAmount,
-            igstRate: igstAmount ? 18 : undefined,
+            igstRate: isInterstate ? 18 : undefined,
             igstAmount,
             totalAmount: grandTotal,
             bankDetails: {
                 bankName,
                 accountNo,
                 ifscCode,
-                accountName: sellerName
+                accountName
             }
         };
     }, [delivery, activeDelivery, copyType, logoUrl, stampUrl, signatureUrl, existingInvoiceDoc, fetchedInvoice]);

@@ -433,8 +433,8 @@ export function SignatureStampUploadModal({
                   </div>
                 )}
                 <div className="text-xs space-y-1">
-                  <p className="font-black text-slate-800 text-[11px]">Bank Details: Verified</p>
-                  <p className="text-[10px] text-slate-500 font-mono">STATE BANK OF INDIA • SBIN0001234</p>
+                  <p className="font-black text-slate-800 text-[11px]">Brand Identity</p>
+                  <p className="text-[10px] text-slate-500 font-mono">Invoice Header & Verification</p>
                 </div>
               </div>
               <div className="relative flex items-center justify-center p-2 rounded-lg border border-slate-200 min-w-[140px] h-[75px] bg-slate-50">

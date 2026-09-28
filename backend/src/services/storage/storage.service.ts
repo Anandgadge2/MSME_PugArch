@@ -845,6 +845,20 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
       expiresInSeconds: result.expiresInSeconds,
       timestamp: Date.now()
     });
+
+    // Also persist to disk cache so subsequent requests hit instant local disk fast-path
+    try {
+      if (assetObj?.key) {
+        const localTarget = path.resolve(process.cwd(), 'uploads', assetObj.key);
+        fs.mkdirSync(path.dirname(localTarget), { recursive: true });
+        if (!fs.existsSync(localTarget)) {
+          fs.writeFileSync(localTarget, buffer);
+        }
+      }
+    } catch {
+      // Non-blocking disk cache
+    }
+
     return result;
   };
 

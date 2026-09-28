@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target, Lock
+  ShieldCheck, AlertCircle, Target, Lock, Loader2
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -110,6 +110,8 @@ export default function BidResultsPage() {
   const [isCompletingTechEvalSuccess, setIsCompletingTechEvalSuccess] = useState(false);
   const [isOpeningFinancialEval, setIsOpeningFinancialEval] = useState(false);
   const [isOpeningFinancialEvalSuccess, setIsOpeningFinancialEvalSuccess] = useState(false);
+  const [isGeneratingPO, setIsGeneratingPO] = useState(false);
+  const [poIssuedLocally, setPoIssuedLocally] = useState(false);
 
   const isTwoPacketMode = React.useMemo(() => {
     if (!bid) return false;
@@ -197,6 +199,7 @@ export default function BidResultsPage() {
   const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
   
   const isContractFinalized = React.useMemo(() => {
+    if (poIssuedLocally) return true;
     if (isAwardOfferPending || isPriceMatchPending) return false;
     const rawStatus = String(bid?.status || '').toUpperCase();
     const rawStage = String(bid?.lifecycleStage || '').toUpperCase();
@@ -204,7 +207,11 @@ export default function BidResultsPage() {
       (bid as any)?.purchaseOrderId ||
       (bid as any)?.purchaseOrder ||
       (bid as any)?.activeOrder ||
-      (Array.isArray((bid as any)?.purchaseOrders) && (bid as any).purchaseOrders.length > 0)
+      (Array.isArray((bid as any)?.purchaseOrders) && (bid as any).purchaseOrders.length > 0) ||
+      (activeAward as any)?.purchaseOrderId ||
+      (activeAward as any)?.purchaseOrder ||
+      (activeAward as any)?.order ||
+      (Array.isArray((activeAward as any)?.purchaseOrders) && (activeAward as any).purchaseOrders.length > 0)
     );
     return (
       hasActivePo ||
@@ -212,7 +219,7 @@ export default function BidResultsPage() {
       ['PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
       ranking.some(r => String((r as any).finalStatus || '').toUpperCase() === 'ORDERED')
     );
-  }, [bid, ranking, isAwardOfferPending, isPriceMatchPending]);
+  }, [bid, ranking, isAwardOfferPending, isPriceMatchPending, activeAward, poIssuedLocally]);
 
   const isBidAlreadyAwarded = Boolean(isContractFinalized);
 
@@ -518,7 +525,13 @@ export default function BidResultsPage() {
             || (r.sellerUserId || r.sellerId ? `Supplier #${r.sellerUserId || r.sellerId}` : `Supplier ${idx + 1}`);
           const contactPerson = r.contactPerson || r.sellerName || r.sellerUser?.name || r.seller?.name || 'Representative';
 
-          const lineItems = (Array.isArray(r.lineItems) && r.lineItems.length > 0)
+          const tenderItemsList: any[] = [
+            ...(Array.isArray(data?.items) ? data.items : []),
+            ...(Array.isArray(data?.technicalPacket?.items) ? data.technicalPacket.items : []),
+            ...(Array.isArray(data?.technicalPacket?.boq) ? data.technicalPacket.boq : []),
+          ];
+
+          const rawCandidateLineItems = (Array.isArray(r.lineItems) && r.lineItems.length > 0)
             ? r.lineItems
             : (Array.isArray(ackData.lineItems) && ackData.lineItems.length > 0)
             ? ackData.lineItems
@@ -534,6 +547,16 @@ export default function BidResultsPage() {
             ? descData.lineItems
             : [];
 
+          const lineItems = rawCandidateLineItems.map((li: any, lIdx: number) => {
+            const matchedTender = tenderItemsList[lIdx] || tenderItemsList[0] || {};
+            const resolvedHsn = li.hsnCode || li.hsn_sac_code || li.hsn || li.hsnSac || li.hsn_code || matchedTender.hsn_sac_code || matchedTender.hsnCode || matchedTender.hsn || '—';
+            return {
+              ...li,
+              hsn: resolvedHsn,
+              hsnCode: resolvedHsn,
+            };
+          });
+
           const docs = normalizeQuotationDocuments({
             ...r,
             acknowledgement: ackData,
@@ -544,6 +567,7 @@ export default function BidResultsPage() {
           const offeredQuantity = r.offeredQuantity || ackData.offeredQuantity || respData.offeredQuantity || (totalQty > 0 ? totalQty : (r.quantity || 1));
 
           const firstLine = lineItems.length > 0 ? lineItems[0] : {};
+          const resolvedDeliveryTimeline = r.deliveryTimeline || ackData.deliveryTimeline || respData.deliveryTimeline || (r.deliveryDays ? `${r.deliveryDays} Days` : '') || data?.schedule?.requiredByDate || data?.basics?.requiredByDate || data?.terms?.deliveryTerms || 'Standard';
 
           return {
             id: r.id || `res-${idx}`,
@@ -580,7 +604,7 @@ export default function BidResultsPage() {
             gstPercentage: Number(r.gstPercentage || ackData.gstPercentage || respData.gstPercentage || 0),
             totalAmount: quotedAmt,
             offeredQuantity,
-            deliveryTimeline: r.deliveryTimeline || ackData.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+            deliveryTimeline: resolvedDeliveryTimeline,
             documents: docs,
             lineItems: lineItems,
             acknowledgement: ackData,
@@ -608,7 +632,7 @@ export default function BidResultsPage() {
               email: r.sellerEmail || r.sellerUser?.email || r.seller?.email || '',
               mobile: r.sellerMobile || r.sellerUser?.mobile || r.seller?.mobile || '',
               submittedAt: r.createdAt || r.submittedAt,
-              deliveryTimeline: r.deliveryTimeline || ackData.deliveryTimeline || respData.deliveryTimeline || 'Standard',
+              deliveryTimeline: resolvedDeliveryTimeline,
               complianceRemarks: r.complianceRemarks || ackData.complianceRemarks || 'Compliant',
               rfqNotes: r.message || respData.message || r.offeredItemDescription || '',
               terms: r.terms || ackData.terms || respData.terms || '',
@@ -992,13 +1016,27 @@ export default function BidResultsPage() {
 
             if (isAwardAccepted) {
               if (isThisRowAwarded && isBuyer) {
+                if (isContractFinalized) {
+                  return (
+                    <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 px-3 text-[10px] font-black uppercase tracking-wide">
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Awarded &amp; PO Issued
+                    </span>
+                  );
+                }
                 return (
                   <button
+                    type="button"
+                    disabled={isGeneratingPO}
                     onClick={handleGeneratePO}
-                    className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs cursor-pointer"
+                    className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3 text-[10px] font-black transition shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     title="Generate and issue Purchase Order to winning supplier"
                   >
-                    <FileText className="h-3.5 w-3.5" /> Issue PO
+                    {isGeneratingPO ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="h-3.5 w-3.5" />
+                    )}
+                    {isGeneratingPO ? 'Issuing PO...' : 'Issue PO'}
                   </button>
                 );
               }
@@ -1148,13 +1186,19 @@ export default function BidResultsPage() {
   };
 
   const handleGeneratePO = async () => {
-    if (!bid) return;
+    if (!bid || isGeneratingPO || isContractFinalized) return;
     try {
-      await procurementBidApi.generatePO(bid.id, {});
+      setIsGeneratingPO(true);
+      await procurementBidApi.generatePO(bid.id, { awardId: activeAward?.id });
+      setPoIssuedLocally(true);
       toast.success('Purchase Order generated & issued successfully! Standby bidders have been politely notified.');
-      loadBid();
+      window.dispatchEvent(new CustomEvent('orders:updated', { detail: { bidId: bid.id } }));
+      window.dispatchEvent(new CustomEvent('award:accepted', { detail: { bidId: bid.id } }));
+      await loadBid();
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Failed to generate Purchase Order.');
+    } finally {
+      setIsGeneratingPO(false);
     }
   };
 
@@ -1548,51 +1592,7 @@ export default function BidResultsPage() {
     );
   };
 
-  // Render dedicated Full View Page when a quotation is selected
-  if (selectedResult) {
-    return (
-      <PageShell>
-        <SupplierQuotationDetailView
-          result={selectedResult}
-          bid={bid}
-          bidId={bidId}
-          onBack={handleBackFromQuotationDetail}
-          onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
-          onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
-          onOpenTechnicalEvaluation={(res) => {
-            setSelectedForTechEval({
-              ...(res.rawParticipation || {}),
-              ...res,
-              rawParticipation: res.rawParticipation || res,
-            });
-          }}
-        />
 
-        {/* Stage 1 Technical Evaluation Modal (Accessible when viewing Quotation Detail) */}
-        {selectedForTechEval && (
-          <TechnicalEvaluationModal
-            isOpen={Boolean(selectedForTechEval)}
-            onClose={() => setSelectedForTechEval(null)}
-            procurementId={bidId}
-            participation={selectedForTechEval}
-            readOnly={true}
-            isFinancialStageOpened={true}
-            isStage2Active={true}
-            bidStatus={bid?.status}
-            isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
-            packetType={bid?.packetType}
-            onSuccess={() => {
-              loadBid();
-            }}
-          />
-        )}
-
-        {/* Contract Award Confirmation Modal */}
-        {renderAwardModal()}
-
-      </PageShell>
-    );
-  }
 
   return (
     <PageShell>
@@ -1971,12 +1971,39 @@ export default function BidResultsPage() {
                 {isBuyer && (
                   <button
                     type="button"
+                    disabled={isGeneratingPO}
                     onClick={handleGeneratePO}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-black shadow-xs transition shrink-0 cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-black shadow-xs transition shrink-0 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <FileText className="h-4 w-4" /> Issue Purchase Order Now
+                    {isGeneratingPO ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    {isGeneratingPO ? 'Issuing Purchase Order...' : 'Issue Purchase Order Now'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Buyer: PO Issued Success Banner */}
+            {isContractFinalized && isBuyer && (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
+                    <CheckCircle2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-emerald-950">Purchase Order Issued &amp; Active</h4>
+                    <p className="text-xs text-emerald-700 font-medium">
+                      Official Purchase Order has been issued to the awarded supplier. The contract is active and fulfillment is underway.
+                    </p>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-800 px-3 py-1.5 text-xs font-black shrink-0">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+                  PO Issued
+                </span>
               </div>
             )}
 
@@ -2180,13 +2207,26 @@ export default function BidResultsPage() {
 
                           if (isAwardAccepted) {
                             if (isThisRowAwarded && isBuyer) {
+                              if (isContractFinalized) {
+                                return (
+                                  <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wide">
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Awarded &amp; PO Issued
+                                  </span>
+                                );
+                              }
                               return (
                                 <button
                                   type="button"
+                                  disabled={isGeneratingPO}
                                   onClick={handleGeneratePO}
-                                  className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer"
+                                  className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
-                                  <FileText className="h-3.5 w-3.5" /> Issue PO
+                                  {isGeneratingPO ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-3.5 w-3.5" />
+                                  )}
+                                  {isGeneratingPO ? 'Issuing PO...' : 'Issue PO'}
                                 </button>
                               );
                             }
@@ -2554,6 +2594,26 @@ export default function BidResultsPage() {
           packetType={bid?.packetType}
           onSuccess={() => {
             loadBid();
+          }}
+        />
+      )}
+
+      {/* Supplier Quotation Breakdown Modal (In-Place Dialog) */}
+      {selectedResult && (
+        <SupplierQuotationDetailModal
+          isOpen={Boolean(selectedResult)}
+          onClose={handleBackFromQuotationDetail}
+          result={selectedResult}
+          bid={bid}
+          bidId={bidId}
+          onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
+          onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
+          onOpenTechnicalEvaluation={(res) => {
+            setSelectedForTechEval({
+              ...(res.rawParticipation || {}),
+              ...res,
+              rawParticipation: res.rawParticipation || res,
+            });
           }}
         />
       )}

@@ -115,7 +115,7 @@ export const buildGovernmentGradeEmailHtml = (options: GovernmentGradeEmailOptio
   const noticeRef = options.noticeRef || `JSG-MSME/NOTIF/${Date.now().toString().slice(-6)}`;
   const badgeVariant = options.badgeVariant || 'primary';
   const dateTimeStr = formatIstDateTime();
-  const helpdeskEmail = options.helpdeskEmail || 'support@jsgsmile.odisha.gov.in';
+  const helpdeskEmail = options.helpdeskEmail || 'jsgsmileportal@gmail.com';
 
   // Badge & alert styling palettes
   const colorPalettes = {

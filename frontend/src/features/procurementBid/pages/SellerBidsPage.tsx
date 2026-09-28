@@ -373,7 +373,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         if (pb.title) {
           const key = String(pb.title).trim().toLowerCase();
           const existing = publicBidMap.get(key);
-          if (!existing || (/^(RFQ|RFP|TND|BID|REQ|LT|RA|RC)-/i.test(String(pb.bidNumber)) && !/^(RFQ|RFP|TND|BID|REQ|LT|RA|RC)-/i.test(String(existing.bidNumber)))) {
+          if (!existing || Number(pb.id || 0) > Number(existing.id || 0)) {
             publicBidMap.set(key, pb);
           }
         }
@@ -388,9 +388,9 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       
       const normalizedMarketplace = marketplaceResponses.map((res: any) => {
         const titleKey = String(res.requirement?.title || '').trim().toLowerCase();
-        const matched = (titleKey ? publicBidMap.get(titleKey) : null) ||
-                        publicBidMap.get(`req-${res.requirementId}`) || 
-                        publicBidMap.get(String(res.requirementId));
+        const matched = publicBidMap.get(`req-${res.requirementId}`) || 
+                        publicBidMap.get(String(res.requirementId)) ||
+                        (titleKey ? publicBidMap.get(titleKey) : null);
 
         const realBidNumber = matched?.bidNumber || res.requirement?.bidNumber || res.requirement?.tenderId;
         const canonicalId = realBidNumber || matched?.id || res.requirementId;

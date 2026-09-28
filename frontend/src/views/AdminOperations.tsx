@@ -598,9 +598,9 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
             </div>
           </div>
 
-          {/* Table list view for Desktop */}
+          {/* Table list view */}
           {viewMode === "list" && (
-            <div className="hidden md:block">
+            <div>
               <DataTable<any>
                 data={filteredRecords}
                 columns={operationColumns}
@@ -797,7 +797,8 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
           )}
 
           {/* Responsive Card Grid for Mobile */}
-          <div className="md:hidden grid grid-cols-1 gap-4 p-4 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
+          {viewMode === "grid" && (
+            <div className="md:hidden grid grid-cols-1 gap-4 p-4 bg-slate-50/50 rounded-b-2xl border-t border-slate-100">
             {loading ? (
               [1, 2, 3].map((i) => (
                 <div key={i} className="animate-pulse rounded-2xl border border-slate-100 bg-white p-4 shadow-sm space-y-3">
@@ -957,6 +958,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
               );
             })}
           </div>
+          )}
           {viewMode === "grid" && !loading && totalRecords > 0 && (
             <div>
               <Pagination page={page} pageSize={pageSize} total={totalRecords} onPageChange={setPage} onPageSizeChange={setPageSize} />

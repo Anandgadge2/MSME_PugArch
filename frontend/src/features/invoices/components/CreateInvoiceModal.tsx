@@ -147,6 +147,25 @@ export function CreateInvoiceModal({
     ? (selectedPurchaseOrder?.totalValue || selectedPurchaseOrder?.amount || 0)
     : ((Number(selectedQuotation?.offeredPrice || 0) * Number(selectedQuotation?.offeredQuantity || 1)) || Number(selectedQuotation?.offeredPrice || 0));
 
+  const selectedBaseValue = useMemo(() => {
+    const gst = parseFloat(invoiceGstRate) || 18;
+    if (sourceType === 'po') {
+      const gross = Number(selectedPurchaseOrder?.totalValue || selectedPurchaseOrder?.amount || 0);
+      const metaBase = Number(selectedPurchaseOrder?.metadata?.baseAmount || selectedPurchaseOrder?.metadata?.taxableAmount || 0);
+      if (metaBase > 0) return metaBase;
+      return gross > 0 ? Math.round((gross / (1 + gst / 100)) * 100) / 100 : 0;
+    } else {
+      const offeredPrice = Number(selectedQuotation?.offeredPrice || 0);
+      const offeredQty = Number(selectedQuotation?.offeredQuantity || 1);
+      const qTotal = Number(selectedQuotation?.totalAmount || 0);
+      const qBase = (offeredPrice * offeredQty) || Number(selectedQuotation?.quotedAmount || 0);
+      if (qTotal > 0 && qBase >= qTotal) {
+        return Math.round((qTotal / (1 + gst / 100)) * 100) / 100;
+      }
+      return qBase > 0 ? qBase : (qTotal > 0 ? Math.round((qTotal / (1 + gst / 100)) * 100) / 100 : 0);
+    }
+  }, [sourceType, selectedPurchaseOrder, selectedQuotation, invoiceGstRate]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl">
@@ -406,6 +425,11 @@ export function CreateInvoiceModal({
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Original Order Value: <strong className="text-slate-800">{formatCurrency(selectedTotalValue)}</strong>
+                      {selectedBaseValue > 0 && selectedBaseValue < selectedTotalValue && (
+                        <span className="ml-1 text-slate-500">
+                          (Taxable Base: <strong className="text-slate-800">{formatCurrency(selectedBaseValue)}</strong>)
+                        </span>
+                      )}
                     </p>
                   </div>
                   <Button
@@ -414,10 +438,11 @@ export function CreateInvoiceModal({
                     size="sm"
                     className="h-7 text-[10px] font-bold bg-white text-blue-800 border-blue-200 shrink-0 cursor-pointer hover:bg-blue-50"
                     onClick={() => {
-                      if (selectedTotalValue) onInvoiceAmountChange(String(selectedTotalValue));
+                      const targetAmt = selectedBaseValue > 0 ? selectedBaseValue : selectedTotalValue;
+                      if (targetAmt) onInvoiceAmountChange(String(targetAmt));
                     }}
                   >
-                    Reset Amount
+                    Reset Base Amount
                   </Button>
                 </div>
               ) : (

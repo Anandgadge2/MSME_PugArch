@@ -64,8 +64,8 @@ export interface DataTableProps<T> {
   containerFooter?: React.ReactNode;
   /**
    * Layout presentation on mobile screens (< sm breakpoint).
-   * 'cards' (default): renders fluid, accessible cards with clear field-value pairs and dedicated action bar.
-   * 'scroll': renders standard table with horizontal overflow scrolling.
+   * 'scroll' (default): renders standard table with horizontal overflow scrolling.
+   * 'cards': renders fluid, accessible cards with clear field-value pairs and dedicated action bar.
    */
   mobileLayout?: 'cards' | 'scroll';
 }
@@ -103,7 +103,7 @@ export function DataTable<T>({
   caption,
   footer,
   containerFooter,
-  mobileLayout = 'cards',
+  mobileLayout = 'scroll',
 }: DataTableProps<T>) {
   const safePageSize = Math.max(1, pageSize || 10);
   const safePage = Math.max(1, page || 1);
@@ -301,7 +301,7 @@ export function DataTable<T>({
       {/* 2. Desktop Table View (>= sm screens or when mobileLayout === 'scroll') */}
       <div
         className={cn(
-          "w-full max-w-full overflow-x-auto",
+          "w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x",
           mobileLayout === 'cards' ? "hidden sm:block" : "block",
           scrollWrapperClassName
         )}

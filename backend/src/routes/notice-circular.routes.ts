@@ -156,12 +156,6 @@ router.post('/admin/notices/broadcast', ...adminOnly, wrap(async (req, res) => {
         isHighlight: true
       },
       {
-        label: 'Priority Level',
-        value: body.priority.toUpperCase(),
-        color: body.priority === 'urgent' ? '#b91c1c' : body.priority === 'high' ? '#b45309' : '#1e3a8a',
-        isHighlight: true
-      },
-      {
         label: 'Issued Date',
         value: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
       }

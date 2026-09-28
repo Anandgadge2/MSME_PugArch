@@ -577,10 +577,13 @@ export function PurchaseOrderReceiptModal({
   const shipVia =
     order.deliveryType ? readableStatus(order.deliveryType) : 'Standard Ground Logistics';
 
-  const trackingNumber =
+  const rawTracking =
     activeDelivery?.trackingNumber ||
     (order.deliveryTrackings && order.deliveryTrackings[0]?.trackingNumber) ||
-    'N/A';
+    null;
+  const isPendingShipment = ['issued', 'generated', 'pending acceptance', 'accepted'].includes(String(order.status || '').toLowerCase()) ||
+    ['CREATED', 'PENDING'].includes(String(activeDelivery?.status || ''));
+  const trackingNumber = rawTracking || (isPendingShipment ? 'Pending Dispatch' : 'N/A');
 
   const poDate = formatIsoDate(order.createdAt);
   const dueDate = formatIsoDate(order.expectedDelivery || order.createdAt);
@@ -595,16 +598,79 @@ export function PurchaseOrderReceiptModal({
         totalAmount: Number(order.amount || order.totalValue || 0),
       }]);
 
+  const grandTotal = Number(order.amount || order.totalValue || 0);
+  const rawGstRate = Number(order.metadata?.gstRate || 18);
+  const metaGstAmount = Number(order.metadata?.gstAmount || 0);
+  const metaBase = Number(order.metadata?.baseAmount || order.metadata?.taxableAmount || order.metadata?.quotationPricing?.subtotal || 0);
+
+  // If order explicitly recorded gstAmount and baseAmount, use them directly:
+  // Otherwise, if grandTotal > 0 and rawGstRate > 0, compute taxableBase = grandTotal / (1 + rawGstRate/100)
+  let taxableBase: number;
+  let taxAmount: number;
+  if (metaBase > 0 && metaGstAmount > 0 && Math.abs((metaBase + metaGstAmount) - grandTotal) < 5) {
+    taxableBase = metaBase;
+    taxAmount = metaGstAmount;
+  } else if (metaBase > 0 && metaBase < grandTotal) {
+    taxableBase = metaBase;
+    taxAmount = Math.round((grandTotal - metaBase) * 100) / 100;
+  } else if (grandTotal > 0 && rawGstRate > 0) {
+    taxableBase = Math.round((grandTotal / (1 + rawGstRate / 100)) * 100) / 100;
+    taxAmount = Math.max(0, Math.round((grandTotal - taxableBase) * 100) / 100);
+  } else {
+    taxableBase = grandTotal;
+    taxAmount = 0;
+  }
+
+  // Determine Inter-state (IGST) vs Intra-state (CGST + SGST) based on Buyer and Seller GSTIN state codes
+  const buyerStateCode = buyerGstin && buyerGstin !== 'N/A' ? buyerGstin.slice(0, 2) : '';
+  const sellerStateCode = sellerGstin && sellerGstin !== 'N/A' ? sellerGstin.slice(0, 2) : '';
+  const isInterstate = Boolean(buyerStateCode && sellerStateCode && buyerStateCode !== sellerStateCode);
+  const cgstAmount = !isInterstate && taxAmount > 0 ? Math.round((taxAmount / 2) * 100) / 100 : 0;
+  const sgstAmount = !isInterstate && taxAmount > 0 ? Math.round((taxAmount - cgstAmount) * 100) / 100 : 0;
+  const igstAmount = isInterstate ? taxAmount : 0;
+  const taxLabel = isInterstate ? `IGST (${rawGstRate}%)` : `TAX / GST (${rawGstRate}%)`;
+
   const displayItems = rawItems.map((it: any, idx: number) => {
     const name = it.product?.name || it.itemName || it.name || it.title || `Item ${idx + 1}`;
     const qty = Number(it.quantity || 1);
-    const unitPrice = Number(it.unitPrice || (qty > 0 ? Number(it.totalAmount || order.totalValue || 0) / qty : 0));
-    const total = Number(it.totalAmount || qty * unitPrice);
+    let unitPrice = Number(it.unitPrice || 0);
+
+    // Guard against legacy bug where unitPrice was set to the entire lot gross amount:
+    if (unitPrice === 0 || (qty > 1 && (unitPrice * qty) > (grandTotal * 1.2)) || (unitPrice >= grandTotal && qty > 1)) {
+      unitPrice = Math.round(((taxableBase > 0 ? taxableBase : grandTotal) / (qty > 0 ? qty : 1)) * 100) / 100;
+    }
+    const total = Math.round(qty * unitPrice * 100) / 100;
     const specs = it.description || it.specifications?.description || (it.product?.brand ? `Brand: ${it.product.brand}` : '');
     const productCode = it.product?.code || (it.productId ? `PRD-${it.productId}` : `SKU-${idx + 101}`);
-    const hsn = it.hsnCode || it.product?.hsnCode || 'N/A';
-    const unit = it.unitOfMeasure || it.unit || it.product?.unitOfMeasure || 'nos';
-    const taxRate = it.taxRate !== undefined && it.taxRate !== null ? `${it.taxRate}%` : '18%';
+    
+    // Comprehensive HSN resolution (check item, product, specs, order metadata, bid metadata, and seller profile)
+    const hsn =
+      it.hsnCode ||
+      it.hsn ||
+      it.hsn_sac_code ||
+      it.hsnSacCode ||
+      it.hsnSac ||
+      it.sacCode ||
+      it.sac ||
+      it.product?.hsnCode ||
+      it.product?.hsn ||
+      it.specifications?.hsn_sac_code ||
+      it.specifications?.hsnCode ||
+      it.specifications?.hsn ||
+      order.metadata?.hsnCode ||
+      order.metadata?.hsn ||
+      order.metadata?.hsnSac ||
+      order.metadata?.bid?.items?.[idx]?.hsn ||
+      order.metadata?.bid?.items?.[idx]?.hsnCode ||
+      order.metadata?.bid?.items?.[idx]?.hsn_sac_code ||
+      order.seller?.sellerProfile?.hsnCode ||
+      sellerReg?.hsnCode ||
+      sellerReg?.hsn ||
+      sellerReg?.gstDetails?.hsnCode ||
+      'N/A';
+
+    const unit = it.unitOfMeasure || it.unit || it.product?.unitOfMeasure || 'Nos';
+    const taxRate = it.taxRate !== undefined && it.taxRate !== null ? `${it.taxRate}%` : `${rawGstRate}%`;
 
     return {
       name,
@@ -619,10 +685,7 @@ export function PurchaseOrderReceiptModal({
     };
   });
 
-  const subtotal = displayItems.reduce((acc, it) => acc + it.total, 0) || Number(order.amount || order.totalValue || 0);
-  const grandTotal = Number(order.amount || order.totalValue || subtotal);
-  // Real calculation: standard GST breakdown
-  const taxAmount = Math.max(0, Math.round((grandTotal * 0.18 / 1.18) * 100) / 100);
+  const subtotal = taxableBase > 0 ? taxableBase : (displayItems.reduce((acc, it) => acc + it.total, 0) || grandTotal);
 
   // On screen, only add filler rows if items < 3 to ensure the entire page fits without scrolling
   const fillerRowCount = Math.max(0, 3 - displayItems.length);
@@ -639,73 +702,61 @@ export function PurchaseOrderReceiptModal({
     try {
       setIsGeneratingPdf(true);
       toast.loading('Generating Purchase Order PDF...', { id: 'po-pdf-dl' });
-      const { PdfEngine, moneyPdf } = await import('../../../lib/pdfEngine');
+      const { generateOfficialPurchaseOrderPdf } = await import('../lib/purchaseOrderPdfGenerator');
 
-      const config: DocumentConfig = {
-        documentTitle: 'PURCHASE ORDER',
-        documentNumber: order.poNumber || `PO-${order.id}`,
-        dateStr: poDate,
+      const doc = await generateOfficialPurchaseOrderPdf({
+        poNumber: order.poNumber || `PO-${order.id}`,
+        poDate,
+        dueDate,
         status: readableStatus(order.status),
+        shipVia,
+        trackingNumber,
+        paymentTerms: order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
         issuerName: topOrgName,
         issuerSubtitle: 'Official Purchase Order Document',
-        issuerLogo: topLogo,
-        sellerSignatureUrl: effectiveSellerSignature,
-        sellerStampUrl: effectiveSellerStamp,
-        buyerSignatureUrl: effectiveBuyerSignature,
-        buyerStampUrl: effectiveBuyerStamp,
-        parties: [
-          {
-            title: 'Ship To / Buyer',
-            name: buyerOrg,
-            address: deliveryAddress,
-            phone: buyerPhone,
-            email: buyerEmail,
-            gstin: buyerGstin,
-            pan: buyerPan,
-            logoUrl: effectiveBuyerLogo,
-            details: [
-              `Ship Via: ${shipVia}`,
-              `Tracking: ${trackingNumber}`,
-            ],
-          },
-          {
-            title: 'Vendor / Seller',
-            name: sellerOrg,
-            address: sellerAddress,
-            phone: sellerPhone,
-            email: sellerEmail,
-            gstin: sellerGstin,
-            pan: sellerPan,
-            logoUrl: effectiveSellerLogo,
-            details: [
-              sellerUdyam ? `Udyam Reg. No.: ${sellerUdyam}` : `Seller Ref: #${order.sellerId || 'N/A'}`,
-            ],
-          },
-        ],
-        infoGrid: {
-          'PO Number': order.poNumber || `PO-${order.id}`,
-          'Date': poDate,
-          'Due Date': dueDate,
-          'Ship Via': shipVia,
-          'Tracking Number': trackingNumber,
-          'Payment Terms': order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice',
+        issuerLogoUrl: resolvedTopLogo || topLogo,
+        buyer: {
+          name: buyerOrg,
+          contactName: order.buyer?.name && order.buyer.name !== buyerOrg ? order.buyer.name : undefined,
+          address: deliveryAddress,
+          gstin: buyerGstin,
+          pan: buyerPan,
+          phone: buyerPhone,
+          email: buyerEmail,
+          logoUrl: resolvedBuyerLogo || effectiveBuyerLogo,
+          stampUrl: resolvedBuyerStamp || effectiveBuyerStamp,
+          signatureUrl: resolvedBuyerSignature || effectiveBuyerSignature,
         },
-        tableHeaders: ['#', 'Product Code', 'Product Description', 'HSN/SAC', 'Qty', 'Unit', 'Rate', 'Total'],
-        tableData: displayItems.map((item, idx) => [
-          String(idx + 1),
-          item.productCode,
-          item.name + (item.specs ? `\n${item.specs}` : ''),
-          item.hsn,
-          String(item.quantity),
-          item.unit,
-          moneyPdf(item.unitPrice),
-          moneyPdf(item.total),
-        ]),
+        seller: {
+          name: sellerOrg,
+          contactName: order.seller?.name && order.seller.name !== sellerOrg ? order.seller.name : undefined,
+          address: sellerAddress,
+          udyamNumber: sellerUdyam || undefined,
+          gstin: sellerGstin,
+          pan: sellerPan,
+          phone: sellerPhone,
+          email: sellerEmail,
+          logoUrl: resolvedSellerLogo || effectiveSellerLogo,
+          stampUrl: resolvedSellerStamp || effectiveSellerStamp,
+          signatureUrl: resolvedSellerSignature || effectiveSellerSignature,
+        },
+        items: displayItems.map((item, idx) => ({
+          itemIndex: idx + 1,
+          productCode: item.productCode,
+          name: item.name,
+          specs: item.specs,
+          hsn: item.hsn,
+          quantity: item.quantity,
+          unit: item.unit,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        })),
         financials: {
-          subtotal: subtotal,
+          subtotal,
           shipping: 0,
-          totalTax: taxAmount,
-          grandTotal: grandTotal,
+          taxAmount,
+          taxLabel,
+          grandTotal,
         },
         notes: [
           '1. Delivery must strictly adhere to agreed specifications and timeline.',
@@ -713,10 +764,8 @@ export function PurchaseOrderReceiptModal({
           `3. Payment Terms: ${order.paymentTerms ? readableStatus(order.paymentTerms) : 'Escrow Held / Pay on Invoice'}.`,
           ...(order.metadata?.notes ? [`4. ${order.metadata.notes}`] : []),
         ],
-      };
+      });
 
-      const engine = new PdfEngine('p');
-      const doc = await engine.generate(config);
       const filename = `${order.poNumber || `PO-${order.id}`}.pdf`;
       doc.save(filename);
       toast.success('Purchase Order PDF downloaded', { id: 'po-pdf-dl' });
@@ -1170,17 +1219,30 @@ export function PurchaseOrderReceiptModal({
                     <table className="w-full text-xs">
                       <tbody>
                         <tr className="border-b border-slate-300">
-                          <td className="p-1.5 font-bold text-slate-800 text-right w-1/2">Subtotal:</td>
+                          <td className="p-1.5 font-bold text-slate-800 text-right w-1/2">Subtotal (Taxable Value):</td>
                           <td className="p-1.5 font-mono font-semibold text-right w-1/2">₹{formatNumber(subtotal)}</td>
                         </tr>
                         <tr className="border-b border-slate-300">
-                          <td className="p-1.5 font-bold text-slate-800 text-right">Shipping & Handling:</td>
+                          <td className="p-1.5 font-bold text-slate-800 text-right">Shipping &amp; Handling:</td>
                           <td className="p-1.5 font-mono font-semibold text-right">₹0.00</td>
                         </tr>
-                        <tr className="border-b border-slate-300">
-                          <td className="p-1.5 font-bold text-slate-800 text-right">TAX / GST (18% Included):</td>
-                          <td className="p-1.5 font-mono font-semibold text-right">₹{formatNumber(taxAmount)}</td>
-                        </tr>
+                        {isInterstate ? (
+                          <tr className="border-b border-slate-300">
+                            <td className="p-1.5 font-bold text-slate-800 text-right">IGST ({rawGstRate}%):</td>
+                            <td className="p-1.5 font-mono font-semibold text-right">₹{formatNumber(igstAmount)}</td>
+                          </tr>
+                        ) : (
+                          <>
+                            <tr className="border-b border-slate-300">
+                              <td className="p-1.5 font-bold text-slate-800 text-right">CGST ({rawGstRate / 2}%):</td>
+                              <td className="p-1.5 font-mono font-semibold text-right">₹{formatNumber(cgstAmount)}</td>
+                            </tr>
+                            <tr className="border-b border-slate-300">
+                              <td className="p-1.5 font-bold text-slate-800 text-right">SGST ({rawGstRate / 2}%):</td>
+                              <td className="p-1.5 font-mono font-semibold text-right">₹{formatNumber(sgstAmount)}</td>
+                            </tr>
+                          </>
+                        )}
                         <tr className={cn("border-t-2 border-black font-black transition-colors", currentTheme.totalBg, currentTheme.totalText)}>
                           <td className="p-1.5 font-black text-right uppercase tracking-wide text-xs sm:text-sm">TOTAL AMOUNT:</td>
                           <td className="p-1.5 font-mono font-black text-right text-sm sm:text-base">₹{formatNumber(grandTotal)}</td>

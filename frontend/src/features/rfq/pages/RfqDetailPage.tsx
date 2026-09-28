@@ -283,6 +283,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const ownParticipation: any = user?.role === 'seller'
     ? (() => {
         const participations = [
+          ...(rawBid?.myParticipation ? [rawBid.myParticipation] : []),
           ...(Array.isArray(rawBid?.participations) ? rawBid.participations : []),
           ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
           ...(Array.isArray(rawBid?.quoteResponses) ? rawBid.quoteResponses : []),
@@ -294,7 +295,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
             (sId && String(sId) === String(user?.id)) ||
             (user?.organizationId && sOrg && String(sOrg) === String(user.organizationId))
           );
-        });
+        }) || rawBid?.myParticipation || null;
       })()
     : null;
 
@@ -319,10 +320,26 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     return null;
   }, [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber, user]);
 
-  const rawOwnResp = (reqData as any)?.ownResponse ?? (ownResponseQueryData as any)?.ownResponse;
+  const rawOwnResp = React.useMemo(() => {
+    const candidate = (reqData as any)?.ownResponse ?? (ownResponseQueryData as any)?.ownResponse;
+    if (!candidate) return null;
+    // Guard against cross-contamination: verify candidate belongs to this procurement
+    const currentBidId = rawBid?.id || activeBidId;
+    const currentReqId = reqObj?.id || requirementId;
+    if (candidate.bidId && currentBidId && Number(candidate.bidId) !== Number(currentBidId)) {
+      return null;
+    }
+    if (candidate.requirementId && currentReqId && Number(candidate.requirementId) !== Number(currentReqId)) {
+      if (!candidate.bidId || !currentBidId || Number(candidate.bidId) !== Number(currentBidId)) {
+        return null;
+      }
+    }
+    return candidate;
+  }, [reqData, ownResponseQueryData, rawBid?.id, activeBidId, reqObj?.id, requirementId]);
+
   const ownResponse =
-    rawOwnResp ??
     (ownParticipation ? {
+      ...ownParticipation,
       id: ownParticipation.id,
       status: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
       submissionStatus: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
@@ -335,6 +352,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
       terms: ownParticipation.terms,
       responseData: ownParticipation.responseData,
     } : null) ??
+    rawOwnResp ??
     localSubmittedResponse;
 
 

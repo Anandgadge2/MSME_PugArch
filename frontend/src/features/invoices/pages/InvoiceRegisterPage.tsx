@@ -859,26 +859,39 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const details = det?.items || [];
 
     const totalVal = Number(inv?.amount || inv?.totalAmount || 0);
-    const taxableVal = Number(inv?.taxableAmount || totalVal);
-    const totalTaxVal = Number(inv?.totalTaxAmount || 0);
+    const taxableVal = Number(inv?.taxableAmount || (totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0));
+    const totalTaxVal = Number(inv?.totalTaxAmount || (totalVal > taxableVal ? Number((totalVal - taxableVal).toFixed(2)) : 0));
 
     const items: TaxInvoiceItem[] = details.length > 0
-      ? details.map((item: any, idx: number) => ({
-          srNo: idx + 1,
-          description: item.itemName || 'MSME Goods / Services Delivery',
-          hsn: item.hsnCode || '84719000',
-          qty: Number(item.quantity || 1),
-          unit: item.unitOfMeasure || 'Unit',
-          priceUnit: Number(item.unitPrice || (item.taxableAmount || totalVal)),
-          amount: Number(item.totalAmount || item.taxableAmount || (item.unitPrice * (item.quantity || 1)))
-        }))
+      ? details.map((item: any, idx: number) => {
+          const qty = Number(item.quantity || 1);
+          let taxableAmt = Number(item.taxableAmount || 0);
+          let unitPrice = Number(item.unitPrice || 0);
+          
+          if (!taxableAmt && unitPrice > 0) {
+            taxableAmt = Number((unitPrice * qty).toFixed(2));
+          } else if (taxableAmt > 0 && (!unitPrice || unitPrice === taxableAmt)) {
+            // Defensive: if unitPrice was saved as the total line sum rather than per-unit rate
+            unitPrice = Number((taxableAmt / qty).toFixed(2));
+          }
+
+          return {
+            srNo: idx + 1,
+            description: item.itemName || item.description || det?.purchaseOrder?.title || inv?.purchaseOrder?.title || 'Goods / Services',
+            hsn: item.hsnCode || item.hsn || item.product?.hsnCode || '-',
+            qty,
+            unit: item.unitOfMeasure || 'Unit',
+            priceUnit: unitPrice || taxableAmt,
+            amount: taxableAmt || (unitPrice * qty)
+          };
+        })
       : [{
           srNo: 1,
-          description: inv?.purchaseOrder?.title || 'UHF RFID Windshield Tags',
-          hsn: '84719000',
+          description: det?.purchaseOrder?.title || inv?.purchaseOrder?.title || 'Goods / Services',
+          hsn: '-',
           qty: 1,
           priceUnit: taxableVal,
-          amount: totalVal || taxableVal
+          amount: taxableVal
         }];
 
     let computedTaxable = 0;
@@ -886,7 +899,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       computedTaxable += (Number(it.amount) || 0);
     });
 
-    const finalSubtotal = computedTaxable > 0 ? computedTaxable : taxableVal;
+    const finalSubtotal = computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : taxableVal;
 
     const formatAddress = (...parts: (string | null | undefined)[]) => {
       const valid = parts.filter(
@@ -899,17 +912,17 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const sellerProfile = det?.seller?.sellerProfile;
     const sellerReg = (det?.seller?.registrationDetails as any);
 
-    const sellerName = sellerProfile?.businessName || sellerOrg?.organizationName || sellerProfile?.nameAsInPan || det?.seller?.name || inv?.seller?.name || 'PugArch Technology Pvt Ltd';
+    const sellerName = sellerProfile?.businessName || sellerOrg?.organizationName || sellerProfile?.nameAsInPan || det?.seller?.name || inv?.seller?.name || '';
 
-    const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerProfile?.corporateAddress || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || sellerReg?.address || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || 'L-18,Laxman Nagar,Manewada,Nagpur,440034';
+    const sellerAddress = sellerProfile?.offices?.[0]?.address || sellerProfile?.registeredAddress || sellerProfile?.corporateAddress || formatAddress(sellerOrg?.addressLine1, sellerOrg?.addressLine2, sellerOrg?.city, sellerOrg?.district, sellerOrg?.state, sellerOrg?.pincode) || sellerReg?.address || formatAddress(sellerReg?.addressLine1, sellerReg?.addressLine2, sellerReg?.city, sellerReg?.state, sellerReg?.pincode) || '';
 
-    const sellerGstin = sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerOrg?.gstin || sellerReg?.gstin || sellerReg?.gst || '27AAOCP3437H1Z4';
+    const sellerGstin = sellerProfile?.offices?.[0]?.gstNumber || sellerProfile?.gstNumber || sellerProfile?.gstMasked || sellerOrg?.gstin || sellerReg?.gstin || sellerReg?.gst || '';
 
-    const sellerPhone = det?.seller?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || '7887858594';
+    const sellerPhone = det?.seller?.mobile || sellerProfile?.mobile || sellerReg?.mobile || sellerReg?.phone || '';
 
-    const sellerEmail = det?.seller?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || 'Info@pugarch.in';
+    const sellerEmail = det?.seller?.email || sellerProfile?.officialEmail || sellerProfile?.email || sellerReg?.email || '';
 
-    const sellerCin = sellerOrg?.cinNumber || sellerReg?.cinNumber || sellerReg?.cin || sellerProfile?.cinNumber || 'U62013MH2023PTC416118';
+    const sellerCin = sellerOrg?.cinNumber || sellerReg?.cinNumber || sellerReg?.cin || sellerProfile?.cinNumber || '';
 
     const sellerLogo = sellerOrg?.profile?.logoUrl || sellerReg?.logoUrl || invoiceLogoUrl || null;
 
@@ -921,31 +934,33 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const buyerProfile = det?.buyer?.buyerProfile;
     const buyerReg = (det?.buyer?.registrationDetails as any);
 
-    const billToName = buyerProfile?.departmentName || buyerProfile?.businessName || buyerOrg?.organizationName || det?.buyer?.name || inv?.buyer?.name || 'Rattan India Power Limited';
+    const billToName = buyerProfile?.departmentName || buyerProfile?.businessName || buyerOrg?.organizationName || det?.buyer?.name || inv?.buyer?.name || '';
 
-    const billToAddress = buyerProfile?.registeredAddress || buyerProfile?.corporateAddress || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || buyerReg?.address || formatAddress(buyerReg?.addressLine1, buyerReg?.addressLine2, buyerReg?.city, buyerReg?.state, buyerReg?.pincode) || 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra';
+    const billToAddress = buyerProfile?.registeredAddress || buyerProfile?.corporateAddress || formatAddress(buyerOrg?.addressLine1, buyerOrg?.addressLine2, buyerOrg?.city, buyerOrg?.district, buyerOrg?.state, buyerOrg?.pincode) || buyerReg?.address || formatAddress(buyerReg?.addressLine1, buyerReg?.addressLine2, buyerReg?.city, buyerReg?.state, buyerReg?.pincode) || '';
 
-    const billToPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.panNumber || 'AALCS2063D';
+    const billToPan = buyerOrg?.panNumber || buyerProfile?.panNumber || buyerProfile?.panMasked || buyerReg?.pan || buyerReg?.panNumber || '';
 
-    const billToGstin = buyerOrg?.gstin || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '27AALCS2063D1ZG';
+    const billToGstin = buyerOrg?.gstin || buyerProfile?.gstNumber || buyerProfile?.gstMasked || buyerReg?.gstin || buyerReg?.gst || '';
 
     const poDeliv = det?.purchaseOrder?.deliveryAddress;
-    const poDelivParts = [
+    const poDelivParts = typeof poDeliv === 'object' && poDeliv !== null ? [
       poDeliv?.addressLine1,
       poDeliv?.addressLine2,
       poDeliv?.city,
       poDeliv?.state,
       poDeliv?.pincode
-    ].filter((p) => p && typeof p === 'string' && p.trim().length > 0);
+    ].filter((p) => p && typeof p === 'string' && p.trim().length > 0) : [];
 
     const shipToName =
-      poDeliv?.recipientName ||
+      (typeof poDeliv === 'object' && poDeliv?.recipientName) ||
       buyerOrg?.organizationName ||
       billToName ||
-      'RattanIndia Power Limited';
+      '';
 
     let shipToAddress = '';
-    if (poDelivParts.length >= 2) {
+    if (typeof poDeliv === 'string' && poDeliv.trim().length > 0) {
+      shipToAddress = poDeliv.trim();
+    } else if (poDelivParts.length >= 2) {
       shipToAddress = formatAddress(
         poDeliv?.addressLine1,
         poDeliv?.addressLine2,
@@ -964,26 +979,44 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         orgDeliv.pincode,
         orgDeliv.country || 'INDIA'
       );
-    } else if (billToAddress && billToAddress !== 'Plot no. D-2 & D-2 (PART) , Additional Industrial area, MIDC\nNandgaon peth Amravati Maharashtra') {
+    } else if (billToAddress) {
       shipToAddress = billToAddress;
-    } else {
-      shipToAddress =
-        'Amravati O&M Phase1\nAmravati Thermal Power Plant, Phase I Plot no. D-2 & D-2 (PART), Additional Industrial area, MIDC\nNandgaon peth, Amravati 444901 AMRAVATI INDIA';
     }
 
-    const bankName = sellerProfile?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerReg?.bankName || 'State Bank of India';
+    const bankName = sellerReg?.bankDetails?.bankName || sellerReg?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerProfile?.bankName || 'State Bank of India';
 
-    const accountNo = sellerProfile?.bankAccountNo || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerReg?.bankAccountNo || '••••••••1234';
+    const accountNo = sellerReg?.bankDetails?.accountNumber || sellerReg?.accountNumber || sellerProfile?.bankAccounts?.[0]?.accountNumberMasked || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerProfile?.bankAccountNo || 'N/A';
 
-    const ifscCode = sellerProfile?.bankIfsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerReg?.bankIfsc || 'SBIN0001234';
+    const ifscCode = sellerReg?.bankDetails?.ifscCode || sellerReg?.ifscCode || sellerProfile?.bankAccounts?.[0]?.ifsc || sellerProfile?.bankAccounts?.[0]?.ifscCode || sellerProfile?.bankIfsc || 'N/A';
 
-    const accountName = sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
+    const accountName = sellerReg?.bankDetails?.accountHolderName || sellerReg?.accountHolderName || sellerProfile?.bankAccounts?.[0]?.holderName || sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
+
+    const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
+    const buyerGstinCode = (billToGstin || '').trim().substring(0, 2);
+    const hasDifferentGstCodes = /^\d{2}$/.test(sellerGstinCode) && /^\d{2}$/.test(buyerGstinCode) && sellerGstinCode !== buyerGstinCode;
+    const hasDifferentStates = Boolean(
+      (sellerProfile?.state || sellerReg?.state) &&
+      (buyerProfile?.state || buyerReg?.state) &&
+      String(sellerProfile?.state || sellerReg?.state).trim().toLowerCase() !== String(buyerProfile?.state || buyerReg?.state).trim().toLowerCase()
+    );
+    const isInterstate = Boolean(inv?.interstate || Number(inv?.igstAmount) > 0 || hasDifferentGstCodes || hasDifferentStates);
+
+    const buyerStateName = buyerProfile?.state || buyerReg?.state || (buyerGstinCode === '21' ? 'Odisha' : 'Other State');
+    const placeOfSupply = isInterstate
+      ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
+      : `${sellerProfile?.state || sellerReg?.state || 'Maharashtra'} - State (CGST + SGST)`;
+
+    const cgstAmount = isInterstate ? undefined : (Number(inv?.cgstAmount) || Math.round(finalSubtotal * 0.09 * 100) / 100);
+    const sgstAmount = isInterstate ? undefined : (Number(inv?.sgstAmount) || Math.round(finalSubtotal * 0.09 * 100) / 100);
+    const igstAmount = isInterstate ? (Number(inv?.igstAmount) || totalTaxVal || Math.round(finalSubtotal * 0.18 * 100) / 100) : undefined;
+    const computedTotal = isInterstate ? Math.round((finalSubtotal + (igstAmount || 0)) * 100) / 100 : Math.round((finalSubtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100;
+    const totalAmount = totalVal > 0 && Math.abs(totalVal - computedTotal) < (computedTotal * 0.1) ? totalVal : computedTotal;
 
     return {
       copyType,
-      invoiceNumber: inv?.invoiceNumber || `PUG2026I${inv?.id || '1404001'}`,
-      dateStr: formatDate(inv?.createdAt) || '14-04-2026',
-      placeOfSupply: inv?.interstate ? 'Other State (IGST)' : 'Maharashtra(27)',
+      invoiceNumber: inv?.invoiceNumber || (inv?.id ? `INV-${inv.id}` : '-'),
+      dateStr: formatDate(inv?.createdAt) || '-',
+      placeOfSupply,
       seller: {
         name: sellerName,
         address: sellerAddress,
@@ -1008,13 +1041,13 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       items,
       subtotal: finalSubtotal,
       cgstRate: 9,
-      cgstAmount: !inv?.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      cgstAmount,
       sgstRate: 9,
-      sgstAmount: !inv?.interstate ? (totalTaxVal ? totalTaxVal / 2 : finalSubtotal * 0.09) : undefined,
+      sgstAmount,
       igstRate: 18,
-      igstAmount: inv?.interstate ? (totalTaxVal || finalSubtotal * 0.18) : undefined,
+      igstAmount,
       otherTaxAmount: Number((inv as any)?.otherTaxAmount || 0),
-      totalAmount: totalVal || (finalSubtotal + (totalTaxVal || finalSubtotal * 0.18)),
+      totalAmount,
       bankDetails: {
         bankName,
         accountNo,
@@ -1623,15 +1656,49 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         selectedPurchaseOrderId={selectedPurchaseOrderId}
         onSelectPurchaseOrder={po => {
           setSelectedPurchaseOrderId(po.id);
-          const poAmt = po.totalValue || po.amount || 0;
-          if (poAmt) setInvoiceAmount(String(poAmt));
+          // Calculate the true taxable base (excluding GST):
+          let taxableBase = 0;
+          if (po.metadata && typeof po.metadata === 'object') {
+            taxableBase = Number(po.metadata.baseAmount || po.metadata.taxableAmount || po.metadata.taxableBase || 0);
+          }
+          if (!taxableBase && Array.isArray(po.items) && po.items.length > 0) {
+            taxableBase = po.items.reduce((sum: number, it: any) => {
+              const lineTaxable = Number(it.taxableAmount || (it.unitPrice && it.quantity ? Number(it.unitPrice) * Number(it.quantity) : 0));
+              return sum + lineTaxable;
+            }, 0);
+          }
+          if (!taxableBase) {
+            const gross = Number(po.totalValue || po.amount || 0);
+            const gstRate = Number(invoiceGstRate || po.metadata?.gstRate || 18);
+            if (gross > 0) {
+              taxableBase = Number((gross / (1 + gstRate / 100)).toFixed(2));
+            }
+          }
+          if (taxableBase > 0) {
+            setInvoiceAmount(String(taxableBase));
+          } else {
+            const fallbackAmt = Number(po.totalValue || po.amount || 0);
+            if (fallbackAmt > 0) setInvoiceAmount(String(fallbackAmt));
+          }
           setPurchaseOrderSearch('');
         }}
         selectedQuotationId={selectedQuotationId}
         onSelectQuotation={q => {
           setSelectedQuotationId(q.id);
-          const totalVal = (Number(q.offeredPrice || 0) * Number(q.offeredQuantity || 1)) || Number(q.offeredPrice || 0);
-          if (totalVal > 0) setInvoiceAmount(String(totalVal));
+          // Calculate taxable base for quotation:
+          let taxableBase = Number(q.baseAmount || q.taxableAmount || 0);
+          if (!taxableBase) {
+            const offeredRate = Number(q.offeredPrice || q.unitPrice || 0);
+            const qty = Number(q.offeredQuantity || q.quantity || 1);
+            const totalVal = (offeredRate * qty) || Number(q.quotedAmount || 0);
+            if (q.taxAmount || q.gstAmount) {
+              taxableBase = totalVal - Number(q.taxAmount || q.gstAmount);
+            } else {
+              const rate = Number(q.gstRate || invoiceGstRate || 18);
+              taxableBase = Number((totalVal / (1 + rate / 100)).toFixed(2));
+            }
+          }
+          if (taxableBase > 0) setInvoiceAmount(String(taxableBase));
           setPurchaseOrderSearch('');
         }}
         acceptedPurchaseOrders={acceptedPurchaseOrders}

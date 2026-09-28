@@ -22,6 +22,7 @@ import {
   Trophy,
   Loader2,
   Award,
+  X,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -37,6 +38,7 @@ export interface SupplierQuotationDetailViewProps {
   onAcceptAndGeneratePo?: (result: any) => void;
   onDownloadPdf?: (result: any) => void;
   onOpenTechnicalEvaluation?: (result: any) => void;
+  isModal?: boolean;
 }
 
 export interface SupplierQuotationDetailModalProps {
@@ -266,11 +268,99 @@ export function SupplierQuotationDetailView({
     ? Math.round((totalEvaluatedPrice - quotedBaseAmount) * 100) / 100
     : Math.round((quotedBaseAmount * (gstPercentage / 100)) * 100) / 100;
 
+  const parseJsonSafe = (val: any) => {
+    if (typeof val === 'string') {
+      try { return JSON.parse(val); } catch { return {}; }
+    }
+    return (val && typeof val === 'object') ? val : {};
+  };
+
+  const parsedAck = parseJsonSafe(result.acknowledgement || result.rawParticipation?.acknowledgement);
+  const parsedResp = parseJsonSafe(result.responseData || result.rawParticipation?.responseData);
+  const parsedDesc = parseJsonSafe(result.offeredItemDescription || result.details?.offeredItemDescription);
+
+  const firstValidStr = (...vals: any[]) => {
+    for (const v of vals) {
+      if (
+        v !== undefined &&
+        v !== null &&
+        typeof v === 'string' &&
+        v.trim() !== '' &&
+        v.trim() !== '—' &&
+        v.trim() !== '-' &&
+        v.trim().toLowerCase() !== 'null' &&
+        v.trim().toLowerCase() !== 'undefined'
+      ) {
+        return v.trim();
+      }
+      if (typeof v === 'number' && !isNaN(v)) {
+        return String(v);
+      }
+    }
+    return '';
+  };
+
   const offeredQty = result.offeredQuantity || result.details?.offeredQuantity || result.quantity || 1;
-  const deliveryTimeline =
-    result.deliveryTimeline ||
-    result.details?.deliveryTimeline ||
-    'As per tender SLA';
+
+  // Gather tender items from bid for authentic item-wise mapping & HSN resolution
+  const tenderItems: any[] = [
+    ...(Array.isArray(bid?.items) && bid.items.length ? bid.items : []),
+    ...(Array.isArray(bid?.technicalPacket?.items) && bid.technicalPacket.items.length ? bid.technicalPacket.items : []),
+    ...(Array.isArray(bid?.technicalPacket?.boq) && bid.technicalPacket.boq.length ? bid.technicalPacket.boq : [])
+  ];
+  const uniqueTenderItems: any[] = [];
+  const seenTenderKeys = new Set<string>();
+  for (const ti of tenderItems) {
+    const key = `${ti.id || ''}-${ti.itemName || ti.name || ''}`;
+    if (!seenTenderKeys.has(key)) {
+      seenTenderKeys.add(key);
+      uniqueTenderItems.push(ti);
+    }
+  }
+
+  // Delivery SLA resolution from authentic vendor response, tender requirements, or consignee schedule
+  const formatSlaDate = (val?: string | null) => {
+    if (!val) return '';
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val);
+      return `By ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    } catch {
+      return String(val);
+    }
+  };
+
+  const isGenericSla = (v: any) => {
+    const s = String(v || '').trim().toLowerCase();
+    return s === '' || s === 'standard' || s === 'as per tender sla' || s === 'null' || s === 'undefined' || s === '—';
+  };
+
+  const explicitSellerTimeline = firstValidStr(
+    !isGenericSla(result.deliveryTimeline) ? result.deliveryTimeline : '',
+    !isGenericSla(result.details?.deliveryTimeline) ? result.details?.deliveryTimeline : '',
+    !isGenericSla(result.rawParticipation?.deliveryTimeline) ? result.rawParticipation?.deliveryTimeline : '',
+    !isGenericSla(parsedResp.deliveryTimeline) ? parsedResp.deliveryTimeline : '',
+    !isGenericSla(parsedAck.deliveryTimeline) ? parsedAck.deliveryTimeline : '',
+    !isGenericSla(parsedDesc.deliveryTimeline) ? parsedDesc.deliveryTimeline : '',
+    result.deliveryDays ? `${result.deliveryDays} Days` : '',
+    result.details?.deliveryDays ? `${result.details.deliveryDays} Days` : '',
+    parsedResp.deliveryDays ? `${parsedResp.deliveryDays} Days` : '',
+    parsedAck.deliveryDays ? `${parsedAck.deliveryDays} Days` : ''
+  );
+
+  const tenderDeliverySla = firstValidStr(
+    formatSlaDate(bid?.schedule?.requiredByDate),
+    formatSlaDate(bid?.basics?.requiredByDate),
+    formatSlaDate(bid?.technicalPacket?.schedule?.requiredByDate),
+    formatSlaDate(bid?.technicalPacket?.basics?.requiredByDate),
+    bid?.terms?.deliveryTerms,
+    bid?.technicalPacket?.terms?.deliveryTerms,
+    bid?.tender?.deliverySchedule,
+    bid?.technicalPacket?.tender?.deliverySchedule,
+    bid?.deliveryRequirement
+  );
+
+  const deliveryTimeline = explicitSellerTimeline || tenderDeliverySla || (result.deliveryTimeline && result.deliveryTimeline !== 'Standard' ? result.deliveryTimeline : '') || 'Direct Consignee Site Dispatch (Standard SLA)';
 
   const termsAndConditions =
     result.terms ||
@@ -294,18 +384,6 @@ export function SupplierQuotationDetailView({
     result.offeredItem ||
     result.details?.offeredItemDescription ||
     '';
-
-  // Extract Line Items from all authentic quotation sources
-  const parseJsonSafe = (val: any) => {
-    if (typeof val === 'string') {
-      try { return JSON.parse(val); } catch { return {}; }
-    }
-    return (val && typeof val === 'object') ? val : {};
-  };
-
-  const parsedAck = parseJsonSafe(result.acknowledgement || result.rawParticipation?.acknowledgement);
-  const parsedResp = parseJsonSafe(result.responseData || result.rawParticipation?.responseData);
-  const parsedDesc = parseJsonSafe(result.offeredItemDescription || result.details?.offeredItemDescription);
 
   const rawCandidateItems = [
     result.lineItems,
@@ -331,27 +409,6 @@ export function SupplierQuotationDetailView({
       rawLineItems = cand;
     }
   }
-
-  const firstValidStr = (...vals: any[]) => {
-    for (const v of vals) {
-      if (
-        v !== undefined &&
-        v !== null &&
-        typeof v === 'string' &&
-        v.trim() !== '' &&
-        v.trim() !== '—' &&
-        v.trim() !== '-' &&
-        v.trim().toLowerCase() !== 'null' &&
-        v.trim().toLowerCase() !== 'undefined'
-      ) {
-        return v.trim();
-      }
-      if (typeof v === 'number' && !isNaN(v)) {
-        return String(v);
-      }
-    }
-    return '';
-  };
 
   const makeBrand = firstValidStr(
     result.makeBrand,
@@ -398,32 +455,28 @@ export function SupplierQuotationDetailView({
     '—'
   );
 
-  // Gather tender items from bid for authentic item-wise mapping
-  const tenderItems: any[] = [
-    ...(Array.isArray(bid?.items) && bid.items.length ? bid.items : []),
-    ...(Array.isArray(bid?.technicalPacket?.items) && bid.technicalPacket.items.length ? bid.technicalPacket.items : []),
-    ...(Array.isArray(bid?.technicalPacket?.boq) && bid.technicalPacket.boq.length ? bid.technicalPacket.boq : [])
-  ];
-  const uniqueTenderItems: any[] = [];
-  const seenTenderKeys = new Set<string>();
-  for (const ti of tenderItems) {
-    const key = `${ti.id || ''}-${ti.itemName || ti.name || ''}`;
-    if (!seenTenderKeys.has(key)) {
-      seenTenderKeys.add(key);
-      uniqueTenderItems.push(ti);
-    }
-  }
-
   // If rawLineItems is empty or has only 1 summary row while tender specifies multiple items:
   if (rawLineItems.length <= 1 && uniqueTenderItems.length > 1) {
     const tenderTotalQty = uniqueTenderItems.reduce((sum: number, it: any) => sum + Number(it.quantity || 1), 0) || 1;
     const unitRateFromTotal = quotedBaseAmount > 0 ? (quotedBaseAmount / tenderTotalQty) : (totalEvaluatedPrice / tenderTotalQty);
 
-    rawLineItems = uniqueTenderItems.map((item: any) => {
+    rawLineItems = uniqueTenderItems.map((item: any, idx: number) => {
       const qty = Number(item.quantity || 1);
       const uPrice = Number(item.unitPrice || item.unitRate || rawLineItems[0]?.unitPrice || rawLineItems[0]?.unitRate || unitRateFromTotal || 0);
       const itemGst = Number(item.gstPercent ?? item.gstPercentage ?? gstPercentage ?? 18);
       const lineTot = Math.round(uPrice * qty * (1 + itemGst / 100));
+      const resolvedHsn = firstValidStr(
+        item.hsn,
+        item.hsnCode,
+        item.hsn_sac_code,
+        item.hsn_code,
+        item.hsnSac,
+        rawLineItems[idx]?.hsnCode,
+        rawLineItems[idx]?.hsn,
+        rawLineItems[0]?.hsnCode,
+        rawLineItems[0]?.hsn
+      ) || '—';
+
       return {
         itemName: item.itemName || item.name || 'Tender Item',
         description: item.description || item.technicalSpecification || '',
@@ -435,7 +488,8 @@ export function SupplierQuotationDetailView({
         gstPercent: itemGst,
         makeBrand: item.brand || item.makeBrand || item.brandPreference || makeBrand || '—',
         model: item.model || model || '—',
-        hsn: item.hsn || item.hsnSac || '—',
+        hsn: resolvedHsn,
+        hsnCode: resolvedHsn,
         lineTotal: lineTot,
         totalAmount: lineTot,
       };
@@ -444,28 +498,93 @@ export function SupplierQuotationDetailView({
 
   // Fallback for single item procurements
   if (rawLineItems.length === 0) {
+    const firstTender = uniqueTenderItems[0] || {};
+    const fallbackHsn = firstValidStr(
+      result.hsn,
+      result.hsnCode,
+      result.hsn_sac_code,
+      result.details?.hsn,
+      result.details?.hsnCode,
+      parsedAck.hsnCode,
+      parsedResp.hsnCode,
+      firstTender.hsn_sac_code,
+      firstTender.hsnCode,
+      firstTender.hsn
+    ) || '—';
+
     rawLineItems = [
       {
         itemName:
           result.offeredItem ||
           result.details?.offeredItemDescription ||
+          firstTender.itemName ||
+          firstTender.name ||
           bid?.title ||
           'Procurement Item Quotation',
         description:
           result.offeredItem ||
+          firstTender.description ||
+          firstTender.technicalSpecification ||
           'Supply of requested procurement items according to specifications',
-        quantity: Number(offeredQty) || 1,
-        unitOfMeasure: 'Nos',
+        quantity: Number(offeredQty) || Number(firstTender.quantity) || 1,
+        unitOfMeasure: firstTender.unitOfMeasure || firstTender.unit || 'Nos',
         unitPrice:
           quotedBaseAmount > 0
             ? Math.round((quotedBaseAmount / (Number(offeredQty) || 1)) * 100) / 100
             : totalEvaluatedPrice,
         gstPercent: gstPercentage,
         makeBrand: makeBrand,
+        model: model,
+        hsn: fallbackHsn,
+        hsnCode: fallbackHsn,
         lineTotal: totalEvaluatedPrice,
       },
     ];
   }
+
+  // Normalization pass across all line items to guarantee authentic HSN, Make & Model resolution
+  rawLineItems = rawLineItems.map((item: any, idx: number) => {
+    const tenderMatch = uniqueTenderItems[idx] || uniqueTenderItems[0] || {};
+    const resolvedHsn = firstValidStr(
+      item.hsn,
+      item.hsnCode,
+      item.hsn_sac_code,
+      item.hsn_code,
+      item.hsnSac,
+      tenderMatch.hsn_sac_code,
+      tenderMatch.hsnCode,
+      tenderMatch.hsn,
+      tenderMatch.hsnSac,
+      uniqueTenderItems[0]?.hsn_sac_code,
+      uniqueTenderItems[0]?.hsnCode,
+      uniqueTenderItems[0]?.hsn
+    ) || '—';
+
+    const resolvedMake = firstValidStr(
+      item.makeBrand,
+      item.brand,
+      tenderMatch.brand,
+      tenderMatch.makeBrand,
+      tenderMatch.brandPreference,
+      makeBrand
+    ) || '—';
+
+    const resolvedModel = firstValidStr(
+      item.model,
+      item.modelNumber,
+      item.partNumber,
+      tenderMatch.model,
+      model
+    ) || '—';
+
+    return {
+      ...item,
+      hsn: resolvedHsn,
+      hsnCode: resolvedHsn,
+      makeBrand: resolvedMake,
+      model: resolvedModel,
+    };
+  });
 
   const totalCommittedUnits = rawLineItems.reduce((acc: number, item: any) => acc + (Number(item.quantity) || 0), 0) || Number(offeredQty) || 1;
 
@@ -916,7 +1035,7 @@ export function SupplierQuotationDetailView({
                         </td>
 
                         <td className="px-4 py-3.5 text-xs text-slate-700">
-                          <span className="font-mono text-slate-800 font-bold text-[11px]">{line.hsn || '—'}</span>
+                          <span className="font-mono text-slate-800 font-bold text-[11px]">{line.hsn || line.hsnCode || '—'}</span>
                         </td>
 
                         <td className="px-4 py-3.5 text-center">
@@ -1190,7 +1309,7 @@ export function SupplierQuotationDetailView({
 }
 
 /**
- * Modal Wrapper that embeds the full view page when used in modal mode
+ * Modal Wrapper that embeds the executive quotation view inside an in-place modal dialog
  */
 export function SupplierQuotationDetailModal({
   isOpen,
@@ -1202,20 +1321,73 @@ export function SupplierQuotationDetailModal({
   onDownloadPdf,
   onOpenTechnicalEvaluation,
 }: SupplierQuotationDetailModalProps) {
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !result) return null;
 
+  const sellerOrg =
+    result.sellerName ||
+    result.details?.organizationName ||
+    result.sellerOrganization?.organizationName ||
+    result.sellerProfile?.organizationName ||
+    result.companyName ||
+    'Quoting Supplier';
+
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="min-h-screen bg-slate-50/60 py-3">
-        <SupplierQuotationDetailView
-          result={result}
-          bid={bid}
-          bidId={bidId}
-          onBack={onClose}
-          onAcceptAndGeneratePo={onAcceptAndGeneratePo}
-          onDownloadPdf={onDownloadPdf}
-          onOpenTechnicalEvaluation={onOpenTechnicalEvaluation}
-        />
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="supplier-quotation-modal-title"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-6xl max-h-[92vh] flex flex-col bg-slate-50 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-white shadow-2xs shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <h2 id="supplier-quotation-modal-title" className="text-sm font-black text-slate-900 tracking-tight truncate">
+              Quotation Breakdown • {sellerOrg}
+            </h2>
+            <span className="hidden sm:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+              #{result.id || result.participationId || 'REF'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close modal"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+          >
+            <X className="h-4.5 w-4.5" />
+          </button>
+        </div>
+
+        {/* Modal Scrollable Body */}
+        <div className="flex-1 overflow-y-auto">
+          <SupplierQuotationDetailView
+            result={result}
+            bid={bid}
+            bidId={bidId}
+            onBack={onClose}
+            onAcceptAndGeneratePo={onAcceptAndGeneratePo}
+            onDownloadPdf={onDownloadPdf}
+            onOpenTechnicalEvaluation={onOpenTechnicalEvaluation}
+            isModal={true}
+          />
+        </div>
       </div>
     </div>
   );

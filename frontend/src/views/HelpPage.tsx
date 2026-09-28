@@ -671,16 +671,16 @@ export default function HelpPage() {
 
               <div className="group relative inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 text-[#0b2447] shadow-2xs transition hover:bg-slate-50">
                 <a
-                  href="mailto:support@jsgsmile.in"
+                  href="mailto:jsgsmileportal@gmail.com"
                   className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide focus-visible:outline-none"
-                  aria-label="Send email to support@jsgsmile.in"
+                  aria-label="Send email to jsgsmileportal@gmail.com"
                 >
                   <Mail className="h-3 w-3 text-[#0b2447]" />
-                  <span>support@jsgsmile.in</span>
+                  <span>jsgsmileportal@gmail.com</span>
                 </a>
                 <button
                   type="button"
-                  onClick={() => handleCopy('support@jsgsmile.in', 'email', 'Support email')}
+                  onClick={() => handleCopy('jsgsmileportal@gmail.com', 'email', 'Support email')}
                   className="rounded-md p-1 hover:bg-slate-100 focus-visible:ring-1 focus-visible:ring-[#0b2447] focus-visible:outline-none"
                   title="Copy Email Address"
                   aria-label="Copy support email address"
@@ -928,7 +928,7 @@ export default function HelpPage() {
                   Account login, 2FA, document uploads, cart navigation, and quotation assistance.
                 </p>
                 <p className="text-[11px] font-medium text-slate-500">
-                  Helpline: 1800-123-4567 • support@jsgsmile.in
+                  Helpline: 1800-123-4567 • jsgsmileportal@gmail.com
                 </p>
               </div>
 

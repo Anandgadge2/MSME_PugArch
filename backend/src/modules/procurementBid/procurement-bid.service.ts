@@ -4,8 +4,9 @@ import { ApiError } from '../../utils/ApiError.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
 import { createOrReuseProcurementPOForAward, getSellerUserIdsForActor } from './procurement-order.service.js';
+import { broadcastToProcurement } from '../../services/websocket.service.js';
 import { logger } from '../../config/logger.js';
-import { notificationService } from '../../services/notification.service.js';
+import { notificationService, resolveSellerOrgName } from '../../services/notification.service.js';
 import { buildGovernmentGradeEmailHtml, ensurePublicUrl, formatIstDateTime, type TableRow } from '../../services/email-template.builder.js';
 import { getPublicPortalUrl } from '../../config/env.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
@@ -1313,24 +1314,42 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     offeredItemDescription: first(descData.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, techOffer.offeredItemDescription),
     // Flatten technical offer fields from all sources so buyer always sees them
     complianceRemarks: first(descData.complianceRemarks, respData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstItem.complianceRemarks, firstItem.remarks),
-    deliveryTimeline: first(p.deliveryTimeline, descData.deliveryTimeline, respData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstItem.deliveryTimeline, firstItem.deliveryRequirement, firstItem.deliverySchedule),
+    deliveryTimeline: first(
+      p.deliveryTimeline,
+      descData.deliveryTimeline,
+      respData.deliveryTimeline,
+      ackData.deliveryTimeline,
+      techOffer.deliveryTimeline,
+      firstItem.deliveryTimeline,
+      firstItem.deliveryRequirement,
+      firstItem.deliverySchedule,
+      bid?.schedule?.requiredByDate ? `By ${bid.schedule.requiredByDate}` : undefined,
+      bid?.basics?.requiredByDate ? `By ${bid.basics.requiredByDate}` : undefined,
+      bid?.terms?.deliveryTerms,
+      bid?.deliveryRequirement
+    ),
     warrantyDetails: first(descData.warrantyDetails, respData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstItem.warrantyDetails),
     serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
     deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
     rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
     responseData: { ...ackData, ...respData, ...descData },
     acknowledgement: p.acknowledgement,
-    lineItems: lineItemsArr.map((item: any) => ({
-      ...item,
-      unitPrice: canSeeFin ? item.unitPrice : null,
-      lineTotal: canSeeFin ? item.lineTotal : null,
-      unitRate: canSeeFin ? item.unitRate : null,
-      totalAmount: canSeeFin ? item.totalAmount : null,
-      gstPercent: canSeeFin ? item.gstPercent : null,
-      gstPercentage: canSeeFin ? item.gstPercentage : null,
-    })),
-    terms: first(p.terms, respData.terms, ackData.terms, descData.terms),
-    offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity),
+    lineItems: lineItemsArr.map((item: any) => {
+      const resolvedHsn = first(item.hsnCode, item.hsn_sac_code, item.hsn, item.hsnSac, item.hsn_code);
+      return {
+        ...item,
+        hsnCode: resolvedHsn || null,
+        hsn: resolvedHsn || null,
+        unitPrice: canSeeFin ? item.unitPrice : null,
+        lineTotal: canSeeFin ? item.lineTotal : null,
+        unitRate: canSeeFin ? item.unitRate : null,
+        totalAmount: canSeeFin ? item.totalAmount : null,
+        gstPercent: canSeeFin ? item.gstPercent : null,
+        gstPercentage: canSeeFin ? item.gstPercentage : null,
+      };
+    }),
+    terms: first(p.terms, respData.terms, ackData.terms, descData.terms, descData.paymentTerms, respData.paymentTerms, ackData.paymentTerms),
+    offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity, (firstItem.quantity != null ? `${firstItem.quantity} ${firstItem.unitOfMeasure || firstItem.unit || 'Nos'}` : undefined)),
     status: p.submissionStatus || 'DRAFT',
     submissionStatus: p.submissionStatus || 'DRAFT',
     submittedAt: p.submittedAt,
@@ -2653,7 +2672,11 @@ export const saveFinancialQuote = async (req: AuthRequest & { file?: Express.Mul
   const ackData = {
     ...existingAck,
     ...(responseDataObj || {}),
-    ...(lineItemsObj ? { lineItems: lineItemsObj } : {})
+    ...(lineItemsObj ? { lineItems: lineItemsObj } : {}),
+    ...(body.deliveryTimeline ? { deliveryTimeline: body.deliveryTimeline } : {}),
+    ...(body.terms ? { terms: body.terms } : {}),
+    ...(body.paymentTerms ? { paymentTerms: body.paymentTerms } : {}),
+    ...(body.offeredQuantity ? { offeredQuantity: body.offeredQuantity } : {})
   };
 
   const updated = await db.procurementBidParticipation.update({
@@ -3567,6 +3590,18 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
 
+  try {
+    broadcastToProcurement(bid.id, {
+      type: 'PROCUREMENT_UPDATED',
+      requirementId: bid.id,
+      procurementId: bid.id,
+      status: 'AWARD_OFFERED',
+      timestamp: new Date().toISOString()
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[RECOMMEND_AWARD] Failed to broadcast award offer to procurement');
+  }
+
   // In the simplified portal, NO auto-PO is generated at award time.
   // The seller must review and accept the award first, then PO is generated and accepted.
   return {
@@ -3658,12 +3693,26 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
 
   await procurementAudit(req, 'AWARD_ACCEPTED', 'ProcurementBidAward', award.id, updatedAward).catch(() => undefined);
 
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(bid.buyerId, {
     title: 'Award Offer Accepted',
-    message: `Seller has accepted your contract award offer for "${bid.title}". You may now generate and issue the Purchase Order.`,
+    message: `${sellerOrgName} has accepted your contract award offer for "${bid.title}". You may now generate and issue the Purchase Order.`,
     type: 'award_accepted',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
+
+  try {
+    broadcastToProcurement(bid.id, {
+      type: 'PROCUREMENT_UPDATED',
+      requirementId: bid.id,
+      procurementId: bid.id,
+      status: 'AWARD_ACCEPTED',
+      timestamp: new Date().toISOString()
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[ACCEPT_AWARD] Failed to broadcast award acceptance to procurement');
+  }
 
   return { award: updatedAward, status: 'AWARD_ACCEPTED' };
 };
@@ -3756,9 +3805,11 @@ export const declineAward = async (req: AuthRequest, bidId: string, body: any = 
 
   await procurementAudit(req, 'AWARD_DECLINED', 'ProcurementBidAward', award.id, { reason }).catch(() => undefined);
 
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(bid.buyerId, {
     title: 'Award Offer Declined',
-    message: `Seller has declined the award offer for "${bid.title}". Reason: ${reason}. You may evaluate other qualified bidders.`,
+    message: `${sellerOrgName} has declined the award offer for "${bid.title}". Reason: ${reason}. You may evaluate other qualified bidders.`,
     type: 'award_declined',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
@@ -3995,9 +4046,11 @@ export const acceptPriceMatchCounterOffer = async (req: AuthRequest, bidId: stri
 
   await procurementAudit(req, 'PRICE_MATCH_COUNTER_OFFER_ACCEPTED', 'ProcurementBidAward', award.id, { acceptedAmount }).catch(() => undefined);
 
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(bid.buyerId, {
     title: '🎯 Price Match Accepted by Supplier',
-    message: `Supplier has accepted your price-match counter-offer at ₹${acceptedAmount.toLocaleString('en-IN')} for "${bid.title}". You may now issue the Purchase Order.`,
+    message: `${sellerOrgName} has accepted your price-match counter-offer at ₹${acceptedAmount.toLocaleString('en-IN')} for "${bid.title}". You may now issue the Purchase Order.`,
     type: 'counter_offer_accepted',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
@@ -4097,9 +4150,11 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
 
   await procurementAudit(req, 'PRICE_MATCH_COUNTER_OFFER_DECLINED', 'ProcurementBidAward', award.id, { reason }).catch(() => undefined);
 
+  const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
+
   await notificationService.notifyUser(bid.buyerId, {
     title: 'Price Match Declined by Supplier',
-    message: `Supplier has declined the price-match counter-offer for "${bid.title}". Reason: ${reason}. You can now award L1 or negotiate with another vendor.`,
+    message: `${sellerOrgName} has declined the price-match counter-offer for "${bid.title}". Reason: ${reason}. You can now award L1 or negotiate with another vendor.`,
     type: 'counter_offer_declined',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
@@ -4153,6 +4208,16 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
 
   const po = await createOrReuseProcurementPOForAward(req, award, bid);
 
+  if (po.reused && (po.purchaseOrder.poStatus === 'ISSUED' || po.purchaseOrder.status === 'issued' || po.purchaseOrder.status === 'pending_acceptance' || po.purchaseOrder.status === 'accepted')) {
+    logger.info({ poId: po.purchaseOrder.id, poNumber: po.purchaseOrder.poNumber }, '[GENERATE_PO] Purchase Order already issued for this award');
+    return {
+      purchaseOrder: po.purchaseOrder,
+      reused: true,
+      alreadyIssued: true,
+      award
+    };
+  }
+
   await db.purchaseOrder.update({
     where: { id: po.purchaseOrder.id },
     data: {
@@ -4174,6 +4239,18 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     type: 'purchase_order',
     redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
   }).catch(() => undefined);
+
+  try {
+    broadcastToProcurement(bid.id, {
+      type: 'PROCUREMENT_UPDATED',
+      requirementId: bid.id,
+      procurementId: bid.id,
+      status: 'PO_GENERATED',
+      timestamp: new Date().toISOString()
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[GENERATE_PO] Failed to broadcast PO generation to procurement');
+  }
 
   return {
     purchaseOrder: po.purchaseOrder,

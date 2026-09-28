@@ -562,8 +562,8 @@ function LegalDocumentReader({ activeKey }: { activeKey: PageKey }) {
           </div>
           <p className="text-slate-600 leading-relaxed text-[11px]">
             Write to the District Information Manager at{' '}
-            <a href="mailto:legal@jsgsmile.in" className="font-bold text-[#0b2447] underline">
-              legal@jsgsmile.in
+            <a href="mailto:jsgsmileportal@gmail.com" className="font-bold text-[#0b2447] underline">
+              jsgsmileportal@gmail.com
             </a>{' '}
             or call toll free at{' '}
             <a href="tel:18003457111" className="font-bold text-[#0b2447]">
@@ -839,7 +839,7 @@ function CautionNoticeText() {
       </p>
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2 text-xs font-semibold text-slate-800">
         <p>• <strong>District MSME Cell Hotline:</strong> 1800-345-7111 / +91 (06645) 272-100</p>
-        <p>• <strong>Official Email:</strong> support@jsgsmile.in / legal@jsgsmile.in</p>
+        <p>• <strong>Official Email:</strong> jsgsmileportal@gmail.com</p>
         <p>• <strong>National Cyber Crime Reporting Helpline:</strong> 1930 (cybercrime.gov.in)</p>
       </div>
     </div>
@@ -894,8 +894,8 @@ function ContactUsView() {
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-              <a href="mailto:support@jsgsmile.in" className="text-[#0b2447] font-bold hover:underline">
-                support@jsgsmile.in
+              <a href="mailto:jsgsmileportal@gmail.com" className="text-[#0b2447] font-bold hover:underline">
+                jsgsmileportal@gmail.com
               </a>
             </div>
           </div>
@@ -926,8 +926,8 @@ function ContactUsView() {
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-              <a href="mailto:verification@jsgsmile.in" className="text-emerald-700 font-bold hover:underline">
-                verification@jsgsmile.in
+              <a href="mailto:jsgsmileportal@gmail.com" className="text-emerald-700 font-bold hover:underline">
+                jsgsmileportal@gmail.com
               </a>
             </div>
           </div>
@@ -958,8 +958,8 @@ function ContactUsView() {
             </div>
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-              <a href="mailto:shg-support@jsgsmile.in" className="text-violet-700 font-bold hover:underline">
-                shg-support@jsgsmile.in
+              <a href="mailto:jsgsmileportal@gmail.com" className="text-violet-700 font-bold hover:underline">
+                jsgsmileportal@gmail.com
               </a>
             </div>
           </div>

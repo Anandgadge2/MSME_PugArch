@@ -263,8 +263,8 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // ─────────────────────────────────────────────────────────────
   const tableData = data.items.map((item, idx) => [
     String(item.srNo || idx + 1),
-    item.description || 'MSME Goods / Services Delivery',
-    item.hsn || '84719000',
+    item.description || 'Goods / Services',
+    item.hsn || '-',
     item.qty ? `${item.qty}${item.unit ? ` ${item.unit}` : ''}` : '-',
     typeof item.priceUnit === 'number' ? formatInr(item.priceUnit) : (item.priceUnit || '-'),
     typeof item.amount === 'number' ? formatInr(item.amount) : (item.amount || '-')
@@ -379,7 +379,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  const forSellerText = doc.splitTextToSize(`For ${data.seller.name || 'Seller Enterprise'}`, stampBoxWidth - 6);
+  const forSellerText = doc.splitTextToSize(`For ${data.seller.name || '-'}`, stampBoxWidth - 6);
   doc.text(forSellerText, rightX - 4, currentY + 5, { align: 'right' });
 
   // Render Official Stamp if provided

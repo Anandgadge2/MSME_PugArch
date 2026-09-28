@@ -996,11 +996,11 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     let disposed = false;
     let retryCount = 0;
 
-    const scheduleReconnect = () => {
+    const scheduleReconnect = (isNormalClose = false) => {
       if (disposed || retryTimeout) return;
-      if (!isRealToken || retryCount >= 2) return;
-      const delay = Math.min(30000, 1000 * (2 ** retryCount));
-      retryCount += 1;
+      if (!isRealToken || retryCount >= 5) return;
+      const delay = isNormalClose ? 1000 : Math.min(30000, 1000 * (2 ** retryCount));
+      if (!isNormalClose) retryCount += 1;
       retryTimeout = setTimeout(() => {
         retryTimeout = null;
         connectStream();
@@ -1008,7 +1008,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     };
 
     const connectStream = () => {
-      if (disposed || retryCount >= 2) return;
+      if (disposed || retryCount >= 5) return;
       try {
         eventSource?.close();
         eventSource = new EventSource(streamUrl, { withCredentials: true });
@@ -1035,23 +1035,24 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         eventSource.addEventListener('close', () => {
           eventSource?.close();
           eventSource = null;
-          scheduleReconnect();
+          retryCount = 0;
+          scheduleReconnect(true);
         });
 
-        eventSource.addEventListener('error', (err) => {
+        eventSource.addEventListener('error', () => {
           if (disposed) return;
           eventSource?.close();
           eventSource = null;
-          if (!isRealToken || retryCount >= 1) {
-            console.info('[SSE] Notification stream unavailable; notifications synchronized via polling.');
+          if (!isRealToken || retryCount >= 4) {
+            console.info('[SSE] Notification stream temporarily unavailable; notifications synchronized via polling.');
             return;
           }
-          scheduleReconnect();
+          scheduleReconnect(false);
         });
       } catch (err) {
         if (isRealToken) {
           console.error('[SSE] Failed to initialize EventSource:', err);
-          scheduleReconnect();
+          scheduleReconnect(false);
         }
       }
     };

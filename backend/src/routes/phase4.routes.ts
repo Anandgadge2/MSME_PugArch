@@ -24,7 +24,7 @@ import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cac
 import { invalidateUserAuthCache } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
-import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail } from '../services/invoice-pdf.service.js';
+import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail, getOrGeneratePurchaseOrderPdfBuffer, getOrGenerateInvoicePdfBuffer } from '../services/invoice-pdf.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
@@ -8998,6 +8998,16 @@ router.get('/purchase-orders/:id/pdf', authenticate, asyncRoute(async (req, res)
   ok(res, { purchaseOrderId: id, pdfFileId: po.pdfFileId, url: po.pdfFileId ? `/api/files/${po.pdfFileId}/signed-url` : null });
 }));
 
+router.get('/purchase-orders/:id/download-pdf', authenticate, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const po = await assertPurchaseOrderAccess(req, id);
+  const { buffer, filename } = await getOrGeneratePurchaseOrderPdfBuffer(po);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', String(buffer.length));
+  res.end(buffer);
+}));
+
 router.post('/purchase-orders/:id/delivery', authenticate, requirePermission('delivery.create', orgScope), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const po = await assertPurchaseOrderAccess(req, id);
@@ -9220,7 +9230,43 @@ router.get('/invoices/:id(\\d+)', authenticate, asyncRoute(async (req, res) => {
       payments: true,
       purchaseOrder: {
         include: {
-          items: true
+          items: true,
+          buyer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              buyerProfile: true,
+              organization: {
+                include: {
+                  profile: true,
+                  deliveryAddresses: true
+                }
+              }
+            }
+          },
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              sellerProfile: {
+                include: {
+                  offices: true,
+                  bankAccounts: true
+                }
+              },
+              organization: {
+                include: {
+                  profile: true
+                }
+              }
+            }
+          }
         }
       },
       seller: {
@@ -9263,7 +9309,49 @@ router.get('/invoices/:id(\\d+)', authenticate, asyncRoute(async (req, res) => {
     }
   });
   if (!invoice || (!isAdmin(req) && invoice.buyerId !== userId(req) && invoice.sellerId !== userId(req))) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-  ok(res, invoice);
+
+  // Compute interstate status from GSTINs / states
+  const sellerReg = (invoice.seller?.registrationDetails as any) || (invoice.purchaseOrder?.seller?.registrationDetails as any) || {};
+  const buyerReg = (invoice.buyer?.registrationDetails as any) || (invoice.purchaseOrder?.buyer?.registrationDetails as any) || {};
+  const sGstin = sellerReg.gstin || invoice.seller?.sellerProfile?.offices?.[0]?.gstNumber || invoice.seller?.organization?.gstin || '';
+  const bGstin = buyerReg.gstin || invoice.buyer?.buyerProfile?.gst || invoice.buyer?.organization?.gstin || '';
+  const sCode = sGstin.trim().substring(0, 2);
+  const bCode = bGstin.trim().substring(0, 2);
+  const isInterstate = Boolean(
+    (invoice.metadata as any)?.interstate ||
+    Number(invoice.igstAmount) > 0 ||
+    (/^\d{2}$/.test(sCode) && /^\d{2}$/.test(bCode) && sCode !== bCode) ||
+    (sellerReg.state && buyerReg.state && sellerReg.state.toLowerCase() !== buyerReg.state.toLowerCase())
+  );
+
+  ok(res, { ...invoice, interstate: isInterstate });
+}));
+
+router.get('/invoices/:id(\\d+)/download-pdf', authenticate, asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const invoice = await db.invoice.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      purchaseOrder: {
+        include: {
+          items: true,
+          buyer: { select: { id: true, name: true, email: true, mobile: true, registrationDetails: true, buyerProfile: true, organizationId: true, organization: { include: { profile: true } } } },
+          seller: { select: { id: true, name: true, email: true, mobile: true, registrationDetails: true, sellerProfile: true, organizationId: true, organization: { include: { profile: true } } } }
+        }
+      },
+      seller: { select: { id: true, name: true, email: true, mobile: true, registrationDetails: true, sellerProfile: true, organizationId: true, organization: { include: { profile: true } } } },
+      buyer: { select: { id: true, name: true, email: true, mobile: true, registrationDetails: true, buyerProfile: true, organizationId: true, organization: { include: { profile: true } } } }
+    }
+  });
+  if (!invoice || (!isAdmin(req) && invoice.buyerId !== userId(req) && invoice.sellerId !== userId(req))) {
+    throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  }
+  const { buffer, filename } = await getOrGenerateInvoicePdfBuffer(invoice);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', String(buffer.length));
+  res.end(buffer);
 }));
 
 for (const [path, data, action] of [

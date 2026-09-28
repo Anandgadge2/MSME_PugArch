@@ -5,6 +5,29 @@ import { getGCSBucket, getGCSBucketName } from '../../config/gcs.js';
 import { logger } from '../../config/logger.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { StorageProvider, StorageUploadInput, StorageUploadResult } from './storage.service.js';
+let cachedClockSkewMs = 0;
+let lastSkewCheck = 0;
+
+export async function getGcsClockSkewMs(): Promise<number> {
+  const now = Date.now();
+  if (now - lastSkewCheck < 10 * 60 * 1000 && lastSkewCheck > 0) {
+    return cachedClockSkewMs;
+  }
+  try {
+    const res = await fetch('https://storage.googleapis.com', { method: 'HEAD' });
+    const dateHeader = res.headers.get('date');
+    if (dateHeader) {
+      const serverTime = new Date(dateHeader).getTime();
+      if (!isNaN(serverTime)) {
+        cachedClockSkewMs = serverTime - Date.now();
+        lastSkewCheck = now;
+      }
+    }
+  } catch {
+    // Keep existing cachedClockSkewMs if fetch fails
+  }
+  return cachedClockSkewMs;
+}
 
 export class GCPStorageService implements StorageProvider {
   name: 'gcp' = 'gcp';
@@ -188,10 +211,13 @@ export class GCPStorageService implements StorageProvider {
         ? (options as any).disposition
         : (isInlineType ? 'inline' : 'attachment');
 
+      const clockSkew = await getGcsClockSkewMs();
+      const expirationTime = Date.now() + clockSkew + expiresIn * 1000;
+
       const [url] = await file.getSignedUrl({
         version: 'v4',
         action,
-        expires: Date.now() + expiresIn * 1000,
+        expires: expirationTime,
         responseDisposition
       });
 

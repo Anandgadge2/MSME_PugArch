@@ -1,4 +1,6 @@
 import PDFDocument from 'pdfkit';
+import path from 'path';
+import fs from 'fs';
 import { db, notifyWorkflowSoon } from './workflow/workflow-common.js';
 import { getFileContent } from './storage/storage.service.js';
 import { logger } from '../config/logger.js';
@@ -47,9 +49,263 @@ function formatDate(val: unknown): string {
 }
 
 /**
- * Generates an official, high-precision GST Tax Invoice PDF Buffer using PDFKit.
+ * Converts numbers into official Indian currency words representation.
+ */
+function numberToWords(amount: number): string {
+  const num = Math.round(Number(amount || 0));
+  if (!Number.isFinite(num) || num <= 0) return 'Zero Rupees Only';
+
+  const units = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+  const toWords = (n: number): string => {
+    if (n < 20) return units[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + units[n % 10] : '');
+    if (n < 1000) return units[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' and ' + toWords(n % 100) : '');
+    if (n < 100000) return toWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + toWords(n % 1000) : '');
+    if (n < 10000000) return toWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + toWords(n % 100000) : '');
+    return toWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + toWords(n % 10000000) : '');
+  };
+
+  const whole = Math.floor(num);
+  const fraction = Math.round((Number(amount) - whole) * 100);
+
+  let words = toWords(whole) + ' Rupees';
+  if (fraction > 0) {
+    words += ' and ' + toWords(fraction) + ' Paise';
+  }
+  return words + ' Only';
+}
+
+/**
+ * Resolves an asset input (fileAssetId, /api/files/:id/view, data URL, GCS URL, or disk file) into a clean image Buffer.
+ */
+async function resolveImageBuffer(
+  input: string | number | null | undefined,
+  fallbackUserId?: number
+): Promise<Buffer | null> {
+  if (!input) return null;
+  try {
+    let rawBuffer: Buffer | null = null;
+
+    if (typeof input === 'number') {
+      try {
+        const stored = await getFileContent(input, { id: fallbackUserId || 1, role: 'admin' });
+        if (stored?.buffer && stored.buffer.length > 0) {
+          rawBuffer = stored.buffer;
+        }
+      } catch {}
+    } else if (typeof input === 'string') {
+      const trimmed = input.trim();
+      if (trimmed) {
+        if (trimmed.startsWith('data:image/')) {
+          const base64Index = trimmed.indexOf(';base64,');
+          if (base64Index !== -1) {
+            rawBuffer = Buffer.from(trimmed.substring(base64Index + 8), 'base64');
+          }
+        } else {
+          const m = trimmed.match(/\/api\/(?:public\/)?files\/(\d+)/);
+          let candidateFileId: number | null = m && m[1] ? parseInt(m[1], 10) : null;
+
+          if (candidateFileId) {
+            try {
+              const stored = await getFileContent(candidateFileId, { id: fallbackUserId || 1, role: 'admin' });
+              if (stored?.buffer && stored.buffer.length > 0) {
+                rawBuffer = stored.buffer;
+              }
+            } catch {}
+          }
+
+          if (!rawBuffer) {
+            const cleanUrl = trimmed.split('?')[0];
+            try {
+              const asset = await db.fileAsset.findFirst({
+                where: {
+                  OR: [
+                    { url: cleanUrl },
+                    { key: cleanUrl },
+                    { key: { endsWith: path.basename(cleanUrl) } }
+                  ],
+                  status: 'active'
+                },
+                select: { id: true, url: true }
+              });
+              if (asset?.id) {
+                try {
+                  const stored = await getFileContent(asset.id, { id: fallbackUserId || 1, role: 'admin' });
+                  if (stored?.buffer && stored.buffer.length > 0) {
+                    rawBuffer = stored.buffer;
+                  }
+                } catch {}
+
+                if (!rawBuffer && asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://'))) {
+                  try {
+                    const resp = await fetch(asset.url, { signal: AbortSignal.timeout(4000) });
+                    if (resp.ok) {
+                      rawBuffer = Buffer.from(await resp.arrayBuffer());
+                    }
+                  } catch {}
+                }
+              }
+            } catch {}
+          }
+
+          if (!rawBuffer) {
+            const localCandidates = [
+              path.resolve(process.cwd(), trimmed.replace(/^\//, '')),
+              path.resolve(process.cwd(), 'uploads', path.basename(trimmed)),
+              path.resolve(process.cwd(), '../frontend/public', trimmed.replace(/^\//, '')),
+              path.resolve(process.cwd(), 'public', trimmed.replace(/^\//, ''))
+            ];
+            for (const cand of localCandidates) {
+              if (fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
+                rawBuffer = fs.readFileSync(cand);
+                break;
+              }
+            }
+          }
+
+          if (!rawBuffer && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+            try {
+              const resp = await fetch(trimmed, { signal: AbortSignal.timeout(4000) });
+              if (resp.ok) {
+                rawBuffer = Buffer.from(await resp.arrayBuffer());
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+
+    if (!rawBuffer || rawBuffer.length === 0) return null;
+
+    try {
+      const sharpMod: any = await import('sharp');
+      const sharpFn = (sharpMod && (sharpMod.default || sharpMod)) as any;
+      if (typeof sharpFn === 'function') {
+        // Convert to clean, standardized PNG buffer to eliminate malformed JPEG EXIF headers that crash PDFKit's jpeg-exif parser
+        return await sharpFn(rawBuffer).png().toBuffer();
+      }
+      return rawBuffer;
+    } catch {
+      return rawBuffer;
+    }
+  } catch (err) {
+    logger.warn({ err, input }, 'Failed to resolve image buffer');
+    return null;
+  }
+}
+
+/**
+ * Safely renders an image buffer in PDFKit without crashing the stream.
+ */
+function safeDrawImage(doc: any, buffer: Buffer | null, x: number, y: number, options: any): boolean {
+  if (!buffer || buffer.length === 0) return false;
+  try {
+    doc.image(buffer, x, y, options);
+    return true;
+  } catch (err) {
+    logger.warn({ err }, 'PDFKit safeDrawImage failed to draw image');
+    return false;
+  }
+}
+
+/**
+ * Generates an official, high-precision GST Tax Invoice PDF Buffer matching the portal ERP design.
  */
 export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Promise<Buffer> {
+  const po = invoice.purchaseOrder || {};
+  const seller = invoice.seller || po.seller || {};
+  const buyer = invoice.buyer || po.buyer || {};
+  const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+  const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
+
+  // Check fallback branding from organization owner if missing
+  if ((!sellerReg.stampUrl || !sellerReg.signatureUrl || !sellerReg.logoUrl) && seller.organizationId) {
+    const orgSeller = await db.user.findFirst({
+      where: { organizationId: seller.organizationId, registrationDetails: { not: null } },
+      select: { registrationDetails: true }
+    });
+    if (orgSeller?.registrationDetails) {
+      const osReg = orgSeller.registrationDetails as Record<string, any>;
+      if (!sellerReg.stampUrl && osReg.stampUrl) sellerReg.stampUrl = osReg.stampUrl;
+      if (!sellerReg.signatureUrl && osReg.signatureUrl) sellerReg.signatureUrl = osReg.signatureUrl;
+      if (!sellerReg.logoUrl && osReg.logoUrl) sellerReg.logoUrl = osReg.logoUrl;
+    }
+  }
+
+  // Pre-fetch seller images in parallel
+  const [sellerLogoBuf, sellerStampBuf, sellerSigBuf] = await Promise.all([
+    resolveImageBuffer(sellerReg.logoUrl || seller.organization?.profile?.logoUrl || seller.organization?.organizationLogoFileId, seller.id),
+    resolveImageBuffer(sellerReg.stampUrl, seller.id),
+    resolveImageBuffer(sellerReg.signatureUrl, seller.id)
+  ]);
+
+  const sellerName = seller.organization?.organizationName || seller.sellerProfile?.businessName || seller.sellerProfile?.companyName || sellerReg.companyName || sellerReg.businessName || seller.name || 'N/A';
+  const sellerAddress = seller.organization?.address || seller.sellerProfile?.registeredAddress || seller.organization?.profile?.registeredAddress || sellerReg.registeredAddress || sellerReg.address || 'N/A';
+  const sellerGstin = seller.organization?.gstin || seller.sellerProfile?.gst || sellerReg.gstin || sellerReg.gstDetails?.gstin || 'N/A';
+  const sellerCin = seller.organization?.cinNumber || seller.sellerProfile?.cin || sellerReg.cin || 'N/A';
+  const sellerPhone = seller.mobile || seller.sellerProfile?.mobile || sellerReg.mobile || 'N/A';
+  const sellerEmail = seller.email || sellerReg.email || 'N/A';
+
+  const buyerName = buyer.organization?.organizationName || buyer.buyerProfile?.organizationName || buyer.buyerProfile?.companyName || buyerReg.companyName || buyerReg.businessName || buyer.name || 'N/A';
+  const buyerAddress = po.deliveryAddress || buyer.organization?.address || buyer.buyerProfile?.registeredAddress || buyerReg.registeredAddress || buyerReg.address || 'N/A';
+  const buyerGstin = buyer.organization?.gstin || buyer.buyerProfile?.gst || buyerReg.gstin || buyerReg.gstDetails?.gstin || 'N/A';
+  const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || buyerReg.pan || buyerReg.gstDetails?.pan || 'N/A';
+
+  const invNo = invoice.invoiceNumber || `INV-${po.poNumber || invoice.id || '2026-001'}`;
+  const dateStr = formatDate(invoice.createdAt || new Date());
+  const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
+  const buyerGstinCode = (buyerGstin || '').trim().substring(0, 2);
+  const isInterstate = Boolean(
+    invoice.interstate ||
+    Number(invoice.igstAmount) > 0 ||
+    (/^\d{2}$/.test(sellerGstinCode) && /^\d{2}$/.test(buyerGstinCode) && sellerGstinCode !== buyerGstinCode) ||
+    (sellerReg.state && buyerReg.state && String(sellerReg.state).toLowerCase() !== String(buyerReg.state).toLowerCase())
+  );
+  const buyerStateName = buyer.buyerProfile?.state || buyerReg.state || (buyerGstinCode === '21' ? 'Odisha' : 'Other State');
+  const placeOfSupply = isInterstate
+    ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
+    : `${seller.sellerProfile?.state || sellerReg.state || 'Maharashtra'} - State (CGST + SGST)`;
+
+  const rawItems = invoice.items?.length ? invoice.items : (po.items?.length ? po.items : []);
+  const totalAmountNum = Number(invoice.amount || po.amount || 0);
+
+  const items = rawItems.length > 0
+    ? rawItems.map((item: any, idx: number) => {
+        const qty = Number(item.quantity || 1);
+        let unitPrice = Number(item.unitPrice || item.priceUnit || 0);
+        let lineTaxable = Number(item.taxableAmount || (unitPrice > 0 ? unitPrice * qty : 0));
+        if (qty > 1 && totalAmountNum > 0 && (unitPrice * qty) > (totalAmountNum * 1.5)) {
+          unitPrice = Number((unitPrice / qty).toFixed(2));
+          lineTaxable = Number((unitPrice * qty).toFixed(2));
+        } else if (lineTaxable > 0 && (!unitPrice || unitPrice === lineTaxable)) {
+          unitPrice = Number((lineTaxable / qty).toFixed(2));
+        }
+        return {
+          srNo: idx + 1,
+          description: item.itemName || item.description || po.title || 'Order Item',
+          hsn: item.hsnCode || item.hsn || item.product?.hsnCode || '-',
+          qty,
+          unitPrice: unitPrice || (lineTaxable / Math.max(qty, 1)),
+          totalAmount: lineTaxable
+        };
+      })
+    : [{
+        srNo: 1,
+        description: po.title || `Purchase Order #${po.poNumber || invoice.id}`,
+        hsn: '-',
+        qty: 1,
+        unitPrice: Number(invoice.taxableAmount || (totalAmountNum > 0 ? totalAmountNum / 1.18 : 0)),
+        totalAmount: Number(invoice.taxableAmount || (totalAmountNum > 0 ? totalAmountNum / 1.18 : 0))
+      }];
+
+  const subtotalNum = Number(invoice.taxableAmount) || items.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0) || (totalAmountNum > 0 ? Number((totalAmountNum / 1.18).toFixed(2)) : 0);
+  const cgstNum = isInterstate ? 0 : (Number(invoice.cgstAmount) || Math.round(subtotalNum * 0.09 * 100) / 100);
+  const sgstNum = isInterstate ? 0 : (Number(invoice.sgstAmount) || Math.round(subtotalNum * 0.09 * 100) / 100);
+  const igstNum = isInterstate ? (Number(invoice.igstAmount) || Math.round(subtotalNum * 0.18 * 100) / 100) : 0;
+  const grandTotalNum = totalAmountNum || Math.round((subtotalNum + (isInterstate ? igstNum : (cgstNum + sgstNum))) * 100) / 100;
+
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 36 });
@@ -59,188 +315,170 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', (err: Error) => reject(err));
 
-      const po = invoice.purchaseOrder || {};
-      const seller = invoice.seller || po.seller || {};
-      const buyer = invoice.buyer || po.buyer || {};
-      const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
-      const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
-
-      const sellerName = seller.organization?.organizationName || seller.sellerProfile?.businessName || seller.sellerProfile?.companyName || sellerReg.companyName || sellerReg.businessName || seller.name || 'N/A';
-      const sellerAddress = seller.organization?.address || seller.sellerProfile?.registeredAddress || seller.organization?.profile?.registeredAddress || sellerReg.registeredAddress || sellerReg.address || 'N/A';
-      const sellerGstin = seller.organization?.gstin || seller.sellerProfile?.gst || sellerReg.gstin || sellerReg.gstDetails?.gstin || 'N/A';
-      const sellerCin = seller.organization?.cinNumber || seller.sellerProfile?.cin || sellerReg.cin || 'N/A';
-      const sellerPhone = seller.mobile || seller.sellerProfile?.mobile || sellerReg.mobile || 'N/A';
-      const sellerEmail = seller.email || sellerReg.email || 'N/A';
-
-      const buyerName = buyer.organization?.organizationName || buyer.buyerProfile?.organizationName || buyer.buyerProfile?.companyName || buyerReg.companyName || buyerReg.businessName || buyer.name || 'N/A';
-      const buyerAddress = po.deliveryAddress || buyer.organization?.address || buyer.buyerProfile?.registeredAddress || buyerReg.registeredAddress || buyerReg.address || 'N/A';
-      const buyerGstin = buyer.organization?.gstin || buyer.buyerProfile?.gst || buyerReg.gstin || buyerReg.gstDetails?.gstin || 'N/A';
-      const buyerPan = buyer.organization?.panNumber || buyer.buyerProfile?.pan || buyerReg.pan || buyerReg.gstDetails?.pan || 'N/A';
-
-      const invNo = invoice.invoiceNumber || `INV-${po.poNumber || invoice.id || '2026-001'}`;
-      const dateStr = formatDate(invoice.createdAt || new Date());
-
-      const rawItems = invoice.items?.length ? invoice.items : (po.items?.length ? po.items : []);
-      const totalAmountNum = Number(invoice.amount || po.amount || 0);
-
-      const items = rawItems.length > 0
-        ? rawItems.map((item: any, idx: number) => {
-            const qty = Number(item.quantity || 1);
-            const unitPrice = Number(item.unitPrice || item.priceUnit || 0);
-            const lineTotal = Number(item.totalAmount || item.taxableAmount || qty * unitPrice || totalAmountNum);
-            return {
-              srNo: idx + 1,
-              description: item.itemName || po.title || 'Order Item',
-              hsn: item.hsnCode || item.hsn || '84719000',
-              qty,
-              unitPrice: unitPrice || (lineTotal / Math.max(qty, 1)),
-              totalAmount: lineTotal
-            };
-          })
-        : [{
-            srNo: 1,
-            description: po.title || `Purchase Order #${po.poNumber || invoice.id}`,
-            hsn: '84719000',
-            qty: 1,
-            unitPrice: totalAmountNum,
-            totalAmount: totalAmountNum
-          }];
-
-      const subtotalNum = Number(invoice.taxableAmount) || items.reduce((sum, item) => sum + Number(item.totalAmount || 0), 0) || totalAmountNum;
-      const isInterstate = Boolean(invoice.interstate);
-      const cgstNum = isInterstate ? 0 : (Number(invoice.cgstAmount) || Math.round(subtotalNum * 0.09 * 100) / 100);
-      const sgstNum = isInterstate ? 0 : (Number(invoice.sgstAmount) || Math.round(subtotalNum * 0.09 * 100) / 100);
-      const igstNum = isInterstate ? (Number(invoice.igstAmount) || Math.round(subtotalNum * 0.18 * 100) / 100) : 0;
-      const grandTotalNum = totalAmountNum || Math.round((subtotalNum + cgstNum + sgstNum + igstNum) * 100) / 100;
-
-      // Page Layout Constants
-      const pageWidth = 595.28; // A4 Width
       const pageMargin = 36;
-      const contentWidth = pageWidth - (pageMargin * 2); // 523.28
+      const contentWidth = 595.28 - (pageMargin * 2); // 523.28
+      const rightX = pageMargin + contentWidth;
 
-      // Top Navy Header Banner
-      doc.rect(pageMargin, 30, contentWidth, 36).fill('#12335f');
-      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold').text('TAX INVOICE', pageMargin + 15, 38);
-      doc.fontSize(9).font('Helvetica').text('ORIGINAL COPY FOR RECIPIENT (GST COMPLIANT)', pageMargin + 15, 56);
+      let currentY = 28;
 
-      doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text(invNo, pageMargin + contentWidth - 180, 38, { width: 165, align: 'right' });
-      doc.fontSize(8.5).font('Helvetica').text(`Date: ${dateStr}`, pageMargin + contentWidth - 180, 54, { width: 165, align: 'right' });
+      // 1. TOP HEADER BOX: Seller details (left) & Logo + CIN (right)
+      const headerBoxHeight = 65;
+      doc.rect(pageMargin, currentY, contentWidth, headerBoxHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
 
-      let currentY = 76;
+      // Left: Seller Info
+      doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text(sellerName, pageMargin + 10, currentY + 8, { width: contentWidth - 170, ellipsis: true });
+      doc.fillColor('#334155').fontSize(7.5).font('Helvetica').text(sellerAddress, pageMargin + 10, currentY + 22, { width: contentWidth - 170, height: 24, ellipsis: true });
+      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`GST NO: ${sellerGstin}  |  Phone: ${sellerPhone}`, pageMargin + 10, currentY + 48, { width: contentWidth - 170, ellipsis: true });
 
-      // Seller & Buyer Address Boxes
-      doc.rect(pageMargin, currentY, contentWidth / 2 - 4, 85).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-      doc.rect(pageMargin + contentWidth / 2 + 4, currentY, contentWidth / 2 - 4, 85).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
+      // Right: Seller Logo & CIN
+      if (sellerLogoBuf) {
+        safeDrawImage(doc, sellerLogoBuf, rightX - 145, currentY + 8, { fit: [135, 34], align: 'right' });
+      }
+      if (sellerCin && sellerCin !== 'N/A') {
+        doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`CIN: ${sellerCin}`, rightX - 160, currentY + 48, { width: 150, align: 'right' });
+      }
 
-      // Seller Details Box
-      doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('SUPPLIER / SELLER DETAILS', pageMargin + 8, currentY + 8);
-      doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold').text(sellerName, pageMargin + 8, currentY + 20);
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(sellerAddress, pageMargin + 8, currentY + 32, { width: contentWidth / 2 - 20 });
-      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`GSTIN: ${sellerGstin}`, pageMargin + 8, currentY + 60);
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(`CIN: ${sellerCin} | Mobile: ${sellerPhone}`, pageMargin + 8, currentY + 71);
+      currentY += headerBoxHeight;
 
-      // Buyer Details Box
-      const rightBoxX = pageMargin + contentWidth / 2 + 4;
-      doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('BILLED TO / BUYER DETAILS', rightBoxX + 8, currentY + 8);
-      doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold').text(buyerName, rightBoxX + 8, currentY + 20);
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(buyerAddress, rightBoxX + 8, currentY + 32, { width: contentWidth / 2 - 20 });
-      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`GSTIN: ${buyerGstin}`, rightBoxX + 8, currentY + 60);
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(`PAN: ${buyerPan} | Place of Supply: ${isInterstate ? 'Interstate (IGST)' : 'Maharashtra (27)'}`, rightBoxX + 8, currentY + 71);
+      // 2. TITLE BAR: TAX INVOICE - ORIGINAL COPY FOR RECIPIENT
+      const titleHeight = 18;
+      doc.rect(pageMargin, currentY, contentWidth, titleHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+      doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold').text('TAX INVOICE - ORIGINAL COPY FOR RECIPIENT', pageMargin, currentY + 4.5, { width: contentWidth, align: 'center' });
 
-      currentY += 95;
+      currentY += titleHeight;
+
+      // 3. METADATA ROW: INV No & Date (left), Place of Supply (right)
+      const metaHeight = 18;
+      const midDividerX = pageMargin + (contentWidth / 2);
+      doc.rect(pageMargin, currentY, contentWidth, metaHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+      doc.moveTo(midDividerX, currentY).lineTo(midDividerX, currentY + metaHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`INV No: ${invNo}    Date: ${dateStr}`, pageMargin + 10, currentY + 5);
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`Place Of Supply: ${placeOfSupply}`, midDividerX + 10, currentY + 5);
+
+      currentY += metaHeight;
+
+      // 4. BILL TO & SHIP TO SECTION (2 Columns with divider)
+      const billShipHeight = 70;
+      doc.rect(pageMargin, currentY, contentWidth, billShipHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+      doc.moveTo(midDividerX, currentY).lineTo(midDividerX, currentY + billShipHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+
+      // Bill To Column
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text('Bill To:', pageMargin + 10, currentY + 6);
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(buyerName, pageMargin + 10, currentY + 18, { width: (contentWidth / 2) - 20, ellipsis: true });
+      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(buyerAddress, pageMargin + 10, currentY + 30, { width: (contentWidth / 2) - 20, height: 20, ellipsis: true });
+      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`PAN: ${buyerPan}  |  GSTIN: ${buyerGstin}`, pageMargin + 10, currentY + 54, { width: (contentWidth / 2) - 20, ellipsis: true });
+
+      // Ship To Column
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text('Ship To:', midDividerX + 10, currentY + 6);
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(buyerName, midDividerX + 10, currentY + 18, { width: (contentWidth / 2) - 20, ellipsis: true });
+      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(buyerAddress, midDividerX + 10, currentY + 30, { width: (contentWidth / 2) - 20, height: 24, ellipsis: true });
+
+      currentY += billShipHeight;
+
+      // 5. ITEMS TABLE
+      const colX = [pageMargin, pageMargin + 30, pageMargin + 250, pageMargin + 320, pageMargin + 380, pageMargin + 445];
+      const colW = [30, 220, 70, 60, 65, 78.28];
 
       // Table Header Row
-      const colX = [
-        pageMargin,
-        pageMargin + 30,
-        pageMargin + 250,
-        pageMargin + 320,
-        pageMargin + 370,
-        pageMargin + 440
-      ];
-      const colW = [30, 220, 70, 50, 70, 83];
-
-      doc.rect(pageMargin, currentY, contentWidth, 20).fill('#f1f5f9');
+      doc.rect(pageMargin, currentY, contentWidth, 18).strokeColor('#1e293b').lineWidth(0.5).stroke();
       doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold');
-      doc.text('SR#', colX[0] + 4, currentY + 6);
-      doc.text('ITEM DESCRIPTION', colX[1] + 4, currentY + 6);
-      doc.text('HSN/SAC', colX[2] + 4, currentY + 6);
-      doc.text('QTY', colX[3] + 4, currentY + 6, { width: colW[3] - 8, align: 'right' });
-      doc.text('UNIT PRICE', colX[4] + 4, currentY + 6, { width: colW[4] - 8, align: 'right' });
-      doc.text('AMOUNT', colX[5] + 4, currentY + 6, { width: colW[5] - 8, align: 'right' });
+      doc.text('Sr. No.', colX[0] + 4, currentY + 5, { width: colW[0] - 8, align: 'center' });
+      doc.text('Description of Goods / Services', colX[1] + 4, currentY + 5, { width: colW[1] - 8, align: 'left' });
+      doc.text('HSN/SAC', colX[2] + 4, currentY + 5, { width: colW[2] - 8, align: 'center' });
+      doc.text('Qty', colX[3] + 4, currentY + 5, { width: colW[3] - 8, align: 'center' });
+      doc.text('Price/Unit', colX[4] + 4, currentY + 5, { width: colW[4] - 8, align: 'right' });
+      doc.text('Amount', colX[5] + 4, currentY + 5, { width: colW[5] - 8, align: 'right' });
 
-      currentY += 20;
+      currentY += 18;
 
       // Items Rows
       items.forEach((item, idx) => {
-        // Page overflow protection: add new page if item row would go past safe zone
-        if (currentY + 22 > 842.89 - 140) {
+        if (currentY + 20 > 841.89 - 180) {
           doc.addPage();
           currentY = 36;
         }
-        const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
-        doc.rect(pageMargin, currentY, contentWidth, 22).fill(rowBg);
-        doc.rect(pageMargin, currentY, contentWidth, 22).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+        const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        doc.rect(pageMargin, currentY, contentWidth, 20).fill(rowBg);
+        doc.rect(pageMargin, currentY, contentWidth, 20).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
 
-        doc.fillColor('#334155').fontSize(8).font('Helvetica');
-        doc.text(String(item.srNo), colX[0] + 4, currentY + 7);
-        doc.font('Helvetica-Bold').fillColor('#0f172a').text(item.description, colX[1] + 4, currentY + 7, { width: colW[1] - 8, height: 14 });
-        doc.font('Helvetica').fillColor('#475569').text(item.hsn, colX[2] + 4, currentY + 7);
-        doc.text(String(item.qty), colX[3] + 4, currentY + 7, { width: colW[3] - 8, align: 'right' });
-        doc.text(formatInr(item.unitPrice), colX[4] + 4, currentY + 7, { width: colW[4] - 8, align: 'right' });
-        doc.font('Helvetica-Bold').fillColor('#0f172a').text(formatInr(item.totalAmount), colX[5] + 4, currentY + 7, { width: colW[5] - 8, align: 'right' });
+        doc.fillColor('#334155').fontSize(7.5).font('Helvetica');
+        doc.text(String(item.srNo), colX[0] + 4, currentY + 6, { width: colW[0] - 8, align: 'center' });
+        doc.font('Helvetica-Bold').fillColor('#0f172a').text(item.description, colX[1] + 4, currentY + 6, { width: colW[1] - 8, height: 12, ellipsis: true });
+        doc.font('Helvetica').fillColor('#475569').text(item.hsn, colX[2] + 4, currentY + 6, { width: colW[2] - 8, align: 'center' });
+        doc.text(String(item.qty), colX[3] + 4, currentY + 6, { width: colW[3] - 8, align: 'center' });
+        doc.text(formatInr(item.unitPrice), colX[4] + 4, currentY + 6, { width: colW[4] - 8, align: 'right' });
+        doc.font('Helvetica-Bold').fillColor('#0f172a').text(formatInr(item.totalAmount), colX[5] + 4, currentY + 6, { width: colW[5] - 8, align: 'right' });
 
-        currentY += 22;
+        currentY += 20;
       });
 
-      currentY += 10;
+      // 6. SUBTOTAL & TAX CALCULATIONS (Right aligned)
+      const summaryBoxW = 240;
+      const summaryBoxX = rightX - summaryBoxW;
 
-      // Totals & Taxes Summary Box (Right aligned)
-      const summaryWidth = 240;
-      const summaryX = pageMargin + contentWidth - summaryWidth;
-
-      doc.rect(summaryX, currentY, summaryWidth, 85).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-
-      let sumY = currentY + 8;
-      const addSummaryLine = (label: string, valStr: string, bold = false) => {
-        doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(8.5).fillColor(bold ? '#0f172a' : '#475569');
-        doc.text(label, summaryX + 10, sumY);
-        doc.text(valStr, summaryX + 10, sumY, { width: summaryWidth - 20, align: 'right' });
-        sumY += 14;
+      const drawCalcRow = (label: string, valStr: string, isBold = false) => {
+        doc.rect(summaryBoxX, currentY, summaryBoxW, 16).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+        doc.fillColor(isBold ? '#0f172a' : '#475569').fontSize(isBold ? 8.5 : 8).font(isBold ? 'Helvetica-Bold' : 'Helvetica');
+        doc.text(label, summaryBoxX + 10, currentY + 4);
+        doc.text(valStr, summaryBoxX + 10, currentY + 4, { width: summaryBoxW - 20, align: 'right' });
+        currentY += 16;
       };
 
-      addSummaryLine('Subtotal (Taxable Value):', formatInr(subtotalNum));
+      drawCalcRow('Sub Total (Taxable Amount):', formatInr(subtotalNum));
       if (isInterstate) {
-        addSummaryLine('IGST (18%):', formatInr(igstNum));
+        drawCalcRow('IGST (18%):', formatInr(igstNum));
       } else {
-        addSummaryLine('CGST (9%):', formatInr(cgstNum));
-        addSummaryLine('SGST (9%):', formatInr(sgstNum));
+        drawCalcRow('CGST (9%):', formatInr(cgstNum));
+        drawCalcRow('SGST (9%):', formatInr(sgstNum));
+      }
+      drawCalcRow('TOTAL INVOICE AMOUNT:', formatInr(grandTotalNum), true);
+
+      // Amount in words
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Oblique').text(`Amount in words: ${numberToWords(grandTotalNum)}`, pageMargin + 10, currentY - 30, { width: contentWidth - summaryBoxW - 20 });
+
+      currentY += 8;
+
+      // 7. FOOTER SECTION: Bank Details (left) & Stamp / Signature (right)
+      const footerBoxHeight = 85;
+      const footerDividerX = pageMargin + (contentWidth / 2) + 20;
+      doc.rect(pageMargin, currentY, contentWidth, footerBoxHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+      doc.moveTo(footerDividerX, currentY).lineTo(footerDividerX, currentY + footerBoxHeight).strokeColor('#1e293b').lineWidth(0.5).stroke();
+
+      // Bank Details (Left side)
+      const bankName = sellerReg.bankDetails?.bankName || sellerReg.bankName || seller.sellerProfile?.bankAccounts?.[0]?.bankName || seller.sellerProfile?.bankName || 'State Bank of India';
+      const accountName = sellerReg.bankDetails?.accountHolderName || sellerReg.accountHolderName || seller.sellerProfile?.bankAccounts?.[0]?.holderName || seller.sellerProfile?.accountHolderName || sellerName;
+      const accountNo = sellerReg.bankDetails?.accountNumber || sellerReg.accountNumber || seller.sellerProfile?.bankAccounts?.[0]?.accountNumberMasked || seller.sellerProfile?.bankAccounts?.[0]?.accountNumber || seller.sellerProfile?.bankAccountNo || 'N/A';
+      const ifscCode = sellerReg.bankDetails?.ifscCode || sellerReg.ifscCode || seller.sellerProfile?.bankAccounts?.[0]?.ifsc || seller.sellerProfile?.bankAccounts?.[0]?.ifscCode || seller.sellerProfile?.bankIfsc || 'N/A';
+
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text('Bank Details:', pageMargin + 10, currentY + 8);
+      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(`Bank Name: ${bankName}`, pageMargin + 10, currentY + 22);
+      doc.text(`Bank Account No: ${accountNo}`, pageMargin + 10, currentY + 34);
+      doc.text(`IFSC CODE: ${ifscCode}`, pageMargin + 10, currentY + 46);
+      doc.text(`Account Name: ${accountName}`, pageMargin + 10, currentY + 58);
+      doc.fillColor('#059669').fontSize(7).font('Helvetica-Bold').text('Status: GST Tax Invoice Created & Verified', pageMargin + 10, currentY + 72);
+
+      // Signatory Box (Right side)
+      const stampBoxWidth = rightX - footerDividerX;
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`For ${sellerName}`, footerDividerX + 10, currentY + 8, { width: stampBoxWidth - 20, align: 'right', ellipsis: true });
+
+      // Render Official Stamp if present
+      if (sellerStampBuf) {
+        safeDrawImage(doc, sellerStampBuf, footerDividerX + 15, currentY + 18, { fit: [55, 38], align: 'left' });
       }
 
-      doc.rect(summaryX, sumY - 4, summaryWidth, 0.75).fill('#cbd5e1');
-      sumY += 2;
-      addSummaryLine('TOTAL INVOICE AMOUNT:', formatInr(grandTotalNum), true);
+      // Render Official Signature if present
+      if (sellerSigBuf) {
+        safeDrawImage(doc, sellerSigBuf, rightX - 95, currentY + 34, { fit: [80, 26], align: 'right' });
+      }
 
-      // Bank Details (Left side bottom)
-      doc.rect(pageMargin, currentY, contentWidth - summaryWidth - 12, 85).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-      doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('PAYMENT & BANK DETAILS', pageMargin + 10, currentY + 8);
-      const bankName = sellerReg.bankDetails?.bankName || sellerReg.bankName || 'N/A';
-      const accountName = sellerReg.bankDetails?.accountHolderName || sellerReg.accountHolderName || sellerName;
-      const accountNo = sellerReg.bankDetails?.accountNumber || sellerReg.accountNumber || 'N/A';
-      const ifscCode = sellerReg.bankDetails?.ifscCode || sellerReg.ifscCode || 'N/A';
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(`Bank Name: ${bankName}`, pageMargin + 10, currentY + 22);
-      doc.text(`Account Name: ${accountName}`, pageMargin + 10, currentY + 34);
-      doc.text(`Account No: ${accountNo}`, pageMargin + 10, currentY + 46);
-      doc.text(`IFSC Code: ${ifscCode}`, pageMargin + 10, currentY + 58);
-      doc.fillColor('#059669').fontSize(7.5).font('Helvetica-Bold').text('Status: GST Tax Invoice Created & Verified', pageMargin + 10, currentY + 70);
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text('Authorized Signatory', footerDividerX + 10, currentY + footerBoxHeight - 12, { width: stampBoxWidth - 20, align: 'right' });
 
-      currentY += 100;
-
-      // Stamp & Authorized Signatory Footer
-      doc.rect(pageMargin, currentY, contentWidth, 50).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text('Terms & Conditions: 1. Payment due within agreed PO timeline. 2. Subject to MSME Procurement Rules.', pageMargin + 10, currentY + 10, { width: contentWidth - 170 });
-      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(`For ${sellerName}`, pageMargin + contentWidth - 150, currentY + 10, { width: 140, align: 'center' });
-      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text('Authorized Signatory / Digital Stamp', pageMargin + contentWidth - 150, currentY + 36, { width: 140, align: 'center' });
+      // Page bottom footer
+      doc.strokeColor('#cbd5e1').lineWidth(0.5);
+      doc.moveTo(pageMargin, 810).lineTo(rightX, 810).stroke();
+      doc.fillColor('#94a3b8').fontSize(7).font('Helvetica').text('GST Tax Compliant Invoice - Government MSME Portal ERP', pageMargin, 816);
+      doc.text('Page 1 of 1', pageMargin, 816, { width: contentWidth, align: 'right' });
 
       doc.end();
     } catch (err) {
@@ -252,32 +490,255 @@ export async function generateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Pro
 /**
  * Retrieves existing stored PDF buffer or generates exact Tax Invoice PDF buffer.
  */
-export async function getOrGenerateInvoicePdfBuffer(invoice: TaxInvoicePdfInput): Promise<{ buffer: Buffer; filename: string }> {
-  const filename = `Invoice_${invoice.invoiceNumber || `INV-${invoice.id}`}.pdf`;
-
-  // 1. Check if invoice has stored fileAssetId or invoiceFileId
-  const fileAssetId = invoice.invoiceFileId || invoice.fileAssetId;
-  if (fileAssetId) {
+export async function getOrGenerateInvoicePdfBuffer(invoice: any): Promise<{ buffer: Buffer; filename: string }> {
+  let fullInvoice = invoice;
+  const invId = typeof invoice === 'number' ? invoice : invoice?.id;
+  if (invId && (!invoice?.seller?.registrationDetails || !invoice?.buyer?.registrationDetails || !invoice?.purchaseOrder?.items)) {
     try {
-      const stored = await getFileContent(fileAssetId, { id: invoice.sellerId || 1, role: 'admin' });
-      if (stored?.buffer && stored.buffer.length > 0) {
-        logger.info({ invoiceId: invoice.id, fileAssetId }, 'Retrieved existing stored invoice PDF file asset buffer');
-        return { buffer: stored.buffer, filename };
+      const dbInv = await db.invoice.findUnique({
+        where: { id: invId },
+        include: {
+          items: true,
+          purchaseOrder: {
+            include: {
+              items: true,
+              buyer: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  mobile: true,
+                  registrationDetails: true,
+                  buyerProfile: true,
+                  organizationId: true,
+                  organization: { include: { profile: true } }
+                }
+              },
+              seller: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  mobile: true,
+                  registrationDetails: true,
+                  sellerProfile: true,
+                  organizationId: true,
+                  organization: { include: { profile: true } }
+                }
+              }
+            }
+          },
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              sellerProfile: true,
+              organizationId: true,
+              organization: { include: { profile: true } }
+            }
+          },
+          buyer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              buyerProfile: true,
+              organizationId: true,
+              organization: { include: { profile: true } }
+            }
+          }
+        }
+      });
+      if (dbInv) {
+        fullInvoice = { ...invoice, ...dbInv };
       }
-    } catch (err) {
-      logger.warn({ err, invoiceId: invoice.id, fileAssetId }, 'Could not retrieve existing invoice file asset buffer, generating PDF on demand');
+    } catch (fetchErr) {
+      logger.warn({ fetchErr, invId }, 'Failed to fetch complete invoice relations for PDF');
     }
   }
 
-  // 2. Generate PDF buffer using PDFKit
-  const buffer = await generateInvoicePdfBuffer(invoice);
+  const filename = `Invoice_${fullInvoice.invoiceNumber || `INV-${fullInvoice.id || 'N/A'}`}.pdf`;
+  const buffer = await generateInvoicePdfBuffer(fullInvoice);
   return { buffer, filename };
 }
 
 /**
- * Generates an official, high-precision Purchase Order PDF Buffer using PDFKit.
+ * Generates an official, high-precision Purchase Order PDF Buffer using PDFKit matching the portal ERP design.
  */
 export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
+  const buyer = po.buyer || {};
+  const seller = po.seller || {};
+  const meta = (typeof po.metadata === 'object' && po.metadata !== null ? po.metadata : {}) as Record<string, any>;
+  const deliveryDetails = (meta.deliveryDetails || {}) as Record<string, any>;
+  const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
+
+  const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
+  const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
+
+  // Check fallback branding from organization owners if missing
+  if ((!buyerReg.stampUrl || !buyerReg.signatureUrl || !buyerReg.logoUrl) && buyer.organizationId) {
+    const orgBuyer = await db.user.findFirst({
+      where: { organizationId: buyer.organizationId, registrationDetails: { not: null } },
+      select: { registrationDetails: true }
+    });
+    if (orgBuyer?.registrationDetails) {
+      const obReg = orgBuyer.registrationDetails as Record<string, any>;
+      if (!buyerReg.stampUrl && obReg.stampUrl) buyerReg.stampUrl = obReg.stampUrl;
+      if (!buyerReg.signatureUrl && obReg.signatureUrl) buyerReg.signatureUrl = obReg.signatureUrl;
+      if (!buyerReg.logoUrl && obReg.logoUrl) buyerReg.logoUrl = obReg.logoUrl;
+    }
+  }
+
+  if ((!sellerReg.stampUrl || !sellerReg.signatureUrl || !sellerReg.logoUrl) && seller.organizationId) {
+    const orgSeller = await db.user.findFirst({
+      where: { organizationId: seller.organizationId, registrationDetails: { not: null } },
+      select: { registrationDetails: true }
+    });
+    if (orgSeller?.registrationDetails) {
+      const osReg = orgSeller.registrationDetails as Record<string, any>;
+      if (!sellerReg.stampUrl && osReg.stampUrl) sellerReg.stampUrl = osReg.stampUrl;
+      if (!sellerReg.signatureUrl && osReg.signatureUrl) sellerReg.signatureUrl = osReg.signatureUrl;
+      if (!sellerReg.logoUrl && osReg.logoUrl) sellerReg.logoUrl = osReg.logoUrl;
+    }
+  }
+
+  // Pre-fetch images in parallel
+  const [buyerLogoBuf, buyerStampBuf, buyerSigBuf, sellerLogoBuf, sellerStampBuf, sellerSigBuf] = await Promise.all([
+    resolveImageBuffer(buyerReg.logoUrl || buyer.organization?.profile?.logoUrl || buyer.organization?.organizationLogoFileId, buyer.id),
+    resolveImageBuffer(buyerReg.stampUrl, buyer.id),
+    resolveImageBuffer(buyerReg.signatureUrl, buyer.id),
+    resolveImageBuffer(sellerReg.logoUrl || seller.organization?.profile?.logoUrl || seller.organization?.organizationLogoFileId, seller.id),
+    resolveImageBuffer(sellerReg.stampUrl, seller.id),
+    resolveImageBuffer(sellerReg.signatureUrl, seller.id)
+  ]);
+
+  const buyerName =
+    billingDetails.companyName ||
+    buyer.organization?.organizationName ||
+    buyer.buyerProfile?.organizationName ||
+    buyer.buyerProfile?.companyName ||
+    buyerReg.companyName ||
+    buyerReg.businessName ||
+    buyer.name ||
+    'N/A';
+
+  const buyerAddress =
+    po.deliveryAddress ||
+    billingDetails.billingAddress ||
+    deliveryDetails.address ||
+    buyer.organization?.address ||
+    buyer.buyerProfile?.registeredAddress ||
+    buyerReg.registeredAddress ||
+    buyerReg.officeZoneName ||
+    buyerReg.address ||
+    'N/A';
+
+  const buyerGstin =
+    billingDetails.gstin ||
+    buyer.organization?.gstin ||
+    buyer.buyerProfile?.gst ||
+    buyerReg.gstin ||
+    buyerReg.gstDetails?.gstin ||
+    'N/A';
+
+  const buyerPan =
+    buyer.organization?.panNumber ||
+    buyer.buyerProfile?.pan ||
+    buyerReg.pan ||
+    buyerReg.orgPan ||
+    buyerReg.personalPan ||
+    'N/A';
+
+  const buyerPhone =
+    deliveryDetails.mobileNumber ||
+    buyer.mobile ||
+    buyer.buyerProfile?.mobile ||
+    buyerReg.mobile ||
+    'N/A';
+
+  const buyerEmail = buyer.email || buyerReg.email || buyerReg.userId || 'N/A';
+
+  const sellerName =
+    seller.organization?.organizationName ||
+    seller.sellerProfile?.businessName ||
+    seller.sellerProfile?.companyName ||
+    sellerReg.companyName ||
+    sellerReg.businessName ||
+    seller.name ||
+    'N/A';
+
+  const sellerAddress =
+    seller.organization?.address ||
+    seller.sellerProfile?.registeredAddress ||
+    seller.organization?.profile?.registeredAddress ||
+    sellerReg.registeredAddress ||
+    sellerReg.address ||
+    'N/A';
+
+  const sellerGstin =
+    seller.organization?.gstin ||
+    seller.sellerProfile?.gst ||
+    sellerReg.gstin ||
+    sellerReg.gstDetails?.gstin ||
+    'N/A';
+
+  const sellerUdyam =
+    seller.organization?.udyamNumber ||
+    seller.sellerProfile?.udyamNumber ||
+    sellerReg.udyamNumber ||
+    sellerReg.udyamDetails?.udyamNumber ||
+    sellerReg.udyam ||
+    null;
+
+  const sellerPhone =
+    seller.mobile ||
+    seller.sellerProfile?.mobile ||
+    sellerReg.mobile ||
+    'N/A';
+
+  const sellerEmail = seller.email || sellerReg.email || 'N/A';
+
+  const poNum = po.poNumber || `PO-${po.id || 'N/A'}`;
+  const dateStr = formatDate(po.createdAt || new Date());
+  const deliveryDateStr = po.expectedDelivery ? formatDate(po.expectedDelivery) : 'As per schedule';
+  const orderStatus = String(po.status || 'Issued').toUpperCase();
+  const paymentTerms = String(po.paymentTerms || 'PAY ON INVOICE').toUpperCase();
+  const deliveryType = String(po.deliveryType || 'Standard delivery').toUpperCase();
+  const acknowledgedAt = po.acceptedAt ? formatDate(po.acceptedAt) : 'Pending / Not recorded';
+  const poRef = `ID #${po.id}`;
+  const poTitle = po.title || 'Purchase Order';
+
+  const rawItems = po.items?.length ? po.items : [];
+  const totalAmountNum = Number(po.amount || po.totalValue || 0);
+
+  const items = rawItems.length > 0
+    ? rawItems.map((item: any, idx: number) => {
+        const qty = Number(item.quantity || 1);
+        const unitPrice = Number(item.unitPrice || 0);
+        const lineTotal = Number(item.totalAmount || qty * unitPrice || totalAmountNum);
+        return {
+          srNo: idx + 1,
+          description: item.itemName || po.title || 'Order Item',
+          hsn: item.hsnCode || 'N/A',
+          qty,
+          unitPrice: unitPrice || (lineTotal / Math.max(qty, 1)),
+          totalAmount: lineTotal
+        };
+      })
+    : [{
+        srNo: 1,
+        description: po.title || `Purchase Order #${poNum}`,
+        hsn: 'N/A',
+        qty: 1,
+        unitPrice: totalAmountNum,
+        totalAmount: totalAmountNum
+      }];
+
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: 'A4', margin: 36 });
@@ -287,230 +748,190 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       doc.on('end', () => resolve(Buffer.concat(buffers)));
       doc.on('error', (err: Error) => reject(err));
 
-      const buyer = po.buyer || {};
-      const seller = po.seller || {};
-      const meta = (typeof po.metadata === 'object' && po.metadata !== null ? po.metadata : {}) as Record<string, any>;
-      const deliveryDetails = (meta.deliveryDetails || {}) as Record<string, any>;
-      const billingDetails = (meta.billingDetails || {}) as Record<string, any>;
-
-      const buyerReg = (buyer.registrationDetails as Record<string, any>) || {};
-      const sellerReg = (seller.registrationDetails as Record<string, any>) || {};
-
-      const buyerName =
-        billingDetails.companyName ||
-        buyer.organization?.organizationName ||
-        buyer.buyerProfile?.organizationName ||
-        buyer.buyerProfile?.companyName ||
-        buyerReg.companyName ||
-        buyerReg.businessName ||
-        buyer.name ||
-        'N/A';
-
-      const buyerAddress =
-        po.deliveryAddress ||
-        billingDetails.billingAddress ||
-        deliveryDetails.address ||
-        buyer.organization?.address ||
-        buyer.buyerProfile?.registeredAddress ||
-        buyerReg.registeredAddress ||
-        buyerReg.address ||
-        'N/A';
-
-      const buyerGstin =
-        billingDetails.gstin ||
-        buyer.organization?.gstin ||
-        buyer.buyerProfile?.gst ||
-        buyerReg.gstin ||
-        buyerReg.gstDetails?.gstin ||
-        'N/A';
-
-      const buyerPan =
-        buyer.organization?.panNumber ||
-        buyer.buyerProfile?.pan ||
-        buyerReg.pan ||
-        buyerReg.gstDetails?.pan ||
-        'N/A';
-
-      const buyerPhone =
-        deliveryDetails.mobileNumber ||
-        buyer.mobile ||
-        buyer.buyerProfile?.mobile ||
-        buyerReg.mobile ||
-        'N/A';
-
-      const buyerEmail = buyer.email || buyerReg.email || 'N/A';
-
-      const sellerName =
-        seller.organization?.organizationName ||
-        seller.sellerProfile?.businessName ||
-        seller.sellerProfile?.companyName ||
-        sellerReg.companyName ||
-        sellerReg.businessName ||
-        seller.name ||
-        'N/A';
-
-      const sellerAddress =
-        seller.organization?.address ||
-        seller.sellerProfile?.registeredAddress ||
-        seller.organization?.profile?.registeredAddress ||
-        sellerReg.registeredAddress ||
-        sellerReg.address ||
-        'N/A';
-
-      const sellerGstin =
-        seller.organization?.gstin ||
-        seller.sellerProfile?.gst ||
-        sellerReg.gstin ||
-        sellerReg.gstDetails?.gstin ||
-        'N/A';
-
-      const sellerPhone =
-        seller.mobile ||
-        seller.sellerProfile?.mobile ||
-        sellerReg.mobile ||
-        'N/A';
-
-      const sellerEmail = seller.email || sellerReg.email || 'N/A';
-
-      const poNum = po.poNumber || `PO-${po.id || 'N/A'}`;
-      const dateStr = formatDate(po.createdAt || new Date());
-      const deliveryDateStr = po.expectedDelivery ? formatDate(po.expectedDelivery) : 'As per schedule';
-
-      const rawItems = po.items?.length ? po.items : [];
-      const totalAmountNum = Number(po.amount || po.totalValue || 0);
-
-      const items = rawItems.length > 0
-        ? rawItems.map((item: any, idx: number) => {
-            const qty = Number(item.quantity || 1);
-            const unitPrice = Number(item.unitPrice || 0);
-            const lineTotal = Number(item.totalAmount || qty * unitPrice || totalAmountNum);
-            return {
-              srNo: idx + 1,
-              description: item.itemName || po.title || 'Order Item',
-              hsn: item.hsnCode || 'N/A',
-              qty,
-              unitPrice: unitPrice || (lineTotal / Math.max(qty, 1)),
-              totalAmount: lineTotal
-            };
-          })
-        : [{
-            srNo: 1,
-            description: po.title || `Purchase Order #${poNum}`,
-            hsn: 'N/A',
-            qty: 1,
-            unitPrice: totalAmountNum,
-            totalAmount: totalAmountNum
-          }];
-
-      const pageWidth = 595.28;
       const pageMargin = 36;
-      const contentWidth = pageWidth - (pageMargin * 2);
+      const contentWidth = 595.28 - (pageMargin * 2); // 523.28
+      const rightX = pageMargin + contentWidth;
 
-      // Header Banner (Dark Navy)
-      doc.rect(pageMargin, 30, contentWidth, 36).fill('#12335f');
-      doc.fillColor('#ffffff').fontSize(16).font('Helvetica-Bold').text('PURCHASE ORDER', pageMargin + 15, 38);
-      doc.fontSize(9).font('Helvetica').text(buyerName !== 'N/A' ? buyerName : 'Enterprise Procurement Order', pageMargin + 15, 56);
+      // 1. TOP HEADER BANNER (Deep Navy #0b2447)
+      const bannerHeight = 44;
+      doc.rect(pageMargin, 28, contentWidth, bannerHeight).fill('#0b2447');
 
-      doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text(poNum, pageMargin + contentWidth - 180, 38, { width: 165, align: 'right' });
-      doc.fontSize(8.5).font('Helvetica').text(`Date: ${dateStr}`, pageMargin + contentWidth - 180, 54, { width: 165, align: 'right' });
+      // Left: Buyer / Issuer Logo & Company Name
+      const logoToUse = buyerLogoBuf || sellerLogoBuf;
+      const textStartX = logoToUse ? pageMargin + 48 : pageMargin + 12;
 
-      let currentY = 76;
+      if (logoToUse) {
+        safeDrawImage(doc, logoToUse, pageMargin + 8, 32, { fit: [36, 36], align: 'left' });
+      }
 
-      // Buyer & Seller Details Boxes
-      doc.rect(pageMargin, currentY, contentWidth / 2 - 4, 90).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-      doc.rect(pageMargin + contentWidth / 2 + 4, currentY, contentWidth / 2 - 4, 90).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
+      doc.fillColor('#ffffff').fontSize(10.5).font('Helvetica-Bold').text(buyerName.toUpperCase(), textStartX, 34, { width: contentWidth - (logoToUse ? 230 : 200), ellipsis: true });
+      doc.fillColor('#94a3b8').fontSize(7.5).font('Helvetica').text('Official Purchase Order Document', textStartX, 52);
 
-      // Buyer Details Box (Issuing Authority)
-      doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('BUYER / ISSUING AUTHORITY', pageMargin + 8, currentY + 8);
-      doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold').text(buyerName, pageMargin + 8, currentY + 20);
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(buyerAddress, pageMargin + 8, currentY + 32, { width: contentWidth / 2 - 20 });
-      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`GSTIN: ${buyerGstin} | PAN: ${buyerPan}`, pageMargin + 8, currentY + 62);
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(`Email: ${buyerEmail} | Mobile: ${buyerPhone}`, pageMargin + 8, currentY + 74);
+      // Right: Document Title, PO Number, Date, Status
+      doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text('PURCHASE ORDER', pageMargin, 33, { width: contentWidth - 10, align: 'right' });
+      doc.fillColor('#e2e8f0').fontSize(8).font('Helvetica').text(`No: ${poNum}`, pageMargin, 47, { width: contentWidth - 10, align: 'right' });
+      doc.fillColor('#cbd5e1').fontSize(7.5).font('Helvetica').text(`Date: ${dateStr}  |  Status: ${orderStatus}`, pageMargin, 57, { width: contentWidth - 10, align: 'right' });
 
-      // Seller Details Box (Provider)
-      const rightBoxX = pageMargin + contentWidth / 2 + 4;
-      doc.fillColor('#12335f').fontSize(8.5).font('Helvetica-Bold').text('SELLER / SUPPLIER DETAILS', rightBoxX + 8, currentY + 8);
-      doc.fillColor('#0f172a').fontSize(9.5).font('Helvetica-Bold').text(sellerName, rightBoxX + 8, currentY + 20);
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(sellerAddress, rightBoxX + 8, currentY + 32, { width: contentWidth / 2 - 20 });
-      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(`GSTIN: ${sellerGstin}`, rightBoxX + 8, currentY + 62);
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(`Email: ${sellerEmail} | Mobile: ${sellerPhone}`, rightBoxX + 8, currentY + 74);
+      let currentY = 78;
 
-      currentY += 100;
+      // 2. PARTIES SECTION (Ship To / Buyer & Vendor / Seller Side-by-Side)
+      const colGap = 8;
+      const boxW = (contentWidth - colGap) / 2; // ~257.64
+      const boxH = 92;
+      const rightBoxX = pageMargin + boxW + colGap;
 
-      // Order Terms & Delivery Card
-      doc.rect(pageMargin, currentY, contentWidth, 38).fill('#f8fafc');
-      doc.rect(pageMargin, currentY, contentWidth, 38).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+      // Left Box (Ship To / Buyer)
+      doc.rect(pageMargin, currentY, boxW, boxH).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
+      doc.rect(pageMargin, currentY, boxW, 16).fill('#1e4072');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold').text('SHIP TO / BUYER', pageMargin + 8, currentY + 4);
 
-      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(`Order Title: ${po.title || 'Purchase Order'}`, pageMargin + 10, currentY + 7, { width: contentWidth - 20 });
-      doc.fillColor('#475569').fontSize(8).font('Helvetica').text(`Expected Delivery Date: `, pageMargin + 10, currentY + 22);
-      doc.font('Helvetica-Bold').text(deliveryDateStr, pageMargin + 110, currentY + 22);
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(buyerName, pageMargin + 8, currentY + 20, { width: boxW - 16, ellipsis: true });
+      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(buyerAddress, pageMargin + 8, currentY + 32, { width: boxW - 16, height: 26, ellipsis: true });
+      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`GSTIN: ${buyerGstin}${buyerPan !== 'N/A' ? `  |  PAN: ${buyerPan}` : ''}`, pageMargin + 8, currentY + 62, { width: boxW - 16, ellipsis: true });
+      doc.fillColor('#64748b').fontSize(7).font('Helvetica').text(`Email: ${buyerEmail}  |  Mobile: ${buyerPhone}`, pageMargin + 8, currentY + 74, { width: boxW - 16, ellipsis: true });
 
-      doc.font('Helvetica').text(`Payment Terms: `, pageMargin + 250, currentY + 22);
-      doc.font('Helvetica-Bold').text(String(po.paymentTerms || 'PAY ON INVOICE').toUpperCase(), pageMargin + 320, currentY + 22);
+      // Right Box (Vendor / Seller)
+      doc.rect(rightBoxX, currentY, boxW, boxH).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
+      doc.rect(rightBoxX, currentY, boxW, 16).fill('#1e4072');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold').text('VENDOR / SELLER', rightBoxX + 8, currentY + 4);
 
-      currentY += 46;
+      if (sellerLogoBuf) {
+        safeDrawImage(doc, sellerLogoBuf, rightBoxX + boxW - 38, currentY + 18, { fit: [30, 24], align: 'right' });
+      }
+
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(sellerName, rightBoxX + 8, currentY + 20, { width: boxW - 48, ellipsis: true });
+      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text(sellerAddress, rightBoxX + 8, currentY + 32, { width: boxW - 16, height: 26, ellipsis: true });
+      doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(`GSTIN: ${sellerGstin}${sellerUdyam ? `  |  Udyam: ${sellerUdyam}` : ''}`, rightBoxX + 8, currentY + 62, { width: boxW - 16, ellipsis: true });
+      doc.fillColor('#64748b').fontSize(7).font('Helvetica').text(`Email: ${sellerEmail}  |  Mobile: ${sellerPhone}`, rightBoxX + 8, currentY + 74, { width: boxW - 16, ellipsis: true });
+
+      currentY += boxH + 8;
+
+      // 3. INFOGRID (Order Metadata Bar - 6 columns)
+      doc.rect(pageMargin, currentY, contentWidth, 32).fillAndStroke('#f1f5f9', '#cbd5e1');
+      const infoColW = contentWidth / 6;
+
+      const drawInfoCell = (idx: number, label: string, val: string) => {
+        const cellX = pageMargin + (idx * infoColW);
+        doc.fillColor('#64748b').fontSize(6.5).font('Helvetica-Bold').text(label, cellX + 5, currentY + 5, { width: infoColW - 10, ellipsis: true });
+        doc.fillColor('#0f172a').fontSize(7.5).font('Helvetica-Bold').text(val, cellX + 5, currentY + 17, { width: infoColW - 10, ellipsis: true });
+      };
+
+      drawInfoCell(0, 'PAYMENT TERMS', paymentTerms);
+      drawInfoCell(1, 'DELIVERY TYPE', deliveryType);
+      drawInfoCell(2, 'EXP. DELIVERY', deliveryDateStr);
+      drawInfoCell(3, 'ACKNOWLEDGED AT', acknowledgedAt);
+      drawInfoCell(4, 'PO REFERENCE', poRef);
+      drawInfoCell(5, 'ORDER TITLE', poTitle);
+
+      currentY += 40;
+
+      // 4. ITEMS TABLE
+      const poColX = [pageMargin, pageMargin + 25, pageMargin + 255, pageMargin + 315, pageMargin + 360, pageMargin + 435];
+      const poColW = [25, 230, 60, 45, 75, 88.28];
 
       // Table Header Row
-      const colX = [
-        pageMargin,
-        pageMargin + 30,
-        pageMargin + 250,
-        pageMargin + 320,
-        pageMargin + 370,
-        pageMargin + 440
-      ];
-      const colW = [30, 220, 70, 50, 70, 83];
+      doc.rect(pageMargin, currentY, contentWidth, 18).fill('#0b2447');
+      doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
+      doc.text('#', poColX[0] + 2, currentY + 5, { width: poColW[0] - 4, align: 'center' });
+      doc.text('Description of Goods / Services', poColX[1] + 4, currentY + 5, { width: poColW[1] - 8, align: 'left' });
+      doc.text('HSN/SAC', poColX[2] + 2, currentY + 5, { width: poColW[2] - 4, align: 'center' });
+      doc.text('Qty', poColX[3] + 2, currentY + 5, { width: poColW[3] - 4, align: 'center' });
+      doc.text('Rate', poColX[4] + 4, currentY + 5, { width: poColW[4] - 8, align: 'right' });
+      doc.text('Line Total', poColX[5] + 4, currentY + 5, { width: poColW[5] - 8, align: 'right' });
 
-      doc.rect(pageMargin, currentY, contentWidth, 20).fill('#f1f5f9');
-      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold');
-      doc.text('SR#', colX[0] + 4, currentY + 6);
-      doc.text('ITEM DESCRIPTION', colX[1] + 4, currentY + 6);
-      doc.text('HSN/SAC', colX[2] + 4, currentY + 6);
-      doc.text('QTY', colX[3] + 4, currentY + 6, { width: colW[3] - 8, align: 'right' });
-      doc.text('UNIT PRICE', colX[4] + 4, currentY + 6, { width: colW[4] - 8, align: 'right' });
-      doc.text('TOTAL AMOUNT', colX[5] + 4, currentY + 6, { width: colW[5] - 8, align: 'right' });
-
-      currentY += 20;
+      currentY += 18;
 
       // Items Rows
       items.forEach((item, idx) => {
-        // Page overflow protection: add new page if item row would go past safe zone
-        if (currentY + 22 > 842.89 - 140) {
+        if (currentY + 20 > 841.89 - 180) {
           doc.addPage();
           currentY = 36;
         }
-        const rowBg = idx % 2 === 0 ? '#ffffff' : '#fafafa';
-        doc.rect(pageMargin, currentY, contentWidth, 22).fill(rowBg);
-        doc.rect(pageMargin, currentY, contentWidth, 22).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+        const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+        doc.rect(pageMargin, currentY, contentWidth, 20).fill(rowBg);
+        doc.rect(pageMargin, currentY, contentWidth, 20).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
 
-        doc.fillColor('#334155').fontSize(8).font('Helvetica');
-        doc.text(String(item.srNo), colX[0] + 4, currentY + 7);
-        doc.font('Helvetica-Bold').fillColor('#0f172a').text(item.description, colX[1] + 4, currentY + 7, { width: colW[1] - 8, height: 14 });
-        doc.font('Helvetica').fillColor('#475569').text(item.hsn, colX[2] + 4, currentY + 7);
-        doc.text(String(item.qty), colX[3] + 4, currentY + 7, { width: colW[3] - 8, align: 'right' });
-        doc.text(formatInr(item.unitPrice), colX[4] + 4, currentY + 7, { width: colW[4] - 8, align: 'right' });
-        doc.font('Helvetica-Bold').fillColor('#0f172a').text(formatInr(item.totalAmount), colX[5] + 4, currentY + 7, { width: colW[5] - 8, align: 'right' });
+        doc.fillColor('#334155').fontSize(7.5).font('Helvetica');
+        doc.text(String(item.srNo), poColX[0] + 2, currentY + 6, { width: poColW[0] - 4, align: 'center' });
+        doc.font('Helvetica-Bold').fillColor('#0f172a').text(item.description, poColX[1] + 4, currentY + 6, { width: poColW[1] - 8, height: 12, ellipsis: true });
+        doc.font('Helvetica').fillColor('#475569').text(item.hsn, poColX[2] + 2, currentY + 6, { width: poColW[2] - 4, align: 'center' });
+        doc.text(String(item.qty), poColX[3] + 2, currentY + 6, { width: poColW[3] - 4, align: 'center' });
+        doc.text(formatInr(item.unitPrice), poColX[4] + 4, currentY + 6, { width: poColW[4] - 8, align: 'right' });
+        doc.font('Helvetica-Bold').fillColor('#0f172a').text(formatInr(item.totalAmount), poColX[5] + 4, currentY + 6, { width: poColW[5] - 8, align: 'right' });
 
-        currentY += 22;
+        currentY += 20;
       });
 
-      currentY += 10;
+      currentY += 8;
 
-      // Grand Total Box
-      const summaryWidth = 240;
-      const summaryX = pageMargin + contentWidth - summaryWidth;
+      // 5. FINANCIALS SUMMARY BOX (Right aligned with zero text collisions)
+      const poSummaryW = 230;
+      const poSummaryX = rightX - poSummaryW;
 
-      doc.rect(summaryX, currentY, summaryWidth, 36).fill('#12335f');
-      doc.fillColor('#ffffff').fontSize(9).font('Helvetica-Bold').text('GRAND TOTAL PURCHASE VALUE:', summaryX + 10, currentY + 12);
-      doc.fillColor('#ffffff').fontSize(11).font('Helvetica-Bold').text(formatInr(totalAmountNum), summaryX + 10, currentY + 12, { width: summaryWidth - 20, align: 'right' });
+      doc.rect(poSummaryX, currentY, poSummaryW, 46).fillAndStroke('#f8fafc', '#cbd5e1');
+      doc.fillColor('#475569').fontSize(8).font('Helvetica').text('Subtotal (Taxable Value):', poSummaryX + 10, currentY + 6);
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text(formatInr(totalAmountNum), poSummaryX + 10, currentY + 6, { width: poSummaryW - 20, align: 'right' });
 
-      currentY += 46;
+      doc.rect(poSummaryX, currentY + 18, poSummaryW, 28).fill('#0b2447');
+      doc.fillColor('#ffffff').fontSize(8.5).font('Helvetica-Bold').text('GRAND TOTAL:', poSummaryX + 10, currentY + 27);
+      doc.fillColor('#ffffff').fontSize(10).font('Helvetica-Bold').text(formatInr(totalAmountNum), poSummaryX + 10, currentY + 27, { width: poSummaryW - 20, align: 'right' });
 
-      // Terms & Authorized Signatory Footer
-      doc.rect(pageMargin, currentY, contentWidth, 50).strokeColor('#cbd5e1').lineWidth(0.75).stroke();
-      doc.fillColor('#475569').fontSize(7.5).font('Helvetica').text('Purchase Order Terms: 1. Order confirmed upon issuance. 2. Supplier to deliver per specified address & timeline. 3. Subject to MSME Procurement Guidelines.', pageMargin + 10, currentY + 10, { width: contentWidth - 170 });
-      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(`For ${buyerName}`, pageMargin + contentWidth - 150, currentY + 10, { width: 140, align: 'center' });
-      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text('Authorized Issuing Authority Seal', pageMargin + contentWidth - 150, currentY + 36, { width: 140, align: 'center' });
+      // Amount in words
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica-Oblique').text(`Amount in words: ${numberToWords(totalAmountNum)}`, pageMargin + 10, currentY + 14, { width: contentWidth - poSummaryW - 20 });
+
+      currentY += 56;
+
+      // 6. CONTRACTUAL TERMS & CONDITIONS
+      doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text('Notes / Terms & Conditions:', pageMargin, currentY);
+      currentY += 12;
+
+      const terms = [
+        '1. This document is generated from the MSME enterprise procurement workflow and must be read with linked GRN, invoice and payment records.',
+        '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
+        '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
+      ];
+
+      terms.forEach((term) => {
+        doc.fillColor('#475569').fontSize(7).font('Helvetica').text(`• ${term}`, pageMargin, currentY, { width: contentWidth });
+        currentY += 10;
+      });
+
+      currentY += 8;
+
+      // 7. BILATERAL SIGNATURES SECTION
+      const sigBlockH = 92;
+      if (currentY + sigBlockH > 841.89 - 40) {
+        doc.addPage();
+        currentY = 36;
+      }
+
+      // Left: Buyer Signatory Block
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(`For ${buyerName}`, pageMargin, currentY, { width: boxW, ellipsis: true });
+
+      if (buyerStampBuf) {
+        safeDrawImage(doc, buyerStampBuf, pageMargin, currentY + 14, { fit: [60, 40], align: 'left' });
+      }
+      if (buyerSigBuf) {
+        safeDrawImage(doc, buyerSigBuf, pageMargin, currentY + (buyerStampBuf ? 54 : 16), { fit: [75, 26], align: 'left' });
+      }
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text('Authorized Signatory (Issuing Authority)', pageMargin, currentY + 80);
+
+      // Right: Seller Signatory Block
+      doc.fillColor('#0f172a').fontSize(8.5).font('Helvetica-Bold').text(`For ${sellerName}`, rightBoxX, currentY, { width: boxW, align: 'right', ellipsis: true });
+
+      if (sellerStampBuf) {
+        safeDrawImage(doc, sellerStampBuf, rightBoxX + boxW - 65, currentY + 14, { fit: [60, 40], align: 'right' });
+      }
+      if (sellerSigBuf) {
+        safeDrawImage(doc, sellerSigBuf, rightBoxX + boxW - 80, currentY + (sellerStampBuf ? 54 : 16), { fit: [75, 26], align: 'right' });
+      }
+      doc.fillColor('#64748b').fontSize(7.5).font('Helvetica').text('Authorized Signatory (Supplier Representative)', rightBoxX, currentY + 80, { width: boxW, align: 'right' });
+
+      // Page bottom footer
+      doc.strokeColor('#cbd5e1').lineWidth(0.5);
+      doc.moveTo(pageMargin, 810).lineTo(rightX, 810).stroke();
+      doc.fillColor('#94a3b8').fontSize(7).font('Helvetica').text('Enterprise Procurement & Supply Chain ERP - Government MSME Portal', pageMargin, 816);
+      doc.text('Page 1 of 1', pageMargin, 816, { width: contentWidth, align: 'right' });
 
       doc.end();
     } catch (err) {
@@ -523,21 +944,54 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
  * Retrieves existing stored PO PDF buffer or generates exact Purchase Order PDF buffer.
  */
 export async function getOrGeneratePurchaseOrderPdfBuffer(po: any): Promise<{ buffer: Buffer; filename: string }> {
-  const filename = `PurchaseOrder_${po.poNumber || `PO-${po.id}`}.pdf`;
-
-  if (po.pdfFileId) {
+  let fullPo = po;
+  const poId = typeof po === 'number' ? po : po?.id;
+  if (poId && (!po?.buyer?.registrationDetails || !po?.items || !po?.seller?.registrationDetails)) {
     try {
-      const stored = await getFileContent(po.pdfFileId, { id: po.sellerId || 1, role: 'admin' });
-      if (stored?.buffer && stored.buffer.length > 0) {
-        logger.info({ poId: po.id, pdfFileId: po.pdfFileId }, 'Retrieved existing stored purchase order PDF file asset buffer');
-        return { buffer: stored.buffer, filename };
+      const dbPo = await db.purchaseOrder.findUnique({
+        where: { id: poId },
+        include: {
+          items: true,
+          buyer: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              buyerProfile: true,
+              organizationId: true,
+              organization: {
+                include: { profile: true }
+              }
+            }
+          },
+          seller: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              mobile: true,
+              registrationDetails: true,
+              sellerProfile: true,
+              organizationId: true,
+              organization: {
+                include: { profile: true }
+              }
+            }
+          }
+        }
+      });
+      if (dbPo) {
+        fullPo = { ...po, ...dbPo };
       }
-    } catch (err) {
-      logger.warn({ err, poId: po.id, pdfFileId: po.pdfFileId }, 'Could not retrieve existing PO file asset buffer, generating PDF on demand');
+    } catch (fetchErr) {
+      logger.warn({ fetchErr, poId }, 'Failed to fetch complete purchase order relations for PDF');
     }
   }
 
-  const buffer = await generatePurchaseOrderPdfBuffer(po);
+  const filename = `PurchaseOrder_${fullPo.poNumber || `PO-${fullPo.id || 'N/A'}`}.pdf`;
+  const buffer = await generatePurchaseOrderPdfBuffer(fullPo);
   return { buffer, filename };
 }
 
@@ -557,6 +1011,8 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
             name: true,
             email: true,
             mobile: true,
+            registrationDetails: true,
+            organizationId: true,
             buyerProfile: true,
             organization: { include: { profile: true } }
           }
@@ -567,6 +1023,8 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
             name: true,
             email: true,
             mobile: true,
+            registrationDetails: true,
+            organizationId: true,
             sellerProfile: true,
             organization: { include: { profile: true } }
           }

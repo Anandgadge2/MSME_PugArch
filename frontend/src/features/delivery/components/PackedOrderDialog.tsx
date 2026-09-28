@@ -190,7 +190,12 @@ export function PackedOrderDialog({
     setCheckedItems(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  // Local guard to prevent rapid double-clicks before mut.isPending kicks in
+  const [saving, setSaving] = useState(false);
+
   const validateAndSave = async () => {
+    if (saving || mut.isPending) return; // guard against repeated clicks
+
     const gWeight = parseFloat(grossWeight);
     if (isNaN(gWeight) || gWeight <= 0) {
       toast.error('Gross package weight must be a valid positive number greater than 0 kg');
@@ -222,12 +227,12 @@ export function PackedOrderDialog({
       remarks: remarks.trim() || undefined
     };
 
+    setSaving(true);
     await runWithToast(
       async () => {
         await mut.mutateAsync(payload);
         await invalidateDeliveryCache(qc, delivery.id);
         if (onSuccess) onSuccess();
-        onClose();
       },
       {
         loading: 'Confirming order packing details...',
@@ -235,6 +240,7 @@ export function PackedOrderDialog({
         error: (err: any) => err?.message || 'Failed to update packing details'
       }
     );
+    setSaving(false);
   };
 
   if (!isOpen) return null;
@@ -625,7 +631,7 @@ export function PackedOrderDialog({
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={mut.isPending}
+              disabled={saving || mut.isPending}
               className="h-9 rounded-xl border-slate-200 px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
             >
               Cancel
@@ -633,10 +639,10 @@ export function PackedOrderDialog({
             <Button
               type="button"
               onClick={validateAndSave}
-              disabled={mut.isPending}
+              disabled={saving || mut.isPending}
               className="h-9 rounded-xl bg-[#12335f] px-5 text-xs font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-xs cursor-pointer"
             >
-              {mut.isPending ? (
+              {saving || mut.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...

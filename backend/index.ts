@@ -3220,7 +3220,7 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
     } else {
       const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
       if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
-      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(asset.entityType);
+      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public', 'stamp', 'signature', 'invoice-branding'].includes(asset.entityType);
       if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
       file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
         ipAddress: req.ip,
@@ -3230,7 +3230,7 @@ app.get('/api/files/:id/view', async (req: any, res: any) => {
 
     const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
     const entityType = String((file.asset as any)?.entityType || '').toLowerCase();
-    const isPublicAsset = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(entityType);
+    const isPublicAsset = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public', 'stamp', 'signature', 'invoice-branding'].includes(entityType);
 
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Length', file.buffer.length);
@@ -3281,7 +3281,7 @@ app.get('/api/files/:id/download', async (req: any, res: any) => {
     } else {
       const asset = await prisma.fileAsset.findUnique({ where: { id: fileId } });
       if (!asset || asset.status !== 'active') throw new ApiError(404, 'File not found', 'FILE_NOT_FOUND');
-      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public'].includes(asset.entityType);
+      const isPublic = ['general', 'logo', 'company_logo', 'organization_logo', 'banner', 'catalogue', 'catalogue_product', 'catalogue_service', 'organization_banner', 'public', 'stamp', 'signature', 'invoice-branding'].includes(asset.entityType);
       if (!isPublic) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
       file = await getStoredFileContent(fileId, { id: asset.ownerId, role: asset.ownerRole }, {
         ipAddress: req.ip,

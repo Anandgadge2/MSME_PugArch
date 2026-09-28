@@ -9,7 +9,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
 import { auditLog } from '../modules/audit/audit.service.js';
-import { notificationService } from '../services/notification.service.js';
+import { notificationService, resolveSellerOrgName } from '../services/notification.service.js';
 import { logger } from '../config/logger.js';
 import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
@@ -2562,9 +2562,10 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
     // Notify buyer
     const buyerUserId = auction.createdByUserId;
     if (buyerUserId) {
+      const sellerOrgName = await resolveSellerOrgName(winner.sellerUserId || winner.sellerOrgId);
       await notificationService.notifyUser(buyerUserId, {
         title: 'Award Offer Formally Accepted',
-        message: `Supplier has formally accepted your contract award offer for Reverse Auction "${auction.title || auction.auctionCode || ('RA-' + auction.id)}". You may now generate the official Purchase Order.`,
+        message: `${sellerOrgName} has formally accepted your contract award offer for Reverse Auction "${auction.title || auction.auctionCode || ('RA-' + auction.id)}". You may now generate the official Purchase Order.`,
         type: 'award_accepted',
         redirectUrl: `/buyer/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
       }).catch(() => undefined);

@@ -768,6 +768,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
       <DispatchDetailsModal
         isOpen={isFulfillmentModalOpen}
         delivery={delivery}
+        isBuyer={accessRole === 'buyer' || accessRole === 'consignee'}
         onClose={() => setIsFulfillmentModalOpen(false)}
         onSuccess={() => detailQuery.refetch()}
       />

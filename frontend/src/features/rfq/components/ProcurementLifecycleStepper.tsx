@@ -37,6 +37,8 @@ export interface ProcurementLifecycleStepperProps {
   purchaseOrders?: any[];
   activeOrder?: any;
   hasApprovedGrn?: boolean;
+  hasCreatedGrn?: boolean;
+  activeGrn?: any;
   invoices?: any[];
   isBuyer?: boolean;
   isStandby?: boolean;
@@ -54,6 +56,7 @@ export interface ProcurementLifecycleStepperProps {
   onViewEvaluation?: () => void;
   onViewPO?: () => void;
   onNavigateDelivery?: () => void;
+  onViewGrn?: (grn?: any) => void;
   onNavigateInvoice?: (invoice?: any) => void;
   onNavigateSettlement?: () => void;
 
@@ -288,6 +291,7 @@ export function determineCurrentLifecycleStage({
   purchaseOrders = [],
   activeOrder,
   hasApprovedGrn,
+  hasCreatedGrn,
   invoices = []
 }: {
   status?: string;
@@ -297,6 +301,7 @@ export function determineCurrentLifecycleStage({
   purchaseOrders?: any[];
   activeOrder?: any;
   hasApprovedGrn?: boolean;
+  hasCreatedGrn?: boolean;
   invoices?: any[];
 }): LifecycleStageId {
   const statusUpper = String(status || '').toUpperCase().trim();
@@ -350,7 +355,7 @@ export function determineCurrentLifecycleStage({
     poStatusUpper === 'INVOICE_SUBMITTED' ||
     hasActiveInvoice ||
     hasApprovedGrn ||
-    activeOrder?.grns?.some((g: any) => String(g.status || '').toUpperCase() === 'APPROVED')
+    activeOrder?.grns?.some((g: any) => ['APPROVED', 'COMPLETED', 'PARTIAL'].includes(String(g.status || '').toUpperCase()))
   ) {
     return 4;
   }
@@ -395,6 +400,8 @@ export function ProcurementLifecycleStepper({
   purchaseOrders,
   activeOrder,
   hasApprovedGrn,
+  hasCreatedGrn,
+  activeGrn,
   invoices,
   isBuyer = true,
   isStandby = false,
@@ -408,6 +415,7 @@ export function ProcurementLifecycleStepper({
   onViewEvaluation,
   onViewPO,
   onNavigateDelivery,
+  onViewGrn,
   onNavigateInvoice,
   onNavigateSettlement,
   onOpenPackDialog,
@@ -431,9 +439,10 @@ export function ProcurementLifecycleStepper({
         purchaseOrders,
         activeOrder,
         hasApprovedGrn,
+        hasCreatedGrn,
         invoices
       }),
-    [status, lifecycleStage, awards, activeAward, purchaseOrders, activeOrder, hasApprovedGrn, invoices]
+    [status, lifecycleStage, awards, activeAward, purchaseOrders, activeOrder, hasApprovedGrn, hasCreatedGrn, invoices]
   );
 
   // Extract contextual identifiers
@@ -482,14 +491,13 @@ export function ProcurementLifecycleStepper({
         if (!isBuyer) {
           if (isSellerParticipated) {
             return {
-              hasAction: true,
-              actionLabel: 'View My Quotation',
-              actionHint: 'Open your submitted quotation dialog modal',
+              hasAction: false,
+              idleStatusText: 'Quotation Under Evaluation',
+              actionHint: 'View your submitted quotation details',
               onClick: () => {
-                if (onViewQuotationClick) onViewQuotationClick();
-                else if (onViewEvaluation) onViewEvaluation();
+                if (onViewEvaluation) onViewEvaluation();
+                else if (onViewQuotationClick) onViewQuotationClick();
               },
-              isPrimary: false
             };
           } else if (canSubmitBid && onSubmitClick) {
             return {
@@ -551,9 +559,27 @@ export function ProcurementLifecycleStepper({
         // Stage 3: Delivery & GRN
         const isOrderActive = Boolean(effectiveActiveOrder);
         const poStatus = String(effectiveActiveOrder?.poStatus || effectiveActiveOrder?.status || '').toLowerCase();
+        const effectiveGrn = activeGrn || (effectiveActiveOrder?.grns && effectiveActiveOrder.grns[0]) || null;
+        const targetGrnNumber = effectiveGrn?.grnNumber || (effectiveGrn?.id ? `GRN-${effectiveGrn.id}` : null);
+        const targetGrnId = effectiveGrn?.id;
+
+        const grnApproved = Boolean(hasApprovedGrn) ||
+          poStatus === 'grn_approved' ||
+          poStatus === 'grn_completed' ||
+          (effectiveGrn && ['APPROVED', 'COMPLETED', 'PARTIAL'].includes(String(effectiveGrn.status || '').toUpperCase()));
+
+        const grnCreated = Boolean(hasCreatedGrn) ||
+          grnApproved ||
+          Boolean(effectiveGrn) ||
+          fulfillmentPhase === 'GRN_CREATED' ||
+          poStatus === 'grn_created' ||
+          poStatus === 'grn_pending';
+
         const isDeliveryPhase = isOrderActive && (
-          ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'grn_approved', 'grn_completed', 'invoiced', 'completed', 'paid'].includes(poStatus) ||
-          Boolean(hasApprovedGrn)
+          ['accepted', 'in_fulfillment', 'dispatched', 'delivered', 'grn_created', 'grn_pending', 'grn_approved', 'grn_completed', 'invoiced', 'completed', 'paid'].includes(poStatus) ||
+          Boolean(hasApprovedGrn) ||
+          Boolean(hasCreatedGrn) ||
+          grnCreated
         );
 
         if (!isDeliveryPhase) {
@@ -563,23 +589,11 @@ export function ProcurementLifecycleStepper({
           };
         }
 
-        const grnApproved = Boolean(hasApprovedGrn) || poStatus === 'grn_approved' || poStatus === 'grn_completed';
-
         if (!isBuyer) {
-          // SELLER
-          if (fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK' || (!poStatus.includes('dispatch') && !poStatus.includes('delivered') && !grnApproved)) {
-            return {
-              hasAction: true,
-              actionLabel: '📦 Pack Order',
-              actionHint: 'Open packing console to record package dimensions',
-              onClick: () => {
-                if (onOpenPackDialog) onOpenPackDialog();
-                else if (onNavigateDelivery) onNavigateDelivery();
-              },
-              isPrimary: true
-            };
-          }
-          if (fulfillmentPhase === 'PACKED') {
+          // SELLER — Order matters: check more-advanced phases first
+
+          // Already packed → prompt dispatch entry
+          if (fulfillmentPhase === 'PACKED' || poStatus === 'packed') {
             return {
               hasAction: true,
               actionLabel: '🚚 Enter Dispatch',
@@ -591,24 +605,107 @@ export function ProcurementLifecycleStepper({
               isPrimary: true
             };
           }
+
+          // Already dispatched → seller can update status (in transit, out for delivery, etc.)
+          if (
+            fulfillmentPhase === 'DISPATCHED' ||
+            poStatus.includes('dispatch') ||
+            poStatus === 'in_transit' ||
+            poStatus === 'out_for_delivery'
+          ) {
+            return {
+              hasAction: true,
+              actionLabel: '🔄 Update Status',
+              actionHint: 'Advance shipment status — In Transit, Out for Delivery, Delivered',
+              onClick: () => {
+                if (onOpenDispatchDialog) onOpenDispatchDialog();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: true
+            };
+          }
+
+          // Delivered / GRN created or approved → show tracking or GRN view
+          if (grnCreated || grnApproved) {
+            return {
+              hasAction: true,
+              actionLabel: targetGrnNumber ? `📋 View GRN #${targetGrnNumber}` : '📋 View GRN',
+              actionHint: 'View Buyer Goods Receipt Note inspection details',
+              onClick: () => {
+                if (onViewGrn) onViewGrn(effectiveGrn);
+                else if (targetGrnId) router.push(`/grn/${targetGrnId}`);
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: false
+            };
+          }
+
+          if (
+            fulfillmentPhase === 'DELIVERED_PENDING_GRN' ||
+            poStatus.includes('delivered')
+          ) {
+            return {
+              hasAction: true,
+              actionLabel: '📍 Track Dispatch',
+              actionHint: 'View carrier dispatch tracking & delivery milestones',
+              onClick: () => {
+                if (onOpenDispatchDialog) onOpenDispatchDialog();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: false
+            };
+          }
+
+          // Not yet packed — show Pack Order
           return {
             hasAction: true,
-            actionLabel: grnApproved ? 'View GRN' : '📍 Track Dispatch',
-            actionHint: 'View carrier dispatch tracking & delivery milestones',
+            actionLabel: '📦 Pack Order',
+            actionHint: 'Open packing console to record package dimensions',
             onClick: () => {
-              if (onOpenDispatchDialog) onOpenDispatchDialog();
+              if (onOpenPackDialog) onOpenPackDialog();
               else if (onNavigateDelivery) onNavigateDelivery();
             },
-            isPrimary: false
+            isPrimary: true
           };
         } else {
           // BUYER
           if (grnApproved) {
             return {
               hasAction: true,
-              actionLabel: 'GRN Approved ✓',
+              actionLabel: targetGrnNumber ? `📋 View GRN #${targetGrnNumber}` : 'GRN Approved ✓',
               actionHint: 'Goods receipt verified and approved',
-              onClick: onNavigateDelivery,
+              onClick: () => {
+                if (onViewGrn) onViewGrn(effectiveGrn);
+                else if (targetGrnId) router.push(`/grn/${targetGrnId}`);
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: false
+            };
+          }
+          if (grnCreated) {
+            return {
+              hasAction: true,
+              actionLabel: targetGrnNumber ? `📋 View GRN #${targetGrnNumber}` : '📋 View GRN (Recorded)',
+              actionHint: 'Goods Receipt Note created — view inspection verification',
+              onClick: () => {
+                if (onViewGrn) onViewGrn(effectiveGrn);
+                else if (targetGrnId) router.push(`/grn/${targetGrnId}`);
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: false
+            };
+          }
+          // If stage is already past delivery/GRN (e.g. Invoicing or Settlement stage)
+          if (currentStageId > 3) {
+            return {
+              hasAction: true,
+              actionLabel: targetGrnNumber ? `📋 View GRN #${targetGrnNumber}` : '📋 Delivery & GRN Done',
+              actionHint: 'Goods delivery and receipt verified',
+              onClick: () => {
+                if (onViewGrn) onViewGrn(effectiveGrn);
+                else if (targetGrnId) router.push(`/grn/${targetGrnId}`);
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
               isPrimary: false
             };
           }
@@ -622,6 +719,18 @@ export function ProcurementLifecycleStepper({
                 else if (onNavigateDelivery) onNavigateDelivery();
               },
               isPrimary: true
+            };
+          }
+          if (fulfillmentPhase === 'PO_ACCEPTED_AWAITING_PACK' || fulfillmentPhase === 'PACKED') {
+            return {
+              hasAction: true,
+              actionLabel: '📦 Packing in Progress',
+              actionHint: 'Seller is packaging and staging consignment',
+              onClick: () => {
+                if (onOpenDispatchDialog) onOpenDispatchDialog();
+                else if (onNavigateDelivery) onNavigateDelivery();
+              },
+              isPrimary: false
             };
           }
           return {
@@ -832,7 +941,7 @@ export function ProcurementLifecycleStepper({
       </div>
 
       {/* Animated Multi-Color Liquid Rainbow Progress Bar */}
-      <div className="pt-2 pb-1 hidden sm:block relative z-10">
+      <div className="pt-2 pb-1 relative z-10">
         <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
           <div
             className="h-full bg-gradient-to-r from-indigo-500 via-sky-500 via-amber-500 via-fuchsia-500 to-emerald-500 transition-all duration-700 ease-out shadow-xs"
@@ -845,10 +954,10 @@ export function ProcurementLifecycleStepper({
         </div>
       </div>
 
-      {/* 5-Stage Stepper Grid */}
+      {/* 5-Stage Stepper Grid: 2 per row on mobile, 5 on desktop */}
       <ol
         role="list"
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-2 relative z-10"
+        className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-2 relative z-10"
       >
         {LIFECYCLE_STAGES.map((stage) => {
           const isCompleted = currentStageId > stage.id || (stage.id === 5 && isContractSettled);
@@ -863,21 +972,22 @@ export function ProcurementLifecycleStepper({
               role="listitem"
               title={`${stage.name}: ${stage.description}`}
               aria-current={isActive ? 'step' : undefined}
-              tabIndex={stageAction.hasAction ? 0 : -1}
+              tabIndex={(stageAction.hasAction || Boolean(stageAction.onClick)) ? 0 : -1}
               onKeyDown={(e) => {
-                if (stageAction.hasAction && (e.key === 'Enter' || e.key === ' ')) {
+                if ((stageAction.hasAction || stageAction.onClick) && (e.key === 'Enter' || e.key === ' ')) {
                   e.preventDefault();
                   if (stageAction.onClick) stageAction.onClick();
                 }
               }}
               onClick={() => {
-                if (stageAction.hasAction && stageAction.onClick) {
+                if (stageAction.onClick) {
                   stageAction.onClick();
                 }
               }}
               className={cn(
                 'group relative flex flex-col justify-between rounded-xl p-2 sm:p-2.5 border transition-all duration-300 outline-none select-none min-h-[52px] sm:min-h-[54px] overflow-hidden',
-                stageAction.hasAction ? 'cursor-pointer' : 'cursor-default',
+                stage.id === 5 && 'col-span-2 lg:col-span-1',
+                (stageAction.hasAction || Boolean(stageAction.onClick)) ? 'cursor-pointer' : 'cursor-default',
                 'focus-visible:ring-2 focus-visible:ring-offset-1',
                 // Completed State: Distinct stage gradient background, colored border, and floating hover aura
                 isCompleted && cn(
@@ -907,7 +1017,7 @@ export function ProcurementLifecycleStepper({
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span
                     className={cn(
-                      'flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-black font-mono transition-transform duration-300 group-hover:scale-110 shadow-2xs',
+                      'flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9px] sm:text-[9.5px] font-black font-mono transition-transform duration-300 group-hover:scale-110 shadow-2xs',
                       isCompleted && theme.completedNumberBg,
                       isActive && 'bg-white text-slate-950 font-black shadow-sm',
                       isUpcoming && cn(theme.upcomingNumberBg, theme.upcomingNumberText, 'font-bold')
@@ -922,7 +1032,7 @@ export function ProcurementLifecycleStepper({
 
                   <h3
                     className={cn(
-                      'text-[11.5px] font-bold tracking-tight truncate leading-tight',
+                      'text-[10.5px] sm:text-[11.5px] font-bold tracking-tight truncate leading-tight',
                       isCompleted && theme.completedTitleText,
                       isActive && 'text-white font-extrabold',
                       isUpcoming && 'text-slate-700 group-hover:text-slate-900'
@@ -934,7 +1044,7 @@ export function ProcurementLifecycleStepper({
 
                 <span
                   className={cn(
-                    'text-[8.5px] font-bold uppercase tracking-wider shrink-0 px-1.5 py-0.2 rounded transition-colors',
+                    'text-[8px] sm:text-[8.5px] font-bold uppercase tracking-wider shrink-0 px-1 sm:px-1.5 py-0.2 rounded transition-colors',
                     isCompleted && theme.completedBadge,
                     isActive && theme.activeBadge,
                     isUpcoming && 'text-slate-400 bg-slate-100/80 border border-slate-200/60'
@@ -966,7 +1076,7 @@ export function ProcurementLifecycleStepper({
                       if (stageAction.onClick) stageAction.onClick();
                     }}
                     className={cn(
-                      'w-full inline-flex items-center justify-center gap-1 rounded h-5.5 px-1.5 text-[9.5px] font-bold tracking-tight transition-all duration-200 cursor-pointer shadow-2xs active:scale-95 group/btn',
+                      'w-full inline-flex items-center justify-center gap-1 rounded h-5.5 px-1 sm:px-1.5 text-[8.5px] sm:text-[9.5px] font-bold tracking-tight transition-all duration-200 cursor-pointer shadow-2xs active:scale-95 group/btn',
                       stageAction.isPrimary
                         ? cn(theme.activeBtnBg, theme.activeBtnText)
                         : isCompleted
@@ -982,10 +1092,10 @@ export function ProcurementLifecycleStepper({
                 ) : (
                   <div
                     className={cn(
-                      'w-full flex items-center justify-center h-5.5 rounded px-1.5 transition-colors',
+                      'w-full flex items-center justify-center h-5.5 rounded px-1 sm:px-1.5 transition-colors',
                       isActive
-                        ? 'bg-white/15 border border-white/30 text-white font-bold text-[9.5px]'
-                        : 'bg-slate-100/70 border border-slate-200/50 text-slate-400 font-medium text-[9px]'
+                        ? 'bg-white/15 border border-white/30 text-white font-bold text-[8.5px] sm:text-[9.5px]'
+                        : 'bg-slate-100/70 border border-slate-200/50 text-slate-400 font-medium text-[8px] sm:text-[9px]'
                     )}
                   >
                     {isActive && <Clock className="h-2 w-2 mr-1 text-white/80 shrink-0" aria-hidden="true" />}

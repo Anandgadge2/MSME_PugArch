@@ -17,6 +17,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/useAuth';
 import { getApi, postApi } from '../shared/apiClient';
 import { formatCurrency } from '../shared/format';
@@ -66,6 +67,7 @@ interface PendingResponse {
 export default function SellerAwardPoAlertPopup() {
   const { user } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [awards, setAwards] = useState<PendingAward[]>([]);
   const [pos, setPOs] = useState<PendingPO[]>([]);
@@ -121,7 +123,13 @@ export default function SellerAwardPoAlertPopup() {
     window.addEventListener('notifications:updated', handleUpdate);
     window.addEventListener('orders:updated', handleUpdate);
 
+    // Active polling interval for real-time background sync
+    const intervalId = setInterval(() => {
+      void checkPendingAwardsAndPOs();
+    }, 15000);
+
     return () => {
+      clearInterval(intervalId);
       window.removeEventListener('notifications:updated', handleUpdate);
       window.removeEventListener('orders:updated', handleUpdate);
     };
@@ -158,8 +166,15 @@ export default function SellerAwardPoAlertPopup() {
         description: `You have successfully accepted the award for ${award.title}. Fulfillment has been opened.`
       });
 
+      window.dispatchEvent(new CustomEvent('award:accepted', { detail: { bidId: award.bidId, awardId: award.id } }));
+      window.dispatchEvent(new CustomEvent('orders:updated', { detail: { bidId: award.bidId, awardId: award.id } }));
       window.dispatchEvent(new CustomEvent('notifications:updated'));
-      window.dispatchEvent(new CustomEvent('orders:updated'));
+
+      void queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+      void queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
+      void queryClient.invalidateQueries({ queryKey: ['procurement-awards'] });
+      void queryClient.invalidateQueries({ queryKey: ['procurement-active-order'] });
+
       await checkPendingAwardsAndPOs();
     } catch (err: any) {
       toast.error('Failed to accept award', {

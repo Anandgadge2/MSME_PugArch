@@ -67,10 +67,10 @@ export function MarketplaceFooter() {
                                     <Mail className="h-3.5 w-3.5" />
                                 </div>
                                 <a
-                                    href="mailto:support@jsgsmile.in"
+                                    href="mailto:jsgsmileportal@gmail.com"
                                     className="hover:text-sky-300 transition-colors underline-offset-2 hover:underline"
                                 >
-                                    support@jsgsmile.in
+                                    jsgsmileportal@gmail.com
                                 </a>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-slate-300/90 font-medium">

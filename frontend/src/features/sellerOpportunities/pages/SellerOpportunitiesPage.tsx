@@ -602,19 +602,22 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const existingIndex = deduped.findIndex(item => {
           const itemRefKeys = extractRefKeys(item);
-          const itemCoreTitle = cleanCoreTitle(item.title);
 
+          // If both have explicit sourceRefs and they differ, they are strictly different procurements
+          if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() !== opportunity.sourceRef.trim().toUpperCase()) {
+            return false;
+          }
+
+          // Exact sourceRef match (e.g. same RFQ or Tender)
           if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() === opportunity.sourceRef.trim().toUpperCase()) {
             return true;
           }
 
+          // Shared reference keys (e.g., tender ID or bid number linked across records)
           const sharedRef = refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
           if (sharedRef) return true;
 
-          if (coreTitle.length >= 4 && itemCoreTitle.length >= 4 && coreTitle === itemCoreTitle) {
-            return true;
-          }
-
+          // Never merge two separate procurements by title alone — separate procurements can share a title
           return false;
         });
 

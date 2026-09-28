@@ -251,6 +251,11 @@ export const tenderWorkflow = {
           sourceType: 'tender',
           sourceId: bid.tenderId,
           metadata: {
+            baseAmount: bid.subtotal || (bid.quantity * bid.unitPrice),
+            taxableAmount: bid.subtotal || (bid.quantity * bid.unitPrice),
+            taxRate: bid.taxRate,
+            taxAmount: bid.taxAmount,
+            totalAmount: amount,
             quotationPricing: {
               subtotal: bid.subtotal,
               taxRate: bid.taxRate,

@@ -2979,50 +2979,54 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
 
         let similar: any[] = [];
         let ownResponse: any = null;
-        const responseRequirementIds = new Set<number>([
-            Number(requirement.id),
-            Math.abs(Number(requirement.id))
-        ].filter((value) => Number.isFinite(value) && value > 0));
 
-        if (req.user?.role === 'seller') {
-            const reqTitle = requirement.title;
-            const reqBuyerId = requirement.buyerId || requirement.createdById;
-            const reqBuyerOrgId = requirement.buyerOrganizationId;
-            const reqNumber = requirement.requirementNumber || requirement.bidNumber || idToken;
+        // Strictly separate IDs by model to prevent cross-table collisions and tenant leakage
+        const targetReqIds = new Set<number>();
+        const targetBidIds = new Set<number>();
 
-            const [mirroredRequirement, linkedLegacyReq, linkedBidRecord] = await Promise.all([
-                db.buyerRequirement.findFirst({
+        const isBidModel = requirement.sourceModel === 'BID' || Boolean(requirement.bidNumber);
+        const reqNum = requirement.requirementNumber || requirement.bidNumber || idToken;
+
+        if (isBidModel) {
+            const numBidId = Number(requirement.id);
+            if (Number.isFinite(numBidId) && numBidId > 0) {
+                targetBidIds.add(numBidId);
+            }
+            const srcReqId = Number(
+                requirement.sourceRequirementId ||
+                (requirement.technicalPacket as any)?.sourceRequirementId ||
+                (requirement.technicalPacket as any)?.requirementId
+            );
+            if (Number.isFinite(srcReqId) && srcReqId > 0) {
+                targetReqIds.add(srcReqId);
+            }
+            if (reqNum) {
+                const mirroredReq = await db.buyerRequirement.findFirst({
+                    where: { referenceNumber: reqNum },
+                    select: { id: true }
+                }).catch(() => null);
+                if (mirroredReq?.id) targetReqIds.add(mirroredReq.id);
+            }
+        } else {
+            const numReqId = Number(requirement.id);
+            if (Number.isFinite(numReqId) && numReqId > 0) {
+                targetReqIds.add(numReqId);
+            }
+            if (reqNum) {
+                const linkedBid = await db.procurementBid.findFirst({
                     where: {
                         OR: [
-                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, createdById: reqBuyerId }] : []),
-                            ...(reqTitle && reqBuyerOrgId ? [{ title: reqTitle, buyerOrganizationId: reqBuyerOrgId }] : [])
+                            { bidNumber: reqNum },
+                            ...(Number.isFinite(numReqId) && numReqId > 0 ? [
+                                { technicalPacket: { path: ['sourceRequirementId'], equals: numReqId } },
+                                { technicalPacket: { path: ['requirementId'], equals: numReqId } }
+                            ] : [])
                         ]
                     },
                     select: { id: true }
-                }).catch(() => null),
-                db.requirement.findFirst({
-                    where: {
-                        OR: [
-                            ...(reqNumber ? [{ requirementNumber: reqNumber }] : []),
-                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, buyerId: reqBuyerId }] : [])
-                        ]
-                    },
-                    select: { id: true }
-                }).catch(() => null),
-                db.procurementBid.findFirst({
-                    where: {
-                        OR: [
-                            ...(reqNumber ? [{ bidNumber: reqNumber }] : []),
-                            ...(reqTitle && reqBuyerId ? [{ title: reqTitle, buyerId: reqBuyerId }] : [])
-                        ]
-                    },
-                    select: { id: true }
-                }).catch(() => null)
-            ]);
-
-            if (mirroredRequirement?.id) responseRequirementIds.add(mirroredRequirement.id);
-            if (linkedLegacyReq?.id) responseRequirementIds.add(linkedLegacyReq.id);
-            if (linkedBidRecord?.id) responseRequirementIds.add(linkedBidRecord.id);
+                }).catch(() => null);
+                if (linkedBid?.id) targetBidIds.add(linkedBid.id);
+            }
         }
 
         const safeReqId = typeof requirement.id === 'number' && requirement.id > 0 ? requirement.id : -999999;
@@ -3036,11 +3040,11 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                 orderBy: { createdAt: 'desc' },
                 select: publicRequirementListSelect
             }).catch(() => []),
-            req.user?.role === 'seller'
+            (req.user?.role === 'seller' && targetReqIds.size > 0)
                 ? db.requirementResponse.findFirst({
                     where: {
                         AND: [
-                            { requirementId: { in: Array.from(responseRequirementIds) } },
+                            { requirementId: { in: Array.from(targetReqIds) } },
                             {
                                 OR: [
                                     { sellerUserId: Number(req.user.id) },
@@ -3052,6 +3056,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                     orderBy: { createdAt: 'desc' },
                     select: {
                         id: true,
+                        requirementId: true,
                         status: true,
                         createdAt: true,
                         updatedAt: true,
@@ -3069,10 +3074,10 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         similar = similarList.map(decorateRequirement);
         ownResponse = response;
 
-        if (!ownResponse && req.user?.role === 'seller') {
+        if (!ownResponse && req.user?.role === 'seller' && targetBidIds.size > 0) {
             const pbPart = await db.procurementBidParticipation.findFirst({
                 where: {
-                    bidId: { in: Array.from(responseRequirementIds) },
+                    bidId: { in: Array.from(targetBidIds) },
                     sellerId: Number(req.user.id),
                     submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
@@ -3082,6 +3087,8 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             if (pbPart) {
                 ownResponse = {
                     id: pbPart.id,
+                    bidId: pbPart.bidId,
+                    requirementId: requirement.id,
                     status: pbPart.submissionStatus || 'SUBMITTED',
                     submissionStatus: pbPart.submissionStatus || 'SUBMITTED',
                     offeredPrice: Number(pbPart.quotedAmount || pbPart.totalAmount || 0),
@@ -3548,7 +3555,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                         }
                     });
 
-                    const partData = {
+                    const partData: any = {
                         quotedAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
                         totalAmount: body.offeredPrice !== undefined ? Number(body.offeredPrice) : 0,
                         submissionStatus: body.status || 'SUBMITTED',
@@ -3561,7 +3568,10 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                         makeBrand: (body as any).makeBrand || (body.responseData as any)?.makeBrand || null,
                         model: (body as any).model || (body.responseData as any)?.model || null,
                         offeredItemDescription: (body as any).technicalSpecifications || (body.responseData as any)?.technicalSpecifications || body.message || 'Quotation submitted via marketplace',
-                        acknowledgement: body.responseData ? body.responseData : undefined
+                        acknowledgement: (body.responseData || body.deliveryTimeline) ? {
+                            ...(body.responseData || {}),
+                            deliveryTimeline: body.deliveryTimeline || (body.responseData as any)?.deliveryTimeline
+                        } : undefined
                     };
 
                     if (existingPart) {
