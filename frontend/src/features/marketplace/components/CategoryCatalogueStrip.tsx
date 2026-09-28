@@ -52,7 +52,10 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
             {/* Background Image with eager high-priority loading for visible cards */}
             <img
                 src={imgSrc}
-                alt={category.name}
+                alt=""
+                aria-hidden="true"
+                width={262}
+                height={328}
                 loading={priority ? 'eager' : 'lazy'}
                 fetchPriority={priority ? 'high' : 'auto'}
                 decoding="async"
@@ -223,7 +226,7 @@ export function CategoryCatalogueStrip({
     const [scopeFilter, setScopeFilter] = useState<CategoryScopeFilter>('ALL');
 
     React.useEffect(() => {
-        preloadCriticalCategoryPhotos(initialCount);
+        preloadCriticalCategoryPhotos(4);
     }, [initialCount]);
 
     const productCategories = useMemo(() => categories.filter(isProductCategory), [categories]);
@@ -310,6 +313,7 @@ export function CategoryCatalogueStrip({
                         <button
                             type="button"
                             role="tab"
+                            aria-controls="category-panel"
                             aria-selected={scopeFilter === 'ALL'}
                             onClick={() => handleScopeChange('ALL')}
                             className={cn(
@@ -332,6 +336,7 @@ export function CategoryCatalogueStrip({
                         <button
                             type="button"
                             role="tab"
+                            aria-controls="category-panel"
                             aria-selected={scopeFilter === 'PRODUCT'}
                             onClick={() => handleScopeChange('PRODUCT')}
                             className={cn(
@@ -354,6 +359,7 @@ export function CategoryCatalogueStrip({
                         <button
                             type="button"
                             role="tab"
+                            aria-controls="category-panel"
                             aria-selected={scopeFilter === 'SERVICE'}
                             onClick={() => handleScopeChange('SERVICE')}
                             className={cn(
@@ -376,7 +382,7 @@ export function CategoryCatalogueStrip({
                 )}
 
                 {/* Clean, Non-Scrolling Responsive Grid Layout */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
+                <div role="tabpanel" id="category-panel" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3.5 sm:gap-4.5">
                     {displayedCategories.map((category, index) => {
                         const selected = String(selectedCategoryId || '') === String(category.id);
                         return (
@@ -384,7 +390,7 @@ export function CategoryCatalogueStrip({
                                 key={category.id}
                                 category={category}
                                 selected={selected}
-                                priority={index < 14}
+                                priority={index < 6}
                                 onSelect={onSelect}
                                 onClick={() => trackCategory(category)}
                             />

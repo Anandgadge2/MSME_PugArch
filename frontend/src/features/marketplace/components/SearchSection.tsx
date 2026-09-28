@@ -33,6 +33,7 @@ export function SearchSection({ categories }: Props) {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         <input
                             type="text"
+                            aria-label="Search products and services"
                             value={query}
                             onChange={e => setQuery(e.target.value)}
                             placeholder="Search products, services…"
@@ -50,7 +51,7 @@ export function SearchSection({ categories }: Props) {
                             <button
                                 key={cat.id}
                                 onClick={() => { setCategoryId(String(cat.id)); doSearch(query, String(cat.id)); }}
-                                className="shrink-0 px-3 py-1 rounded-full border border-slate-200 bg-slate-50 text-[10px] font-medium text-slate-600 hover:border-[#0b2447] hover:text-[#0b2447] active:scale-95 transition"
+                                className="shrink-0 min-h-[36px] flex items-center px-3.5 py-1.5 rounded-full border border-slate-200 bg-slate-50 text-xs font-semibold text-slate-700 hover:border-[#0b2447] hover:text-[#0b2447] active:scale-95 transition"
                             >
                                 {cat.name}
                             </button>

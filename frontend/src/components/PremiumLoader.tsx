@@ -37,6 +37,8 @@ export interface PremiumLoaderProps {
   isReady?: boolean;
   duration?: number;
   onComplete?: () => void;
+  networkNotice?: string;
+  onBypass?: () => void;
 }
 
 export default function PremiumLoader({
@@ -44,7 +46,9 @@ export default function PremiumLoader({
   mode = 'initial',
   isReady = false,
   duration = 800,
-  onComplete
+  onComplete,
+  networkNotice,
+  onBypass,
 }: PremiumLoaderProps) {
   const [internalProgress, setInternalProgress] = useState(0);
   const [isFading, setIsFading] = useState(false);
@@ -142,15 +146,17 @@ export default function PremiumLoader({
             <img
               src="/logoo.png"
               alt="SMiLE MSME Logo"
+              width={80}
+              height={80}
               className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300"
             />
           </div>
         </div>
 
         {/* Header Titles */}
-        <h1 className="mt-4 text-xl md:text-2xl font-black tracking-widest text-white uppercase text-center bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent">
+        <h2 className="mt-4 text-xl md:text-2xl font-black tracking-widest text-white uppercase text-center bg-gradient-to-r from-white via-slate-100 to-amber-200 bg-clip-text text-transparent">
           JSG SMILE PORTAL
-        </h1>
+        </h2>
 
         <div className="w-16 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent my-3 rounded-full" />
 
@@ -197,6 +203,25 @@ export default function PremiumLoader({
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
             </div>
           </div>
+
+          {/* Network Notice Badge for Slow or Offline Network */}
+          {networkNotice && (
+            <div className="mt-3 flex flex-col items-center justify-center gap-2 text-center animate-fade-in">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-[11px] text-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span>{networkNotice}</span>
+              </div>
+              {onBypass && (
+                <button
+                  type="button"
+                  onClick={onBypass}
+                  className="text-[11px] text-slate-300 hover:text-white underline underline-offset-4 transition-colors cursor-pointer"
+                >
+                  Continue in Offline Mode
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
       </div>

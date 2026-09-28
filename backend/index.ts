@@ -17,6 +17,7 @@ import { createApp } from './src/app.js';
 import { logger } from './src/config/logger.js';
 import { connectRedis, isRedisReady, redis } from './src/config/redis.js';
 import { configureGCS } from './src/config/gcs.js';
+import { optimizeImageBuffer } from './src/utils/imageOptimizer.js';
 
 // Storage Configuration (Google Cloud Storage)
 configureGCS().then(ok => {
@@ -3323,11 +3324,12 @@ app.get('/api/files/raw/*', async (req: any, res: any) => {
         userAgent: req.headers['user-agent']
       });
       const filename = encodeURIComponent(asset.originalName || asset.key || 'image');
-      res.setHeader('Content-Type', file.contentType || asset.mimeType || 'image/jpeg');
-      res.setHeader('Content-Length', file.buffer.length);
+      const optimized = await optimizeImageBuffer(file.buffer, file.contentType || asset.mimeType || 'image/jpeg', req.query);
+      res.setHeader('Content-Type', optimized.contentType);
+      res.setHeader('Content-Length', optimized.buffer.length);
       res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.end(file.buffer);
+      return res.end(optimized.buffer);
     }
 
     // Direct GCS fallback stream if key exists in bucket

@@ -7,6 +7,7 @@ import { cn } from './lib/utils';
 import { isShgUser } from './lib/shg';
 import { getCookieValue } from './lib/auth';
 import { resolveLegacyUrl } from './lib/routes';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 
 // Eagerly imported (small, always-needed for initial routes).
 import Login from './views/Login';
@@ -531,6 +532,7 @@ export default function App({
   initialSidebarCollapsed?: boolean;
 }) {
   const { user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+  const network = useNetworkStatus();
   const router = useRouter();
   const pathname = usePathname() || '/';
   const [initialLoadComplete, setInitialLoadComplete] = useState(() => {
@@ -1213,6 +1215,14 @@ export default function App({
         mode="initial"
         isReady={isInitialReady}
         onComplete={completeInitialLoad}
+        networkNotice={
+          !network.isOnline
+            ? 'Operating in offline mode • Cached marketplace ready'
+            : network.isSlowConnection
+            ? 'Weak internet detected (2G) • Establishing link...'
+            : undefined
+        }
+        onBypass={completeInitialLoad}
       />
     );
   }

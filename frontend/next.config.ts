@@ -79,6 +79,24 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/:all*(png|jpg|jpeg|webp|svg|ico|woff2|woff|ttf|eot)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/proxy/api/files/raw/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
     ];
   },
   async rewrites() {

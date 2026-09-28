@@ -46,16 +46,6 @@ export function HeroBanner({ banners }: Props) {
         const url = slides[current]?.imageUrl;
         const resolved = resolveImageSrc(url, current);
         setCurrentImg(resolved);
-
-        if (resolved && typeof window !== 'undefined') {
-            const img = new Image();
-            img.src = resolved;
-            img.onload = () => {
-                if (img.naturalWidth && img.naturalHeight) {
-                    setAspectRatio(img.naturalWidth / img.naturalHeight);
-                }
-            };
-        }
     }, [slides, current]);
 
     const goTo = useCallback((idx: number) => {
@@ -128,7 +118,6 @@ export function HeroBanner({ banners }: Props) {
             }}
             className="group/hero relative overflow-hidden bg-slate-950 w-full min-h-[290px] xs:min-h-[310px] sm:min-h-[350px] md:min-h-[400px] transition-[aspect-ratio] duration-500 ease-out"
             aria-label="Marketplace Featured Hero Banner"
-            role="region"
             aria-roledescription="carousel"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -144,6 +133,8 @@ export function HeroBanner({ banners }: Props) {
                             src={activeImageSrc}
                             alt=""
                             aria-hidden="true"
+                            width={1376}
+                            height={768}
                             className={`absolute inset-0 w-full h-full object-cover object-center blur-2xl md:blur-3xl scale-110 opacity-50 brightness-75 transition-opacity duration-700 pointer-events-none ${
                                 fading ? 'opacity-0' : 'opacity-50'
                             }`}
@@ -152,9 +143,12 @@ export function HeroBanner({ banners }: Props) {
                         {/* Plane 1: Featured Sharp Image (100% visible, uncropped, responsive across all screen sizes) */}
                         <img
                             key={`featured-${slide?.id ?? 'slide'}-${current}`}
-                            src={activeImageSrc}
+                            src={`${activeImageSrc}${activeImageSrc.includes('?') ? '&' : '?'}w=1400&q=82&fmt=webp`}
                             alt={slide?.title || 'Marketplace Hero Banner'}
+                            width={1376}
+                            height={768}
                             loading="eager"
+                            fetchPriority="high"
                             referrerPolicy="no-referrer"
                             onLoad={(e) => {
                                 const img = e.currentTarget;
@@ -228,17 +222,17 @@ export function HeroBanner({ banners }: Props) {
                             <button 
                                 type="button"
                                 onClick={handlePostRequirement} 
-                                className="inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
+                                className="inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-xs font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
                             >
-                                <FileText className="h-3 w-3 text-[#c8a45c]" aria-hidden="true" />
+                                <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
                                 <span>Post Requirement</span>
                             </button>
                             <button 
                                 type="button"
                                 onClick={handleStartSelling} 
-                                className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 px-3.5 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] font-black active:scale-95 transition-all shadow-md shrink-0"
+                                className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-xs font-black active:scale-95 transition-all shadow-md shrink-0"
                             >
-                                <Store className="h-3 w-3 text-[#0b2447]" aria-hidden="true" />
+                                <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
                                 <span>Start Selling</span>
                             </button>
                         </div>
@@ -296,15 +290,20 @@ export function HeroBanner({ banners }: Props) {
                     {slides.map((_, i) => (
                         <button
                             key={i}
+                            type="button"
                             onClick={() => goTo(i)}
-                            className={`rounded-full transition-all duration-300 focus:outline-none ${
-                                i === current
-                                    ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
-                                    : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
-                            }`}
+                            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8a45c] rounded-full"
                             aria-label={`Go to slide ${i + 1}`}
                             aria-current={i === current ? 'true' : undefined}
-                        />
+                        >
+                            <span
+                                className={`block rounded-full transition-all duration-300 pointer-events-none ${
+                                    i === current
+                                        ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
+                                        : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
+                                }`}
+                            />
+                        </button>
                     ))}
                 </div>
             </div>

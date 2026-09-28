@@ -1,0 +1,16 @@
+# JsgSmile MSME Portal - Jharsuguda Synergy for MSME and Industry Linkage Ecosystem
+
+> Official MSME & Industry Linkage Procurement Portal for Jharsuguda District, Odisha, India.
+> Connects MSMEs, Buyers, Sellers, SHGs, and Large Industries for digital procurement.
+
+## Key Pages
+
+- [Homepage](https://msme-pugarch-frontend.vercel.app/)
+- [Marketplace](https://msme-pugarch-frontend.vercel.app/marketplace)
+- [Seller Registration](https://msme-pugarch-frontend.vercel.app/seller/register)
+- [Buyer Registration](https://msme-pugarch-frontend.vercel.app/buyer/register)
+- [Login](https://msme-pugarch-frontend.vercel.app/login)
+
+## About
+
+JsgSmile (Jharsuguda Synergy for MSME and Industry Linkage Ecosystem) is a government-backed digital procurement portal enabling MSMEs in Jharsuguda district to connect with large industries, participate in tenders, and sell products through a transparent e-procurement platform.

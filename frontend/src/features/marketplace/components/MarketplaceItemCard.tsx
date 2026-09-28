@@ -124,8 +124,10 @@ export function MarketplaceItemCard({
                 >
                     {imageUrl ? (
                         <img
-                            src={imageUrl}
+                            src={`${imageUrl}${imageUrl.includes('?') ? '&' : '?'}w=400&q=80&fmt=webp`}
                             alt={item.name}
+                            width={223}
+                            height={149}
                             loading={priority ? 'eager' : 'lazy'}
                             decoding="async"
                             fetchPriority={priority ? 'high' : 'auto'}
@@ -147,12 +149,12 @@ export function MarketplaceItemCard({
                                 <span className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-1 py-0.5 rounded border border-amber-200/60">
                                     <span className="mr-0.5 text-[10px] leading-none">★</span> {ratingScore}
                                 </span>
-                                <span className="text-[9px] font-medium text-slate-400">
+                                <span className="text-[9px] font-medium text-slate-600">
                                     ({reviewCount})
                                 </span>
                             </>
                         ) : (
-                            <span className="text-[9px] font-medium text-slate-400 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">
+                            <span className="text-[9px] font-medium text-slate-600 bg-slate-50 border border-slate-100 px-1.5 py-0.5 rounded">
                                 ★ New Listing
                             </span>
                         )}
@@ -183,7 +185,7 @@ export function MarketplaceItemCard({
                                 {effectivePrice > 0 ? `₹${effectivePrice.toLocaleString('en-IN')}` : 'Price on Request'}
                             </span>
                             {discountPercent > 0 && displayOriginalPrice > effectivePrice && (
-                                <span className="text-[9.5px] text-slate-400 line-through">
+                                <span className="text-[9.5px] text-slate-600 line-through">
                                     ₹{displayOriginalPrice.toLocaleString('en-IN')}
                                 </span>
                             )}
@@ -210,7 +212,7 @@ export function MarketplaceItemCard({
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="flex w-full items-center justify-center gap-1 rounded-lg bg-[#0b2447] hover:bg-blue-700 px-2.5 py-1.5 text-[11px] font-bold text-white shadow-2xs transition-colors duration-150 active:scale-[0.98]"
+                    className="flex w-full items-center justify-center gap-1.5 min-h-[38px] rounded-lg bg-[#0b2447] hover:bg-blue-700 px-3 py-2 text-xs font-bold text-white shadow-2xs transition-colors duration-150 active:scale-[0.98]"
                 >
                     <span>View {type === 'service' ? 'Service' : 'Product'}</span>
                     <span className="text-blue-200 transition-transform duration-150 group-hover:translate-x-0.5">&rarr;</span>

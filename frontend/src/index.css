@@ -988,10 +988,12 @@ textarea.soft-field {
 
 @keyframes dt-pulse-glow {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.45), 0 0 15px rgba(15, 118, 110, 0.2);
+    transform: scale(1);
+    opacity: 0.85;
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(15, 118, 110, 0), 0 0 25px rgba(15, 118, 110, 0.4);
+    transform: scale(1.05);
+    opacity: 1;
   }
 }
 
@@ -1104,15 +1106,15 @@ textarea.soft-field {
 @keyframes dt-pulse-ring {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0.5);
+    opacity: 0.8;
   }
   70% {
-    transform: scale(1);
-    box-shadow: 0 0 0 6px rgba(15, 118, 110, 0);
+    transform: scale(1.1);
+    opacity: 0;
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(15, 118, 110, 0);
+    opacity: 0;
   }
 }
 

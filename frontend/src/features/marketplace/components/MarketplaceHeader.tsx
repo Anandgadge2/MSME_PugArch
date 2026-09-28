@@ -392,11 +392,11 @@ export function MarketplaceHeader({ user }: Props) {
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-103 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
-                            <img src="/logoo.png" alt="Jharsuguda SMiLE MSME Marketplace Logo" className="h-full w-full object-contain" />
+                            <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} className="h-full w-full object-contain" />
                         </div>
                         <div className="min-w-0 leading-tight">
                             <p className="truncate text-base font-black tracking- text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
-                            <p className="truncate text-[9.8px] font-bold text-slate-400">Jharsuguda MSME Marketplace Portal</p>
+                            <p className="truncate text-[9.8px] font-bold text-slate-600">Jharsuguda MSME Marketplace Portal</p>
                         </div>
                     </Link>
 
@@ -416,11 +416,11 @@ export function MarketplaceHeader({ user }: Props) {
                                 Search verified products, services, sellers, and categories
                             </label>
 
-                            <div className="flex items-center pl-3.5 pr-1 shrink-0 text-slate-400">
+                            <div className="flex items-center pl-3.5 pr-1 shrink-0 text-slate-600">
                                 {isSearching ? (
                                     <Loader2 className="h-4 w-4 text-[#0b2447] animate-spin" aria-hidden="true" />
                                 ) : (
-                                    <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
+                                    <Search className="h-4 w-4 text-slate-600" aria-hidden="true" />
                                 )}
                             </div>
 
@@ -441,7 +441,7 @@ export function MarketplaceHeader({ user }: Props) {
                                 placeholder="Search verified products, services, sellers..."
                                 autoComplete="off"
                                 spellCheck="false"
-                                className="flex-1 min-w-0 h-full bg-transparent text-xs sm:text-sm pl-2 pr-2 outline-none font-medium text-slate-900 placeholder:text-slate-400"
+                                className="flex-1 min-w-0 h-full bg-transparent text-xs sm:text-sm pl-2 pr-2 outline-none font-medium text-slate-900 placeholder:text-slate-600"
                             />
 
                             {/* Clear Search button */}
@@ -449,7 +449,7 @@ export function MarketplaceHeader({ user }: Props) {
                                 <button
                                     type="button"
                                     onClick={handleClearSearch}
-                                    className="h-6 w-6 mr-1.5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 active:scale-90 transition text-xs font-bold"
+                                    className="h-6 w-6 mr-1.5 flex items-center justify-center rounded-full text-slate-600 hover:text-slate-700 hover:bg-slate-200/70 active:scale-90 transition text-xs font-bold"
                                     title="Clear search"
                                     aria-label="Clear search query"
                                 >
@@ -473,7 +473,7 @@ export function MarketplaceHeader({ user }: Props) {
                         {isDropdownOpen && (
                             <div
                                 id="header-search-results-list"
-                                role="listbox"
+                                role="list"
                                 aria-label="Search suggestions"
                                 className="absolute left-0 right-0 top-full mt-2 z-50 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150 max-h-[82vh] flex flex-col"
                             >
@@ -484,8 +484,8 @@ export function MarketplaceHeader({ user }: Props) {
                                         {recentSearches.length > 0 && (
                                             <div>
                                                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                                                    <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                                                        <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                                    <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                                                        <Clock className="h-3.5 w-3.5 text-slate-600" />
                                                         Recent Searches
                                                     </span>
                                                     <button
@@ -500,9 +500,8 @@ export function MarketplaceHeader({ user }: Props) {
                                                     {recentSearches.map((term, idx) => (
                                                         <div
                                                             key={term}
-                                                            role="option"
+                                                            role="listitem"
                                                             id={`suggestion-opt-${idx}`}
-                                                            aria-selected={highlightedIndex === idx}
                                                             onClick={() => {
                                                                 setSearchQ(term);
                                                                 executeSearch(term);
@@ -515,13 +514,13 @@ export function MarketplaceHeader({ user }: Props) {
                                                             )}
                                                         >
                                                             <div className="flex items-center gap-2.5 truncate">
-                                                                <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0 group-hover:text-[#0b2447]" />
+                                                                <Clock className="h-3.5 w-3.5 text-slate-600 shrink-0 group-hover:text-[#0b2447]" />
                                                                 <span className="truncate">{term}</span>
                                                             </div>
                                                             <button
                                                                 type="button"
                                                                 onClick={(e) => removeRecentSearch(term, e)}
-                                                                className="h-5 w-5 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition"
+                                                                className="h-5 w-5 flex items-center justify-center rounded-full text-slate-600 hover:text-slate-700 hover:bg-slate-200/60 transition"
                                                                 title="Remove search from history"
                                                                 aria-label={`Remove ${term} from search history`}
                                                             >
@@ -537,7 +536,7 @@ export function MarketplaceHeader({ user }: Props) {
                                         <div>
                                             <div className="flex items-center gap-1.5 pb-2 mb-2 border-b border-slate-100">
                                                 <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Popular Categories</span>
+                                                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Popular Categories</span>
                                             </div>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {POPULAR_SEARCH_CHIPS.map(chip => (
@@ -550,14 +549,14 @@ export function MarketplaceHeader({ user }: Props) {
                                                         }}
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50 text-xs font-semibold text-slate-700 hover:border-[#0b2447] hover:bg-blue-50/50 hover:text-[#0b2447] active:scale-95 transition-all shadow-2xs"
                                                     >
-                                                        <Search className="h-3 w-3 text-slate-400" />
+                                                        <Search className="h-3 w-3 text-slate-600" />
                                                         <span>{chip}</span>
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
 
-                                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-600 font-medium">
                                             <span>💡 Type at least 2 characters for live suggestions</span>
                                             <span>Press <strong>Enter</strong> to search</span>
                                         </div>
@@ -649,7 +648,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                 <div className="space-y-1.5">
                                                     <div className="flex items-center gap-1.5 px-2">
                                                         <Tag className="h-3.5 w-3.5 text-blue-600" />
-                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Categories</span>
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Categories</span>
                                                     </div>
                                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                                         {suggestions.categories.map((cat) => {
@@ -662,8 +661,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                                     key={cat.id}
                                                                     href={targetUrl}
                                                                     id={`suggestion-opt-${itemIndex}`}
-                                                                    role="option"
-                                                                    aria-selected={isHighlighted}
+                                                                    role="listitem"
                                                                     onClick={() => {
                                                                         saveRecentSearch(searchQ);
                                                                         setIsInputFocused(false);
@@ -699,7 +697,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                     <div className="flex items-center justify-between px-2">
                                                         <div className="flex items-center gap-1.5">
                                                             <ShoppingBag className="h-3.5 w-3.5 text-[#0b2447]" />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Products</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Products</span>
                                                         </div>
                                                         <button
                                                             type="button"
@@ -723,8 +721,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                                     key={prod.id}
                                                                     href={`/marketplace/products/${prod.id}`}
                                                                     id={`suggestion-opt-${itemIndex}`}
-                                                                    role="option"
-                                                                    aria-selected={isHighlighted}
+                                                                    role="listitem"
                                                                     onClick={() => {
                                                                         saveRecentSearch(searchQ);
                                                                         setIsInputFocused(false);
@@ -780,7 +777,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                     <div className="flex items-center justify-between px-2">
                                                         <div className="flex items-center gap-1.5">
                                                             <Wrench className="h-3.5 w-3.5 text-[#0b2447]" />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Services</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Services</span>
                                                         </div>
                                                         <button
                                                             type="button"
@@ -803,8 +800,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                                     key={serv.id}
                                                                     href={`/marketplace/services/${serv.id}`}
                                                                     id={`suggestion-opt-${itemIndex}`}
-                                                                    role="option"
-                                                                    aria-selected={isHighlighted}
+                                                                    role="listitem"
                                                                     onClick={() => {
                                                                         saveRecentSearch(searchQ);
                                                                         setIsInputFocused(false);
@@ -856,7 +852,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                     <div className="flex items-center justify-between px-2">
                                                         <div className="flex items-center gap-1.5">
                                                             <Store className="h-3.5 w-3.5 text-emerald-600" />
-                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Verified Suppliers</span>
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Verified Suppliers</span>
                                                         </div>
                                                         <button
                                                             type="button"
@@ -880,8 +876,7 @@ export function MarketplaceHeader({ user }: Props) {
                                                                     key={seller.id}
                                                                     href={`/marketplace/sellers/${seller.id}`}
                                                                     id={`suggestion-opt-${itemIndex}`}
-                                                                    role="option"
-                                                                    aria-selected={isHighlighted}
+                                                                    role="listitem"
                                                                     onClick={() => {
                                                                         saveRecentSearch(searchQ);
                                                                         setIsInputFocused(false);
@@ -1040,7 +1035,7 @@ export function MarketplaceHeader({ user }: Props) {
                         <div className="bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f] p-4 text-white flex items-center justify-between shadow-md shrink-0">
                             <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 min-w-0">
                                 <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm">
-                                    <img src="/logoo.png" alt="SMiLE Logo" className="h-full w-full object-contain" />
+                                    <img src="/logoo.png" alt="" aria-hidden="true" width={36} height={36} className="h-full w-full object-contain" />
                                 </div>
                                 <div className="min-w-0 leading-tight">
                                     <p className="truncate text-sm font-black tracking-tight text-white">JsgSMILE</p>
@@ -1049,10 +1044,10 @@ export function MarketplaceHeader({ user }: Props) {
                             </Link>
                             <button
                                 onClick={() => setMobileMenuOpen(false)}
-                                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md active:scale-90 transition-all"
+                                className="flex min-h-[40px] min-w-[40px] h-10 w-10 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 text-white border border-white/20 backdrop-blur-md active:scale-90 transition-all"
                                 aria-label="Close menu"
                             >
-                                <X className="h-4 w-4" />
+                                <X className="h-5 w-5" />
                             </button>
                         </div>
 

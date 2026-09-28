@@ -101,7 +101,7 @@ export function MarketplaceSectionCarousel({
                                 showCompare={showCompare}
                                 showAddToCart={showAddToCart}
                                 showRequestQuote={showRequestQuote}
-                                priority={idx < 4}
+                                priority={false}
                             />
                         ))}
                         {viewAllUrl && (

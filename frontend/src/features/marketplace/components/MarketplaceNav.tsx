@@ -359,7 +359,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                                 </div>
                                 <div>
                                     <p className="leading-tight">Active Procurement</p>
-                                    <p className="text-[10px] text-slate-400 font-normal">View open RFQs & tenders</p>
+                                    <p className="text-[10px] text-slate-600 font-normal">View open RFQs & tenders</p>
                                 </div>
                             </Link>
 
@@ -374,7 +374,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                                 </div>
                                 <div>
                                     <p className="leading-tight">Verified Buyers</p>
-                                    <p className="text-[10px] text-slate-400 font-normal">PSUs, Large Corporates</p>
+                                    <p className="text-[10px] text-slate-600 font-normal">PSUs, Large Corporates</p>
                                 </div>
                             </Link>
 
@@ -389,7 +389,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                                 </div>
                                 <div>
                                     <p className="leading-tight">Publish Requirements</p>
-                                    <p className="text-[10px] text-slate-400 font-normal">Post tender demands</p>
+                                    <p className="text-[10px] text-slate-600 font-normal">Post tender demands</p>
                                 </div>
                             </Link>
                         </div>
@@ -415,7 +415,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                     >
                         <Briefcase className="h-4 w-4 text-slate-500" aria-hidden="true" />
                         <span>Buyer</span>
-                        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${activeDropdown === 'buyer' ? 'rotate-180 text-[#0b2447]' : 'text-slate-400'}`} aria-hidden="true" />
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${activeDropdown === 'buyer' ? 'rotate-180 text-[#0b2447]' : 'text-slate-600'}`} aria-hidden="true" />
                     </button>
                     
                     {activeDropdown === 'buyer' && (
@@ -435,7 +435,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                                 </div>
                                 <div>
                                     <p className="leading-tight">All Categories</p>
-                                    <p className="text-[10px] text-slate-400 font-normal">Explore full catalogue</p>
+                                    <p className="text-[10px] text-slate-600 font-normal">Explore full catalogue</p>
                                 </div>
                             </Link>
 
@@ -450,7 +450,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                                 </div>
                                 <div>
                                     <p className="leading-tight">Verified Partners</p>
-                                    <p className="text-[10px] text-slate-400 font-normal">ZED Certified Suppliers</p>
+                                    <p className="text-[10px] text-slate-600 font-normal">ZED Certified Suppliers</p>
                                 </div>
                             </Link>
                         </div>
@@ -483,7 +483,7 @@ export function MarketplaceNav({ categories }: MarketplaceNavProps) {
                     {activeDropdown === 'categories' && (
                         <div 
                             id="category-mega-tray"
-                            role="dialog"
+                            role="region"
                             aria-label="Category Catalogue Explorer"
                             className="absolute top-full left-2 right-2 sm:left-4 sm:right-4 mt-0.5 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 z-50 before:content-[''] before:absolute before:-top-3 before:left-0 before:right-0 before:h-3"
                         >

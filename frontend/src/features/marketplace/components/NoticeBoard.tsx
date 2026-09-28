@@ -25,7 +25,7 @@ export function NoticeBoard({ notices }: Props) {
                         <h2 className="text-sm font-bold text-[#0b2447]">Important Notices & Announcements</h2>
                         <p className="text-[10px] text-slate-500 mt-0.5">Latest updates from the portal administration</p>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 inline-flex items-center gap-1">
+                    <span className="text-[10px] font-bold text-slate-600 inline-flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {formatDate(new Date())}
                     </span>
@@ -42,11 +42,11 @@ export function NoticeBoard({ notices }: Props) {
                                 <div className="flex-1 min-w-0">
                                     <h3 className="text-xs font-semibold text-slate-800">{notice.title}</h3>
                                     {notice.description && <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-2">{notice.description}</p>}
-                                    <p className="text-[9px] text-slate-400 mt-1">
+                                    <p className="text-[9px] text-slate-600 mt-1">
                                         {formatDate(notice.publishedAt)}
                                     </p>
                                 </div>
-                                <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                <span className="text-[8px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
                                     {notice.type}
                                 </span>
                             </div>

@@ -17,19 +17,21 @@ import {
 } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceNav } from '../components/MarketplaceNav';
-import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { HeroBanner } from '../components/HeroBanner';
 import { SearchSection } from '../components/SearchSection';
 import { TrustBanner } from '../components/TrustBanner';
 import { CategoryCatalogueStrip } from '../components/CategoryCatalogueStrip';
 import { MarketplaceSectionCarousel } from '../components/MarketplaceSectionCarousel';
 import type { MarketplaceDiscoveryItem } from '../components/MarketplaceItemCard';
-import { BuyerRequirementBrowser } from '../components/BuyerRequirementBrowser';
-import { LatestBids } from '../components/LatestBids';
-import { SellerStrip } from '../components/SellerStrip';
-import { StatsSection } from '../components/StatsSection';
-import { NoticeBoard } from '../components/NoticeBoard';
-import { CompareTray } from '../components/CompareTray';
+
+// Below-the-fold sections: lazy-loaded to reduce initial JS bundle and improve TBT
+const MarketplaceFooter = React.lazy(() => import('../components/MarketplaceFooter').then(m => ({ default: m.MarketplaceFooter })));
+const BuyerRequirementBrowser = React.lazy(() => import('../components/BuyerRequirementBrowser').then(m => ({ default: m.BuyerRequirementBrowser })));
+const LatestBids = React.lazy(() => import('../components/LatestBids').then(m => ({ default: m.LatestBids })));
+const SellerStrip = React.lazy(() => import('../components/SellerStrip').then(m => ({ default: m.SellerStrip })));
+const StatsSection = React.lazy(() => import('../components/StatsSection').then(m => ({ default: m.StatsSection })));
+const NoticeBoard = React.lazy(() => import('../components/NoticeBoard').then(m => ({ default: m.NoticeBoard })));
+const CompareTray = React.lazy(() => import('../components/CompareTray').then(m => ({ default: m.CompareTray })));
 
 type HomeBuyer = MarketplaceHomeData['largeIndustries'][number];
 type HomeSellerFallback = { sellers?: MarketplaceSeller[] };

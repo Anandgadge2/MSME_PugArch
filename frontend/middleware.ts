@@ -1,16 +1,23 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const protectedPrefixes = ['/dashboard', '/seller', '/buyer', '/admin', '/master-admin', '/profile', '/quotations'];
-
-// Public routes that start with protected prefixes but should be accessible without auth
-const publicExceptions = ['/seller/register', '/buyer/register', '/admin/register', '/seller/rfq', '/seller/rfp'];
-
 export function middleware(req: NextRequest) {
-  // Allow requests to proceed to the Next.js client-side application so that
-  // useAuth, App.tsx route guards, and local session caches can hydrate cleanly
-  // without premature server-side redirects to '/' during page refreshes.
-  return NextResponse.next();
+  const response = NextResponse.next();
+  // Set cookie to skip PremiumLoader splash screen on first visit
+  // (prevents 1.15s render delay for Lighthouse and real users)
+  if (!req.cookies.get('jsg_initial_load')) {
+    response.cookies.set('jsg_initial_load', 'true', {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+      sameSite: 'lax',
+    });
+  }
+  return response;
 }
 
-export const config = { matcher: ['/((?!_next|favicon.ico).*)'] };
+export const config = {
+  matcher: [
+    // Only match page routes, skip all static files and Next.js internals
+    '/((?!_next|favicon\\.ico|favicon\\.png|logoo\\.png|logo\\.png|msme-logo\\.png|category-photos|banners|products|org-logos|docs|llms\\.txt|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2|woff|ttf|eot|css|js|map|pdf)).*)',
+  ],
+};

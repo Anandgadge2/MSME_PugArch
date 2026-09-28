@@ -57,7 +57,8 @@ function SellerLogoImage({
         return (
             <img
                 src={logo}
-                alt={`${name} logo`}
+                alt=""
+                aria-hidden="true"
                 onError={() => setImgError(true)}
                 className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                 loading="lazy"
