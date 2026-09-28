@@ -682,6 +682,8 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
 
             // Synchronize seller opportunities & fast paths with unified procurement catalog
             let sellerOppsData = { total: 0, openTenders: 0, rfps: 0, rfqs: 0, auctions: 0, rateContracts: 0 };
+            let participantAuctionIds: number[] = [];
+            const now = new Date();
             if (isSeller) {
                 try {
                     const actorInviteIds = [Number(userIdNum), Number(orgId)].filter(Number.isFinite);
@@ -723,7 +725,6 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             }
                         ]
                     };
-                    const now = new Date();
                     const publicBidStatusesList = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED', 'EXPIRED'];
                     const sellerBaseBidWhere: any = {
                         approvalStatus: { in: ['APPROVED', 'PENDING'] },
@@ -731,7 +732,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         ...restrictedBidsCondition
                     };
 
-                    const [sellerBids, allBidNumbers, tendersCount, participantAuctionIds] = await Promise.all([
+                    const [sellerBids, allBidNumbers, tendersCount, fetchedAuctionIds] = await Promise.all([
                         (prisma as any).procurementBid.findMany({
                             where: sellerBaseBidWhere,
                             select: { id: true, bidNumber: true, procurementType: true, bidType: true }
@@ -755,6 +756,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             select: { auctionId: true }
                         }).then(rows => rows.map(r => r.auctionId)).catch(() => [])
                     ]);
+                    participantAuctionIds = fetchedAuctionIds;
 
                     const liveAuctionsCount = participantAuctionIds.length > 0 ? await prisma.auction.count({
                         where: {
@@ -838,6 +840,258 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 ? (buyerProcData.kpis.totalResponses ?? buyerProcData.all.reduce((s: number, p: any) => s + (p.participantsCount || 0), 0))
                 : myRfqs;
 
+            // ─── Usability Engine: Compute Onboarding Checklist & Next Best Action ───
+            const isShgAccount = req.user!.role === 'shg';
+            const userRolePrefix = isShgAccount ? '/shg' : isSeller ? '/seller' : '/buyer';
+
+            const [userOnboardingRecord, sellerProfileRecord, sellerBankAccountsCount, deliveryAddressesCount, pendingActionPO, liveReverseAuction] = await Promise.all([
+                prisma.user.findUnique({ where: { id: userIdNum }, select: { onboardingStatus: true } }).catch(() => null),
+                isSeller ? prisma.sellerProfile.findUnique({ where: { userId: userIdNum } }).catch(() => null) : Promise.resolve(null),
+                isSeller ? prisma.sellerBankAccount.count({ where: { sellerProfile: { userId: userIdNum } } }).catch(() => 0) : Promise.resolve(0),
+                isBuyer ? prisma.deliveryAddress.count({ where: { OR: [{ buyerId: userIdNum }, ...(orgId ? [{ organizationId: orgId }] : [])] } }).catch(() => 0) : Promise.resolve(0),
+                isSeller ? prisma.purchaseOrder.findFirst({
+                    where: { ...sellerRecordWhere, status: { in: ['issued', 'generated', 'order_placed', 'pending_acceptance'] } },
+                    orderBy: { createdAt: 'desc' },
+                    select: { id: true, poNumber: true, title: true, amount: true }
+                }).catch(() => null) : Promise.resolve(null),
+                isSeller && participantAuctionIds.length > 0 ? prisma.auction.findFirst({
+                    where: { id: { in: participantAuctionIds }, status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] }, endTime: { gt: now } },
+                    orderBy: { endTime: 'asc' },
+                    select: { id: true, title: true, auctionCode: true, endTime: true }
+                }).catch(() => null) : Promise.resolve(null)
+            ]);
+
+            const userOnboardingStatus = String(userOnboardingRecord?.onboardingStatus || (req.user as any)?.onboardingStatus || 'pending');
+            const isUserApproved = userOnboardingStatus === 'approved_for_procurement';
+
+            // Calculate Onboarding Checklist
+            let onboardingChecklist: any = null;
+            if (isSeller) {
+                const isProfileComplete = isUserApproved;
+                const isPanOrUdyamVerified = Boolean(sellerProfileRecord?.panVerified || sellerProfileRecord?.isUdyamCertified || sellerProfileRecord?.aadhaarVerified);
+                const isBankAdded = sellerBankAccountsCount > 0;
+                const hasCatalogueItem = sellerCatalogueItems > 0;
+                const hasSubmittedBid = sellerSubmittedProposals > 0;
+
+                let completedCount = 0;
+                if (isProfileComplete) completedCount++;
+                if (isBankAdded) completedCount++;
+                if (hasCatalogueItem) completedCount++;
+                if (hasSubmittedBid) completedCount++;
+
+                onboardingChecklist = {
+                    role: req.user!.role,
+                    isProfileComplete,
+                    isPanOrUdyamVerified,
+                    isBankAdded,
+                    hasCatalogueItem,
+                    hasSubmittedBid,
+                    completedSteps: completedCount,
+                    totalSteps: 4,
+                    completionPercentage: Math.round((completedCount / 4) * 100),
+                    steps: [
+                        {
+                            id: 'profile',
+                            title: 'Business Verification',
+                            description: 'PAN, Aadhaar & UDYAM registration status',
+                            completed: isProfileComplete,
+                            href: `${userRolePrefix}/onboarding`
+                        },
+                        {
+                            id: 'bank',
+                            title: 'Bank Account Linked',
+                            description: 'Registered for direct escrow settlement and payouts',
+                            completed: isBankAdded,
+                            href: `${userRolePrefix}/onboarding?tab=bank`
+                        },
+                        {
+                            id: 'catalogue',
+                            title: 'First Catalogue Listing',
+                            description: 'Add products or services for direct buyer purchase orders',
+                            completed: hasCatalogueItem,
+                            href: isShgAccount ? '/shg/products' : '/seller/catalogue'
+                        },
+                        {
+                            id: 'quote',
+                            title: 'Submit First Bid / Quote',
+                            description: 'Explore live RFQs and public tenders in your industry',
+                            completed: hasSubmittedBid,
+                            href: `${userRolePrefix}/opportunities`
+                        }
+                    ]
+                };
+            } else if (isBuyer) {
+                const isProfileComplete = isUserApproved;
+                const hasDeliveryAddress = deliveryAddressesCount > 0;
+                const hasPublishedProcurement = finalMyTenders > 0;
+                const hasIssuedPO = myActivePOs > 0;
+
+                let completedCount = 0;
+                if (isProfileComplete) completedCount++;
+                if (hasDeliveryAddress) completedCount++;
+                if (hasPublishedProcurement) completedCount++;
+                if (hasIssuedPO) completedCount++;
+
+                onboardingChecklist = {
+                    role: req.user!.role,
+                    isProfileComplete,
+                    hasDeliveryAddress,
+                    hasPublishedProcurement,
+                    hasIssuedPO,
+                    completedSteps: completedCount,
+                    totalSteps: 4,
+                    completionPercentage: Math.round((completedCount / 4) * 100),
+                    steps: [
+                        {
+                            id: 'profile',
+                            title: 'Department Profile Verification',
+                            description: 'Official department and procurement officer credentials',
+                            completed: isProfileComplete,
+                            href: '/buyer/onboarding'
+                        },
+                        {
+                            id: 'delivery-address',
+                            title: 'Consignee Delivery Locations',
+                            description: 'Official consignee delivery addresses for orders',
+                            completed: hasDeliveryAddress,
+                            href: '/buyer/onboarding?tab=addresses'
+                        },
+                        {
+                            id: 'procurement',
+                            title: 'Publish First Sourcing Notice',
+                            description: 'Create an RFQ, RFP, or Tender using Guided Wizard',
+                            completed: hasPublishedProcurement,
+                            href: '/procurements/create'
+                        },
+                        {
+                            id: 'po',
+                            title: 'Contract Award & Order Release',
+                            description: 'Evaluate vendor bids and issue first Purchase Order',
+                            completed: hasIssuedPO,
+                            href: '/buyer/orders'
+                        }
+                    ]
+                };
+            }
+
+            // Calculate Next Best Action
+            let nextBestAction: any = null;
+            if (isSeller) {
+                if (pendingActionPO) {
+                    nextBestAction = {
+                        id: `po-${pendingActionPO.id}`,
+                        type: 'PURCHASE_ORDER',
+                        urgency: 'HIGH',
+                        title: `Review Purchase Order #${pendingActionPO.poNumber || pendingActionPO.id}`,
+                        subtitle: `Buyer has officially issued an order for ₹${Number(pendingActionPO.amount || 0).toLocaleString('en-IN')}. Please accept or decline to commit fulfillment.`,
+                        actionHref: `/seller/orders?orderId=${pendingActionPO.id}`,
+                        actionLabel: 'Review & Respond'
+                    };
+                } else if (liveReverseAuction) {
+                    nextBestAction = {
+                        id: `ra-${liveReverseAuction.id}`,
+                        type: 'REVERSE_AUCTION',
+                        urgency: 'HIGH',
+                        title: `Live Reverse Auction Floor Open`,
+                        subtitle: `The bidding window for "${liveReverseAuction.title || 'Live Auction'}" is open right now. Submit your lower quotes before time runs out!`,
+                        actionHref: `/seller/procurement/reverse-auction/${liveReverseAuction.id}/live`,
+                        actionLabel: 'Enter Auction Floor'
+                    };
+                } else if (sellerReceivedRfqs > 0) {
+                    nextBestAction = {
+                        id: 'direct-rfq',
+                        type: 'DIRECT_RFQ',
+                        urgency: 'MEDIUM',
+                        title: `${sellerReceivedRfqs} Direct Price Quotations Requested`,
+                        subtitle: `Buyer departments have specifically requested formal quotations on your catalogue products.`,
+                        actionHref: `${userRolePrefix}/opportunities/rfqs`,
+                        actionLabel: 'Submit Quotations'
+                    };
+                } else if (!isUserApproved) {
+                    nextBestAction = {
+                        id: 'onboarding',
+                        type: 'ONBOARDING',
+                        urgency: 'MEDIUM',
+                        title: `Complete Profile & Verification`,
+                        subtitle: `Verify your business credentials to unlock bidding on state and enterprise tenders.`,
+                        actionHref: `${userRolePrefix}/onboarding`,
+                        actionLabel: 'Complete Verification'
+                    };
+                } else if (sellerCatalogueItems === 0) {
+                    nextBestAction = {
+                        id: 'catalogue',
+                        type: 'CATALOGUE',
+                        urgency: 'NORMAL',
+                        title: `Publish Your First Catalogue Item`,
+                        subtitle: `List your products or services so verified government buyers can send direct purchase orders.`,
+                        actionHref: isShgAccount ? '/shg/products' : '/seller/catalogue',
+                        actionLabel: 'Add Product'
+                    };
+                } else {
+                    nextBestAction = {
+                        id: 'explore-tenders',
+                        type: 'DISCOVERY',
+                        urgency: 'NORMAL',
+                        title: `Explore Live Procurement Opportunities`,
+                        subtitle: `${sellerOppsData.total || 0} live government and enterprise tenders are open in your domain today.`,
+                        actionHref: `${userRolePrefix}/opportunities`,
+                        actionLabel: 'Browse Opportunities'
+                    };
+                }
+            } else if (isBuyer) {
+                if (pendingApprovals > 0) {
+                    nextBestAction = {
+                        id: 'approvals',
+                        type: 'APPROVAL',
+                        urgency: 'HIGH',
+                        title: `${pendingApprovals} Procurement Approvals Awaiting Decision`,
+                        subtitle: `Requisitions and financial approvals require your authorization before proceeding.`,
+                        actionHref: '/approvals',
+                        actionLabel: 'Review Approvals'
+                    };
+                } else if (grnsToApprove > 0) {
+                    nextBestAction = {
+                        id: 'grn',
+                        type: 'GRN',
+                        urgency: 'HIGH',
+                        title: `${grnsToApprove} Consignments Awaiting GRN Inspection`,
+                        subtitle: `Shipments delivered by suppliers require physical verification and goods receipt notes.`,
+                        actionHref: '/buyer/orders',
+                        actionLabel: 'Inspect & Approve'
+                    };
+                } else if (myPendingInvoices > 0) {
+                    nextBestAction = {
+                        id: 'invoices',
+                        type: 'INVOICE',
+                        urgency: 'MEDIUM',
+                        title: `${myPendingInvoices} Invoices Pending Settlement`,
+                        subtitle: `Invoices approved for delivered purchase orders are ready for payment release.`,
+                        actionHref: '/payments/transactions',
+                        actionLabel: 'Process Settlement'
+                    };
+                } else if (!isUserApproved) {
+                    nextBestAction = {
+                        id: 'onboarding-buyer',
+                        type: 'ONBOARDING',
+                        urgency: 'MEDIUM',
+                        title: `Verify Department Authority`,
+                        subtitle: `Upload statutory authorization documents to publish tenders and issue purchase orders.`,
+                        actionHref: '/buyer/onboarding',
+                        actionLabel: 'Verify Department'
+                    };
+                } else {
+                    nextBestAction = {
+                        id: 'create-rfq',
+                        type: 'CREATE',
+                        urgency: 'NORMAL',
+                        title: `Initiate a New Procurement Requirement`,
+                        subtitle: `Source goods, services, or multi-item BOQs with competitive bidding from verified MSMEs.`,
+                        actionHref: '/procurements/create',
+                        actionLabel: 'Create Procurement'
+                    };
+                }
+            }
+
             return {
                 cartItemCount: activeCart?._count.items || 0,
                 pendingApprovalsCount: pendingApprovals,
@@ -871,6 +1125,8 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerRateContractsCount: sellerOppsData.rateContracts,
                 reverseAuctionsLive: sellerOppsData.auctions,
                 reverseAuctionInvites: sellerOppsData.auctions,
+                onboardingChecklist,
+                nextBestAction,
                 orgRole
             };
         },

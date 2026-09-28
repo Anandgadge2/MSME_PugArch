@@ -630,7 +630,7 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       if (isAdmin(req) || auction.createdByUserId === req.user.id || (auction.buyerOrgId && auction.buyerOrgId === req.user.organizationId)) {
         authorized = true;
       }
-      if (req.user.role === 'seller') {
+      if (req.user.role === 'seller' || req.user.role === 'shg') {
         myParticipant = await db.auctionParticipant.findFirst({
           where: {
             auctionId: id,
@@ -653,7 +653,7 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
 
     // Anonymize competitor bids if competitor names are hidden
     const isManagerUser = canManageAuction(req, auction);
-    if ((req.user?.role === 'seller' || !isManagerUser) && !auction.allowCompetitorNames) {
+    if ((req.user?.role === 'seller' || req.user?.role === 'shg' || !isManagerUser) && !auction.allowCompetitorNames) {
       auction.bids = (auction.bids || []).map((bid: any, idx: number) => {
         const isMe = (req.user?.organizationId && bid.sellerOrgId === req.user.organizationId) ||
                      (req.user?.id && bid.sellerId === req.user.id);
@@ -1167,50 +1167,36 @@ const enrichAuctions = async (auctions: any[]) => {
     buyerOrgIds.length > 0 ? db.organization.findMany({
       where: { id: { in: buyerOrgIds } },
       select: { id: true, organizationName: true, addressLine1: true, addressLine2: true, city: true, district: true, state: true, pincode: true }
-    }) : [],
+    }).catch((err: any) => { logger.warn({ err }, '[enrichAuctions] org fetch failed'); return []; }) : [],
     creatorUserIds.length > 0 ? db.user.findMany({
       where: { id: { in: creatorUserIds } },
       select: { id: true, name: true, organizationId: true, organization: { select: { id: true, organizationName: true, district: true, state: true } } }
-    }) : [],
+    }).catch((err: any) => { logger.warn({ err }, '[enrichAuctions] creator fetch failed'); return []; }) : [],
     linkedReqIds.length > 0 ? db.requirement.findMany({
       where: { id: { in: linkedReqIds } },
       select: {
         id: true,
         requirementNumber: true,
-        deliveryLocation: true,
-        deliveryDistrict: true,
-        deliveryState: true,
-        district: true,
-        state: true,
+        title: true,
+        payload: true,
         organization: { select: { id: true, organizationName: true, district: true, state: true } },
-        createdBy: { select: { id: true, name: true } }
+        buyer: { select: { id: true, name: true } }
       }
-    }) : [],
+    }).catch((err: any) => { logger.warn({ err }, '[enrichAuctions] requirement fetch failed'); return []; }) : [],
     linkedBidIds.length > 0 ? db.procurementBid.findMany({
       where: { id: { in: linkedBidIds } },
       select: {
         id: true,
         bidNumber: true,
+        title: true,
         deliveryLocation: true,
         district: true,
         state: true,
-        buyerName: true,
         buyerOrganizationName: true,
-        requirement: {
-          select: {
-            id: true,
-            requirementNumber: true,
-            deliveryLocation: true,
-            deliveryDistrict: true,
-            deliveryState: true,
-            district: true,
-            state: true,
-            organization: { select: { id: true, organizationName: true, district: true, state: true } },
-            createdBy: { select: { id: true, name: true } }
-          }
-        }
+        buyer: { select: { id: true, name: true } },
+        buyerOrganization: { select: { id: true, organizationName: true, district: true, state: true } }
       }
-    }) : []
+    }).catch((err: any) => { logger.warn({ err }, '[enrichAuctions] bid fetch failed'); return []; }) : []
   ]);
 
   const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
@@ -1223,46 +1209,45 @@ const enrichAuctions = async (auctions: any[]) => {
     const creator = auction.createdByUserId ? creatorMap.get(auction.createdByUserId) : null;
     const reqItem = auction.linkedRequirementId ? reqMap.get(auction.linkedRequirementId) : null;
     const bidItem = auction.linkedBidId ? bidMap.get(auction.linkedBidId) : null;
-    const bidReq = bidItem?.requirement;
+    const reqPayload = (reqItem?.payload || {}) as any;
 
     const buyerOrgName = org?.organizationName
       || bidItem?.buyerOrganizationName
+      || bidItem?.buyerOrganization?.organizationName
       || reqItem?.organization?.organizationName
-      || bidReq?.organization?.organizationName
       || creator?.organization?.organizationName
       || null;
 
     const buyerName = creator?.name
-      || bidItem?.buyerName
-      || reqItem?.createdBy?.name
-      || bidReq?.createdBy?.name
+      || bidItem?.buyer?.name
+      || reqItem?.buyer?.name
       || buyerOrgName
       || null;
 
-    const district = reqItem?.deliveryDistrict
-      || reqItem?.district
-      || bidReq?.deliveryDistrict
-      || bidReq?.district
+    const district = reqPayload?.deliveryDistrict
+      || reqPayload?.district
       || bidItem?.district
+      || bidItem?.buyerOrganization?.district
       || org?.district
       || creator?.organization?.district
+      || reqItem?.organization?.district
       || null;
 
-    const state = reqItem?.deliveryState
-      || reqItem?.state
-      || bidReq?.deliveryState
-      || bidReq?.state
+    const state = reqPayload?.deliveryState
+      || reqPayload?.state
       || bidItem?.state
+      || bidItem?.buyerOrganization?.state
       || org?.state
       || creator?.organization?.state
+      || reqItem?.organization?.state
       || null;
 
-    const deliveryLocation = reqItem?.deliveryLocation
-      || bidReq?.deliveryLocation
+    const deliveryLocation = reqPayload?.deliveryLocation
+      || reqPayload?.deliveryAddress
       || bidItem?.deliveryLocation
       || (district && state ? `${district}, ${state}` : district || state || null);
 
-    const buyerOrganization = org || creator?.organization || reqItem?.organization || bidReq?.organization || null;
+    const buyerOrganization = org || creator?.organization || reqItem?.organization || bidItem?.buyerOrganization || null;
 
     return {
       ...auction,
@@ -1284,17 +1269,19 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
     const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize || 20)));
     const status = req.query.status ? String(req.query.status) : undefined;
     const where: any = status ? { status } : {};
-    if (req.user?.role === 'seller') {
+    if (req.user?.role === 'seller' || req.user?.role === 'shg') {
       where.participants = undefined;
-      const participantRows = await db.auctionParticipant.findMany({
-        where: {
-          OR: [
-            ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
-            ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
-          ]
-        },
+      const orConditions: any[] = [];
+      if (req.user.organizationId) {
+        orConditions.push({ sellerOrgId: req.user.organizationId });
+      }
+      if (req.user.id) {
+        orConditions.push({ sellerUserId: req.user.id });
+      }
+      const participantRows = orConditions.length > 0 ? await db.auctionParticipant.findMany({
+        where: { OR: orConditions },
         select: { auctionId: true }
-      });
+      }).catch(() => []) : [];
       where.id = { in: participantRows.map((row: any) => row.auctionId) };
     } else if (!isAdmin(req)) {
       where.OR = [{ createdByUserId: req.user?.id }, { buyerOrgId: req.user?.organizationId || -1 }];
@@ -1307,6 +1294,7 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
     const enriched = await enrichAuctions(withStatuses);
     return apiResponse.success(res, { auctions: maskSensitive(enriched), total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
   } catch (error: any) {
+    logger.error({ error, stack: error?.stack }, '[REVERSE_AUCTION_LIST_ERROR] Unable to load reverse auctions');
     return apiResponse.error(res, 500, 'Unable to load reverse auctions', 'REVERSE_AUCTION_LIST_ERROR');
   }
 });

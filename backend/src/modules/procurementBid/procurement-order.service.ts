@@ -1274,11 +1274,62 @@ export const listAdminSettlements = async (actor: AuthenticatedUser, query: any 
 };
 
 export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, body: any = {}) => {
-  const invoice = await db.invoice.findUnique({
-    where: { id: invoiceId },
-    include: { purchaseOrder: true }
-  });
-  if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  let invoice: any = (!isNaN(invoiceId) && invoiceId > 0)
+    ? await db.invoice.findUnique({
+        where: { id: invoiceId },
+        include: { purchaseOrder: true }
+      })
+    : null;
+
+  const targetOrderId = Number(body.orderId || req.params?.orderId || 0);
+
+  if (!invoice && targetOrderId > 0) {
+    invoice = await db.invoice.findFirst({
+      where: {
+        purchaseOrderId: targetOrderId,
+        status: { notIn: ['cancelled', 'rejected', 'CANCELLED', 'REJECTED'] }
+      },
+      include: { purchaseOrder: true },
+      orderBy: { id: 'desc' }
+    });
+
+    if (!invoice) {
+      // Auto-generate invoice for this order so payment can be registered
+      const po = await db.purchaseOrder.findUnique({
+        where: { id: targetOrderId },
+        include: { items: true, grns: true }
+      });
+      if (po) {
+        if (!isAdmin(req.user) && po.buyerId !== req.user!.id) {
+          throw new ApiError(403, 'Buyer access required to record payment', 'FORBIDDEN_ROLE');
+        }
+        const approvedGrn = po.grns?.find((g: any) => String(g.status).toLowerCase() === 'approved') || po.grns?.[0];
+        const poAmount = Number(body.amount || po.totalValue || po.amount || 0);
+        invoice = await db.invoice.create({
+          data: {
+            invoiceNumber: numberSeries('INV-PB'),
+            purchaseOrderId: po.id,
+            sellerId: po.sellerId,
+            buyerId: po.buyerId,
+            grnId: approvedGrn?.id || null,
+            amount: poAmount,
+            status: 'submitted',
+            invoiceStatus: 'SUBMITTED',
+            taxableAmount: poAmount,
+            igstAmount: 0,
+            totalTaxAmount: 0,
+            metadata: {
+              source: 'procurement_order_payment',
+              bidId: (po.metadata as any)?.bidId
+            }
+          },
+          include: { purchaseOrder: true }
+        });
+      }
+    }
+  }
+
+  if (!invoice) throw new ApiError(404, 'Invoice or Purchase Order not found', 'INVOICE_NOT_FOUND');
   if (!isAdmin(req.user) && invoice.buyerId !== req.user!.id) {
     throw new ApiError(403, 'Buyer access required to record payment', 'FORBIDDEN_ROLE');
   }
@@ -1289,7 +1340,7 @@ export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, bo
   }
 
   const paymentDate = body.paymentDate ? new Date(body.paymentDate) : now();
-  const fileAssetId = body.fileAssetId ? Number(body.fileAssetId) : null;
+  const fileAssetId = body.fileAssetId ? Number(body.fileAssetId) : (body.paymentSlipFileId ? Number(body.paymentSlipFileId) : null);
   const bankName = body.bankName ? String(body.bankName).trim() : null;
   const paymentMode = body.paymentMode || 'BANK_TRANSFER';
 
@@ -1347,10 +1398,26 @@ export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, bo
 };
 
 export const confirmOrderSettlement = async (req: AuthRequest, invoiceId: number, body: any = {}) => {
-  const invoice = await db.invoice.findUnique({
-    where: { id: invoiceId },
-    include: { purchaseOrder: true }
-  });
+  let invoice: any = (!isNaN(invoiceId) && invoiceId > 0)
+    ? await db.invoice.findUnique({
+        where: { id: invoiceId },
+        include: { purchaseOrder: true }
+      })
+    : null;
+
+  const targetOrderId = Number(body.orderId || req.params?.orderId || 0);
+
+  if (!invoice && targetOrderId > 0) {
+    invoice = await db.invoice.findFirst({
+      where: {
+        purchaseOrderId: targetOrderId,
+        status: { notIn: ['cancelled', 'rejected', 'CANCELLED', 'REJECTED'] }
+      },
+      include: { purchaseOrder: true },
+      orderBy: { id: 'desc' }
+    });
+  }
+
   if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
   if (!isAdmin(req.user) && invoice.sellerId !== req.user!.id) {
     const sellerIds = await getSellerUserIdsForActor(req.user!);

@@ -2153,14 +2153,16 @@ router.post('/orders/:orderId/settlement/mark-confirmed', authenticate, requireA
 }));
 
 router.post(['/buyer/invoices/:invoiceId/record-payment', '/orders/:orderId/invoices/:invoiceId/record-payment', '/orders/:orderId/payment/record'], authenticate, requireAccountType('buyer', 'admin'), asyncRoute(async (req, res) => {
-  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
-  const data = await orderService.recordOrderPayment(req, invoiceId, req.body || {});
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId || 0);
+  const orderId = Number(req.params.orderId || req.body?.orderId || 0);
+  const data = await orderService.recordOrderPayment(req, invoiceId, { ...req.body, orderId });
   return apiResponse.success(res, data, 200, 'Payment receipt recorded successfully');
 }));
 
-router.post(['/seller/invoices/:invoiceId/confirm-settlement', '/orders/:orderId/invoices/:invoiceId/confirm-settlement'], authenticate, requireAccountType('seller', 'admin'), asyncRoute(async (req, res) => {
-  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId);
-  const data = await orderService.confirmOrderSettlement(req, invoiceId, req.body || {});
+router.post(['/seller/invoices/:invoiceId/confirm-settlement', '/orders/:orderId/invoices/:invoiceId/confirm-settlement', '/orders/:orderId/settlement/confirm'], authenticate, requireAccountType('seller', 'admin'), asyncRoute(async (req, res) => {
+  const invoiceId = Number(req.params.invoiceId || req.body?.invoiceId || 0);
+  const orderId = Number(req.params.orderId || req.body?.orderId || 0);
+  const data = await orderService.confirmOrderSettlement(req, invoiceId, { ...req.body, orderId });
   return apiResponse.success(res, data, 200, 'Payment settlement confirmed and order completed');
 }));
 

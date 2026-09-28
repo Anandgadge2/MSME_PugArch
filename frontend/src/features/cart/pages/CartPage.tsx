@@ -9,7 +9,7 @@
 */
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Clock, History, Minus, Plus, RefreshCw, Send, ShoppingCart, Store, Trash2, X, XCircle, ArrowUpDown, ArrowUp, ArrowDown, FileText, ExternalLink, ArrowRight } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -58,7 +58,8 @@ export default function CartPage() {
     const canApproveCheckout = hasPermission('checkout.approve');
     const canStartApprovalChain = hasPermission('approval.submit');
     const isViewer = permissions.length > 0 && permissions.every(code => code.endsWith('.view'));
-    const canTransact = isApproved && (canEditCart || canSubmitCart);
+    const canEditCartItems = !isViewer && (canEditCart || canSubmitCart || user?.role === 'buyer' || user?.role === 'admin');
+    const canTransact = canEditCartItems && (isApproved || user?.role === 'buyer' || user?.role === 'admin');
 
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -179,8 +180,9 @@ export default function CartPage() {
     };
 
     const handleRequestQuote = () => {
-        if (selectedItems.length === 0) {
-            toast.info('Select at least one cart item to request a quote.');
+        const targetItems = selectedItems.length > 0 ? selectedItems : sortedItems;
+        if (targetItems.length === 0) {
+            toast.info('No items in cart to request a quote for.');
             return;
         }
 
@@ -194,12 +196,17 @@ export default function CartPage() {
             return;
         }
 
-        // Determine primary seller ID from selected items
-        const primaryItem = selectedItems.find(i => Number(i.sellerId || i.seller?.id || 0) > 0) || selectedItems[0];
+        // If no items were pre-selected, select all so the UI stays consistent
+        if (selectedItems.length === 0) {
+            setSelectedItemIds(new Set(sortedItems.map(i => i.id)));
+        }
+
+        // Determine primary seller ID from target items
+        const primaryItem = targetItems.find(i => Number(i.sellerId || i.seller?.id || 0) > 0) || targetItems[0];
         const sellerId = Number(primaryItem?.sellerId || primaryItem?.seller?.id || 0);
 
-        // Format quote data for ALL selected items
-        const { subject, message, totalValue } = formatCartQuoteData(selectedItems);
+        // Format quote data for ALL target items
+        const { subject, message, totalValue } = formatCartQuoteData(targetItems);
 
         setQuoteModalState({
             sellerId: sellerId > 0 ? String(sellerId) : '',
@@ -269,28 +276,34 @@ export default function CartPage() {
         {
             key: 'select',
             header: (
-                <input
-                    type="checkbox"
-                    checked={isAllSelected}
-                    ref={el => {
-                        if (el) el.indeterminate = isSomeSelected;
-                    }}
-                    onChange={toggleSelectAll}
-                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                    title="Select all items"
-                    aria-label="Select all items"
-                />
+                <div className="flex items-center justify-center">
+                    <input
+                        type="checkbox"
+                        checked={isAllSelected}
+                        ref={el => {
+                            if (el) el.indeterminate = isSomeSelected;
+                        }}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                        title={isAllSelected ? "Deselect all items" : "Select all items"}
+                        aria-label="Select all items"
+                    />
+                </div>
             ),
-            width: 'w-10',
+            width: 'w-12',
             align: 'center',
+            cellClassName: 'text-center',
+            headerClassName: 'text-center',
             cell: (item) => (
-                <input
-                    type="checkbox"
-                    checked={selectedItemIds.has(item.id)}
-                    onChange={() => toggleSelectItem(item.id)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                    aria-label={`Select ${item.itemName}`}
-                />
+                <div className="flex items-center justify-center">
+                    <input
+                        type="checkbox"
+                        checked={selectedItemIds.has(item.id)}
+                        onChange={() => toggleSelectItem(item.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                        aria-label={`Select ${item.itemName}`}
+                    />
+                </div>
             )
         },
         {
@@ -298,30 +311,70 @@ export default function CartPage() {
             header: 'Item',
             sortable: true,
             sortKey: 'item',
-            cell: (item) => (
-                <div className="flex flex-col gap-0.5">
-                    <p className="text-xs font-bold text-[#12335f] break-words leading-tight">{item.itemName}</p>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                        <EntityIdLink
-                            label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId}`}
-                            id={item.productId || item.serviceId || 0}
-                            size="sm"
-                            onClick={() => { }}
-                        />
-                        <span className="text-[9px] font-medium text-slate-500">{item.unitOfMeasure}</span>
+            width: 'w-[28%] min-w-[220px]',
+            cell: (item) => {
+                const itemHref = item.productId
+                    ? `/marketplace/products/${item.productId}`
+                    : item.serviceId
+                        ? `/marketplace/services/${item.serviceId}`
+                        : null;
+
+                return (
+                    <div className="flex flex-col gap-1 pr-2">
+                        {itemHref ? (
+                            <button
+                                type="button"
+                                onClick={() => router.push(itemHref)}
+                                className="text-left text-xs font-bold text-[#12335f] hover:underline hover:text-blue-800 break-words leading-snug cursor-pointer transition-colors"
+                                title={`View ${item.itemName} in marketplace`}
+                            >
+                                {item.itemName}
+                            </button>
+                        ) : (
+                            <p className="text-xs font-bold text-[#12335f] break-words leading-snug">{item.itemName}</p>
+                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <EntityIdLink
+                                label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId || item.id}`}
+                                id={item.productId || item.serviceId || item.id}
+                                size="sm"
+                                onClick={() => {
+                                    if (itemHref) router.push(itemHref);
+                                }}
+                            />
+                            {item.unitOfMeasure && (
+                                <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                    {item.unitOfMeasure}
+                                </span>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )
+                );
+            }
         },
         {
             key: 'seller',
             header: 'Seller',
             sortable: true,
             sortKey: 'seller',
+            width: 'w-[18%] min-w-[160px]',
             cell: (item) => (
-                <div>
-                    <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
-                    {item.seller?.email && <p className="text-[9px] font-medium text-slate-500 break-all mt-0.5">{item.seller.email}</p>}
+                <div className="flex flex-col gap-0.5 pr-2">
+                    {item.sellerId ? (
+                        <button
+                            type="button"
+                            onClick={() => router.push(`/marketplace/sellers/${item.sellerId}`)}
+                            className="text-left text-[11px] font-bold text-slate-900 hover:text-[#12335f] hover:underline break-words leading-tight transition-colors"
+                            title={`View seller: ${item.seller?.name || `Seller #${item.sellerId}`}`}
+                        >
+                            {item.seller?.name || `Seller #${item.sellerId}`}
+                        </button>
+                    ) : (
+                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
+                    )}
+                    {item.seller?.email && (
+                        <p className="text-[10px] font-medium text-slate-500 break-all leading-tight">{item.seller.email}</p>
+                    )}
                 </div>
             )
         },
@@ -331,10 +384,10 @@ export default function CartPage() {
             sortable: true,
             sortKey: 'unitPrice',
             align: 'right',
-            width: 'w-24',
+            width: 'w-28 min-w-[95px]',
             cellClassName: 'text-right',
             headerClassName: 'text-right',
-            cell: (item) => <span className="text-[11px] font-bold text-slate-700 whitespace-nowrap">{formatCurrency(item.unitPrice)}</span>
+            cell: (item) => <span className="font-mono text-xs font-bold text-slate-800 whitespace-nowrap">{formatCurrency(item.unitPrice)}</span>
         },
         {
             key: 'quantity',
@@ -342,32 +395,38 @@ export default function CartPage() {
             sortable: true,
             sortKey: 'quantity',
             align: 'center',
-            width: 'w-24',
+            width: 'w-32 min-w-[115px]',
             cellClassName: 'text-center',
             headerClassName: 'text-center',
             cell: (item) => (
-                cart?.status === 'ACTIVE' && canTransact ? (
-                    <div className="flex items-center justify-center gap-1">
+                cart?.status === 'ACTIVE' && canEditCartItems ? (
+                    <div className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
                         <button
                             type="button"
                             onClick={() => handleUpdate(item.id, Number(item.quantity) - 1)}
-                            disabled={Number(item.quantity) <= 1 || item.id < 0}
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
+                            disabled={Number(item.quantity) <= 1 || item.id < 0 || updateMut.isPending}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 transition cursor-pointer"
+                            aria-label={`Decrease quantity of ${item.itemName}`}
+                            title="Decrease quantity"
                         >
-                            <Minus className="h-3 w-3" />
+                            <Minus className="h-3.5 w-3.5" />
                         </button>
-                        <span className="min-w-[20px] text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</span>
+                        <span className="min-w-[28px] text-center font-mono text-xs font-bold text-slate-900">{Number(item.quantity)}</span>
                         <button
                             type="button"
                             onClick={() => handleUpdate(item.id, Number(item.quantity) + 1)}
-                            disabled={item.id < 0}
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 transition-colors"
+                            disabled={item.id < 0 || updateMut.isPending}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40 transition cursor-pointer"
+                            aria-label={`Increase quantity of ${item.itemName}`}
+                            title="Increase quantity"
                         >
-                            <Plus className="h-3 w-3" />
+                            <Plus className="h-3.5 w-3.5" />
                         </button>
                     </div>
                 ) : (
-                    <p className="text-center font-mono text-[11px] font-bold text-slate-900">{Number(item.quantity)}</p>
+                    <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 font-mono text-xs font-bold text-slate-900">
+                        {Number(item.quantity)} {item.unitOfMeasure || ''}
+                    </span>
                 )
             )
         },
@@ -377,12 +436,12 @@ export default function CartPage() {
             sortable: true,
             sortKey: 'total',
             align: 'right',
-            width: 'w-24',
+            width: 'w-28 min-w-[105px]',
             cellClassName: 'text-right',
             headerClassName: 'text-right',
             cell: (item) => {
                 const lineTotal = Number(item.quantity) * Number(item.unitPrice);
-                return <span className="text-[11px] font-black text-slate-900 whitespace-nowrap">{formatCurrency(lineTotal)}</span>;
+                return <span className="font-mono text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(lineTotal)}</span>;
             }
         },
         {
@@ -390,14 +449,17 @@ export default function CartPage() {
             header: 'Tech Status',
             sortable: true,
             sortKey: 'techStatus',
-            width: 'w-24',
+            align: 'center',
+            width: 'w-28 min-w-[100px]',
+            cellClassName: 'text-center',
+            headerClassName: 'text-center',
             cell: (item) => (
                 item.technicalApproved === null ? (
-                    <span className="inline-flex rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500">Pending</span>
+                    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700">Pending</span>
                 ) : item.technicalApproved ? (
-                    <span className="inline-flex rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700">Approved</span>
+                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">Approved</span>
                 ) : (
-                    <span className="inline-flex rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-700" title={item.technicalNote || ''}>Rejected</span>
+                    <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-700" title={item.technicalNote || 'Rejected during technical review'}>Rejected</span>
                 )
             )
         },
@@ -406,31 +468,61 @@ export default function CartPage() {
             header: 'Date & Time',
             sortable: true,
             sortKey: 'createdAt',
-            width: 'w-28',
-            cell: (item) => <span className="text-[10px] font-medium text-slate-500 leading-tight whitespace-nowrap">{formatDateTime(item.createdAt)}</span>
+            align: 'center',
+            width: 'w-32 min-w-[125px]',
+            cellClassName: 'text-center',
+            headerClassName: 'text-center',
+            cell: (item) => (
+                <div className="flex flex-col text-[10px] leading-tight text-slate-500 whitespace-nowrap">
+                    <span className="font-semibold text-slate-700">{formatDateTime(item.createdAt).split(',')[0]}</span>
+                    <span>{formatDateTime(item.createdAt).split(',')[1]?.trim() || ''}</span>
+                </div>
+            )
         },
         {
             key: 'action',
             header: 'Action',
             align: 'right',
-            width: 'w-12',
+            width: 'w-24 min-w-[95px]',
             cellClassName: 'text-right',
             headerClassName: 'text-right',
-            cell: (item) => (
-                cart?.status === 'ACTIVE' && canTransact ? (
-                    <button
-                        type="button"
-                        onClick={() => handleRemove(item)}
-                        disabled={removeMut.isPending || item.id < 0}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
-                        title="Remove from cart"
-                    >
-                        <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                ) : null
-            )
+            cell: (item) => {
+                const itemHref = item.productId
+                    ? `/marketplace/products/${item.productId}`
+                    : item.serviceId
+                        ? `/marketplace/services/${item.serviceId}`
+                        : null;
+
+                return (
+                    <div className="flex items-center justify-end gap-1.5">
+                        {itemHref && (
+                            <button
+                                type="button"
+                                onClick={() => router.push(itemHref)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-[#12335f] cursor-pointer"
+                                title="View item details"
+                                aria-label={`View details for ${item.itemName}`}
+                            >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                        {cart?.status === 'ACTIVE' && canEditCartItems && (
+                            <button
+                                type="button"
+                                onClick={() => handleRemove(item)}
+                                disabled={removeMut.isPending || item.id < 0}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50/50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-40 cursor-pointer"
+                                title="Remove from cart"
+                                aria-label={`Remove ${item.itemName} from cart`}
+                            >
+                                <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                        )}
+                    </div>
+                );
+            }
         }
-    ], [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canTransact, handleUpdate, handleRemove, removeMut.isPending]);
+    ], [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canEditCartItems, handleUpdate, handleRemove, removeMut.isPending, updateMut.isPending, router]);
  
     if (permissionsLoading && !canViewCart) {
         return <LoadingState label="Loading cart..." />;
@@ -587,17 +679,21 @@ export default function CartPage() {
             )}
 
             {/* Cart Items */}
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 shadow-sm overflow-hidden">
                 <CardContent className="p-0">
-                    <div className="border-b border-slate-100 bg-slate-50/60 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="border-b border-slate-100 bg-slate-50/75 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-3">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cart Items ({totals.lineCount})</p>
+                            <p className="text-xs font-black uppercase tracking-wider text-slate-700">Cart Items ({totals.lineCount})</p>
                             <span className={`inline-flex rounded-md border px-2 py-0.5 text-[10px] font-black uppercase ${STATUS_TONE[cart?.status || 'ACTIVE']}`}>
                                 {(cart?.status || 'ACTIVE').replace(/_/g, ' ')}
                             </span>
-                            {selectedItemIds.size > 0 && (
+                            {selectedItemIds.size > 0 ? (
                                 <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-black text-indigo-700">
                                     {selectedItemIds.size} of {sortedItems.length} selected ({formatCurrency(selectedTotal)})
+                                </span>
+                            ) : (
+                                <span className="text-xs text-slate-500 font-medium hidden sm:inline">
+                                    Select checkboxes to request quote for specific items
                                 </span>
                             )}
                         </div>
@@ -607,17 +703,16 @@ export default function CartPage() {
                                     type="button"
                                     size="sm"
                                     onClick={handleRequestQuote}
-                                    disabled={selectedItemIds.size === 0}
                                     className={cn(
-                                        "h-8 gap-1.5 rounded-lg text-xs font-black uppercase transition",
+                                        "h-8 gap-1.5 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer",
                                         selectedItemIds.size > 0
                                             ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                            : "border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
                                     )}
-                                    title={selectedItemIds.size === 0 ? "Select items from the cart to request a quote" : `Send quote request for ${selectedItemIds.size} item(s)`}
+                                    title={selectedItemIds.size === 0 ? "Request quote for all items in cart" : `Send quote request for ${selectedItemIds.size} selected item(s)`}
                                 >
                                     <FileText className="h-3.5 w-3.5" />
-                                    Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}
+                                    <span>Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : '(All)'}</span>
                                 </Button>
                             </div>
                         )}
@@ -634,66 +729,80 @@ export default function CartPage() {
                             keyExtractor={(item) => item.id}
                             showSrNo={true}
                             srNoHeader="#"
-                            srNoWidth="w-10"
-                            minWidth="min-w-[760px]"
+                            srNoWidth="w-12"
+                            minWidth="min-w-[1100px]"
                             sortKey={sortField || undefined}
                             sortDirection={sortDir || 'asc'}
                             onSort={(field) => handleSort(field as SortField)}
                             rowClassName={(item) => selectedItemIds.has(item.id) ? "bg-indigo-50/20" : ""}
                             footer={
-                                <tr>
-                                    <td colSpan={6} className="px-3 py-2.5 text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Grand Total</td>
-                                    <td className="px-3 py-2.5 text-right text-sm font-black text-slate-900 whitespace-nowrap">{formatCurrency(totals.total)}</td>
-                                    <td colSpan={3} />
+                                <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
+                                    <td colSpan={6} className="px-3 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">Grand Total</td>
+                                    <td className="px-3 py-3 text-right font-mono text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
+                                    <td colSpan={3} className="px-3 py-3" />
                                 </tr>
                             }
                         />
                     )}
 
                     {cart && cart.items.length > 0 && (
-                        <div className="border-t border-slate-100 bg-slate-50/40 px-4 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="border-t border-slate-100 bg-slate-50/60 px-4 py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                             <div>
-                                <p className="text-[11px] font-semibold text-slate-500">
-                                    Created by {cart.createdBy?.name} · {formatDateTime(cart.createdAt)}
+                                <p className="text-xs font-semibold text-slate-500">
+                                    Created by <span className="font-bold text-slate-800">{cart.createdBy?.name || 'User'}</span> · {formatDateTime(cart.createdAt)}
                                 </p>
                                 {selectedItemIds.size > 0 && (
-                                    <p className="text-xs font-bold text-slate-700 mt-0.5">
+                                    <p className="text-xs font-bold text-slate-700 mt-1">
                                         Selected for Quote: <span className="font-extrabold text-[#12335f]">{selectedItemIds.size} item{selectedItemIds.size !== 1 ? 's' : ''}</span> ({formatCurrency(selectedTotal)})
                                     </p>
                                 )}
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-start md:justify-end">
                                 <Button
                                     type="button"
                                     onClick={handleRequestQuote}
-                                    disabled={selectedItemIds.size === 0}
                                     className={cn(
-                                        "gap-1.5 font-bold transition shadow-xs",
+                                        "h-9 gap-2 font-bold text-xs transition shadow-xs cursor-pointer",
                                         selectedItemIds.size > 0
                                             ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                                            : "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                                            : "border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
                                     )}
-                                    title={selectedItemIds.size === 0 ? "Select items from the cart to request a quote" : `Send quote request for ${selectedItemIds.size} item(s)`}
+                                    title={selectedItemIds.size === 0 ? "Request quote for all items in cart" : `Send quote request for ${selectedItemIds.size} item(s)`}
                                 >
                                     <FileText className="h-4 w-4" />
-                                    Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size} Selected)` : ''}
+                                    <span>Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size} Selected)` : ''}</span>
                                 </Button>
+
+                                {canSubmitCart && cart?.status === 'ACTIVE' && (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => setShowSubmitModal(true)}
+                                        className="h-9 gap-1.5 text-xs border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 font-bold transition shadow-xs cursor-pointer"
+                                        title="Submit this cart for Finance approval"
+                                    >
+                                        <Send className="h-3.5 w-3.5 text-amber-600" />
+                                        <span>Submit for Approval</span>
+                                    </Button>
+                                )}
+
                                 {isSubmittable && (
                                     <div className="flex items-center gap-2">
                                         <Button
                                             type="button"
                                             variant="outline"
                                             onClick={() => router.push('/buyer/procurement/create?method=RFQ&fromCart=1')}
-                                            className="text-xs border-slate-300 font-semibold"
+                                            className="h-9 text-xs border-slate-300 font-bold text-slate-700 hover:bg-slate-100 transition shadow-xs cursor-pointer"
                                         >
                                             Create RFQ / Bid
                                         </Button>
                                         <Button
                                             type="button"
                                             onClick={() => router.push('/buyer/checkout')}
-                                            className="bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold text-xs px-5 shadow-sm"
+                                            className="h-9 bg-[#12335f] text-white hover:bg-[#0e2a4f] font-bold text-xs px-5 shadow-sm transition gap-1.5 cursor-pointer"
                                         >
-                                            Proceed to Direct Checkout
+                                            <span>Proceed to Direct Checkout</span>
+                                            <ArrowRight className="h-3.5 w-3.5" />
                                         </Button>
                                     </div>
                                 )}

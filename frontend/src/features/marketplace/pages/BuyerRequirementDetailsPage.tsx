@@ -151,8 +151,12 @@ const getDetailRoute = (requirement: any): string | null => {
   if (method === 'RATE_CONTRACT') {
     return sellerRoutes.detail('RATE_CONTRACT', sourceId);
   }
+  // Direct purchase & catalog orders are private bilateral orders, not open RFQ solicitations
+  if (['DIRECT_PURCHASE', 'CATALOG_PURCHASE'].includes(method)) {
+    return '/seller/direct-purchase';
+  }
   // RFQ-type methods
-  if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER'].includes(method)) {
+  if (['RFQ', 'REPEAT_ORDER'].includes(method)) {
     return sellerRoutes.detail('RFQ', sourceId);
   }
   // RFP-type methods
@@ -173,7 +177,8 @@ const getDetailRoute = (requirement: any): string | null => {
 /** Action label based on procurement method */
 const getActionLabel = (method: string): string => {
   const m = method.toUpperCase();
-  if (['RFQ', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(m)) return 'Submit Quotation';
+  if (['DIRECT_PURCHASE', 'CATALOG_PURCHASE'].includes(m)) return 'View Direct Order';
+  if (['RFQ', 'REPEAT_ORDER', 'RATE_CONTRACT'].includes(m)) return 'Submit Quotation';
   if (['RFP', 'SINGLE_SOURCE'].includes(m)) return 'Submit Proposal';
   if (['OPEN_TENDER', 'LIMITED_TENDER', 'TWO_STAGE_TENDER', 'EMERGENCY_PURCHASE'].includes(m)) return 'Participate in Tender';
   if (m === 'REVERSE_AUCTION') return 'Join Auction';
@@ -646,13 +651,23 @@ const BuyerRequirementDetailsPage = () => {
                   Login to {actionLabel}
                 </a>
               ) : isSeller && !isClosed && !ownResponse ? (
-                <a
-                  href={detailRoute || sellerRoutes.detail('RFQ', Math.abs(requirement.id))}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 text-sm font-black text-white shadow-sm hover:bg-[#12335f] active:scale-95 transition"
-                >
-                  <Send className="h-4 w-4" />
-                  {actionLabel}
-                </a>
+                ['DIRECT_PURCHASE', 'CATALOG_PURCHASE'].includes(method) ? (
+                  <a
+                    href="/seller/direct-purchase"
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 text-sm font-black text-white shadow-sm hover:bg-[#12335f] active:scale-95 transition"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View Direct Purchases
+                  </a>
+                ) : (
+                  <a
+                    href={detailRoute || sellerRoutes.detail('RFQ', Math.abs(requirement.id))}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#0b2447] px-6 text-sm font-black text-white shadow-sm hover:bg-[#12335f] active:scale-95 transition"
+                  >
+                    <Send className="h-4 w-4" />
+                    {actionLabel}
+                  </a>
+                )
               ) : ownResponse ? (
                 <div className="flex flex-wrap items-center gap-3">
                   <button

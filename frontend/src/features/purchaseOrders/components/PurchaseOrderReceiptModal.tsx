@@ -29,6 +29,7 @@ import {
   ZoomOut,
   Lock,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -167,6 +168,14 @@ export const NEUTRAL_MINIMAL_THEME = {
   tableHeaderBorder: 'border-slate-300',
 };
 
+// In-memory cache for instant modal open without network delay or N/A flicker
+const poDetailCache = new Map<number, PurchaseOrderDto>();
+let cachedInvoiceBranding: {
+  logoUrl: string | null;
+  stampUrl: string | null;
+  signatureUrl: string | null;
+} | null = null;
+
 export function PurchaseOrderReceiptModal({
   order: initialOrder,
   onClose,
@@ -186,7 +195,21 @@ export function PurchaseOrderReceiptModal({
 }: PurchaseOrderReceiptModalProps) {
   const router = useRouter();
   const { user } = useAuth();
-  const [order, setOrder] = useState<PurchaseOrderDto | null>(initialOrder);
+  const [order, setOrder] = useState<PurchaseOrderDto | null>(() => {
+    if (initialOrder?.id && poDetailCache.has(initialOrder.id)) {
+      return { ...initialOrder, ...poDetailCache.get(initialOrder.id)! };
+    }
+    return initialOrder;
+  });
+
+  const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(() => {
+    if (!initialOrder?.id) return false;
+    if (poDetailCache.has(initialOrder.id)) return false;
+    const hasSeller = Boolean(initialOrder.seller?.organization?.organizationName || initialOrder.seller?.name);
+    const hasItems = Array.isArray(initialOrder.items) && initialOrder.items.length > 0;
+    return !hasSeller || !hasItems;
+  });
+
   const [activeTab, setActiveTab] = useState<'receipt' | 'audit'>('receipt');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasBg, setCanvasBg] = useState<'light' | 'dark'>('light');
@@ -224,14 +247,17 @@ export function PurchaseOrderReceiptModal({
     logoUrl: string | null;
     stampUrl: string | null;
     signatureUrl: string | null;
-  }>({
+  }>(() => cachedInvoiceBranding || {
     logoUrl: null,
     stampUrl: null,
     signatureUrl: null
   });
 
   useEffect(() => {
-    if (!order) return;
+    if (cachedInvoiceBranding) {
+      setLiveBranding(cachedInvoiceBranding);
+      return;
+    }
     const fetchBranding = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -242,18 +268,20 @@ export function PurchaseOrderReceiptModal({
         if (res.ok) {
           const raw = await res.json();
           const data = raw?.data || raw;
-          setLiveBranding({
+          const branding = {
             logoUrl: data?.logoUrl || null,
             stampUrl: data?.stampUrl || null,
             signatureUrl: data?.signatureUrl || null
-          });
+          };
+          cachedInvoiceBranding = branding;
+          setLiveBranding(branding);
         }
       } catch {
         // non-blocking
       }
     };
     void fetchBranding();
-  }, [order]);
+  }, []);
 
   const currentTheme = NEUTRAL_MINIMAL_THEME;
 
@@ -314,7 +342,11 @@ export function PurchaseOrderReceiptModal({
 
   // Sync initial order
   useEffect(() => {
-    setOrder(initialOrder);
+    if (initialOrder?.id && poDetailCache.has(initialOrder.id)) {
+      setOrder({ ...initialOrder, ...poDetailCache.get(initialOrder.id)! });
+    } else {
+      setOrder(initialOrder);
+    }
   }, [initialOrder]);
 
   // Fetch full details whenever the modal opens to guarantee all organization relations are populated
@@ -322,16 +354,32 @@ export function PurchaseOrderReceiptModal({
     if (!initialOrder?.id) return;
     let isMounted = true;
 
+    // Fast-path: if already cached, apply immediately
+    if (poDetailCache.has(initialOrder.id)) {
+      setOrder(prev => ({ ...(prev || initialOrder), ...poDetailCache.get(initialOrder.id)! }));
+      setIsLoadingDetails(false);
+      return;
+    }
+
+    const hasSeller = Boolean(initialOrder.seller?.organization?.organizationName || initialOrder.seller?.name);
+    const hasItems = Array.isArray(initialOrder.items) && initialOrder.items.length > 0;
+    if (!hasSeller || !hasItems) {
+      setIsLoadingDetails(true);
+    }
+
     const fetchFullDetails = async () => {
       try {
         const res = await api.get(`/api/purchase-orders/${initialOrder.id}`);
         const body = await readJsonResponse(res);
         const fullData = (body as any)?.data || body;
         if (fullData && fullData.id && isMounted) {
+          poDetailCache.set(initialOrder.id, fullData);
           setOrder(prev => ({ ...(prev || initialOrder), ...fullData }));
+          setIsLoadingDetails(false);
         }
       } catch (err) {
         console.warn('Failed to fetch full PO details for modal', err);
+        if (isMounted) setIsLoadingDetails(false);
       }
     };
 
@@ -412,6 +460,14 @@ export function PurchaseOrderReceiptModal({
     sellerReg.personalPan ||
     sellerReg.gstDetails?.pan ||
     'N/A';
+
+  const sellerUdyam =
+    order.seller?.organization?.udyamNumber ||
+    order.seller?.sellerProfile?.udyamNumber ||
+    sellerReg.udyamNumber ||
+    sellerReg.udyamDetails?.udyamNumber ||
+    sellerReg.udyam ||
+    null;
 
   const buyerReg = (order.buyer?.registrationDetails as Record<string, any>) || {};
   const buyerOrg =
@@ -622,7 +678,7 @@ export function PurchaseOrderReceiptModal({
             pan: sellerPan,
             logoUrl: effectiveSellerLogo,
             details: [
-              `Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`,
+              sellerUdyam ? `Udyam Reg. No.: ${sellerUdyam}` : `Seller Ref: #${order.sellerId || 'N/A'}`,
             ],
           },
         ],
@@ -920,8 +976,15 @@ export function PurchaseOrderReceiptModal({
           {activeTab === 'receipt' ? (
             /* 1st Page Format: RECEIPT PURCHASE ORDER (Exact Match to Image 1) */
             <div className="min-h-full w-full p-3 sm:p-6 flex flex-col items-center justify-start sm:justify-center overflow-x-auto">
-              <div
-                className="po-scale-wrapper relative mx-auto my-auto shrink-0 transition-all duration-150"
+              {isLoadingDetails ? (
+                <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-slate-200 shadow-md my-auto max-w-md text-center">
+                  <RefreshCw className="h-8 w-8 text-[#12335f] animate-spin mb-3 text-center mx-auto" />
+                  <p className="text-sm font-bold text-slate-800">Loading Official Purchase Order...</p>
+                  <p className="text-xs text-slate-500 mt-1">Retrieving official organization profile, line items, and tax credentials</p>
+                </div>
+              ) : (
+                <div
+                  className="po-scale-wrapper relative mx-auto my-auto shrink-0 transition-all duration-150"
                 style={{
                   width: `${Math.round((sheetDims.w || 800) * scaleFactor)}px`,
                   height: `${Math.round((sheetDims.h || 650) * scaleFactor)}px`,
@@ -991,8 +1054,8 @@ export function PurchaseOrderReceiptModal({
                       <tr className="border-b border-slate-300">
                         <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Address:</td>
                         <td className="font-semibold p-1.5 text-slate-900 border-r border-black leading-tight">{sellerAddress}</td>
-                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Code:</td>
-                        <td className="font-black p-1.5 text-slate-950 font-mono">{order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}</td>
+                        <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Udyam Reg. No.:</td>
+                        <td className="font-black p-1.5 text-slate-950 font-mono">{sellerUdyam || 'N/A'}</td>
                       </tr>
                       <tr>
                         <td className={cn("font-bold p-1.5 border-r border-slate-400 transition-colors", currentTheme.labelBg, currentTheme.labelText)}>Vendor Tax Info:</td>
@@ -1177,6 +1240,7 @@ export function PurchaseOrderReceiptModal({
                 </div>
               </div>
             </div>
+            )}
           </div>
         ) : (
           /* Audit & Workflow Tracking View */
@@ -1473,9 +1537,26 @@ export function PurchaseOrderReceiptModal({
                         <p className="text-[10px] font-semibold text-slate-500">Live dispatch and tracking status</p>
                       </div>
                     </div>
-                    <span className="rounded-full bg-[#12335f] text-white px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs">
-                      {readableStatus(activeDelivery.status || 'pending')}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="rounded-full bg-[#12335f] text-white px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                        {readableStatus(activeDelivery.status || 'pending')}
+                      </span>
+                      {activeDelivery.id && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            onClose();
+                            router.push(`/delivery/${activeDelivery.id}`);
+                          }}
+                          className="h-7 text-[11px] font-bold bg-[#12335f] text-white hover:bg-[#0e2a4f] shadow-2xs rounded-lg px-2.5 gap-1.5 cursor-pointer"
+                          title="Open live delivery tracking & details"
+                        >
+                          <span>Live Tracking</span>
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white/90 rounded-xl p-3.5 border border-blue-100/80 text-xs">

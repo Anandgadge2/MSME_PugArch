@@ -103,3 +103,9 @@ export const getPusherClient = (): Pusher | null => {
   return pusherInstance;
 };
 
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', () => {
+    disconnectPusher();
+  });
+}
+

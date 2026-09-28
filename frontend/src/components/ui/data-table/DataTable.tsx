@@ -396,7 +396,7 @@ export function DataTable<T>({
                   tabIndex={onRowClick ? 0 : undefined}
                   role={onRowClick ? 'button' : undefined}
                   className={cn(
-                    "hover:bg-slate-50/50 transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-inset",
+                    "group hover:bg-slate-50/50 transition focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-inset",
                     onRowClick && "cursor-pointer",
                     customRowClass
                   )}

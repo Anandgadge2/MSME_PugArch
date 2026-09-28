@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
+import { ProcurementGlossaryTooltip } from '../../../components/common/ProcurementGlossaryTooltip';
 
 // Helper to format currency
 const formatCurrency = (val: number) =>
@@ -117,6 +118,7 @@ interface ProcurementMethodCardProps {
   isSelected?: boolean;
   isDisabled?: boolean;
   isRecommended?: boolean;
+  termKey?: string;
   onSelect: () => void;
   fitCriteria?: string[];
 }
@@ -130,16 +132,25 @@ export function ProcurementMethodCard({
   isSelected = false,
   isDisabled = false,
   isRecommended = false,
+  termKey,
   onSelect,
   fitCriteria = []
 }: ProcurementMethodCardProps) {
   return (
-    <button
-      type="button"
-      disabled={isDisabled}
-      onClick={onSelect}
+    <div
+      role="button"
+      tabIndex={isDisabled ? -1 : 0}
+      aria-disabled={isDisabled}
+      aria-pressed={isSelected}
+      onClick={isDisabled ? undefined : onSelect}
+      onKeyDown={(e) => {
+        if (!isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
       className={cn(
-        "flex h-full w-full flex-col justify-between rounded-[22px] border-0 bg-white/95 p-4 text-left shadow-3xs ring-1 ring-slate-200/70 transition",
+        "flex h-full w-full flex-col justify-between rounded-[22px] border-0 bg-white/95 p-4 text-left shadow-3xs ring-1 ring-slate-200/70 transition select-none",
         isSelected ? "ring-2 ring-[#12335f]/35 shadow-[0_14px_34px_rgba(18,51,95,0.12)]" : "hover:ring-[#12335f]/25 hover:shadow-sm",
         isDisabled ? "opacity-50 cursor-not-allowed bg-slate-50" : "cursor-pointer"
       )}
@@ -152,11 +163,18 @@ export function ProcurementMethodCard({
           )}>
             <Icon className="h-4.5 w-4.5" />
           </span>
-          {isRecommended && (
-            <span className="bg-amber-100 text-amber-800 font-extrabold uppercase text-[8px] px-2 py-0.5 rounded leading-none border border-amber-200 animate-pulse">
-              Recommended
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {termKey && (
+              <span onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <ProcurementGlossaryTooltip term={termKey} />
+              </span>
+            )}
+            {isRecommended && (
+              <span className="bg-amber-100 text-amber-800 font-extrabold uppercase text-[8px] px-2 py-0.5 rounded leading-none border border-amber-200 animate-pulse">
+                Recommended
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="mt-3">
@@ -180,7 +198,7 @@ export function ProcurementMethodCard({
         <span>Complexity: <strong className="text-slate-800">{complexity}</strong></span>
         <span>Est. Time: <strong className="text-slate-800">{estimatedTime}</strong></span>
       </div>
-    </button>
+    </div>
   );
 }
 

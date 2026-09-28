@@ -1,4 +1,4 @@
-import { COOKIE_SESSION_TOKEN, getCookieValue } from './auth';
+import { COOKIE_SESSION_TOKEN, getCookieValue, getStoredToken } from './auth';
 
 export const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -89,8 +89,8 @@ const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | nu
     delete next.authorization;
   }
   if (!next.Authorization && !next.authorization && typeof window !== 'undefined') {
-    const token = localStorage.getItem('token') || localStorage.getItem('msme_auth_token');
-    if (token && token !== 'null' && token !== 'undefined') {
+    const token = getStoredToken() || localStorage.getItem('token') || localStorage.getItem('msme_auth_token');
+    if (token && token !== 'null' && token !== 'undefined' && token !== COOKIE_SESSION_TOKEN) {
       next['Authorization'] = `Bearer ${token}`;
     }
   }
@@ -132,14 +132,25 @@ const isCsrfFailure = async (response: Response) => {
   }
 };
 
-const refreshSessionCookies = async () => {
-  const response = await fetch(resolveUrl('/api/auth/refresh'), {
-    method: 'POST',
-    credentials: 'include',
-    headers: normalizeHeaders(undefined, null),
-    body: '{}',
-  });
-  return response.ok;
+let activeRefreshPromise: Promise<boolean> | null = null;
+const refreshSessionCookies = async (): Promise<boolean> => {
+  if (activeRefreshPromise) return activeRefreshPromise;
+  activeRefreshPromise = (async () => {
+    try {
+      const response = await fetch(resolveUrl('/api/auth/refresh'), {
+        method: 'POST',
+        credentials: 'include',
+        headers: normalizeHeaders(undefined, null),
+        body: '{}',
+      });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      activeRefreshPromise = null;
+    }
+  })();
+  return activeRefreshPromise;
 };
 
 const networkErrorResponse = (error: unknown) => {
@@ -196,6 +207,20 @@ export const api = {
         if (refreshed) {
           const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
           response = await sendRequest(retryHeaders);
+        }
+      }
+
+      // If unauthorized and not an auth endpoint, attempt transparent session refresh and retry once
+      if (response.status === 401 && !endpoint.startsWith('/api/auth/')) {
+        const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
+          getCookieValue('csrfToken') || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
+        );
+        if (hasSessionEvidence) {
+          const refreshed = await refreshSessionCookies().catch(() => false);
+          if (refreshed) {
+            const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
+            response = await sendRequest(retryHeaders);
+          }
         }
       }
 

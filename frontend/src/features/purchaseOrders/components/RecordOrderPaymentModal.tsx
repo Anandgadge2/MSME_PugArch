@@ -130,7 +130,9 @@ export function RecordOrderPaymentModal({
         paymentDate: new Date().toISOString(),
         paymentMode: 'ONLINE_ESCROW',
         remarks: remarks.trim() || 'Direct online escrow payment authorized by buyer',
-        amount: targetAmount
+        amount: targetAmount,
+        orderId: Number(order?.id),
+        invoiceId: targetInvoiceId || undefined
       };
 
       if (targetInvoiceId) {
@@ -171,9 +173,12 @@ export function RecordOrderPaymentModal({
         bankName: bankName.trim(),
         paymentDate: new Date(paymentDate).toISOString(),
         paymentSlipFileId: uploadedFileId || undefined,
+        fileAssetId: uploadedFileId || undefined,
         paymentMode: 'OFFLINE_BANK_TRANSFER',
         remarks: remarks.trim() || undefined,
-        amount: targetAmount
+        amount: targetAmount,
+        orderId: Number(order?.id),
+        invoiceId: targetInvoiceId || undefined
       };
 
       if (targetInvoiceId) {
@@ -243,36 +248,56 @@ export function RecordOrderPaymentModal({
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div className="mt-4 flex rounded-xl bg-slate-100 p-1 border border-slate-200">
+          <div
+            role="tablist"
+            aria-label="Payment Mode Selection"
+            className="mt-4 grid grid-cols-2 gap-2 p-1.5 rounded-xl bg-slate-100 border border-slate-200"
+          >
             <button
               type="button"
-              onClick={() => setActiveTab('online')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              role="tab"
+              id="tab-pay-online"
+              aria-selected={activeTab === 'online'}
+              aria-controls="panel-pay-online"
+              onClick={() => {
+                setActiveTab('online');
+                document.getElementById('btn-pay-online-action')?.focus();
+              }}
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-black rounded-lg transition-all cursor-pointer ${
                 activeTab === 'online'
-                  ? 'bg-white text-[#12335f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#12335f] text-white shadow-sm ring-2 ring-[#12335f]/25'
+                  : 'bg-white text-slate-800 hover:bg-slate-50 hover:text-slate-950 border border-slate-300 shadow-2xs'
               }`}
             >
-              <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" />
-              <span>⚡ Pay Online Now</span>
+              <Zap className={`h-4 w-4 shrink-0 ${activeTab === 'online' ? 'text-amber-300 fill-amber-300' : 'text-amber-500 fill-amber-500'}`} />
+              <span>Pay Online Now</span>
             </button>
             <button
               type="button"
+              role="tab"
+              id="tab-upload-proof"
+              aria-selected={activeTab === 'offline'}
+              aria-controls="panel-upload-proof"
               onClick={() => setActiveTab('offline')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-black rounded-lg transition-all cursor-pointer ${
                 activeTab === 'offline'
-                  ? 'bg-white text-[#12335f] shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-[#12335f] text-white shadow-sm ring-2 ring-[#12335f]/25'
+                  : 'bg-white text-slate-800 hover:bg-slate-50 hover:text-slate-950 border border-slate-300 shadow-2xs'
               }`}
             >
-              <Upload className="h-3.5 w-3.5 text-blue-600" />
-              <span>📤 Upload Payment Proof</span>
+              <Upload className={`h-4 w-4 shrink-0 ${activeTab === 'offline' ? 'text-cyan-300' : 'text-blue-600'}`} />
+              <span>Upload Payment Proof</span>
             </button>
           </div>
 
           {activeTab === 'online' ? (
             /* ── Tab 1: Instant Online Payment ── */
-            <div className="mt-4 space-y-4">
+            <div
+              id="panel-pay-online"
+              role="tabpanel"
+              aria-labelledby="tab-pay-online"
+              className="mt-4 space-y-4"
+            >
               <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600">Settlement Beneficiary</span>
@@ -313,25 +338,26 @@ export function RecordOrderPaymentModal({
                   variant="outline"
                   disabled={submitting}
                   onClick={onClose}
-                  className="font-bold text-xs"
+                  className="font-bold text-xs cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="button"
+                  id="btn-pay-online-action"
                   disabled={submitting}
                   onClick={handleOnlinePaymentSubmit}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs gap-1.5 shadow-sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs gap-1.5 shadow-sm cursor-pointer"
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Processing Escrow Payment...
+                      <span>Processing Escrow Payment...</span>
                     </>
                   ) : (
                     <>
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Authorize &amp; Pay {formatCurrency(targetAmount)}
+                      <Zap className="h-3.5 w-3.5 text-amber-300 fill-amber-300" />
+                      <span>Pay Online Now • {formatCurrency(targetAmount)}</span>
                     </>
                   )}
                 </Button>
@@ -339,7 +365,13 @@ export function RecordOrderPaymentModal({
             </div>
           ) : (
             /* ── Tab 2: Offline Transfer & Proof Upload ── */
-            <form onSubmit={handleOfflineSubmit} className="space-y-4 pt-4">
+            <form
+              id="panel-upload-proof"
+              role="tabpanel"
+              aria-labelledby="tab-upload-proof"
+              onSubmit={handleOfflineSubmit}
+              className="space-y-4 pt-4"
+            >
               {/* UTR Reference Input */}
               <div>
                 <label
@@ -464,8 +496,9 @@ export function RecordOrderPaymentModal({
                   type="button"
                   variant="outline"
                   disabled={submitting}
-                  onClick={onClose}
-                  className="font-bold text-xs"
+                  onClick={() => setActiveTab('online')}
+                  className="font-bold text-xs cursor-pointer"
+                  title="Return to Pay Online Now"
                 >
                   Cancel
                 </Button>

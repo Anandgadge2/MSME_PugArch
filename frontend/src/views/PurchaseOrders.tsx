@@ -68,6 +68,7 @@ import { PageToolbar } from '../features/shared/PageToolbar';
 import { useAuth } from '../hooks/useAuth';
 import type { PurchaseOrderDto } from '../features/shared/types';
 import { useDeliveryByPO } from '../features/delivery/hooks';
+import { getDeliveryByPurchaseOrder } from '../features/delivery/api';
 import { PageTableSkeleton, TableSkeleton, GridCardSkeleton } from '../components/ui/skeleton';
 import { DataTable, type ColumnDef } from '../components/ui/data-table';
 import { FocusTrap } from '../components/ui/FocusTrap';
@@ -1067,7 +1068,29 @@ export default function PurchaseOrders() {
     }
   };
 
-  const handleOpenDelivery = (order: PurchaseOrderDto) => {
+  const handleOpenDelivery = async (order: PurchaseOrderDto) => {
+    // 1. Direct delivery tracking ID if present on PO or activeDelivery
+    const dlvId = (order as any).deliveryTrackings?.[0]?.id || 
+                  (order as any).deliveryId || 
+                  (order as any).delivery?.id || 
+                  (activeDelivery?.id && viewingOrder?.id === order.id ? activeDelivery.id : null);
+    if (dlvId) {
+      router.push(`/delivery/${dlvId}`);
+      return;
+    }
+
+    // 2. Fetch delivery record associated with this PO
+    try {
+      const dlv = await getDeliveryByPurchaseOrder(order.id);
+      if (dlv?.id) {
+        router.push(`/delivery/${dlv.id}`);
+        return;
+      }
+    } catch (err) {
+      console.warn('Could not resolve delivery for PO', err);
+    }
+
+    // 3. Fallback to seller delivery management list
     if (order.poNumber) {
       router.push(`/seller/delivery-management?search=${encodeURIComponent(order.poNumber)}`);
     } else {
@@ -1268,6 +1291,14 @@ export default function PurchaseOrders() {
       buyerReg.gstDetails?.responseGstin ||
       'N/A';
 
+    const sellerUdyam =
+      seller.organization?.udyamNumber ||
+      seller.sellerProfile?.udyamNumber ||
+      sellerReg.udyamNumber ||
+      sellerReg.udyamDetails?.udyamNumber ||
+      sellerReg.udyam ||
+      null;
+
     const currentUserReg = (user?.registrationDetails as Record<string, any>) || {};
     const lsStamp = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_stamp') : null;
     const lsSig = typeof window !== 'undefined' ? localStorage.getItem('msme_invoice_signature') : null;
@@ -1337,7 +1368,7 @@ export default function PurchaseOrders() {
           gstin: sellerGstin,
           address: sellerAddress,
           logoUrl: effectiveSellerLogo,
-          details: [`Vendor Code: ${order.sellerId ? `VNDR-${order.sellerId}` : 'N/A'}`]
+          details: [sellerUdyam ? `Udyam Reg. No.: ${sellerUdyam}` : `Seller Ref: #${order.sellerId || 'N/A'}`]
         }
       ],
       infoGrid: {
@@ -3046,6 +3077,9 @@ export default function PurchaseOrders() {
           orderId={Number(viewProofOrder.id)}
           orderPoNumber={viewProofOrder.poNumber}
           sellerName={viewProofOrder.seller?.name}
+          isSettled={
+            ['completed', 'settled'].includes(String(viewProofOrder.status || viewProofOrder.poStatus || '').toLowerCase())
+          }
           onStatusChange={() => {
             setViewProofOrder(null);
             reload();

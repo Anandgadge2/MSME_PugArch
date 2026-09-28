@@ -583,31 +583,16 @@ export default function SellerDeliveryManagementPage() {
     useEffect(() => {
         if (typeof window !== 'undefined' && items.length > 0 && !actionTarget && !autoOpenedRef.current && !userDismissedRef.current) {
             const params = new URLSearchParams(window.location.search);
-            const dispatchId = params.get('dispatch') || params.get('deliveryId');
-            const poId = params.get('poId');
-            const poSearch = params.get('poNumber') || params.get('search') || params.get('q');
-            if (dispatchId) {
-                const found = items.find(d => String(d.id) === dispatchId);
-                if (found) {
-                    autoOpenedRef.current = true;
-                    setActionTarget({ kind: 'dispatch-details', delivery: found });
-                    return;
-                }
-            }
-            if (poId) {
-                const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
-                if (found) {
-                    autoOpenedRef.current = true;
-                    setActionTarget({ kind: 'dispatch-details', delivery: found });
-                    return;
-                }
-            }
-            if (poSearch) {
-                const cleanSearch = poSearch.replace(/[\s-]/g, '').toLowerCase();
-                const found = items.find(d => {
-                    const cleanPo = String(d.purchaseOrder?.poNumber || '').replace(/[\s-]/g, '').toLowerCase();
-                    return cleanPo && (cleanPo === cleanSearch || cleanPo.includes(cleanSearch) || cleanSearch.includes(cleanPo));
-                });
+            const dispatchId = params.get('dispatch') || params.get('dispatchId');
+            const shouldOpenDispatch = Boolean(dispatchId || params.get('action') === 'dispatch');
+
+            if (shouldOpenDispatch) {
+                const targetId = dispatchId || params.get('deliveryId') || params.get('id');
+                const targetPo = params.get('poId');
+                const found = items.find(d => 
+                    (targetId && String(d.id) === targetId) ||
+                    (targetPo && (String(d.purchaseOrderId) === targetPo || String(d.purchaseOrder?.id) === targetPo))
+                );
                 if (found) {
                     autoOpenedRef.current = true;
                     setActionTarget({ kind: 'dispatch-details', delivery: found });
@@ -621,27 +606,18 @@ export default function SellerDeliveryManagementPage() {
         const handlePopState = () => {
             if (typeof window !== 'undefined') {
                 const params = new URLSearchParams(window.location.search);
-                const dispatchId = params.get('dispatch') || params.get('deliveryId');
-                const poId = params.get('poId');
-                if (items.length > 0) {
-                    if (dispatchId) {
-                        const found = items.find(d => String(d.id) === dispatchId);
-                        if (found) {
-                            userDismissedRef.current = false;
-                            setActionTarget({ kind: 'dispatch-details', delivery: found });
-                            return;
-                        }
-                    }
-                    if (poId) {
-                        const found = items.find(d => String(d.purchaseOrderId) === poId || String(d.purchaseOrder?.id) === poId);
-                        if (found) {
-                            userDismissedRef.current = false;
-                            setActionTarget({ kind: 'dispatch-details', delivery: found });
-                            return;
-                        }
+                const dispatchId = params.get('dispatch') || params.get('dispatchId');
+                const shouldOpenDispatch = Boolean(dispatchId || params.get('action') === 'dispatch');
+                if (items.length > 0 && shouldOpenDispatch) {
+                    const targetId = dispatchId || params.get('deliveryId') || params.get('id');
+                    const found = items.find(d => targetId && String(d.id) === targetId);
+                    if (found) {
+                        userDismissedRef.current = false;
+                        setActionTarget({ kind: 'dispatch-details', delivery: found });
+                        return;
                     }
                 }
-                if (!dispatchId && !poId && actionTarget) {
+                if (!shouldOpenDispatch && actionTarget) {
                     userDismissedRef.current = true;
                     setActionTarget(null);
                 }

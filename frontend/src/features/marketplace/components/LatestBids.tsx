@@ -690,7 +690,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                     href={item.link} 
                     className="inline-flex h-8 items-center justify-center gap-1 rounded-full bg-[#0b2447] px-3 text-xs font-black text-white hover:bg-[#12335f] active:scale-95 transition-all duration-200 shadow-sm whitespace-nowrap cursor-pointer"
                 >
-                    View Details 
+                    Details 
                     <ArrowRight className="h-3 w-3" />
                 </Link>
             )
@@ -723,7 +723,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
                                 Active Procurement Opportunities
                             </h2>
                             <p className="mt-1 text-sm text-slate-500 font-medium">
-                                Bid on active opportunities, view government e-tenders, or submit quotes for portal-native contracts.
+                                Bid on active opportunities, view tenders, or submit quotes for portal-native contracts.
                             </p>
                         </div>
 

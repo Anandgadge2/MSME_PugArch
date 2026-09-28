@@ -1481,7 +1481,7 @@ const rateContractConfigSchema = z.object({
     supplierId: z.coerce.number().int().positive(),
     supplierUserId: z.coerce.number().int().positive().optional().nullable(),
     supplierName: z.string().trim().max(180).optional().nullable()
-  })).min(1),
+  })).default([]),
   itemRateSchedule: z.array(rateContractItemSchema).min(1),
   priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']).optional().default('FIXED_PRICE'),
   callOffOrderAllowed: z.coerce.boolean(),
@@ -1832,10 +1832,10 @@ const createRateContractForSubmittedProcurement = async (req: AuthRequest, requi
         buyerId: userId(req),
         buyerOrganizationId: req.user?.organizationId || requirement.organizationId || null,
         buyerOrganizationName: (req.user as any)?.organizationName || requirement.organization?.organizationName || null,
-        buyerName: (req.user as any)?.name || requirement.createdBy?.name || null,
-        district: requirement.deliveryDistrict || requirement.district || null,
-        state: requirement.deliveryState || requirement.state || null,
-        deliveryLocation: requirement.deliveryLocation || null,
+        buyerName: (req.user as any)?.name || requirement.buyer?.name || null,
+        district: payloadBasics.district || payload.deliveryDistrict || payload.district || requirement.organization?.district || null,
+        state: payloadBasics.state || payload.deliveryState || payload.state || requirement.organization?.state || null,
+        deliveryLocation: payloadBasics.deliveryLocation || payload.deliveryLocation || payload.deliveryAddress || null,
         callOffOrderAllowed: config.callOffOrderAllowed,
         activeState: config.periodEndDate.getTime() >= Date.now() ? 'ACTIVE' : 'EXPIRED'
       }
@@ -1844,7 +1844,7 @@ const createRateContractForSubmittedProcurement = async (req: AuthRequest, requi
 
   await auditWrite(req, 'rate_contract.created_from_procurement', 'contract', contract.id, {
     requirementId: requirement.id,
-    supplierCount: config.selectedSuppliers.length,
+    supplierCount: (config.selectedSuppliers || []).length,
     itemCount: config.itemRateSchedule.length
   });
   return contract;
@@ -5789,7 +5789,7 @@ const enrichRateContracts = async (contracts: any[]) => {
     buyerOrgIds.length > 0 ? db.organization.findMany({
       where: { id: { in: buyerOrgIds } },
       select: { id: true, organizationName: true, addressLine1: true, addressLine2: true, city: true, district: true, state: true, pincode: true }
-    }) : [],
+    }).catch(() => []) : [],
     buyerUserIds.length > 0 ? db.user.findMany({
       where: { id: { in: buyerUserIds } },
       select: {
@@ -5799,22 +5799,18 @@ const enrichRateContracts = async (contracts: any[]) => {
         organizationId: true,
         organization: { select: { id: true, organizationName: true, addressLine1: true, city: true, district: true, state: true, pincode: true } }
       }
-    }) : [],
+    }).catch(() => []) : [],
     requirementIds.length > 0 ? db.requirement.findMany({
       where: { id: { in: requirementIds } },
       select: {
         id: true,
         requirementNumber: true,
         title: true,
-        deliveryLocation: true,
-        deliveryDistrict: true,
-        deliveryState: true,
-        district: true,
-        state: true,
-        createdBy: { select: { id: true, name: true } },
+        payload: true,
+        buyer: { select: { id: true, name: true } },
         organization: { select: { id: true, organizationName: true, city: true, district: true, state: true } }
       }
-    }) : []
+    }).catch(() => []) : []
   ]);
 
   const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
@@ -5826,6 +5822,7 @@ const enrichRateContracts = async (contracts: any[]) => {
     const buyerOrg = orgMap.get(Number(meta.buyerOrganizationId));
     const buyerUser = userMap.get(Number(meta.buyerId));
     const reqItem = reqMap.get(Number(meta.requirementId));
+    const reqPayload = (reqItem?.payload || {}) as any;
 
     const resolvedOrgName = buyerOrg?.organizationName
       || buyerUser?.organization?.organizationName
@@ -5836,22 +5833,24 @@ const enrichRateContracts = async (contracts: any[]) => {
       || null;
 
     const resolvedBuyerName = buyerUser?.name
-      || reqItem?.createdBy?.name
+      || reqItem?.buyer?.name
       || resolvedOrgName
       || meta.buyerName
       || null;
 
-    const resolvedDistrict = reqItem?.deliveryDistrict
-      || reqItem?.district
+    const resolvedDistrict = reqPayload?.deliveryDistrict
+      || reqPayload?.district
       || buyerOrg?.district
       || buyerUser?.organization?.district
+      || reqItem?.organization?.district
       || meta.district
       || null;
 
-    const resolvedState = reqItem?.deliveryState
-      || reqItem?.state
+    const resolvedState = reqPayload?.deliveryState
+      || reqPayload?.state
       || buyerOrg?.state
       || buyerUser?.organization?.state
+      || reqItem?.organization?.state
       || meta.state
       || null;
 
@@ -5859,7 +5858,8 @@ const enrichRateContracts = async (contracts: any[]) => {
       ? meta.deliveryLocation
       : null;
 
-    const resolvedLocation = reqItem?.deliveryLocation
+    const resolvedLocation = reqPayload?.deliveryLocation
+      || reqPayload?.deliveryAddress
       || rawDeliveryLoc
       || (resolvedDistrict && resolvedState ? `${resolvedDistrict}, ${resolvedState}` : resolvedDistrict || resolvedState || null);
 
@@ -5886,7 +5886,7 @@ const enrichRateContracts = async (contracts: any[]) => {
   });
 };
 
-router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
+router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller', 'shg'), asyncRoute(async (req, res) => {
   const query = parse(paginationQuery.extend({
     contractState: z.enum(['ACTIVE', 'EXPIRED']).optional()
   }), req.query);
@@ -5904,7 +5904,7 @@ router.get('/procurement/rate-contracts', authenticate, authorize('buyer', 'admi
   });
   const filtered = (isAdmin(req) || req.user?.role === 'master_admin')
     ? allContracts
-    : req.user?.role === 'seller'
+    : (req.user?.role === 'seller' || req.user?.role === 'shg')
       ? allContracts.filter(contract => {
           const meta = (contract.metadata || {}) as any;
           const selectedSuppliers = Array.isArray(meta.selectedSuppliers) ? meta.selectedSuppliers : [];
@@ -6010,7 +6010,7 @@ router.post('/procurement/rate-contracts/:id/call-off-orders', authenticate, aut
   ok(res, po, 201);
 }, 'Unable to create rate contract call-off order'));
 
-router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller'), asyncRoute(async (req, res) => {
+router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', 'admin', 'master_admin', 'seller', 'shg'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const contract = await db.contract.findUnique({
     where: { id },
@@ -6033,7 +6033,7 @@ router.get('/procurement/rate-contracts/:id', authenticate, authorize('buyer', '
   }
   const isOwner = isAdmin(req) || req.user?.role === 'master_admin' || Number((contract.metadata as any)?.buyerId || 0) === userId(req);
   if (!isOwner) {
-    if (req.user?.role === 'seller') {
+    if (req.user?.role === 'seller' || req.user?.role === 'shg') {
       const meta = (contract.metadata || {}) as any;
       const selectedSuppliers = Array.isArray(meta.selectedSuppliers) ? meta.selectedSuppliers : [];
       const isSelectedSeller = selectedSuppliers.some((s: any) =>
@@ -8653,9 +8653,10 @@ router.post('/purchase-orders/:id/repeat', authenticate, authorize('buyer'), pay
 
 const formatOrgWithAddress = (org: any) => {
   if (!org) return org;
+  const parts = [org.addressLine1, org.addressLine2, org.city, org.state, org.pincode].filter(Boolean);
   return {
     ...org,
-    address: [org.addressLine1, org.addressLine2].filter(Boolean).join(', ') || [org.city, org.state, org.pincode].filter(Boolean).join(', ') || null,
+    address: parts.length > 0 ? parts.join(', ') : (org.address || null),
     organizationLogoFile: org.logoFile || org.organizationLogoFile || null
   };
 };
@@ -8731,6 +8732,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 organizationName: true,
                 gstin: true,
                 panNumber: true,
+                udyamNumber: true,
                 addressLine1: true,
                 addressLine2: true,
                 city: true,
@@ -8759,6 +8761,7 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
                 organizationName: true,
                 gstin: true,
                 panNumber: true,
+                udyamNumber: true,
                 addressLine1: true,
                 addressLine2: true,
                 city: true,
@@ -8805,6 +8808,7 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               organizationName: true,
               gstin: true,
               panNumber: true,
+              udyamNumber: true,
               addressLine1: true,
               addressLine2: true,
               city: true,
@@ -8833,6 +8837,7 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
               organizationName: true,
               gstin: true,
               panNumber: true,
+              udyamNumber: true,
               addressLine1: true,
               addressLine2: true,
               city: true,

@@ -27,6 +27,8 @@ import { BuyerSpendAndCompliance } from '../features/dashboard/components/BuyerS
 import { BuyerProcurementSpendChart } from '../features/dashboard/components/BuyerProcurementSpendChart';
 import { SellerRevenueTrendChart } from '../features/dashboard/components/SellerRevenueTrendChart';
 import { SuspensionAppealForm } from '../features/shared/SuspensionAppealForm';
+import { NextBestActionBanner } from '../features/dashboard/components/NextBestActionBanner';
+import { FirstTimeUserOnboardingCard } from '../features/dashboard/components/FirstTimeUserOnboardingCard';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -857,6 +859,12 @@ export default function Dashboard() {
       )}
 
       {(user?.role as string) !== 'admin' && <RoleAwareActionCards />}
+
+      {/* ── Dynamic Next Best Action Hero Banner ── */}
+      <NextBestActionBanner action={summaryData?.nextBestAction} />
+
+      {/* ── Day-1 Onboarding Checklist (for new users) ── */}
+      <FirstTimeUserOnboardingCard checklist={summaryData?.onboardingChecklist} role={user?.role} />
 
       <div className="space-y-4">
         {/* Only show the GST onboarding card if user is not yet approved/onboarded and has no GST */}

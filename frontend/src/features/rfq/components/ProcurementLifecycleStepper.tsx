@@ -116,6 +116,170 @@ export const LIFECYCLE_STAGES: StageConfig[] = [
   }
 ];
 
+// Distinct, vibrant, executive stage visual themes with gradients & hover glows
+export interface StageVisualTheme {
+  name: string;
+  completedCardBg: string;
+  completedBorder: string;
+  completedTitleText: string;
+  completedBadge: string;
+  completedBadgeText: string;
+  completedNumberBg: string;
+  completedBtnBg: string;
+  completedBtnBorder: string;
+  completedBtnText: string;
+  completedHoverShadow: string;
+  activeCardBg: string;
+  activeBorder: string;
+  activeRing: string;
+  activeBadge: string;
+  activeGlow: string;
+  activeBtnBg: string;
+  activeBtnText: string;
+  upcomingNumberText: string;
+  upcomingNumberBg: string;
+  upcomingHoverBorder: string;
+  accentGradient: string;
+}
+
+export const STAGE_VISUAL_THEMES: Record<LifecycleStageId, StageVisualTheme> = {
+  1: {
+    // Evaluation: Indigo / Violet
+    name: 'Evaluation',
+    completedCardBg: 'bg-gradient-to-br from-indigo-50/95 via-violet-50/60 to-white',
+    completedBorder: 'border-indigo-200/90 hover:border-indigo-400',
+    completedTitleText: 'text-indigo-950 font-bold',
+    completedBadge: 'bg-indigo-100/90 text-indigo-700 border border-indigo-200/90',
+    completedBadgeText: 'text-indigo-700 font-extrabold',
+    completedNumberBg: 'bg-gradient-to-br from-indigo-600 to-violet-600 text-white shadow-indigo-300/50',
+    completedBtnBg: 'bg-white/95 hover:bg-indigo-50',
+    completedBtnBorder: 'border-indigo-200/90 hover:border-indigo-300',
+    completedBtnText: 'text-indigo-900 font-bold',
+    completedHoverShadow: 'hover:shadow-[0_8px_20px_-4px_rgba(99,102,241,0.25)]',
+
+    activeCardBg: 'bg-gradient-to-br from-[#1e1b4b] via-[#312e81] to-[#4338ca]',
+    activeBorder: 'border-indigo-400/90',
+    activeRing: 'ring-2 ring-indigo-400/50',
+    activeBadge: 'bg-indigo-400/20 text-indigo-200 border border-indigo-300/40',
+    activeGlow: 'shadow-[0_10px_25px_-5px_rgba(79,70,229,0.5)]',
+    activeBtnBg: 'bg-gradient-to-r from-indigo-500 via-indigo-600 to-violet-600 hover:from-indigo-400 hover:to-violet-500',
+    activeBtnText: 'text-white font-extrabold shadow-sm',
+
+    upcomingNumberText: 'text-indigo-500',
+    upcomingNumberBg: 'bg-indigo-50 border border-indigo-100',
+    upcomingHoverBorder: 'hover:border-indigo-300 hover:bg-indigo-50/30',
+    accentGradient: 'from-indigo-500 to-violet-600'
+  },
+  2: {
+    // Award & PO: Azure / Cyan / Sky Blue
+    name: 'Award & PO',
+    completedCardBg: 'bg-gradient-to-br from-sky-50/95 via-cyan-50/60 to-white',
+    completedBorder: 'border-sky-200/90 hover:border-sky-400',
+    completedTitleText: 'text-sky-950 font-bold',
+    completedBadge: 'bg-sky-100/90 text-sky-700 border border-sky-200/90',
+    completedBadgeText: 'text-sky-700 font-extrabold',
+    completedNumberBg: 'bg-gradient-to-br from-sky-600 to-blue-600 text-white shadow-sky-300/50',
+    completedBtnBg: 'bg-white/95 hover:bg-sky-50',
+    completedBtnBorder: 'border-sky-200/90 hover:border-sky-300',
+    completedBtnText: 'text-sky-900 font-bold',
+    completedHoverShadow: 'hover:shadow-[0_8px_20px_-4px_rgba(14,165,233,0.25)]',
+
+    activeCardBg: 'bg-gradient-to-br from-[#082f49] via-[#0369a1] to-[#0284c7]',
+    activeBorder: 'border-sky-400/90',
+    activeRing: 'ring-2 ring-sky-400/50',
+    activeBadge: 'bg-sky-400/20 text-sky-200 border border-sky-300/40',
+    activeGlow: 'shadow-[0_10px_25px_-5px_rgba(2,132,199,0.5)]',
+    activeBtnBg: 'bg-gradient-to-r from-sky-500 via-sky-600 to-blue-600 hover:from-sky-400 hover:to-blue-500',
+    activeBtnText: 'text-white font-extrabold shadow-sm',
+
+    upcomingNumberText: 'text-sky-500',
+    upcomingNumberBg: 'bg-sky-50 border border-sky-100',
+    upcomingHoverBorder: 'hover:border-sky-300 hover:bg-sky-50/30',
+    accentGradient: 'from-sky-500 to-blue-600'
+  },
+  3: {
+    // Delivery & GRN: Amber / Warm Gold / Orange
+    name: 'Delivery & GRN',
+    completedCardBg: 'bg-gradient-to-br from-amber-50/95 via-orange-50/60 to-white',
+    completedBorder: 'border-amber-200/90 hover:border-amber-400',
+    completedTitleText: 'text-amber-950 font-bold',
+    completedBadge: 'bg-amber-100/90 text-amber-800 border border-amber-200/90',
+    completedBadgeText: 'text-amber-800 font-extrabold',
+    completedNumberBg: 'bg-gradient-to-br from-amber-600 to-orange-600 text-white shadow-amber-300/50',
+    completedBtnBg: 'bg-white/95 hover:bg-amber-50',
+    completedBtnBorder: 'border-amber-200/90 hover:border-amber-300',
+    completedBtnText: 'text-amber-950 font-bold',
+    completedHoverShadow: 'hover:shadow-[0_8px_20px_-4px_rgba(245,158,11,0.25)]',
+
+    activeCardBg: 'bg-gradient-to-br from-[#451a03] via-[#9a3412] to-[#c2410c]',
+    activeBorder: 'border-amber-400/90',
+    activeRing: 'ring-2 ring-amber-400/50',
+    activeBadge: 'bg-amber-400/20 text-amber-200 border border-amber-300/40',
+    activeGlow: 'shadow-[0_10px_25px_-5px_rgba(217,119,6,0.5)]',
+    activeBtnBg: 'bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 hover:from-amber-400 hover:to-orange-500',
+    activeBtnText: 'text-white font-extrabold shadow-sm',
+
+    upcomingNumberText: 'text-amber-500',
+    upcomingNumberBg: 'bg-amber-50 border border-amber-100',
+    upcomingHoverBorder: 'hover:border-amber-300 hover:bg-amber-50/30',
+    accentGradient: 'from-amber-500 to-orange-600'
+  },
+  4: {
+    // Invoicing: Fuchsia / Purple / Magenta
+    name: 'Invoicing',
+    completedCardBg: 'bg-gradient-to-br from-fuchsia-50/95 via-purple-50/60 to-white',
+    completedBorder: 'border-fuchsia-200/90 hover:border-fuchsia-400',
+    completedTitleText: 'text-fuchsia-950 font-bold',
+    completedBadge: 'bg-fuchsia-100/90 text-fuchsia-800 border border-fuchsia-200/90',
+    completedBadgeText: 'text-fuchsia-800 font-extrabold',
+    completedNumberBg: 'bg-gradient-to-br from-fuchsia-600 to-purple-600 text-white shadow-fuchsia-300/50',
+    completedBtnBg: 'bg-white/95 hover:bg-fuchsia-50',
+    completedBtnBorder: 'border-fuchsia-200/90 hover:border-fuchsia-300',
+    completedBtnText: 'text-fuchsia-950 font-bold',
+    completedHoverShadow: 'hover:shadow-[0_8px_20px_-4px_rgba(217,70,239,0.25)]',
+
+    activeCardBg: 'bg-gradient-to-br from-[#4a044e] via-[#86198f] to-[#a21caf]',
+    activeBorder: 'border-fuchsia-400/90',
+    activeRing: 'ring-2 ring-fuchsia-400/50',
+    activeBadge: 'bg-fuchsia-400/20 text-fuchsia-200 border border-fuchsia-300/40',
+    activeGlow: 'shadow-[0_10px_25px_-5px_rgba(162,28,175,0.5)]',
+    activeBtnBg: 'bg-gradient-to-r from-fuchsia-500 via-fuchsia-600 to-purple-600 hover:from-fuchsia-400 hover:to-purple-500',
+    activeBtnText: 'text-white font-extrabold shadow-sm',
+
+    upcomingNumberText: 'text-fuchsia-500',
+    upcomingNumberBg: 'bg-fuchsia-50 border border-fuchsia-100',
+    upcomingHoverBorder: 'hover:border-fuchsia-300 hover:bg-fuchsia-50/30',
+    accentGradient: 'from-fuchsia-500 to-purple-600'
+  },
+  5: {
+    // Settlement: Emerald / Teal / Mint
+    name: 'Settlement',
+    completedCardBg: 'bg-gradient-to-br from-emerald-50/95 via-teal-50/60 to-white',
+    completedBorder: 'border-emerald-200/90 hover:border-emerald-400',
+    completedTitleText: 'text-emerald-950 font-bold',
+    completedBadge: 'bg-emerald-100/90 text-emerald-800 border border-emerald-200/90',
+    completedBadgeText: 'text-emerald-800 font-extrabold',
+    completedNumberBg: 'bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-emerald-300/50',
+    completedBtnBg: 'bg-white/95 hover:bg-emerald-50',
+    completedBtnBorder: 'border-emerald-200/90 hover:border-emerald-300',
+    completedBtnText: 'text-emerald-950 font-bold',
+    completedHoverShadow: 'hover:shadow-[0_8px_20px_-4px_rgba(16,185,129,0.25)]',
+
+    activeCardBg: 'bg-gradient-to-br from-[#064e3b] via-[#047857] to-[#059669]',
+    activeBorder: 'border-emerald-400/90',
+    activeRing: 'ring-2 ring-emerald-400/50',
+    activeBadge: 'bg-emerald-400/20 text-emerald-200 border border-emerald-300/40',
+    activeGlow: 'shadow-[0_10px_25px_-5px_rgba(5,150,105,0.5)]',
+    activeBtnBg: 'bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600 hover:from-emerald-400 hover:to-teal-500',
+    activeBtnText: 'text-white font-extrabold shadow-sm',
+
+    upcomingNumberText: 'text-emerald-500',
+    upcomingNumberBg: 'bg-emerald-50 border border-emerald-100',
+    upcomingHoverBorder: 'hover:border-emerald-300 hover:bg-emerald-50/30',
+    accentGradient: 'from-emerald-500 to-teal-600'
+  }
+};
+
 export function determineCurrentLifecycleStage({
   status,
   lifecycleStage,
@@ -272,17 +436,36 @@ export function ProcurementLifecycleStepper({
     [status, lifecycleStage, awards, activeAward, purchaseOrders, activeOrder, hasApprovedGrn, invoices]
   );
 
-  const currentStageConfig = LIFECYCLE_STAGES.find(s => s.id === currentStageId) || LIFECYCLE_STAGES[0];
-  const stageHint = isBuyer
-    ? currentStageConfig.buyerHint
-    : isStandby && currentStageId === 2
-      ? 'Award processing with primary bidder — You remain on standby reserve'
-      : currentStageConfig.sellerHint;
-
   // Extract contextual identifiers
   const effectiveActiveOrder = activeOrder || purchaseOrders?.[0];
   const effectivePoNumber = effectiveActiveOrder?.poNumber || effectiveActiveOrder?.id;
   const effectiveAmount = activeOrder?.amount || activeOrder?.totalValue || activeAward?.finalAmount;
+
+  const allInvoicesList = useMemo(() => [
+    ...(Array.isArray(invoices) ? invoices : []),
+    ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : []),
+    ...(Array.isArray(purchaseOrders?.[0]?.invoices) ? purchaseOrders[0].invoices : [])
+  ], [invoices, activeOrder, purchaseOrders]);
+
+  const hasSettledInvoice = allInvoicesList.some(inv => {
+    const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
+    return s === 'SETTLED' || s === 'PAID';
+  });
+
+  const isContractSettled = useMemo(() => {
+    const statusUpper = String(status || '').toUpperCase().trim();
+    const poStatusUpper = String(effectiveActiveOrder?.poStatus || effectiveActiveOrder?.status || '').toUpperCase().trim();
+    return statusUpper === 'COMPLETED' || poStatusUpper === 'COMPLETED' || hasSettledInvoice;
+  }, [status, effectiveActiveOrder, hasSettledInvoice]);
+
+  const currentStageConfig = LIFECYCLE_STAGES.find(s => s.id === currentStageId) || LIFECYCLE_STAGES[0];
+  const stageHint = isContractSettled
+    ? 'All contract milestones successfully completed & funds settled'
+    : isBuyer
+      ? currentStageConfig.buyerHint
+      : isStandby && currentStageId === 2
+        ? 'Award processing with primary bidder — You remain on standby reserve'
+        : currentStageConfig.sellerHint;
 
   // Compute strictly conditional action & status for each stage
   const getStageAction = (stageId: LifecycleStageId): {
@@ -456,10 +639,6 @@ export function ProcurementLifecycleStepper({
 
       case 4: {
         // Stage 4: Invoicing (Can be generated post PO acceptance to accompany delivery)
-        const allInvoicesList = [
-          ...(Array.isArray(invoices) ? invoices : []),
-          ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : [])
-        ];
         const validInvoice = allInvoicesList.find(
           inv => !['CANCELLED', 'DRAFT'].includes(String(inv.status || inv.invoiceStatus || '').toUpperCase())
         );
@@ -511,28 +690,14 @@ export function ProcurementLifecycleStepper({
 
       case 5: {
         // Stage 5: Settlement
-        const statusUpper = String(status || '').toUpperCase().trim();
-        const poStatusUpper = String(activeOrder?.poStatus || activeOrder?.status || '').toUpperCase().trim();
-        const allInvoicesList = [
-          ...(Array.isArray(invoices) ? invoices : []),
-          ...(Array.isArray(activeOrder?.invoices) ? activeOrder.invoices : [])
-        ];
-        const hasSettled = allInvoicesList.some(inv => {
-          const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
-          return s === 'SETTLED' || s === 'PAID';
-        });
+        const poStatusUpper = String(effectiveActiveOrder?.poStatus || effectiveActiveOrder?.status || '').toUpperCase().trim();
         const hasPaymentSub = allInvoicesList.some(inv => {
           const s = String(inv.invoiceStatus || inv.status || '').toUpperCase();
           return s === 'PAYMENT_SUBMITTED' || Boolean(inv.paymentReference) || Boolean(inv.paymentSlipFileId);
         }) || Boolean(effectiveActiveOrder?.paymentSlipFileId) || Boolean((effectiveActiveOrder as any)?.paymentProof);
 
-        const isSettled =
-          statusUpper === 'COMPLETED' ||
-          poStatusUpper === 'COMPLETED' ||
-          hasSettled;
-
         if (isBuyer) {
-          if (isSettled) {
+          if (isContractSettled) {
             return {
               hasAction: true,
               actionLabel: 'Contract Settled ✓',
@@ -556,20 +721,28 @@ export function ProcurementLifecycleStepper({
               isPrimary: false
             };
           }
-          // Buyer can pay once GRN is approved or in settlement phase
-          return {
-            hasAction: true,
-            actionLabel: '💰 Make Payment',
-            actionHint: 'Pay online or record UTR and payment proof',
-            onClick: () => {
-              if (onOpenPaymentModal) onOpenPaymentModal(effectiveActiveOrder);
-              else if (onNavigateSettlement) onNavigateSettlement();
-            },
-            isPrimary: true
-          };
+          // STRICT BUYER GATING: Buyer can ONLY pay once in Stage 4/5 with an active PO & invoice/GRN!
+          const canBuyerPay = currentStageId >= 4 && (hasApprovedGrn || allInvoicesList.length > 0 || currentStageId === 5);
+          if (canBuyerPay) {
+            return {
+              hasAction: true,
+              actionLabel: '💰 Make Payment',
+              actionHint: 'Pay online or record UTR and payment proof',
+              onClick: () => {
+                if (onOpenPaymentModal) onOpenPaymentModal(effectiveActiveOrder);
+                else if (onNavigateSettlement) onNavigateSettlement();
+              },
+              isPrimary: true
+            };
+          } else {
+            return {
+              hasAction: false,
+              idleStatusText: currentStageId < 2 ? 'Pending Evaluation' : currentStageId === 2 ? 'Pending PO Issue' : currentStageId === 3 ? 'Pending Delivery/GRN' : 'Pending Invoice'
+            };
+          }
         } else {
           // SELLER
-          if (isSettled) {
+          if (isContractSettled) {
             return {
               hasAction: true,
               actionLabel: 'Contract Settled ✓',
@@ -606,219 +779,226 @@ export function ProcurementLifecycleStepper({
   return (
     <nav
       aria-label="Procurement Lifecycle Highway"
-      className="w-full rounded-xl border border-slate-200/90 bg-white/95 p-2 sm:p-2.5 shadow-2xs transition-all relative overflow-hidden"
+      className="w-full rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-md p-2.5 sm:p-3 shadow-xs transition-all relative overflow-hidden group/highway"
     >
-      {/* Background ambient portal aura */}
+      {/* Background ambient multi-color portal auras */}
       <div
-        className="pointer-events-none absolute -right-24 -top-24 h-48 w-48 rounded-full bg-gradient-to-br from-[#12335f]/8 via-sky-500/5 to-transparent blur-2xl"
+        className="pointer-events-none absolute -left-16 -top-16 h-44 w-44 rounded-full bg-gradient-to-br from-indigo-500/10 via-violet-500/10 to-transparent blur-3xl"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -right-16 -bottom-16 h-44 w-44 rounded-full bg-gradient-to-tl from-emerald-500/15 via-teal-500/10 to-transparent blur-3xl"
         aria-hidden="true"
       />
 
       {/* Slim Header Bar */}
-      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-1.5 mb-2">
+      <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between pb-2 border-b border-slate-100/90 relative z-10">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-[#12335f] text-white shadow-2xs ring-2 ring-[#12335f]/10">
-            <Sparkles className="h-3 w-3" aria-hidden="true" />
+          <div className="flex h-5.5 w-5.5 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 via-blue-600 to-teal-500 text-white shadow-xs ring-1 ring-blue-500/20">
+            <Sparkles className="h-3 w-3 animate-pulse" aria-hidden="true" />
           </div>
-          <div className="min-w-0 flex flex-wrap items-baseline gap-1.5 sm:gap-2">
-            <h2 className="text-[10.5px] font-black uppercase tracking-wider text-[#12335f] leading-tight">
+          <div className="min-w-0 flex items-center gap-2 flex-wrap">
+            <h2 className="text-[11.5px] font-black uppercase tracking-wider bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 bg-clip-text text-transparent leading-none">
               Procurement Highway
             </h2>
-            <span className="hidden sm:inline-block text-[10px] text-slate-300 font-normal">|</span>
-            <p className="text-[10px] sm:text-[10.5px] font-medium text-slate-500 leading-tight truncate">
-              Stage {currentStageId}/5: <strong className="font-extrabold text-slate-900">{currentStageConfig.name}</strong> — {stageHint}
+            <span className="inline-flex items-center rounded-md bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 px-2 py-0.5 text-[9.5px] font-extrabold text-indigo-900 shadow-2xs">
+              {isContractSettled ? '5 / 5 Completed' : `Stage ${currentStageId}/5: ${currentStageConfig.name}`}
+            </span>
+            <span className="hidden md:inline-block text-[10px] text-slate-300">|</span>
+            <p className="hidden md:inline-block text-[11px] font-medium text-slate-600 leading-tight truncate">
+              {stageHint}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2 py-0.5 text-[9.5px] sm:text-[10px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
-            <span
-              className={cn(
-                'h-1.5 w-1.5 rounded-full shrink-0',
-                currentStageId === 5
-                  ? 'bg-emerald-500'
-                  : isStandby && currentStageId === 2
-                    ? 'bg-sky-500 animate-pulse'
-                    : 'bg-emerald-500 animate-ping'
-              )}
-              aria-hidden="true"
-            />
-            {currentStageId === 5
-              ? 'Contract Fully Settled'
-              : isStandby && currentStageId === 2
-                ? 'Award in Progress (Standby)'
-                : `Active: ${currentStageConfig.shortName}`}
-          </span>
+          {isContractSettled ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-800 border border-emerald-300 shadow-2xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+              Contract Fully Settled
+            </span>
+          ) : isStandby && currentStageId === 2 ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-0.5 text-[10.5px] font-bold text-sky-800 border border-sky-200 shadow-2xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse shrink-0" aria-hidden="true" />
+              Award in Progress (Standby)
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 px-2.5 py-0.5 text-[10.5px] font-black text-indigo-900 border border-indigo-200/80 shadow-2xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-ping shrink-0" aria-hidden="true" />
+              Active: {currentStageConfig.name}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* 5-Stage Stepper Grid with Flowing Connector Highway Track */}
-      <div className="relative">
-        {/* Animated Highway Progress Track (Desktop) */}
-        <div className="hidden sm:block absolute top-[13px] left-[8%] right-[8%] h-[2.5px] bg-slate-100 rounded-full overflow-hidden pointer-events-none z-0">
+      {/* Animated Multi-Color Liquid Rainbow Progress Bar */}
+      <div className="pt-2 pb-1 hidden sm:block relative z-10">
+        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-100 shadow-inner">
           <div
-            className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-[#12335f] transition-all duration-700 ease-out"
+            className="h-full bg-gradient-to-r from-indigo-500 via-sky-500 via-amber-500 via-fuchsia-500 to-emerald-500 transition-all duration-700 ease-out shadow-xs"
             style={{
-              width: `${Math.min(100, Math.max(0, ((currentStageId - 1) / 4) * 100))}%`
+              width: isContractSettled
+                ? '100%'
+                : `${Math.min(100, Math.max(14, ((currentStageId - 1) / 4) * 86 + 14))}%`
             }}
           />
         </div>
+      </div>
 
-        <ol
-          role="list"
-          className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 relative z-10"
-        >
-          {LIFECYCLE_STAGES.map((stage) => {
-            const isCompleted = currentStageId > stage.id;
-            const isActive = currentStageId === stage.id;
-            const isUpcoming = currentStageId < stage.id;
-            const Icon = stage.icon;
-            const stageAction = getStageAction(stage.id);
+      {/* 5-Stage Stepper Grid */}
+      <ol
+        role="list"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 mt-2 relative z-10"
+      >
+        {LIFECYCLE_STAGES.map((stage) => {
+          const isCompleted = currentStageId > stage.id || (stage.id === 5 && isContractSettled);
+          const isActive = currentStageId === stage.id && !isContractSettled;
+          const isUpcoming = currentStageId < stage.id;
+          const stageAction = getStageAction(stage.id);
+          const theme = STAGE_VISUAL_THEMES[stage.id] || STAGE_VISUAL_THEMES[1];
 
-            return (
-              <li
-                key={stage.id}
-                role="listitem"
-                aria-current={isActive ? 'step' : undefined}
-                tabIndex={stageAction.hasAction ? 0 : -1}
-                onKeyDown={(e) => {
-                  if (stageAction.hasAction && (e.key === 'Enter' || e.key === ' ')) {
-                    e.preventDefault();
-                    if (stageAction.onClick) stageAction.onClick();
-                  }
-                }}
-                onClick={() => {
-                  if (stageAction.hasAction && stageAction.onClick) {
-                    stageAction.onClick();
-                  }
-                }}
-                className={cn(
-                  'group relative flex flex-col justify-between rounded-lg p-2 border transition-all duration-200 outline-none select-none min-h-[56px] sm:min-h-[58px]',
-                  stageAction.hasAction ? 'cursor-pointer' : 'cursor-default',
-                  'focus-visible:ring-2 focus-visible:ring-[#12335f] focus-visible:ring-offset-1',
-                  // Completed State
-                  isCompleted &&
-                    'border-emerald-200/90 bg-gradient-to-b from-emerald-50/70 to-emerald-50/20 text-emerald-950 hover:border-emerald-400 hover:shadow-xs hover:-translate-y-0.5',
-                  // Active State (Command Focus)
-                  isActive &&
-                    'border-[#12335f] bg-gradient-to-br from-[#12335f] via-[#102d54] to-[#0a1e38] text-white shadow-sm ring-1 ring-[#12335f]/30 hover:-translate-y-0.5 hover:shadow-md',
-                  // Upcoming State
-                  isUpcoming &&
-                    'border-slate-200/70 bg-slate-50/50 text-slate-600 hover:border-slate-300 hover:bg-slate-100/60 hover:-translate-y-0.5'
-                )}
-              >
-                {/* Top Row: Micro Stage Badge, Status Indicator, Icon */}
-                <div className="flex items-center justify-between gap-1">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span
-                      className={cn(
-                        'flex h-4 w-4 shrink-0 items-center justify-center rounded text-[9px] font-black font-mono transition-transform group-hover:scale-105',
-                        isCompleted && 'bg-emerald-600 text-white shadow-2xs',
-                        isActive && 'bg-white text-[#12335f] shadow-2xs font-extrabold',
-                        isUpcoming && 'bg-slate-200 text-slate-600'
-                      )}
-                    >
-                      {isCompleted ? (
-                        <CheckCircle2 className="h-3 w-3 stroke-[2.5]" aria-hidden="true" />
-                      ) : (
-                        stage.id
-                      )}
-                    </span>
-
-                    <span
-                      className={cn(
-                        'text-[8.5px] font-black uppercase tracking-wider truncate',
-                        isCompleted && 'text-emerald-700',
-                        isActive && 'text-emerald-300 font-extrabold flex items-center gap-1',
-                        isUpcoming && 'text-slate-400 font-semibold'
-                      )}
-                    >
-                      {isCompleted && 'Done'}
-                      {isActive && (
-                        <>
-                          <span className="relative flex h-1.5 w-1.5 shrink-0">
-                            <span
-                              className={cn(
-                                'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
-                                isStandby && stage.id === 2 ? 'bg-sky-400' : 'bg-emerald-400'
-                              )}
-                            />
-                            <span
-                              className={cn(
-                                'relative inline-flex rounded-full h-1.5 w-1.5',
-                                isStandby && stage.id === 2 ? 'bg-sky-400' : 'bg-emerald-400'
-                              )}
-                            />
-                          </span>
-                          <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'In Progress'}</span>
-                        </>
-                      )}
-                      {isUpcoming && 'Pending'}
-                    </span>
-                  </div>
-
-                  <Icon
+          return (
+            <li
+              key={stage.id}
+              role="listitem"
+              title={`${stage.name}: ${stage.description}`}
+              aria-current={isActive ? 'step' : undefined}
+              tabIndex={stageAction.hasAction ? 0 : -1}
+              onKeyDown={(e) => {
+                if (stageAction.hasAction && (e.key === 'Enter' || e.key === ' ')) {
+                  e.preventDefault();
+                  if (stageAction.onClick) stageAction.onClick();
+                }
+              }}
+              onClick={() => {
+                if (stageAction.hasAction && stageAction.onClick) {
+                  stageAction.onClick();
+                }
+              }}
+              className={cn(
+                'group relative flex flex-col justify-between rounded-xl p-2 sm:p-2.5 border transition-all duration-300 outline-none select-none min-h-[52px] sm:min-h-[54px] overflow-hidden',
+                stageAction.hasAction ? 'cursor-pointer' : 'cursor-default',
+                'focus-visible:ring-2 focus-visible:ring-offset-1',
+                // Completed State: Distinct stage gradient background, colored border, and floating hover aura
+                isCompleted && cn(
+                  theme.completedCardBg,
+                  theme.completedBorder,
+                  theme.completedHoverShadow,
+                  'shadow-2xs hover:-translate-y-1 hover:scale-[1.01]'
+                ),
+                // Active State: Luminous rich jewel-tone gradient, breathing ring, and prominent aura glow
+                isActive && cn(
+                  theme.activeCardBg,
+                  theme.activeBorder,
+                  theme.activeRing,
+                  theme.activeGlow,
+                  'text-white hover:-translate-y-1 hover:scale-[1.015]'
+                ),
+                // Upcoming State: Soft frosted glass card with subtle stage-tinted hover
+                isUpcoming && cn(
+                  'bg-white/80 border-slate-200/90 text-slate-600 hover:bg-white',
+                  theme.upcomingHoverBorder,
+                  'hover:-translate-y-0.5 hover:shadow-2xs'
+                )
+              )}
+            >
+              {/* Row 1: Indicator + Stage Title + Status Badge */}
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
                     className={cn(
-                      'h-3.5 w-3.5 shrink-0 transition-transform group-hover:scale-110',
-                      isCompleted && 'text-emerald-600',
-                      isActive && 'text-emerald-300',
-                      isUpcoming && 'text-slate-400'
+                      'flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full text-[9.5px] font-black font-mono transition-transform duration-300 group-hover:scale-110 shadow-2xs',
+                      isCompleted && theme.completedNumberBg,
+                      isActive && 'bg-white text-slate-950 font-black shadow-sm',
+                      isUpcoming && cn(theme.upcomingNumberBg, theme.upcomingNumberText, 'font-bold')
                     )}
-                    aria-hidden="true"
-                  />
-                </div>
+                  >
+                    {isCompleted ? (
+                      <CheckCircle2 className="h-2.5 w-2.5 stroke-[2.8]" aria-hidden="true" />
+                    ) : (
+                      `0${stage.id}`
+                    )}
+                  </span>
 
-                {/* Middle Row: Stage Title */}
-                <div className="my-0.5 min-w-0">
                   <h3
                     className={cn(
-                      'text-[11px] sm:text-[11.5px] font-extrabold tracking-tight leading-snug truncate',
-                      isCompleted && 'text-emerald-950',
-                      isActive && 'text-white',
-                      isUpcoming && 'text-slate-700'
+                      'text-[11.5px] font-bold tracking-tight truncate leading-tight',
+                      isCompleted && theme.completedTitleText,
+                      isActive && 'text-white font-extrabold',
+                      isUpcoming && 'text-slate-700 group-hover:text-slate-900'
                     )}
                   >
                     {stage.name}
                   </h3>
                 </div>
 
-                {/* Bottom Row: Strictly Conditional Action Button OR Clean Status Chip */}
-                <div className="flex items-center justify-between gap-1 pt-0.5 mt-auto">
-                  {stageAction.hasAction ? (
-                    <button
-                      type="button"
-                      aria-label={`${stage.name}: ${stageAction.actionLabel}`}
-                      title={stageAction.actionHint}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (stageAction.onClick) stageAction.onClick();
-                      }}
-                      className={cn(
-                        'w-full inline-flex items-center justify-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-2xs hover:scale-[1.02] active:scale-95',
-                        stageAction.isPrimary
-                          ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 shadow-xs font-black ring-1 ring-emerald-300/60'
-                          : isCompleted
-                            ? 'bg-white hover:bg-emerald-600 text-emerald-800 hover:text-white border border-emerald-300/80'
-                            : 'bg-white hover:bg-[#12335f] text-[#12335f] hover:text-white border border-slate-300'
-                      )}
-                    >
-                      <span className="truncate">{stageAction.actionLabel}</span>
-                      <ArrowUpRight className="h-2.5 w-2.5 shrink-0" aria-hidden="true" />
-                    </button>
-                  ) : (
-                    <div className="w-full flex items-center justify-center py-0.5 rounded bg-slate-100/50 border border-slate-200/40">
-                      <span className="text-[8.5px] font-semibold text-slate-400 truncate">
-                        {stageAction.idleStatusText || 'Pending'}
-                      </span>
-                    </div>
+                <span
+                  className={cn(
+                    'text-[8.5px] font-bold uppercase tracking-wider shrink-0 px-1.5 py-0.2 rounded transition-colors',
+                    isCompleted && theme.completedBadge,
+                    isActive && theme.activeBadge,
+                    isUpcoming && 'text-slate-400 bg-slate-100/80 border border-slate-200/60'
                   )}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
+                >
+                  {isCompleted && (stage.id === 5 ? 'Settled ✓' : 'Done ✓')}
+                  {isActive && (
+                    <span className="flex items-center gap-1 font-black">
+                      <span className="relative flex h-1.5 w-1.5 shrink-0">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                      </span>
+                      <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'Active'}</span>
+                    </span>
+                  )}
+                  {isUpcoming && 'Pending'}
+                </span>
+              </div>
+
+              {/* Row 2: Compact Action CTA Button or Clean State Pill */}
+              <div className="pt-1 mt-1 border-t border-slate-100/80 group-data-[active=true]:border-white/10">
+                {stageAction.hasAction ? (
+                  <button
+                    type="button"
+                    aria-label={`${stage.name}: ${stageAction.actionLabel}`}
+                    title={stageAction.actionHint}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (stageAction.onClick) stageAction.onClick();
+                    }}
+                    className={cn(
+                      'w-full inline-flex items-center justify-center gap-1 rounded h-5.5 px-1.5 text-[9.5px] font-bold tracking-tight transition-all duration-200 cursor-pointer shadow-2xs active:scale-95 group/btn',
+                      stageAction.isPrimary
+                        ? cn(theme.activeBtnBg, theme.activeBtnText)
+                        : isCompleted
+                          ? cn(theme.completedBtnBg, theme.completedBtnBorder, theme.completedBtnText, 'border hover:scale-[1.01]')
+                          : isActive
+                            ? 'bg-white hover:bg-slate-100 text-slate-950 font-black border border-white/60 shadow-md hover:scale-[1.01]'
+                            : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:scale-[1.01]'
+                    )}
+                  >
+                    <span className="truncate">{stageAction.actionLabel}</span>
+                    <ArrowUpRight className="h-2 w-2 shrink-0 opacity-75 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div
+                    className={cn(
+                      'w-full flex items-center justify-center h-5.5 rounded px-1.5 transition-colors',
+                      isActive
+                        ? 'bg-white/15 border border-white/30 text-white font-bold text-[9.5px]'
+                        : 'bg-slate-100/70 border border-slate-200/50 text-slate-400 font-medium text-[9px]'
+                    )}
+                  >
+                    {isActive && <Clock className="h-2 w-2 mr-1 text-white/80 shrink-0" aria-hidden="true" />}
+                    <span className="truncate font-semibold">
+                      {stageAction.idleStatusText || 'Pending'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
     </nav>
   );
 }

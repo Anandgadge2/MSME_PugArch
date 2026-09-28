@@ -1,8 +1,12 @@
 import { api, readJsonResponse, unwrapApiData } from '../../lib/api';
+import { getStoredToken, COOKIE_SESSION_TOKEN } from '../../lib/auth';
 
 const headers = (): Record<string, string> => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const token = typeof window !== 'undefined' ? getStoredToken() : null;
+  if (token && token !== COOKIE_SESSION_TOKEN && token !== 'null' && token !== 'undefined') {
+    return { Authorization: `Bearer ${token}` };
+  }
+  return {};
 };
 
 const json = async <T>(response: Response): Promise<T> => {

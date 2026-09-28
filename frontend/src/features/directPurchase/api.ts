@@ -39,20 +39,6 @@ export const acceptDirectPurchase = (id: number) =>
 export const rejectDirectPurchase = (id: number) =>
     postApi<DirectPurchaseDto>(`/api/direct-purchases/${id}/reject`, {});
 
-export interface DirectPurchaseCheckoutPayload {
-    deliveryAddressId?: number | null;
-    deliveryAddressText?: string | null;
-    department: string;
-    budgetHead: string;
-    costCenter: string;
-    justification: string;
-    remarks?: string | null;
-    deliveryInstructions?: string | null;
-    requiredDeliveryDate?: string | null;
-}
-
-export const directPurchaseCheckout = (payload: DirectPurchaseCheckoutPayload) =>
-    postApi<DirectPurchaseDto[]>(`/api/direct-purchases/checkout`, payload);
 
 export interface PlaceDirectOrderPayload {
     deliveryAddressId?: number | null;

@@ -54,6 +54,7 @@ export interface PaymentReceiptViewModalProps {
   sellerName?: string | null;
   buyerName?: string | null;
   onUploadSlip?: (payment: any) => void;
+  isSettled?: boolean;
 }
 
 const buildPaymentTimeline = (payment: any) => {
@@ -128,7 +129,8 @@ export function PaymentReceiptViewModal({
   invoiceNumber,
   sellerName,
   buyerName,
-  onUploadSlip
+  onUploadSlip,
+  isSettled: isSettledProp
 }: PaymentReceiptViewModalProps) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'master_admin';
@@ -263,6 +265,15 @@ export function PaymentReceiptViewModal({
             const poRes = await getApi<any>(`/api/purchase-orders/${resolvedTargetPoId}`);
             const poData = poRes?.data || poRes;
             setLinkedPo(poData);
+            if (!currentPayment && Array.isArray(poData?.payments) && poData.payments.length > 0) {
+              const matched = poData.payments.find((p: any) =>
+                ['success', 'escrow_released', 'offline_proof_verified'].includes(String(p.status).toLowerCase())
+              ) || poData.payments[0];
+              if (matched) {
+                currentPayment = matched;
+                setFetchedPayment(matched);
+              }
+            }
             if (!targetInvId && poData?.invoices?.length > 0) {
               setLinkedInvoice(poData.invoices[0]);
             }
@@ -461,6 +472,13 @@ export function PaymentReceiptViewModal({
   };
 
   const status = String(resolvedProof?.status || activePayment?.status || 'UPLOADED').toUpperCase();
+
+  const isSettledState = Boolean(
+    isSettledProp ||
+    ['SETTLED', 'COMPLETED', 'ORDER_COMPLETED'].includes(String(linkedPo?.status || linkedPo?.poStatus || '').toUpperCase()) ||
+    ['SETTLED', 'PAID'].includes(String(linkedInvoice?.status || linkedInvoice?.invoiceStatus || '').toUpperCase()) ||
+    ['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED'].includes(status)
+  );
 
   const handleOpenFile = async () => {
     let fileId: number | null =
@@ -891,7 +909,7 @@ export function PaymentReceiptViewModal({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-black uppercase tracking-wider shadow-2xs",
-                        status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED'
+                        isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
                           ? "bg-emerald-600 text-white border border-emerald-700 shadow-emerald-600/20"
                           : status === 'REJECTED' || status === 'FAILED'
                           ? "bg-rose-600 text-white border border-rose-700 shadow-rose-600/20"
@@ -900,7 +918,7 @@ export function PaymentReceiptViewModal({
                           : "bg-amber-500 text-white border border-amber-600 shadow-amber-500/20"
                       )}
                     >
-                      {status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' ? (
+                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED' ? (
                         <ShieldCheck className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
                       ) : status === 'REJECTED' || status === 'FAILED' ? (
                         <XCircle className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
@@ -909,7 +927,7 @@ export function PaymentReceiptViewModal({
                       ) : (
                         <Clock className="h-4 w-4 stroke-[2.5] animate-pulse" aria-hidden="true" />
                       )}
-                      {status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED'
+                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
                         ? 'Settlement Verified'
                         : status === 'REJECTED' || status === 'FAILED'
                         ? 'Proof Rejected'
@@ -919,7 +937,7 @@ export function PaymentReceiptViewModal({
                     </span>
 
                     <span className="text-[10px] font-semibold text-slate-500">
-                      {status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED'
+                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
                         ? 'Funds confirmed & ledger updated'
                         : status === 'REJECTED' || status === 'FAILED'
                         ? 'Proof rejected or remittance failed'
@@ -1314,7 +1332,12 @@ export function PaymentReceiptViewModal({
         <div className="shrink-0 flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 sm:px-6 py-3.5">
           {/* Status summary pill */}
           <div className="flex items-center gap-2">
-            {status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' ? (
+            {loading ? (
+              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-hidden="true" />
+                Checking settlement status...
+              </span>
+            ) : isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED' ? (
               <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                 Verified &amp; Settled
@@ -1339,7 +1362,7 @@ export function PaymentReceiptViewModal({
 
           <div className="flex items-center gap-2.5">
             {/* Seller Verification Buttons (Admin is strictly View-Only) */}
-            {isSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
+            {!loading && !isSettledState && isSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
               <>
                 <Button
                   type="button"

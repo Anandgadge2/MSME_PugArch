@@ -65,6 +65,8 @@ import { cn } from '../../lib/utils';
 import { routeForNotification, type PortalNotification } from '../../lib/notifications';
 import { isShgUser, getSellerPortalPath } from '../../lib/shg';
 import { useMarketplaceCart } from '../../features/marketplace/hooks/useMarketplaceCart';
+import GlobalCommandPalette from '../common/GlobalCommandPalette';
+
 
 interface SidebarItem {
   label: string;
@@ -837,6 +839,18 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [activateConsent2, setActivateConsent2] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
 
   const handleProfileMouseEnter = () => {
     if (profileTimeoutRef.current) {
@@ -1183,6 +1197,21 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         </div>
 
         <div className="flex items-center gap-2 sm:gap-4">
+          {/* Universal Command Palette Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsCommandPaletteOpen(true)}
+            className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100 text-slate-600 hover:text-[#12335f] transition-all text-xs font-semibold shadow-3xs cursor-pointer"
+            title="Quick Search & Commands (Ctrl + K)"
+            aria-label="Quick Search and Commands (Ctrl + K)"
+          >
+            <Search className="h-3.5 w-3.5 text-slate-500" />
+            <span className="hidden md:inline">Quick Search</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] font-mono text-slate-400 shadow-3xs font-bold">
+              Ctrl K
+            </kbd>
+          </button>
+
           {(user?.role === 'admin' || user?.role === 'master_admin') && (
             <button
               onClick={() => setIsNoticeModalOpen(true)}
@@ -1653,6 +1682,10 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           onClose={() => setIsNoticeModalOpen(false)}
         />
       )}
+      <GlobalCommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+      />
     </header>
   );
 }

@@ -8242,28 +8242,28 @@ export function ProcurementDetailUnifiedView(
             isAwardedToMe &&
             effectiveActiveOrder &&
             isPOAccepted && (
-              <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex items-start gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+              <div className="rounded-lg border border-slate-200 bg-gradient-to-r from-slate-50/90 via-blue-50/20 to-white p-2.5 sm:p-3 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#0b1f3a] text-white shadow-2xs mt-0.5">
                       <CheckCircle2 className="h-4 w-4" />
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-blue-900">
+                          <CheckCircle2 className="h-3 w-3 text-blue-600" />
                           Purchase Order Accepted &amp; Committed
                         </span>
-                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                        <span className="rounded bg-white border border-slate-200 px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700 shadow-2xs">
                           PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
                         </span>
                       </div>
-                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                      <h3 className="text-xs sm:text-[12.5px] font-bold text-slate-900 tracking-tight">
                         Order Confirmed — Delivery Stage Active
                       </h3>
-                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                      <p className="text-[11px] text-slate-600 max-w-3xl leading-snug">
                         You have formally accepted Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} for{" "}
-                        <strong className="text-emerald-700 font-bold">
+                        <strong className="text-blue-950 font-bold">
                           ₹{Number(
                             effectiveActiveOrder.amount ||
                               effectiveActiveOrder.totalValue ||
@@ -8275,12 +8275,12 @@ export function ProcurementDetailUnifiedView(
                       </p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-emerald-100">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
                     <Button
                       type="button"
                       size="sm"
                       onClick={() => setIsReceiptModalOpen(true)}
-                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                      className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-md cursor-pointer"
                     >
                       <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View PO Copy
@@ -8297,7 +8297,7 @@ export function ProcurementDetailUnifiedView(
                           setSelectedInvoiceModalData(existingTaxInvoice || null);
                           setIsTaxInvoiceModalOpen(true);
                         }}
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                        className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-slate-700 hover:bg-slate-50 border border-slate-300 shadow-2xs rounded-md cursor-pointer"
                       >
                         <FileText className="h-3.5 w-3.5 text-slate-500" />
                         📄 View Tax Invoice
@@ -8307,7 +8307,7 @@ export function ProcurementDetailUnifiedView(
                         type="button"
                         size="sm"
                         onClick={() => setIsCreateInvoiceOpen(true)}
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-300 shadow-2xs rounded-lg cursor-pointer"
+                        className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-blue-700 hover:bg-blue-50 border border-blue-300 shadow-2xs rounded-md cursor-pointer"
                       >
                         <FileText className="h-3.5 w-3.5 text-blue-600" />
                         🧾 Create Tax Invoice
@@ -8320,7 +8320,7 @@ export function ProcurementDetailUnifiedView(
                         type="button"
                         size="sm"
                         onClick={handleOpenPackDialog}
-                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        className="h-7 px-3 gap-1.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-md cursor-pointer transition-transform active:scale-95"
                       >
                         <Package className="h-3.5 w-3.5" />
                         📦 Pack Order
@@ -8332,7 +8332,7 @@ export function ProcurementDetailUnifiedView(
                         type="button"
                         size="sm"
                         onClick={handleOpenDispatchDialog}
-                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        className="h-7 px-3 gap-1.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-md cursor-pointer transition-transform active:scale-95"
                       >
                         <Truck className="h-3.5 w-3.5" />
                         🚚 Enter Dispatch Details
@@ -8345,7 +8345,7 @@ export function ProcurementDetailUnifiedView(
                         size="sm"
                         variant="outline"
                         onClick={handleOpenDispatchDialog}
-                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-50 shadow-2xs rounded-lg cursor-pointer"
+                        className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-blue-700 border-blue-300 hover:bg-blue-50 shadow-2xs rounded-md cursor-pointer"
                       >
                         <Truck className="h-3.5 w-3.5 text-blue-600" />
                         📍 View Tracking Info
@@ -8353,15 +8353,15 @@ export function ProcurementDetailUnifiedView(
                     )}
 
                     {fulfillmentPhase === 'DELIVERED_PENDING_GRN' && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
-                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
+                        <Clock className="h-3 w-3 text-amber-600" />
                         <span>⏳ Awaiting Buyer Goods Inspection &amp; GRN</span>
                       </span>
                     )}
 
                     {fulfillmentPhase === 'GRN_APPROVED' && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">
-                        <Clock className="h-3.5 w-3.5 text-amber-600" />
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-800">
+                        <Clock className="h-3 w-3 text-amber-600" />
                         <span>⏳ Awaiting Buyer Payment &amp; Payment Proof</span>
                       </span>
                     )}
@@ -8382,7 +8382,7 @@ export function ProcurementDetailUnifiedView(
                             const proofId = existingTaxInvoice?.paymentReceiptFileAssetId || (effectiveActiveOrder as any)?.paymentSlipFileId;
                             if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
                           }}
-                          className="h-8 px-3 gap-1.5 text-xs font-bold bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50 shadow-2xs rounded-lg cursor-pointer"
+                          className="h-7 px-2.5 gap-1 text-[11px] font-bold bg-white text-indigo-700 border-indigo-300 hover:bg-indigo-50 shadow-2xs rounded-md cursor-pointer"
                         >
                           <Receipt className="h-3.5 w-3.5 text-indigo-600" />
                           📄 View Payment Proof
@@ -8391,7 +8391,7 @@ export function ProcurementDetailUnifiedView(
                           type="button"
                           size="sm"
                           onClick={() => setIsConfirmSettlementOpen(true)}
-                          className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                          className="h-7 px-3 gap-1.5 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs rounded-md cursor-pointer transition-transform active:scale-95"
                         >
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           ✅ Confirm Settlement &amp; Close
@@ -8400,8 +8400,8 @@ export function ProcurementDetailUnifiedView(
                     )}
 
                     {fulfillmentPhase === 'SETTLED' && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800">
-                        <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-900">
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
                         <span>✅ Contract Settled &amp; Closed</span>
                       </span>
                     )}
@@ -9176,6 +9176,11 @@ export function ProcurementDetailUnifiedView(
               orderId={effectiveActiveOrder?.id ? Number(effectiveActiveOrder.id) : null}
               invoiceId={existingTaxInvoice?.id ? Number(existingTaxInvoice.id) : null}
               orderPoNumber={effectiveActiveOrder?.poNumber || null}
+              isSettled={
+                fulfillmentPhase === 'SETTLED' ||
+                ['completed', 'settled'].includes(String(effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || '').toLowerCase()) ||
+                ['settled', 'paid'].includes(String(existingTaxInvoice?.status || existingTaxInvoice?.invoiceStatus || '').toLowerCase())
+              }
             />
           )}
 

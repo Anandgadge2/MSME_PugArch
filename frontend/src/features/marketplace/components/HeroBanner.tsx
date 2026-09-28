@@ -286,24 +286,20 @@ export function HeroBanner({ banners }: Props) {
 
             {/* Floating Carousel Dots Indicator */}
             <div className="absolute bottom-2.5 sm:bottom-4 md:bottom-5 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
-                <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-0.5 sm:py-1 rounded-full bg-black/30 backdrop-blur-xs border border-white/15">
+                <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full bg-black/30 backdrop-blur-xs border border-white/15">
                     {slides.map((_, i) => (
                         <button
                             key={i}
                             type="button"
                             onClick={() => goTo(i)}
-                            className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8a45c] rounded-full"
+                            className={`rounded-full transition-all duration-300 focus:outline-none cursor-pointer ${
+                                i === current
+                                    ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
+                                    : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
+                            }`}
                             aria-label={`Go to slide ${i + 1}`}
                             aria-current={i === current ? 'true' : undefined}
-                        >
-                            <span
-                                className={`block rounded-full transition-all duration-300 pointer-events-none ${
-                                    i === current
-                                        ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
-                                        : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
-                                }`}
-                            />
-                        </button>
+                        />
                     ))}
                 </div>
             </div>

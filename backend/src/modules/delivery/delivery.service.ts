@@ -114,14 +114,69 @@ const fetchDpExtensions = async (deliveryTrackingId: number) => {
   return [];
 };
 
+const PO_PARTY_INCLUDE = {
+  organization: {
+    select: {
+      id: true,
+      organizationName: true,
+      gstin: true,
+      panNumber: true,
+      udyamNumber: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      pincode: true,
+      organizationLogoFileId: true,
+      profile: { select: { logoUrl: true } },
+      logoFile: { select: { id: true, url: true, fileUrl: true } }
+    }
+  }
+};
+
+const formatOrgWithAddress = (org: any) => {
+  if (!org) return org;
+  const parts = [org.addressLine1, org.addressLine2, org.city, org.state, org.pincode].filter(Boolean);
+  return {
+    ...org,
+    address: parts.length > 0 ? parts.join(', ') : (org.address || null),
+    organizationLogoFile: org.logoFile || org.organizationLogoFile || null
+  };
+};
+
+const formatPoWithOrgAddress = (po: any) => {
+  if (!po) return po;
+  return {
+    ...po,
+    buyer: po.buyer ? {
+      ...po.buyer,
+      organization: formatOrgWithAddress(po.buyer.organization)
+    } : po.buyer,
+    seller: po.seller ? {
+      ...po.seller,
+      organization: formatOrgWithAddress(po.seller.organization)
+    } : po.seller
+  };
+};
+
 const loadDelivery = async (id: number) => {
   const delivery = await db.deliveryTracking.findUnique({
     where: { id },
     include: {
       purchaseOrder: {
         include: {
-          buyer: true,
-          seller: true,
+          buyer: {
+            include: {
+              ...PO_PARTY_INCLUDE,
+              buyerProfile: true
+            }
+          },
+          seller: {
+            include: {
+              ...PO_PARTY_INCLUDE,
+              sellerProfile: true
+            }
+          },
           contract: { select: { id: true, contractNumber: true, contractType: true, metadata: true } },
           items: true,
           invoices: {
@@ -156,6 +211,9 @@ const loadDelivery = async (id: number) => {
   (delivery as any).grnStatus = primaryGrn?.status ?? null;
   (delivery as any).hasGrn = Boolean(primaryGrn);
   (delivery as any).hasSubmittedGrn = Boolean(submittedGrn);
+  if ((delivery as any).purchaseOrder) {
+    (delivery as any).purchaseOrder = formatPoWithOrgAddress((delivery as any).purchaseOrder);
+  }
   return delivery;
 };
 
@@ -166,8 +224,18 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
     include: {
       purchaseOrder: {
         include: {
-          buyer: true,
-          seller: true,
+          buyer: {
+            include: {
+              ...PO_PARTY_INCLUDE,
+              buyerProfile: true
+            }
+          },
+          seller: {
+            include: {
+              ...PO_PARTY_INCLUDE,
+              sellerProfile: true
+            }
+          },
           contract: { select: { id: true, contractNumber: true, contractType: true, metadata: true } },
           items: true,
           invoices: {
@@ -202,6 +270,9 @@ const loadDeliveryByPO = async (purchaseOrderId: number) => {
   (delivery as any).grnStatus = primaryGrn?.status ?? null;
   (delivery as any).hasGrn = Boolean(primaryGrn);
   (delivery as any).hasSubmittedGrn = Boolean(submittedGrn);
+  if ((delivery as any).purchaseOrder) {
+    (delivery as any).purchaseOrder = formatPoWithOrgAddress((delivery as any).purchaseOrder);
+  }
   return delivery;
 };
 
