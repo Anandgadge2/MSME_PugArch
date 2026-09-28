@@ -16,6 +16,7 @@ import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
 import { broadcastToAuction, broadcastToProcurement } from '../services/websocket.service.js';
+import { formatIstDateTime } from '../services/email-template.builder.js';
 
 const router = Router();
 const db = prisma as any;
@@ -1488,7 +1489,7 @@ router.post('/reverse-auctions/:id/invite-sellers', requirePermission('reverse_a
     // failure never blocks the invite response.
     void (async () => {
       const auctionTitle = auction.title || auction.auctionCode || `Reverse Auction #${id}`;
-      const endsAt = auction.endTime ? new Date(auction.endTime).toLocaleString() : null;
+      const endsAt = auction.endTime ? formatIstDateTime(auction.endTime) : null;
       const redirectUrl = `/reverse-auctions/${id}`;
       for (const seller of payload.sellers) {
         // Prefer the explicitly named user; otherwise notify every user in the seller org.

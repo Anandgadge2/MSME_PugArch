@@ -315,35 +315,60 @@ kycConfigReport();
 
 /**
  * Resolves the official, public-facing portal frontend URL.
- * Strictly guarantees that links sent to external email recipients NEVER point to 'localhost' or '127.0.0.1',
+ * Strictly guarantees that links sent to external email recipients NEVER point to 'localhost', '127.0.0.1',
+ * or the backend API service (e.g. 'msme-pugarch-backend.vercel.app'),
  * falling back to the live production deployment URL: 'https://msme-pugarch-frontend.vercel.app'.
  */
 export const getPublicPortalUrl = (): string => {
-  const isLocalHost = (u: string) => /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(u.trim());
-  
-  // Check candidate variables in order of priority
+  const isInvalidPortalUrl = (u: string): boolean => {
+    const s = u.trim().toLowerCase();
+    return (
+      /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(s) ||
+      s.includes('msme-pugarch-backend.vercel.app') ||
+      s.includes('-backend.vercel.app') ||
+      s.includes(':5000') ||
+      s.includes(':5001')
+    );
+  };
+
+  const sanitizeCandidate = (c?: string | null): string | null => {
+    if (!c || typeof c !== 'string') return null;
+    let trimmed = c.trim().replace(/\/+$/, '');
+    if (!trimmed) return null;
+
+    // If an environment variable accidentally provided the backend Vercel URL, rewrite to frontend sibling
+    if (trimmed.includes('msme-pugarch-backend.vercel.app')) {
+      trimmed = trimmed.replace('msme-pugarch-backend.vercel.app', 'msme-pugarch-frontend.vercel.app');
+    } else if (trimmed.includes('-backend.vercel.app')) {
+      trimmed = trimmed.replace('-backend.vercel.app', '-frontend.vercel.app');
+    }
+
+    if (isInvalidPortalUrl(trimmed)) {
+      return null;
+    }
+
+    return trimmed.startsWith('http://') || trimmed.startsWith('https://') ? trimmed : `https://${trimmed}`;
+  };
+
+  // Check candidate variables in order of priority (Frontend explicit vars first)
   const candidates = [
-    process.env.NEXT_PUBLIC_PORTAL_URL,
+    process.env.FRONTEND_URL,
     process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NEXT_PUBLIC_PORTAL_URL,
     process.env.NEXT_PUBLIC_FRONTEND_URL,
     process.env.NEXT_PUBLIC_SITE_URL,
     process.env.NEXT_PUBLIC_URL,
+    process.env.PRODUCTION_FRONTEND_URL,
     process.env.PRODUCTION_URL,
-    process.env.PUBLIC_URL,
     process.env.PORTAL_URL,
     process.env.APP_URL,
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined,
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-    env?.FRONTEND_URL,
-    process.env.FRONTEND_URL
+    env?.FRONTEND_URL
   ];
 
   for (const c of candidates) {
-    if (c && typeof c === 'string' && c.trim()) {
-      const trimmed = c.trim().replace(/\/+$/, '');
-      if (!isLocalHost(trimmed)) {
-        return trimmed.startsWith('http://') || trimmed.startsWith('https://') ? trimmed : `https://${trimmed}`;
-      }
+    const sanitized = sanitizeCandidate(c);
+    if (sanitized) {
+      return sanitized;
     }
   }
 

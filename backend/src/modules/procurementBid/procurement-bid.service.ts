@@ -6,6 +6,8 @@ import type { AuthRequest, AuthenticatedUser } from '../../middleware/authentica
 import { createOrReuseProcurementPOForAward, getSellerUserIdsForActor } from './procurement-order.service.js';
 import { logger } from '../../config/logger.js';
 import { notificationService } from '../../services/notification.service.js';
+import { buildGovernmentGradeEmailHtml, ensurePublicUrl, formatIstDateTime, type TableRow } from '../../services/email-template.builder.js';
+import { getPublicPortalUrl } from '../../config/env.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
 import { getNextCanonicalSequence } from '../../services/sequence.service.js';
@@ -1977,13 +1979,52 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
     const participations = await db.procurementBidParticipation.findMany({
       where: { bidId: bid.id }
     });
+    const tenderRef = bid.bidNumber || bid.requirementNumber || `PRC-${bid.id}`;
+    const noticeRef = `JSG-TND/${new Date().getFullYear()}/${bid.id}/EXT`;
+    const originalDeadlineStr = formatIstDateTime(oldEndDate);
+    const revisedDeadlineStr = formatIstDateTime(newEndDate);
+    const portalUrl = getPublicPortalUrl();
+    const redirectPath = `/seller/procurement/events/${bid.id}`;
+    const actionUrl = ensurePublicUrl(redirectPath);
+
+    const detailsTable: TableRow[] = [
+      { label: 'Tender / RFQ Reference', value: tenderRef, isCode: true },
+      { label: 'Tender Title', value: bid.title, isHighlight: true },
+      { label: 'Notice Type', value: 'Submission Deadline Extended', isHighlight: true },
+      { label: 'Original Submission Deadline', value: originalDeadlineStr },
+      { label: 'Revised Submission Deadline', value: revisedDeadlineStr, color: '#166534', isHighlight: true },
+      { label: 'Submission Protocol', value: 'Existing Submissions Remain Valid • Revisions Allowed', color: '#1e40af', isHighlight: true },
+      { label: 'Official Portal Gateway', value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>` }
+    ];
+
+    const emailHtml = buildGovernmentGradeEmailHtml({
+      portalName: 'JSG SMILE Procurement Portal',
+      departmentName: 'Government of Odisha • District Administration Jharsuguda',
+      noticeType: 'OFFICIAL NOTICE • DEADLINE EXTENDED',
+      noticeRef,
+      badgeVariant: 'warning',
+      heading: 'Submission Deadline Extended',
+      summary: `Official Notification for Tender "${bid.title}" (${tenderRef}). The submission closing timeline has been extended to ${revisedDeadlineStr}. All previously submitted commercial & technical quotations remain securely sealed and valid. Participating bidders may review or revise their submissions prior to the revised closing timestamp.`,
+      detailsTable,
+      actionButton: {
+        label: 'View Tender & Manage Submission →',
+        url: actionUrl
+      },
+      securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules.'
+    });
+
     for (const p of participations) {
       try {
         await notificationService.notifyUser(p.sellerId, {
           title: 'Submission Deadline Extended',
-          message: `The submission deadline for "${bid.title}" has been extended to ${newEndDate.toLocaleString()}.`,
+          message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}.`,
           type: 'tender.deadline_extended',
-          redirectUrl: `/seller/procurement/events/${bid.id}`
+          priority: 'high',
+          redirectUrl: redirectPath,
+          emailSubject: `[Tender Notice] Submission Deadline Extended: ${bid.title} (${tenderRef})`,
+          emailHtml,
+          detailsTable,
+          noticeRef
         }, ['in_app', 'email']);
       } catch (err) {
         logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');
@@ -2184,15 +2225,73 @@ export const extendBidSchedule = async (
     where: { bidId: bid.id }
   });
   const notifiedSellerIds = new Set<number>();
+  const corrigendumNumber = updatedTechnicalPacket?.corrigendumCount || 1;
+  const tenderRef = bid.bidNumber || bid.requirementNumber || `PRC-${bid.id}`;
+  const noticeRef = `JSG-CORR/${new Date().getFullYear()}/${bid.id}/${String(corrigendumNumber).padStart(2, '0')}`;
+  const originalDeadlineStr = bid.endDate ? formatIstDateTime(bid.endDate) : 'Not specified';
+  const revisedDeadlineStr = formatIstDateTime(newClosingDate);
+  const reasonStr = body.reason || 'Administrative Extension of Bidding Timelines';
+  const portalUrl = getPublicPortalUrl();
+  const redirectPath = `/seller/procurement/events/${bid.id}`;
+  const actionUrl = ensurePublicUrl(redirectPath);
+
+  const detailsTable: TableRow[] = [
+    { label: 'Tender / RFQ Reference', value: tenderRef, isCode: true },
+    { label: 'Tender Title', value: bid.title, isHighlight: true },
+    { label: 'Notice Serial', value: `Corrigendum Notice #${corrigendumNumber}`, isHighlight: true },
+    { label: 'Original Submission Deadline', value: originalDeadlineStr },
+    { label: 'Revised Submission Deadline', value: revisedDeadlineStr, color: '#166534', isHighlight: true },
+    ...(newTechDate || bid.technicalOpeningDate ? [{
+      label: 'Technical Bid Opening',
+      value: formatIstDateTime(newTechDate || bid.technicalOpeningDate)
+    }] : []),
+    ...(newFinDate || bid.financialOpeningDate ? [{
+      label: 'Financial Bid Opening',
+      value: formatIstDateTime(newFinDate || bid.financialOpeningDate)
+    }] : []),
+    { label: 'Corrigendum Justification', value: reasonStr },
+    { label: 'Submission Protocol', value: 'Existing Submissions Remain Valid • Revisions Allowed', color: '#1e40af', isHighlight: true },
+    { label: 'Official Portal Gateway', value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>` }
+  ];
+
+  const emailHtml = buildGovernmentGradeEmailHtml({
+    portalName: 'JSG SMILE Procurement Portal',
+    departmentName: 'Government of Odisha • District Administration Jharsuguda',
+    noticeType: 'OFFICIAL CORRIGENDUM • DEADLINE EXTENDED',
+    noticeRef,
+    badgeVariant: 'warning',
+    heading: `Corrigendum #${corrigendumNumber}: Submission Deadline Extended`,
+    summary: `Official Corrigendum Notice for Tender "${bid.title}" (${tenderRef}). The submission closing timeline has been extended to ${revisedDeadlineStr}. All previously submitted commercial & technical quotations remain securely sealed and valid. Participating bidders may review or revise their submissions prior to the revised closing timestamp.`,
+    detailsTable,
+    stepInstructions: {
+      title: 'Action for Participating Bidders',
+      steps: [
+        'If you have already submitted your bid: Your quotation remains securely recorded and sealed. You may review or revise it at any time before the new deadline.',
+        `If you have not yet submitted: Complete your technical and financial submission through the official portal before ${revisedDeadlineStr}.`,
+        'Ensure all required statutory compliance documents, schedule sheets, and BG / EMD confirmations are attached.'
+      ]
+    },
+    actionButton: {
+      label: 'View Tender & Manage Submission →',
+      url: actionUrl
+    },
+    securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules. Official nodal authorities will never ask for your authentication PIN or OTP.'
+  });
+
   for (const p of participations) {
     if (notifiedSellerIds.has(p.sellerId)) continue;
     notifiedSellerIds.add(p.sellerId);
     try {
       await notificationService.notifyUser(p.sellerId, {
-        title: 'Submission Deadline Extended (Corrigendum)',
-        message: `The submission deadline for "${bid.title}" has been extended to ${newClosingDate.toLocaleString()}. Your existing submission remains valid. You may revise your quotation before the new deadline. Reason: ${body.reason}`,
+        title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
+        message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}. Reason: ${reasonStr}`,
         type: 'tender.deadline_extended',
-        redirectUrl: `/seller/procurement/events/${bid.id}`
+        priority: 'high',
+        redirectUrl: redirectPath,
+        emailSubject: `[Corrigendum #${corrigendumNumber}] Submission Deadline Extended: ${bid.title} (${tenderRef})`,
+        emailHtml,
+        detailsTable,
+        noticeRef
       }, ['in_app', 'email']);
     } catch (err) {
       logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');

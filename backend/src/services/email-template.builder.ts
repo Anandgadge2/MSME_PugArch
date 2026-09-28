@@ -38,8 +38,8 @@ export interface GovernmentGradeEmailOptions {
 }
 
 /**
- * Ensures that any portal link passed into emails is an official, publicly reachable URL
- * and never contains localhost or 127.0.0.1.
+ * Ensures that any portal link passed into emails is an official, publicly reachable frontend URL
+ * and never contains localhost, 127.0.0.1, or the backend deployment domain (msme-pugarch-backend.vercel.app).
  */
 export const ensurePublicUrl = (targetUrl?: string): string => {
   const base = getPublicPortalUrl().replace(/\/+$/, '');
@@ -49,18 +49,25 @@ export const ensurePublicUrl = (targetUrl?: string): string => {
 
   const trimmed = targetUrl.trim();
 
-  // If already an absolute public url (not localhost)
-  if (/^https?:\/\//i.test(trimmed)) {
-    if (!/^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(trimmed)) {
-      return trimmed;
-    }
-    // If it was localhost, extract the path and prepend the public base
+  // If the target URL contains backend domain or localhost, extract the path and bind to the frontend base
+  if (
+    trimmed.includes('msme-pugarch-backend.vercel.app') ||
+    trimmed.includes('-backend.vercel.app') ||
+    /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed) ||
+    /:\d{4,5}/.test(trimmed)
+  ) {
     try {
-      const parsed = new URL(trimmed);
+      const parsed = new URL(trimmed.startsWith('http') ? trimmed : `https://${trimmed}`);
       return `${base}${parsed.pathname}${parsed.search}${parsed.hash}`;
     } catch {
-      return base;
+      const pathOnly = trimmed.replace(/^https?:\/\/[^/]+/i, '');
+      return `${base}${pathOnly.startsWith('/') ? pathOnly : `/${pathOnly}`}`;
     }
+  }
+
+  // If already an absolute public url (and verified not backend or localhost)
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
   }
 
   // Relative path
@@ -77,10 +84,12 @@ export const escapeEmailHtml = (value: unknown): string =>
     .replace(/'/g, '&#39;');
 
 /**
- * Format current date in Indian Standard Time (IST)
+ * Format current date or specified timestamp in Indian Standard Time (IST)
  */
-export const formatIstDateTime = (date = new Date()): string => {
+export const formatIstDateTime = (date: Date | string | number = new Date()): string => {
   try {
+    const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+    if (!d || isNaN(d.getTime())) return '-';
     return new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
       day: '2-digit',
@@ -89,9 +98,9 @@ export const formatIstDateTime = (date = new Date()): string => {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
-    }).format(date) + ' IST';
+    }).format(d) + ' IST';
   } catch {
-    return date.toUTCString();
+    return date ? String(date) : '-';
   }
 };
 

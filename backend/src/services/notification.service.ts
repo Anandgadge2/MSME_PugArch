@@ -4,16 +4,25 @@ import { getTransporter, getTransporterForCompany, compileEmailTemplate } from '
 import { env, getPublicPortalUrl } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { smsService, type SmsPurpose } from './sms.service.js';
-import { buildGovernmentGradeEmailHtml, ensurePublicUrl } from './email-template.builder.js';
+import { buildGovernmentGradeEmailHtml, ensurePublicUrl, formatIstDateTime, type TableRow } from './email-template.builder.js';
 
 const db = prisma as any;
 
-interface NotifyOpts {
+export interface NotifyOpts {
   title: string;
   message: string;
   type: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   redirectUrl?: string;
+  emailSubject?: string;
+  emailHtml?: string;
+  detailsTable?: TableRow[];
+  noticeRef?: string;
+  badgeVariant?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  stepInstructions?: {
+    title?: string;
+    steps: string[];
+  };
 }
 
 interface EmailOpts {
@@ -49,29 +58,38 @@ export const buildNotificationEmailHtml = (opts: {
   type?: string;
   priority?: string;
   redirectUrl?: string;
+  detailsTable?: TableRow[];
+  noticeRef?: string;
+  badgeVariant?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
+  stepInstructions?: {
+    title?: string;
+    steps: string[];
+  };
 }) => {
   const priority = escapeHtml(opts.priority || 'medium');
   const type = (opts.type || 'PORTAL NOTIFICATION').replace(/_/g, ' ');
   const portalUrl = getPublicPortalUrl();
   const actionUrl = opts.redirectUrl ? ensurePublicUrl(opts.redirectUrl) : portalUrl;
 
-  const badgeVariant = opts.priority === 'urgent'
+  const badgeVariant = opts.badgeVariant || (opts.priority === 'urgent'
     ? 'danger'
     : opts.priority === 'high'
     ? 'warning'
     : opts.priority === 'low'
     ? 'info'
-    : 'primary';
+    : 'primary');
+
+  const noticeRef = opts.noticeRef || `JSG-NOTIF/${Date.now().toString().slice(-6)}`;
 
   return buildGovernmentGradeEmailHtml({
     portalName: 'JSG SMILE Procurement Portal',
     departmentName: 'Government of Odisha • District Administration Jharsuguda',
     noticeType: type,
-    noticeRef: `JSG-NOTIF/${Date.now().toString().slice(-6)}`,
+    noticeRef,
     badgeVariant,
     heading: opts.title,
     summary: opts.message,
-    detailsTable: [
+    detailsTable: opts.detailsTable && opts.detailsTable.length > 0 ? opts.detailsTable : [
       {
         label: 'Event Type',
         value: type.toUpperCase(),
@@ -88,6 +106,7 @@ export const buildNotificationEmailHtml = (opts: {
         value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>`
       }
     ],
+    stepInstructions: opts.stepInstructions,
     actionButton: {
       label: opts.redirectUrl ? 'Open Details in Portal' : 'Access JSG SMILE Portal',
       url: actionUrl
@@ -108,8 +127,8 @@ export const notificationService = {
     if (selected.includes('in_app')) await this.notifyNow(userId, opts);
     if (selected.includes('email')) {
       await this.sendEmail(userId, {
-        subject: `${opts.title} - MSME Procurement Portal`,
-        html: buildNotificationEmailHtml(opts)
+        subject: opts.emailSubject || `${opts.title} - MSME Procurement Portal`,
+        html: opts.emailHtml || buildNotificationEmailHtml(opts)
       });
     }
     if (selected.includes('sms')) {
@@ -238,7 +257,7 @@ export const notificationService = {
             ${procurement.endDate ? `
             <tr>
               <td style="padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; font-weight: 700; color: #475569;">Submission Deadline</td>
-              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${new Date(procurement.endDate).toLocaleString()}</td>
+              <td style="padding: 10px 12px; border: 1px solid #e2e8f0; color: #0f172a;">${formatIstDateTime(procurement.endDate)}</td>
             </tr>` : ''}
           </table>
         `,

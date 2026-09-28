@@ -28,6 +28,7 @@ import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
+import { formatIstDateTime } from '../services/email-template.builder.js';
 import { sha256 } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
@@ -6944,7 +6945,7 @@ router.put('/quote-requests/:id', authenticate, authorize('buyer', 'admin'), asy
     await notifySafe(
       updated.sellerId,
       'RFQ Deadline Extended',
-      `The submission deadline for RFQ "${updated.subject}" has been extended to ${newDeadline.toLocaleString()}.`,
+      `The submission deadline for RFQ "${updated.subject}" has been extended to ${formatIstDateTime(newDeadline)}.`,
       'quote_request_deadline_extended',
       '/quotations'
     );
