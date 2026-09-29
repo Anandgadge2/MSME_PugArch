@@ -1,19 +1,20 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { 
   ShieldCheck, 
-  TrendingUp, 
-  Award, 
-  IndianRupee, 
   CheckCircle2, 
-  AlertCircle,
-  ArrowUpRight,
-  Info,
-  ChevronRight,
-  Sparkles
+  Info, 
+  ChevronRight
 } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  PieChart, 
+  Pie, 
+  Cell, 
+  Tooltip 
+} from 'recharts';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useQuery } from '@tanstack/react-query';
 import { api, unwrapApiData } from '../../../lib/api';
@@ -35,11 +36,14 @@ interface BuyerSpendAndComplianceProps {
     estimatedSavings?: number;
     savingsPercent?: number;
   };
+  granularity?: 'daily' | 'weekly' | 'monthly' | 'quarterly';
 }
 
-export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps) {
+export function BuyerSpendAndCompliance({ 
+  stats,
+  granularity = 'monthly'
+}: BuyerSpendAndComplianceProps) {
   const { token } = useAuth();
-  const [timeRange, setTimeRange] = useState<'month' | 'quarter' | 'year'>('quarter');
 
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
   const { data: summaryData } = useQuery({
@@ -55,23 +59,42 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
     refetchOnWindowFocus: false
   });
 
-  const totalSpend = Number(stats?.totalSpend ?? summaryData?.buyerProcurementTotalSpentValue ?? 0);
-  const activePOs = stats?.activeOrdersCount ?? summaryData?.myActivePOsCount ?? 0;
+  // Authentic period spend and order count — strictly authentic database records
+  const totalSpend = stats?.totalSpend !== undefined 
+    ? Number(stats.totalSpend) 
+    : Number(summaryData?.buyerProcurementTotalSpentValue ?? 0);
+  const activePOs = stats?.activeOrdersCount !== undefined
+    ? Number(stats.activeOrdersCount)
+    : Number(summaryData?.myActivePOsCount ?? 0);
   
-  // Real compliance calculations — strictly authentic DB values with zero synthetic fallbacks
   const msmePercent = stats?.msmeSharePercent ?? 0;
-  const womenPercent = stats?.womenPercent ?? 0;
-  const scStPercent = stats?.scStPercent ?? 0;
-  const generalPercent = stats?.generalPercent ?? Math.max(0, Number((msmePercent - womenPercent - scStPercent).toFixed(1)));
   const savings = stats?.estimatedSavings ?? 0;
   const savingsPercent = stats?.savingsPercent ?? 0;
-
   const isMandateMet = msmePercent >= 25.0;
+
+  const timeframeLabel = useMemo(() => {
+    switch (granularity) {
+      case 'daily': return '14-Day Trajectory';
+      case 'weekly': return '8-Week Trajectory';
+      case 'quarterly': return '4-Quarter Trajectory';
+      default: return '6-Month Trajectory';
+    }
+  }, [granularity]);
+
+  // Donut Gauge Data
+  const donutData = useMemo(() => {
+    const achieved = Math.min(100, Math.max(0, msmePercent));
+    const remainder = Math.max(0, 100 - achieved);
+    return [
+      { name: 'MSME Quota Achieved', value: achieved, color: isMandateMet ? '#10b981' : '#f59e0b' },
+      { name: 'Remaining / General', value: remainder, color: '#f1f5f9' }
+    ];
+  }, [msmePercent, isMandateMet]);
 
   return (
     <Card className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden">
-      {/* ── Card Header ── */}
-      <div className="bg-slate-50/50 px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between rounded-t-xl">
+      {/* ── Card Header (Clean & Focused, Filters Removed) ── */}
+      <div className="bg-slate-50/50 px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2 rounded-t-xl">
         <div className="flex items-center gap-2">
           <div className="h-7 w-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
             <ShieldCheck className="h-4 w-4" />
@@ -81,35 +104,18 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
               Procurement Spend & MSME Mandate
             </h2>
             <p className="text-[10px] font-medium text-slate-500">
-              Mandatory 25% MSME public procurement quota compliance
+              Mandatory 25% statutory public procurement compliance
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 bg-white p-0.5 rounded-md border border-slate-200">
-          <button
-            type="button"
-            onClick={() => setTimeRange('month')}
-            className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${
-              timeRange === 'month' ? 'bg-[#12335f] text-white' : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            30D
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeRange('quarter')}
-            className={`px-2 py-0.5 text-[9px] font-bold uppercase rounded ${
-              timeRange === 'quarter' ? 'bg-[#12335f] text-white' : 'text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            Quarter
-          </button>
-        </div>
+        <span className="text-[9px] font-bold text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded-full shrink-0">
+          Target: 25.0%
+        </span>
       </div>
 
       <CardContent className="p-3.5 space-y-3.5">
-        {/* ── Top Metric Highlights ── */}
+        {/* ── Top Metric Highlights (Dynamically synchronized with filter) ── */}
         <div className="grid grid-cols-2 gap-2.5">
           {/* MSME Quota Compliance Metric */}
           <div className={`p-2.5 rounded-lg border space-y-1 ${
@@ -154,7 +160,7 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
           <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/70 space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                Total Spend
+                Period Spend
               </span>
               {savings > 0 && (
                 <span className="text-[8px] font-bold uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
@@ -164,30 +170,20 @@ export function BuyerSpendAndCompliance({ stats }: BuyerSpendAndComplianceProps)
             </div>
             <div className="flex items-baseline gap-1">
               <span className="text-lg font-black text-[#12335f]">
-                {totalSpend > 0 ? `₹${(totalSpend / 100000).toFixed(1)}L` : '₹0'}
+                {totalSpend >= 100000 ? `₹${(totalSpend / 100000).toFixed(1)}L` : totalSpend > 0 ? `₹${(totalSpend / 1000).toFixed(1)}k` : '₹0'}
               </span>
             </div>
             <p className="text-[9px] font-medium text-slate-500 leading-tight">
               {totalSpend > 0 
-                ? `${activePOs} active purchase orders`
-                : 'No purchase orders issued yet'}
+                ? `${activePOs} purchase orders in period`
+                : 'No orders in selected period'}
             </p>
           </div>
         </div>
 
-        {/* ── Footer Link ── */}
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
-          <span className="font-semibold text-slate-500 flex items-center gap-1">
-            <Info className="h-3 w-3 text-slate-400" />
-            Audit-ready MSME return
-          </span>
-          <Link 
-            href="/admin/reports" 
-            className="font-bold uppercase tracking-wide text-[#12335f] hover:underline flex items-center gap-0.5"
-          >
-            Export Report <ChevronRight className="h-3 w-3" />
-          </Link>
-        </div>
+       
+
+       
       </CardContent>
     </Card>
   );

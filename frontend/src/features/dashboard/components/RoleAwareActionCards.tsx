@@ -106,229 +106,225 @@ function RoleAwareActionCards() {
     const isLoading = summary.isLoading && !summary.data;
     const isBuyer = user?.role === 'buyer';
     const isShgAccount = isShgUser(user) || user?.role === 'shg';
-    const isSeller = user?.role === 'seller' || isShgAccount;
+    const isSeller = (user?.role === 'seller' || isShgAccount) && !isBuyer;
     const sellerPrefix = isShgAccount ? '/shg' : '/seller';
-    const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
-    const hasPermission = useCallback((permissionCode: string) => {
-        return permissions.includes('*') || permissions.includes(permissionCode);
-    }, [permissions]);
 
-    const cards: ActionCardConfig[] = useMemo(() => [
-        // ─── Buyer baseline tiles ───
-        {
-            label: 'Active Procurements',
-            count: data.activeProcurementsCount ?? data.myTendersCount ?? 0,
-            href: '/buyer/my-procurements',
-            icon: ClipboardList,
-            tone: 'indigo',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Published requisitions'
-        },
-        {
-            label: 'Procurement Bids',
-            count: data.buyerProcurementActiveBidsCount || 0,
-            href: '/marketplace',
-            icon: Gavel,
-            tone: 'purple',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Active market bids'
-        },
-        {
-            label: 'Procurement Spend',
-            count: data.buyerProcurementTotalSpentValue || 0,
-            href: '/payments/transactions',
-            icon: IndianRupee,
-            tone: 'emerald',
-            show: isBuyer,
-            priority: false,
-            isCurrency: true,
-            subtext: 'Cumulative purchase value'
-        },
-        {
-            label: 'Active Orders',
-            count: data.myActivePOsCount || 0,
-            href: '/orders',
-            icon: Package,
-            tone: 'emerald',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Orders in fulfillment'
-        },
-        {
-            label: 'My Procurements',
-            count: data.supplierResponsesCount ?? data.myRfqsCount ?? 0,
-            href: '/buyer/my-procurements',
-            icon: Send,
-            tone: 'blue',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Bids & quotes submitted'
-        },
-        {
-            label: 'Negotiate Price',
-            count: data.reverseAuctionsActive || data.reverseAuctionsScheduled || 0,
-            href: '/buyer/my-procurements?type=Reverse Auction',
-            icon: Gavel,
-            tone: 'amber',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Live reverse auctions'
-        },
-        {
-            label: 'Pending Payments',
-            count: data.myPendingInvoicesCount || 0,
-            href: '/payments/invoices',
-            icon: Receipt,
-            tone: 'rose',
-            show: isBuyer,
-            priority: false,
-            subtext: 'Awaiting clearance'
-        },
-        {
-            label: 'Delivery Confirmation',
-            count: data.grnsToApproveCount || 0,
-            href: '/orders/delivery-confirmation',
-            icon: ClipboardCheck,
-            tone: 'teal',
-            show: isBuyer && hasPermission('inspection.view'),
-            priority: false,
-            subtext: 'GRNs awaiting approval'
-        },
-        {
-            label: 'Carts to Approve',
-            count: data.cartApprovalsCount || 0,
-            href: '/cart/approvals',
-            icon: ClipboardCheck,
-            tone: 'cyan',
-            show: isBuyer && hasPermission('checkout.approve'),
-            priority: false,
-            subtext: 'Direct purchase checks'
-        },
-        {
-            label: 'Approvals Pending',
-            count: data.pendingApprovalsCount || 0,
-            href: '/approvals',
-            icon: Inbox,
-            tone: 'amber',
-            show: isBuyer && hasPermission('approval.view'),
-            priority: (data.pendingApprovalsCount || 0) > 0,
-            subtext: (data.pendingApprovalsCount || 0) > 0 ? 'Requires your review' : 'No pending items'
-        },
-
-        // ─── Seller baseline tiles (Exactly 8 most critical cards) ───
-        {
-            label: 'Live Reverse Auctions',
-            count: data.reverseAuctionsLive || data.reverseAuctionsActive || 0,
-            href: `${sellerPrefix}/bids/submitted`,
-            icon: Gavel,
-            tone: 'rose',
-            show: isSeller && ((data.reverseAuctionsLive || 0) > 0 || (data.reverseAuctionsActive || 0) > 0),
-            priority: true,
-            subtext: 'Bidding floor active'
-        },
-        {
-            label: 'New Opportunities',
-            count: data.sellerOpportunitiesCount || 0,
-            href: `${sellerPrefix}/opportunities`,
-            icon: ClipboardList,
-            tone: 'indigo',
-            show: isSeller,
-            priority: false,
-            subtext: 'Live opportunities available'
-        },
-        {
-            label: 'Direct RFQs',
-            count: data.sellerRfqsCount ?? data.sellerReceivedRfqsCount ?? 0,
-            href: `${sellerPrefix}/opportunities/rfqs`,
-            icon: FileText,
-            tone: 'purple',
-            show: isSeller,
-            priority: false,
-            subtext: 'Live buyer RFQs'
-        },
-        {
-            label: 'Public Tenders',
-            count: data.sellerOpenTendersCount || 0,
-            href: `${sellerPrefix}/opportunities/open-tenders`,
-            icon: Gavel,
-            tone: 'blue',
-            show: isSeller,
-            priority: false,
-            subtext: 'Live open tenders'
-        },
-        {
-            label: 'My Bids / Quotations',
-            count: data.sellerSubmittedBidsCount ?? data.sellerQuotationsCount ?? 0,
-            href: `${sellerPrefix}/bids/submitted`,
-            icon: ClipboardCheck,
-            tone: 'purple',
-            show: isSeller,
-            priority: false,
-            subtext: 'Submitted proposals'
-        },
-        {
-            label: 'Orders Received',
-            count: data.sellerActivePOsCount || 0,
-            href: `${sellerPrefix}/orders`,
-            icon: Package,
-            tone: 'emerald',
-            show: isSeller,
-            priority: false,
-            subtext: 'Orders to fulfill'
-        },
-        {
-            label: 'Active Deliveries',
-            count: data.activeDeliveriesCount || 0,
-            href: `${sellerPrefix}/delivery-management`,
-            icon: Truck,
-            tone: 'teal',
-            show: isSeller,
-            priority: false,
-            subtext: 'Shipments in transit'
-        },
-        {
-            label: 'Payment Status',
-            count: data.sellerPendingInvoicesCount || 0,
-            href: isShgAccount ? '/shg/payments' : '/payments/transactions',
-            icon: Receipt,
-            tone: 'rose',
-            show: isSeller,
-            priority: false,
-            subtext: 'Invoices under settlement'
-        },
-        {
-            label: 'Catalogue Items',
-            count: data.sellerCatalogueItemsCount || 0,
-            href: isShgAccount ? '/shg/products' : '/seller/catalogue',
-            icon: Store,
-            tone: 'cyan',
-            show: isSeller,
-            priority: false,
-            subtext: 'Listed products & services'
+    // Strictly 6 KPI cards per role
+    const cards: ActionCardConfig[] = useMemo(() => {
+        if (isBuyer) {
+            return [
+                {
+                    label: 'Active Procurements',
+                    count: data.activeProcurementsCount ?? data.myTendersCount ?? 0,
+                    href: '/buyer/my-procurements',
+                    icon: ClipboardList,
+                    tone: 'indigo',
+                    show: true,
+                    priority: false,
+                    subtext: 'Published requisitions'
+                },
+                {
+                    label: 'Bids Under Review',
+                    count: data.buyerProcurementActiveBidsCount ?? data.supplierResponsesCount ?? 0,
+                    href: '/buyer/my-procurements?tab=evaluation',
+                    icon: Gavel,
+                    tone: 'purple',
+                    show: true,
+                    priority: false,
+                    subtext: 'Vendor bids received'
+                },
+                {
+                    label: 'Active Orders',
+                    count: data.myActivePOsCount || 0,
+                    href: '/orders',
+                    icon: Package,
+                    tone: 'blue',
+                    show: true,
+                    priority: false,
+                    subtext: 'Orders in fulfillment'
+                },
+                {
+                    label: 'Procurement Spend',
+                    count: data.buyerProcurementTotalSpentValue || 0,
+                    href: '/payments/transactions',
+                    icon: IndianRupee,
+                    tone: 'emerald',
+                    show: true,
+                    priority: false,
+                    isCurrency: true,
+                    subtext: 'Cumulative purchase value'
+                },
+                {
+                    label: 'Pending Approvals',
+                    count: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0),
+                    href: '/cart/approvals',
+                    icon: ClipboardCheck,
+                    tone: 'amber',
+                    show: true,
+                    priority: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0) > 0,
+                    subtext: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0) > 0 ? 'Requires sign-off' : 'All cleared'
+                },
+                {
+                    label: 'Pending Invoices',
+                    count: data.myPendingInvoicesCount || 0,
+                    href: '/payments/invoices',
+                    icon: Receipt,
+                    tone: 'rose',
+                    show: true,
+                    priority: false,
+                    subtext: 'Awaiting 3-way clearance'
+                }
+            ];
         }
-    ], [data, isBuyer, isSeller, isShgAccount, sellerPrefix, hasPermission]);
 
-    const visible = useMemo(() => cards.filter(c => c.show), [cards]);
+        if (isShgAccount) {
+            return [
+                {
+                    label: 'Open Demands',
+                    count: data.sellerOpportunitiesCount ?? 0,
+                    href: '/shg/opportunities',
+                    icon: ClipboardList,
+                    tone: 'indigo',
+                    show: true,
+                    priority: false,
+                    subtext: 'SHG eligible leads'
+                },
+                {
+                    label: 'Submitted Quotes',
+                    count: data.sellerSubmittedBidsCount ?? data.sellerQuotationsCount ?? 0,
+                    href: '/shg/bids/submitted',
+                    icon: Gavel,
+                    tone: 'purple',
+                    show: true,
+                    priority: false,
+                    subtext: 'Quotations in review'
+                },
+                {
+                    label: 'Orders to Fulfill',
+                    count: data.sellerActivePOsCount || 0,
+                    href: '/shg/orders',
+                    icon: Package,
+                    tone: 'emerald',
+                    show: true,
+                    priority: false,
+                    subtext: 'Active work orders'
+                },
+                {
+                    label: 'Catalogue Items',
+                    count: data.sellerCatalogueItemsCount || 0,
+                    href: '/shg/products',
+                    icon: Store,
+                    tone: 'cyan',
+                    show: true,
+                    priority: false,
+                    subtext: 'Listed products'
+                },
+                {
+                    label: 'Active Deliveries',
+                    count: data.activeDeliveriesCount || 0,
+                    href: '/shg/delivery-management',
+                    icon: Truck,
+                    tone: 'teal',
+                    show: true,
+                    priority: false,
+                    subtext: 'Shipments in transit'
+                },
+                {
+                    label: 'Payment Receivables',
+                    count: data.sellerPendingInvoicesCount || 0,
+                    href: '/shg/payments',
+                    icon: Receipt,
+                    tone: 'rose',
+                    show: true,
+                    priority: false,
+                    subtext: 'Invoices under review'
+                }
+            ];
+        }
+
+        // Standard Seller
+        return [
+            {
+                label: 'Live Opportunities',
+                count: data.sellerOpportunitiesCount ?? ((data.sellerOpenTendersCount || 0) + (data.sellerRfqsCount || 0)),
+                href: `${sellerPrefix}/opportunities`,
+                icon: ClipboardList,
+                tone: 'indigo',
+                show: true,
+                priority: false,
+                subtext: 'Tenders & RFQs open'
+            },
+            {
+                label: 'Submitted Proposals',
+                count: data.sellerSubmittedBidsCount ?? data.sellerQuotationsCount ?? 0,
+                href: `${sellerPrefix}/bids/submitted`,
+                icon: Gavel,
+                tone: 'purple',
+                show: true,
+                priority: false,
+                subtext: 'Bids under evaluation'
+            },
+            {
+                label: 'Orders Received',
+                count: data.sellerActivePOsCount || 0,
+                href: `${sellerPrefix}/orders`,
+                icon: Package,
+                tone: 'emerald',
+                show: true,
+                priority: false,
+                subtext: 'Orders to fulfill'
+            },
+            {
+                label: 'Realized Revenue',
+                count: (data as any).sellerRealizedRevenue || 0,
+                href: '/payments/transactions',
+                icon: IndianRupee,
+                tone: 'emerald',
+                show: true,
+                priority: false,
+                isCurrency: true,
+                subtext: 'Cumulative sales volume'
+            },
+            {
+                label: 'Active Deliveries',
+                count: data.activeDeliveriesCount || 0,
+                href: `${sellerPrefix}/delivery-management`,
+                icon: Truck,
+                tone: 'teal',
+                show: true,
+                priority: false,
+                subtext: 'Shipments in transit'
+            },
+            {
+                label: 'Payment Status',
+                count: data.sellerPendingInvoicesCount || 0,
+                href: '/payments/invoices',
+                icon: Receipt,
+                tone: 'rose',
+                show: true,
+                priority: false,
+                subtext: 'Invoices under payout'
+            }
+        ];
+    }, [data, isBuyer, isShgAccount, sellerPrefix]);
+
+    const visible = useMemo(() => cards.filter(c => c.show).slice(0, 6), [cards]);
     const openCard = useCallback((href: string) => router.push(href), [router]);
 
     if (visible.length === 0) return null;
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-2">
             <div className="flex items-center justify-between">
                 <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-0.5 flex items-center gap-1.5">
-                    Overview Metrics & Fast Paths
-                    <span className="text-[9px] font-bold text-slate-400/80 bg-slate-100 px-1.5 py-0.2 rounded">
-                        {visible.length} KPIs
+                    Overview Metrics & Quick Actions
+                    <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        6 KPIs
                     </span>
                 </h4>
             </div>
-            <div className={isSeller 
-                ? "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-4" 
-                : "grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
-            }>
+            {/* Strictly 6 KPI cards in a single row on desktop (lg:grid-cols-6) and 2 in mobile (grid-cols-2) */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 {visible.map(card => (
                     <KpiCard
                         key={card.label}

@@ -84,7 +84,7 @@ export function RecentOrdersSnapshot() {
           amount: Number(o.totalAmount || o.grandTotal || o.amount || 0),
           status: rawStatus,
           statusLabel: String(o.status || (isBuyer ? 'In Fulfillment' : 'Pending Dispatch')).replace(/_/g, ' ').toUpperCase(),
-          actionHref: isBuyer ? `/orders` : `${prefix}`,
+          actionHref: isBuyer ? `/orders?orderId=${o.id}` : `${prefix}?orderId=${o.id}`,
           actionLabel
         };
       });

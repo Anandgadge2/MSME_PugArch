@@ -139,14 +139,20 @@ export function LiveOpportunityRadar() {
         let actionHref = '';
         let actionLabel = '';
 
-        if (type === 'Reverse Auction') {
-          actionHref = `${rolePrefix}/procurement/reverse-auction/${bid.auctionCode || bid.id}/live`;
+        if (bid.purchaseOrderId || bid.orderId) {
+          actionHref = `${rolePrefix}/orders?orderId=${encodeURIComponent(String(bid.purchaseOrderId || bid.orderId))}`;
+          actionLabel = 'View Order';
+        } else if (bid.hasSubmitted || bid.myParticipation) {
+          actionHref = `${rolePrefix}/bids/submitted?bidId=${encodeURIComponent(String(bid.id))}`;
+          actionLabel = 'Review Bid';
+        } else if (type === 'Reverse Auction') {
+          actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(bid.auctionCode || bid.id))}/live`;
           actionLabel = isExpired ? 'View Results' : 'Join Auction';
         } else if (type === 'RFQ') {
-          actionHref = `${rolePrefix}/procurement/rfq/${bid.id}`;
+          actionHref = `${rolePrefix}/procurement/rfq/${encodeURIComponent(String(bid.id))}`;
           actionLabel = isExpired ? 'View Details' : 'Quote Now';
         } else {
-          actionHref = `${rolePrefix}/procurement/open-tender/${bid.id}`;
+          actionHref = `${rolePrefix}/procurement/open-tender/${encodeURIComponent(String(bid.id))}`;
           actionLabel = isExpired ? 'View Details' : 'Bid Now';
         }
 
@@ -443,35 +449,11 @@ export function LiveOpportunityRadar() {
             );
           })}
 
-          {/* Dedicated 'View All Opportunities' Button */}
-          <div className="pt-2 pb-1 flex items-center justify-center">
-            <Link href={viewAllHref} className="w-full sm:w-auto">
-              <Button 
-                variant="outline"
-                className="w-full sm:w-auto h-8 px-5 rounded-lg border-[#12335f]/25 text-[#12335f] hover:bg-[#12335f] hover:text-white text-[10px] font-bold uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
-              >
-                <span>{viewAllLabel} ({filtered.length})</span>
-                <ArrowRight className="h-3 w-3" />
-              </Button>
-            </Link>
-          </div>
+        
         </div>
       )}
 
-      {/* ── Card Footer Fast Insight ── */}
-      <div className="bg-slate-50/80 px-3.5 py-2.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-1.5 text-[10px] font-medium text-slate-600">
-        <span className="flex items-center gap-1.5">
-          <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
-          Showing top {displayedOpportunities.length} of {filtered.length} active opportunities.
-        </span>
-        <Link 
-          href={viewAllHref}
-          className="font-bold uppercase tracking-wider text-[#12335f] hover:underline shrink-0 flex items-center gap-1"
-        >
-          <span>All Opportunities</span>
-          <ChevronRight className="h-3 w-3" />
-        </Link>
-      </div>
+     
     </section>
   );
 }

@@ -431,12 +431,14 @@ router.get('/dashboard/analytics', authenticate, shortCache(30), asyncRoute(asyn
     const orgId = req.user.organizationId;
     const userIdNum = req.user.id;
     const role = req.user.role;
+    const rawGranularity = String(req.query.granularity || 'monthly').toLowerCase();
+    const granularity = (['daily', 'weekly', 'monthly', 'quarterly'].includes(rawGranularity) ? rawGranularity : 'monthly') as any;
 
     if (role === 'buyer') {
-        const data = await dashboardAnalyticsService.getBuyerAnalytics(userIdNum, orgId);
+        const data = await dashboardAnalyticsService.getBuyerAnalytics(userIdNum, orgId, granularity);
         return ok(res, data);
     } else if (role === 'seller' || role === 'shg') {
-        const data = await dashboardAnalyticsService.getSellerAnalytics(userIdNum, orgId);
+        const data = await dashboardAnalyticsService.getSellerAnalytics(userIdNum, orgId, granularity);
         return ok(res, data);
     } else {
         return ok(res, { role, message: 'Analytics currently focused on buyer and seller portals' });
@@ -528,7 +530,8 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerSubmittedProposals,
                 sellerReceivedRfqs,
                 buyerProcurementActiveBids,
-                buyerProcurementTotalSpent
+                buyerProcurementTotalSpent,
+                sellerRealizedRevenue
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -638,8 +641,8 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         ? Promise.all([
                             (prisma as any).procurementBidParticipation.count({
                                 where: orgId
-                                    ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }], status: { in: ['SUBMITTED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED', 'QUALIFIED', 'AWARDED', 'ACCEPTED'] } }
-                                    : { sellerId: userIdNum, status: { in: ['SUBMITTED', 'TECHNICAL_DOCUMENTS_UPLOADED', 'FINANCIAL_QUOTE_UPLOADED', 'QUALIFIED', 'AWARDED', 'ACCEPTED'] } }
+                                    ? { OR: [{ sellerId: userIdNum }, { seller: { organizationId: orgId } }], submissionStatus: { not: 'DRAFT' } }
+                                    : { sellerId: userIdNum, submissionStatus: { not: 'DRAFT' } }
                             }).catch(() => 0),
                             (prisma as any).requirementResponse.count({
                                 where: orgId
@@ -663,10 +666,17 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         : Promise.resolve(0),
                     // buyer procurement spent
                     isBuyer
-                        ? prisma.purchaseOrder.aggregate({
-                            where: { ...buyerRecordWhere, sourceType: 'procurement_bid_award', status: { not: 'cancelled' } },
-                            _sum: { amount: true }
-                        }).then(r => Number(r._sum.amount || 0)).catch(() => 0)
+                        ? prisma.purchaseOrder.findMany({
+                            where: { ...buyerRecordWhere, status: { notIn: ['cancelled', 'CANCELLED', 'DRAFT'] } },
+                            select: { amount: true, totalValue: true }
+                        }).then(orders => (orders as any[]).reduce((sum, o) => sum + Number(o.amount || o.totalValue || 0), 0)).catch(() => 0)
+                        : Promise.resolve(0),
+                    // seller realized revenue
+                    isSeller
+                        ? prisma.purchaseOrder.findMany({
+                            where: { ...sellerRecordWhere, status: { notIn: ['cancelled', 'CANCELLED', 'DRAFT'] } },
+                            select: { amount: true, totalValue: true }
+                        }).then(orders => (orders as any[]).reduce((sum, o) => sum + Number(o.amount || o.totalValue || 0), 0)).catch(() => 0)
                         : Promise.resolve(0)
             ]);
 
@@ -1115,6 +1125,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerOpenTendersCount: sellerOppsData.openTenders,
                 sellerRfpsCount: sellerOppsData.rfps,
                 sellerActivePOsCount: sellerActivePOs,
+                sellerRealizedRevenue: sellerRealizedRevenue || 0,
                 sellerCatalogueItemsCount: sellerCatalogueItems,
                 sellerPendingInvoicesCount: sellerPendingInvoices,
                 sellerQuotationsCount: sellerSubmittedProposals,

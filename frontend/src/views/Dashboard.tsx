@@ -363,10 +363,12 @@ export default function Dashboard() {
     refetchInterval: 15000,
   });
 
+  const [analyticsGranularity, setAnalyticsGranularity] = useState<'daily' | 'weekly' | 'monthly' | 'quarterly'>('monthly');
+
   const { data: analyticsData, isLoading: isAnalyticsLoading } = useQuery({
-    queryKey: ['dashboard', 'analytics', user?.id, user?.organizationId, user?.role],
+    queryKey: ['dashboard', 'analytics', user?.id, user?.organizationId, user?.role, analyticsGranularity],
     queryFn: async () => {
-      const res = await api.fetch('/api/dashboard/analytics', { headers: authHeaders });
+      const res = await api.fetch(`/api/dashboard/analytics?granularity=${analyticsGranularity}`, { headers: authHeaders });
       if (!res.ok) return null;
       const json = await res.json();
       return unwrapApiData<any>(json);
@@ -938,6 +940,10 @@ export default function Dashboard() {
                 spendTrend={analyticsData?.spendTrend}
                 methodDistribution={analyticsData?.methodDistribution}
                 procurementFunnel={analyticsData?.procurementFunnel}
+                categoryDistribution={analyticsData?.categoryDistribution}
+                compliance={analyticsData?.compliance}
+                granularity={analyticsGranularity}
+                onGranularityChange={setAnalyticsGranularity}
                 isLoading={isAnalyticsLoading}
               />
               <BuyerProcurementMonitor />
@@ -948,9 +954,8 @@ export default function Dashboard() {
               <BuyerUrgentActionsInbox />
               
               <BuyerSpendAndCompliance 
-                stats={analyticsData?.compliance ?? {
-                  totalSpend: Number(summaryData?.buyerProcurementTotalSpentValue || 0)
-                }}
+                stats={analyticsData?.compliance}
+                granularity={analyticsGranularity}
               />
 
               {/* Compact Verification & Support Cards */}
@@ -1015,6 +1020,8 @@ export default function Dashboard() {
                 cashflowLifecycle={analyticsData?.cashflowLifecycle}
                 totalRevenue={analyticsData?.conversion?.totalRevenue}
                 totalOrders={analyticsData?.conversion?.totalOrders}
+                granularity={analyticsGranularity}
+                onGranularityChange={setAnalyticsGranularity}
                 isLoading={isAnalyticsLoading}
               />
               <LiveOpportunityRadar />
@@ -1033,6 +1040,7 @@ export default function Dashboard() {
                   rfqs: Number(summaryData?.sellerRfqsCount ?? summaryData?.sellerReceivedRfqsCount ?? 0),
                   auctions: Number(summaryData?.reverseAuctionsLive || summaryData?.reverseAuctionInvites || 0),
                 }}
+                granularity={analyticsGranularity}
                 isLoading={isAnalyticsLoading}
               />
 

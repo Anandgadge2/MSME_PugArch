@@ -202,10 +202,10 @@ export function RecordOrderPaymentModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="make-payment-title"
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 animate-in fade-in duration-100"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-100"
     >
-      <FocusTrap>
-        <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 transform-gpu will-change-[transform,opacity] animate-in zoom-in-95 duration-100">
+      <FocusTrap className="w-full max-w-lg md:max-w-xl flex items-center justify-center">
+        <div className="w-full max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl border border-slate-200 transform-gpu will-change-[transform,opacity] animate-in zoom-in-95 duration-100">
           <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">

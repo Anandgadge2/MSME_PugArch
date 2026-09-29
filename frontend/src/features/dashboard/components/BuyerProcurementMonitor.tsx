@@ -116,54 +116,66 @@ export function BuyerProcurementMonitor() {
         ? bid.participants.length 
         : (bid.participantsCount || bid.bidsCount || bid._count?.participants || 0);
 
+      let typeLabel: BuyerProcurementItem['type'] = 'RFQ';
+      let methodSlug = 'rfq';
+      const rawMethod = String(bid.procurementMethod || bid.procurementType || bid.bidType || bid.type || '').toUpperCase();
+      if (bid.type === 'reverse_auction' || rawMethod.includes('AUCTION')) {
+        typeLabel = 'Reverse Auction';
+        methodSlug = 'reverse-auction';
+      } else if (bid.type === 'bid_tender' || rawMethod.includes('OPEN_TENDER') || rawMethod.includes('TENDER')) {
+        typeLabel = 'Open Tender';
+        methodSlug = 'open-tender';
+      } else if (rawMethod.includes('LIMITED')) {
+        methodSlug = 'limited-tender';
+      } else if (rawMethod.includes('RFP')) {
+        methodSlug = 'rfp';
+      } else if (bid.type === 'direct_purchase' || rawMethod.includes('DIRECT')) {
+        typeLabel = 'Direct Purchase';
+        methodSlug = 'direct-purchase';
+      }
+
+      const procDetailId = bid.auctionCode || bid.id;
+      let actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
       let stage: BuyerProcurementItem['stage'] = 'published';
       let stageLabel = 'Bidding Open';
       let urgentAction = false;
       let actionLabel = 'View Details';
-      let actionHref = bid.type === 'reverse_auction' 
-        ? `/buyer/my-procurements?type=Reverse+Auction` 
-        : `/buyer/my-procurements`;
 
       const rawStatus = String(bid.status || bid.stage || bid.statusGroup || '').toUpperCase();
       if (rawStatus.includes('EVAL') || rawStatus.includes('TECHNICAL')) {
         stage = 'tech_eval';
         stageLabel = 'Technical Evaluation';
-        actionLabel = participantsCount > 0 ? `Evaluate (${participantsCount} Bids)` : 'Evaluate Bids';
+        actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'Review Bids';
         urgentAction = true;
-      } else if (rawStatus.includes('FINANCIAL') || rawStatus.includes('AUCTION')) {
+        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+      } else if (rawStatus.includes('FINANCIAL')) {
         stage = 'financial_eval';
         stageLabel = 'Financial Opening';
         actionLabel = 'Compare Commercials';
         urgentAction = true;
+        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
       } else if (rawStatus.includes('AWARD') || rawStatus.includes('RECOMMEND')) {
         stage = 'awarded';
         stageLabel = 'Award Pending';
         actionLabel = 'Issue PO';
         urgentAction = true;
-        actionHref = '/orders';
-      } else if (rawStatus.includes('CLOSED') || rawStatus.includes('COMPLETED')) {
+        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+      } else if (rawStatus.includes('CLOSED') || rawStatus.includes('COMPLETED') || bid.purchaseOrderId || bid.orderId) {
         stage = 'closed';
         stageLabel = 'Completed';
         actionLabel = 'View Order';
-        actionHref = '/orders';
+        const poId = bid.purchaseOrderId || bid.orderId || bid.id;
+        actionHref = `/orders?orderId=${encodeURIComponent(String(poId))}`;
       } else if (rawStatus.includes('DRAFT')) {
         stage = 'draft';
         stageLabel = 'Draft Requisition';
         actionLabel = 'Continue Draft';
-        actionHref = `/buyer/procurement/create?draftId=${bid.id}`;
+        actionHref = `/buyer/procurement/create?draftId=${encodeURIComponent(String(bid.id))}`;
       } else {
         stage = 'published';
         stageLabel = participantsCount > 0 ? `${participantsCount} Bids Received` : 'Awaiting Bids';
-        actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'Manage Tender';
-      }
-
-      let typeLabel: BuyerProcurementItem['type'] = 'RFQ';
-      if (bid.type === 'reverse_auction' || bid.procurementMethod === 'REVERSE_AUCTION') {
-        typeLabel = 'Reverse Auction';
-      } else if (bid.type === 'bid_tender' || bid.bidType === 'TENDER' || bid.procurementType === 'OPEN_TENDER') {
-        typeLabel = 'Open Tender';
-      } else if (bid.type === 'direct_purchase') {
-        typeLabel = 'Direct Purchase';
+        actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'View Details';
+        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
       }
 
       return {
@@ -188,11 +200,12 @@ export function BuyerProcurementMonitor() {
   }, [procurementsData, user]);
 
   const filteredProcurements = useMemo(() => {
-    if (activeTab === 'all') return procurements;
-    if (activeTab === 'bidding') return procurements.filter(p => p.stage === 'published');
-    if (activeTab === 'evaluation') return procurements.filter(p => p.stage === 'tech_eval' || p.stage === 'financial_eval');
-    if (activeTab === 'awarded') return procurements.filter(p => p.stage === 'awarded' || p.stage === 'closed');
-    return procurements;
+    let list = procurements;
+    if (activeTab === 'bidding') list = procurements.filter(p => p.stage === 'published');
+    else if (activeTab === 'evaluation') list = procurements.filter(p => p.stage === 'tech_eval' || p.stage === 'financial_eval');
+    else if (activeTab === 'awarded') list = procurements.filter(p => p.stage === 'awarded' || p.stage === 'closed');
+    // Strictly current / recent 5 procurements only
+    return list.slice(0, 5);
   }, [procurements, activeTab]);
 
   const tabCounts = useMemo(() => ({
@@ -215,10 +228,9 @@ export function BuyerProcurementMonitor() {
               <h2 className="text-xs font-bold uppercase tracking-wide text-slate-900">
                 Active Requisitions & Published Tenders
               </h2>
-              {procurements.length > 0 && (
-                <span className="flex h-2 w-2 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              {procurements.length > 5 && (
+                <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                  Recent 5
                 </span>
               )}
             </div>

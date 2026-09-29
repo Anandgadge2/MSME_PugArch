@@ -23,7 +23,11 @@ import {
   PieChart, 
   Pie, 
   Cell, 
-  Tooltip 
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis
 } from 'recharts';
 import { Card, CardContent } from '../../../components/ui/card';
 import { useAuth } from '../../../hooks/useAuth';
@@ -57,6 +61,7 @@ interface SellerCreativeAnalyticsProps {
     auctions?: number;
   };
   isLoading?: boolean;
+  granularity?: 'daily' | 'weekly' | 'monthly' | 'quarterly';
 }
 
 const formatCurrency = (val: number) => {
@@ -70,28 +75,29 @@ export function SellerCreativeAnalytics({
   cashflowLifecycle = [],
   conversion,
   opportunityCounts,
+  granularity = 'monthly',
   isLoading = false
 }: SellerCreativeAnalyticsProps) {
   const { user } = useAuth();
   const isShg = isShgUser(user) || user?.role === 'shg';
   const rolePrefix = isShg ? '/shg' : '/seller';
 
-  const [activeTab, setActiveTab] = useState<'cashflow' | 'opportunities' | 'fulfillment'>(() => {
+  const [activeTab, setActiveTab] = useState<'cashflow' | 'opportunities' | 'bidding' | 'fulfillment'>(() => {
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search);
       const urlTab = sp.get('analyticsTab');
-      if (urlTab && ['cashflow', 'opportunities', 'fulfillment'].includes(urlTab)) {
-        return urlTab as 'cashflow' | 'opportunities' | 'fulfillment';
+      if (urlTab && ['cashflow', 'opportunities', 'bidding', 'fulfillment'].includes(urlTab)) {
+        return urlTab as 'cashflow' | 'opportunities' | 'bidding' | 'fulfillment';
       }
       const saved = sessionStorage.getItem('dashboard_seller_analytics_tab');
-      if (saved && ['cashflow', 'opportunities', 'fulfillment'].includes(saved)) {
-        return saved as 'cashflow' | 'opportunities' | 'fulfillment';
+      if (saved && ['cashflow', 'opportunities', 'bidding', 'fulfillment'].includes(saved)) {
+        return saved as 'cashflow' | 'opportunities' | 'bidding' | 'fulfillment';
       }
     }
     return 'cashflow';
   });
 
-  const handleTabChange = useCallback((newTab: 'cashflow' | 'opportunities' | 'fulfillment') => {
+  const handleTabChange = useCallback((newTab: 'cashflow' | 'opportunities' | 'bidding' | 'fulfillment') => {
     setActiveTab(newTab);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('dashboard_seller_analytics_tab', newTab);
@@ -105,8 +111,8 @@ export function SellerCreativeAnalytics({
     const handlePopState = () => {
       const sp = new URLSearchParams(window.location.search);
       const urlTab = sp.get('analyticsTab');
-      if (urlTab && ['cashflow', 'opportunities', 'fulfillment'].includes(urlTab)) {
-        setActiveTab(urlTab as 'cashflow' | 'opportunities' | 'fulfillment');
+      if (urlTab && ['cashflow', 'opportunities', 'bidding', 'fulfillment'].includes(urlTab)) {
+        setActiveTab(urlTab as 'cashflow' | 'opportunities' | 'bidding' | 'fulfillment');
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -208,6 +214,19 @@ export function SellerCreativeAnalytics({
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === 'bidding'}
+            onClick={() => handleTabChange('bidding')}
+            className={`px-2.5 py-1 rounded-md transition-all ${
+              activeTab === 'bidding' 
+                ? 'bg-white text-[#12335f] shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Win Rate
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === 'fulfillment'}
             onClick={() => handleTabChange('fulfillment')}
             className={`px-2.5 py-1 rounded-md transition-all ${
@@ -300,7 +319,7 @@ export function SellerCreativeAnalytics({
 
                 <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
                   <span className="text-slate-500 font-medium">
-                    Total {totalInvoicesCount} invoices tracked
+                    Total {totalInvoicesCount} invoices tracked ({granularity === 'daily' ? 'Today' : granularity === 'weekly' ? 'Past 7 Days' : granularity === 'quarterly' ? 'Past 90 Days' : 'Past 30 Days'})
                   </span>
                   <Link 
                     href={isShg ? '/shg/payments' : '/payments/transactions'}
@@ -313,7 +332,13 @@ export function SellerCreativeAnalytics({
             ) : (
               <div className="p-5 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
                 <Receipt className="h-6 w-6 mx-auto text-slate-300 mb-1.5" />
-                <p className="text-xs font-bold text-slate-700">No invoices generated yet</p>
+                <p className="text-xs font-bold text-slate-700">
+                  {granularity === 'daily'
+                    ? 'No invoices recorded today'
+                    : granularity === 'weekly'
+                    ? 'No invoices recorded in the past 7 days'
+                    : 'No invoices generated yet'}
+                </p>
                 <p className="text-[10px] text-slate-500 mt-0.5 max-w-xs mx-auto">
                   When you fulfill purchase orders and submit GST invoices, your payout lifecycle will be dynamically charted here.
                 </p>
@@ -420,7 +445,105 @@ export function SellerCreativeAnalytics({
           </div>
         )}
 
-        {/* ── View 3: Order Fulfillment & Delivery Health ── */}
+        {/* ── View 3: Bid Pipeline & Win Rate ── */}
+        {activeTab === 'bidding' && (
+          <div className="space-y-3 animate-in fade-in duration-300">
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200/70">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-blue-900 block">
+                  Win Rate Ratio
+                </span>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-xl font-black text-blue-950">
+                    {conversion?.winRate ?? 0}%
+                  </span>
+                  <span className="text-[9px] font-bold text-blue-700">awarded</span>
+                </div>
+                <p className="text-[9px] font-medium text-blue-700 mt-0.5">
+                  {conversion?.won ?? 0} contracts won
+                </p>
+              </div>
+
+              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200/70">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-900 block">
+                  Active Bid Pipeline
+                </span>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <span className="text-xl font-black text-emerald-950">
+                    {formatCurrency(conversion?.pipelineValue ?? 0)}
+                  </span>
+                </div>
+                <p className="text-[9px] font-medium text-emerald-700 mt-0.5">
+                  {conversion?.underEval ?? 0} proposals under review
+                </p>
+              </div>
+            </div>
+
+            {/* Funnel Bar Chart */}
+            {(conversion?.submitted ?? 0) > 0 ? (
+              <div className="space-y-1.5 pt-1">
+                <div className="h-[120px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      layout="vertical"
+                      data={[
+                        { stage: 'Submitted', count: conversion?.submitted ?? 0, fill: '#3b82f6' },
+                        { stage: 'Evaluating', count: conversion?.underEval ?? 0, fill: '#f59e0b' },
+                        { stage: 'Won', count: conversion?.won ?? 0, fill: '#10b981' },
+                        { stage: 'Rejected', count: conversion?.rejected ?? 0, fill: '#94a3b8' }
+                      ]}
+                      margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
+                    >
+                      <XAxis type="number" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis type="category" dataKey="stage" tick={{ fontSize: 9, fill: '#334155', fontWeight: 600 }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '8px', fontSize: '11px', fontWeight: 'bold' }}
+                        formatter={(val: any) => [`${val} proposals`, 'Volume']}
+                      />
+                      <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                        {[
+                          { fill: '#3b82f6' },
+                          { fill: '#f59e0b' },
+                          { fill: '#10b981' },
+                          { fill: '#94a3b8' }
+                        ].map((c, i) => (
+                          <Cell key={`funnel-cell-${i}`} fill={c.fill} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                  <span className="text-slate-500 font-medium">
+                    {conversion?.submitted ?? 0} total proposals submitted
+                  </span>
+                  <Link 
+                    href={`${rolePrefix}/bids`}
+                    className="font-bold uppercase tracking-wider text-[#12335f] hover:underline flex items-center gap-0.5"
+                  >
+                    View Bid Proposals →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                <p className="text-xs font-bold text-slate-700">No tender proposals submitted yet</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">
+                  Submit bids on open tenders or respond to RFQs to build your conversion pipeline.
+                </p>
+                <Link 
+                  href={`${rolePrefix}/opportunities`}
+                  className="mt-2 inline-block text-[10px] font-bold uppercase tracking-wide text-[#12335f] hover:underline"
+                >
+                  Find Tenders to Quote →
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── View 4: Order Fulfillment & Delivery Health ── */}
         {activeTab === 'fulfillment' && (
           <div className="space-y-3 animate-in fade-in duration-300">
             <div className="grid grid-cols-2 gap-2.5">
