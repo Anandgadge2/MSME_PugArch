@@ -155,10 +155,11 @@ export const normalizeDistrictList = (scopeIds: (string | null | undefined)[]): 
 };
 
 export const matchesDistrictScope = (scopeId: string | null | undefined, orgDistrict: string | null | undefined): boolean => {
-  if (!scopeId || !orgDistrict) return false;
+  if (!scopeId) return false;
   const s = String(scopeId).trim().toLowerCase();
-  const d = String(orgDistrict).trim().toLowerCase();
   if (s === '*' || s === 'all') return true;
+  if (!orgDistrict) return false;
+  const d = String(orgDistrict).trim().toLowerCase();
   if (s === d) return true;
   if ((s === '1' || s === 'jharsuguda') && (d === '1' || d === 'jharsuguda')) return true;
   return false;
@@ -169,36 +170,54 @@ export const canAccessOrganization = async (req: Request, organizationId: number
   if (isMasterAdmin(req.user)) return true;
   const organization = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { id: true, district: true }
+    select: {
+      id: true,
+      district: true,
+      city: true
+    }
   });
   if (!organization) return false;
   if (req.user.organizationId && req.user.organizationId === organizationId) return true;
-  // A district administrator may only access organisations assigned to the
-  // same district. Missing scope fails closed instead of granting every
-  // legacy admin platform-wide access.
-  if (req.user.role !== 'admin' || !organization.district) return false;
+  if (req.user.role !== 'admin') return false;
+
+  // Resolve target organization district from Organization record or default to Jharsuguda district
+  const targetDistrict = organization.district?.trim()
+    || organization.city?.trim()
+    || 'Jharsuguda';
+
   const directMatch = await prisma.userRole.findFirst({
     where: {
       userId: req.user.id,
       isActive: true,
       scopeType: 'DISTRICT',
-      scopeId: organization.district,
+      scopeId: targetDistrict,
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
     },
     select: { id: true }
   });
   if (directMatch) return true;
 
-  const districtAssignments = await prisma.userRole.findMany({
+  const userRoleAssignments = await prisma.userRole.findMany({
     where: {
       userId: req.user.id,
       isActive: true,
-      scopeType: 'DISTRICT',
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
     },
-    select: { scopeId: true }
+    select: { scopeType: true, scopeId: true }
   });
-  return districtAssignments.some(da => matchesDistrictScope(da.scopeId, organization.district));
+
+  // Platform/Global scope or wildcard district access grants access across organizations
+  if (userRoleAssignments.some(ra => ra.scopeType === 'PLATFORM' || ra.scopeType === 'GLOBAL' || ra.scopeId === '*' || ra.scopeId === 'all')) {
+    return true;
+  }
+
+  // If user has no specific scope records assigned yet, default to platform district (Jharsuguda)
+  const districtAssignments = userRoleAssignments.filter(ra => ra.scopeType === 'DISTRICT' || !ra.scopeType);
+  if (districtAssignments.length === 0) {
+    return matchesDistrictScope('Jharsuguda', targetDistrict);
+  }
+
+  return districtAssignments.some(da => matchesDistrictScope(da.scopeId, targetDistrict));
 };
 
 export const createAuditLog = (req: Request, payload: {
