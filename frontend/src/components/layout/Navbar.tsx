@@ -832,7 +832,6 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   const [notifications, setNotifications] = useState<PortalNotification[]>([]);
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileDropdownRef = useRef<HTMLDivElement>(null);
-  const profileTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [roleAction, setRoleAction] = useState<'buyer' | 'seller' | null>(null);
   const [pendingActivateRole, setPendingActivateRole] = useState<'buyer' | 'seller' | null>(null);
   const [activateConsent1, setActivateConsent1] = useState(false);
@@ -850,28 +849,6 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
     };
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, []);
-
-  const handleProfileMouseEnter = () => {
-    if (profileTimeoutRef.current) {
-      clearTimeout(profileTimeoutRef.current);
-      profileTimeoutRef.current = null;
-    }
-    setIsProfileDropdownOpen(true);
-  };
-
-  const handleProfileMouseLeave = () => {
-    profileTimeoutRef.current = setTimeout(() => {
-      setIsProfileDropdownOpen(false);
-    }, 180);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (profileTimeoutRef.current) {
-        clearTimeout(profileTimeoutRef.current);
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -1085,16 +1062,25 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   }, [isNotificationsOpen]);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(event.target as Node)) {
+        setIsProfileDropdownOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
         setIsProfileDropdownOpen(false);
       }
     }
     if (isProfileDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isProfileDropdownOpen]);
 
@@ -1384,13 +1370,13 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
           <div 
             className="relative" 
             ref={profileDropdownRef}
-            onMouseEnter={handleProfileMouseEnter}
-            onMouseLeave={handleProfileMouseLeave}
           >
             <button
-              onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+              onClick={() => setIsProfileDropdownOpen((prev) => !prev)}
               className="flex items-center gap-2.5 p-1 rounded-xl hover:bg-slate-50 transition-colors group text-left cursor-pointer border border-transparent hover:border-slate-200/80"
               aria-label="User profile options"
+              aria-haspopup="true"
+              aria-expanded={isProfileDropdownOpen}
             >
               <div className="h-8 w-8 rounded-full bg-[#12335f] flex items-center justify-center text-white font-black text-xs shadow-sm ring-2 ring-white ring-offset-1 group-hover:ring-offset-2 transition-all">
                 {user?.name?.charAt(0) || 'U'}
@@ -1407,7 +1393,11 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             </button>
 
             {isProfileDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 duration-200 z-50">
+              <div 
+                className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 origin-top-right"
+                role="menu"
+                aria-orientation="vertical"
+              >
                 {/* User & Organization identity card */}
                 <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50/60">
                   <div className="space-y-0.5">
