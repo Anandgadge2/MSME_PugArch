@@ -1309,8 +1309,8 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     totalAmount: canSeeFin ? moneyNumber(rawTotal) : null,
     financialSealed: !canSeeFin,
     financialMessage: !canSeeFin ? 'Financial bid is sealed until opening' : undefined,
-    makeBrand: first(p.makeBrand, respData.makeBrand, ackData.makeBrand, descData.makeBrand, techOffer.makeBrand, firstItem.makeBrand),
-    model: first(p.model, respData.model, ackData.model, descData.model, techOffer.model, firstItem.model),
+    makeBrand: first(p.makeBrand, respData.makeBrand, ackData.makeBrand, descData.makeBrand, techOffer.makeBrand, firstItem.makeBrand, firstItem.brand),
+    model: first(p.model, p.modelNumber, respData.model, respData.modelNumber, ackData.model, ackData.modelNumber, descData.model, descData.modelNumber, techOffer.model, techOffer.modelNumber, firstItem.model, firstItem.modelNumber, firstItem.partNumber),
     offeredItemDescription: first(descData.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, techOffer.offeredItemDescription),
     // Flatten technical offer fields from all sources so buyer always sees them
     complianceRemarks: first(descData.complianceRemarks, respData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstItem.complianceRemarks, firstItem.remarks),
@@ -1349,6 +1349,7 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
       };
     }),
     terms: first(p.terms, respData.terms, ackData.terms, descData.terms, descData.paymentTerms, respData.paymentTerms, ackData.paymentTerms),
+    paymentTerms: first(p.paymentTerms, respData.paymentTerms, ackData.paymentTerms, descData.paymentTerms, p.terms, respData.terms, ackData.terms, descData.terms, bid?.paymentTerms, bid?.terms?.paymentTerms),
     offeredQuantity: first(p.offeredQuantity, respData.offeredQuantity, ackData.offeredQuantity, descData.offeredQuantity, (firstItem.quantity != null ? `${firstItem.quantity} ${firstItem.unitOfMeasure || firstItem.unit || 'Nos'}` : undefined)),
     status: p.submissionStatus || 'DRAFT',
     submissionStatus: p.submissionStatus || 'DRAFT',

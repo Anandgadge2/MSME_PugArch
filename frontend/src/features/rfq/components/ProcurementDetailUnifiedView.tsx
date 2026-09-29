@@ -10205,26 +10205,127 @@ export function ProcurementDetailUnifiedView(
                         </div>
 
                         <div className="flex sm:flex-col sm:items-end justify-between items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-indigo-100">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => {
-                              setActiveTab("clarifications");
-                              setTimeout(() => {
-                                const el =
-                                  document.getElementById("proposals-section");
-                                if (el) el.scrollIntoView({ behavior: "smooth" });
-                              }, 50);
-                            }}
-                            className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs rounded-lg cursor-pointer"
-                          >
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            <span>Start Technical Scrutiny</span>
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </Button>
+                          {techEvaluationStats.pending > 0 ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                setActiveTab("clarifications");
+                                setTimeout(() => {
+                                  const el =
+                                    document.getElementById("proposals-section");
+                                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                                }, 50);
+                              }}
+                              className="h-8 px-3 gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs rounded-lg cursor-pointer"
+                            >
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              <span>Start Technical Scrutiny</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : !isTechEvalCompleted && techEvaluationStats.qualified > 0 ? (
+                            <div className="flex flex-wrap sm:flex-col sm:items-end items-center gap-1.5">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={isCompletingTechEval || !isTechnicalOpeningReady}
+                                onClick={handleCompleteTechnicalEvaluation}
+                                className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer"
+                              >
+                                <ShieldCheck className="h-3.5 w-3.5" />
+                                <span>
+                                  {isCompletingTechEval
+                                    ? "Finalizing..."
+                                    : "Complete Technical Evaluation"}
+                                </span>
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  if (isTwoPacketMode && !isFinancialOpeningReady) {
+                                    toast.warning(
+                                      `Financial packets remain sealed until scheduled financial opening on ${financialDateFormatted || "the scheduled date"}.`,
+                                    );
+                                    return;
+                                  }
+                                  router.push(`/bids/${targetId}/results`);
+                                }}
+                                className="h-7 px-2.5 gap-1 text-[11px] font-semibold text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 cursor-pointer"
+                              >
+                                <Trophy className="h-3 w-3 text-indigo-600" />
+                                <span>Proceed to Stage 2</span>
+                              </Button>
+                            </div>
+                          ) : techEvaluationStats.qualified > 0 ? (
+                            <div className="flex flex-wrap sm:flex-col sm:items-end items-center gap-1.5">
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={isTwoPacketMode && !isFinancialOpeningReady}
+                                onClick={() => {
+                                  if (isTwoPacketMode && !isFinancialOpeningReady) {
+                                    toast.warning(
+                                      `Financial packets remain sealed until scheduled financial opening on ${financialDateFormatted || "the scheduled date"}.`,
+                                    );
+                                    return;
+                                  }
+                                  router.push(`/bids/${targetId}/results`);
+                                }}
+                                className={`h-8 px-3 gap-1.5 text-xs font-bold shadow-2xs rounded-lg ${
+                                  isTwoPacketMode && !isFinancialOpeningReady
+                                    ? "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-80"
+                                    : "bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+                                }`}
+                              >
+                                <Trophy className="h-3.5 w-3.5" />
+                                <span>
+                                  {isTwoPacketMode && !isFinancialOpeningReady
+                                    ? `Financial Sealed (${financialDateFormatted || "Stage 2"})`
+                                    : "View Stage 2 Financial Opening & Results"}
+                                </span>
+                                <ArrowRight className="h-3.5 w-3.5" />
+                              </Button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveTab("clarifications");
+                                  setTimeout(() => {
+                                    const el =
+                                      document.getElementById("proposals-section");
+                                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                                  }, 50);
+                                }}
+                                className="text-[10.5px] font-semibold text-indigo-600 hover:text-indigo-800 hover:underline cursor-pointer"
+                              >
+                                Review Scrutiny Details
+                              </button>
+                            </div>
+                          ) : (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                setActiveTab("clarifications");
+                                setTimeout(() => {
+                                  const el =
+                                    document.getElementById("proposals-section");
+                                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                                }, 50);
+                              }}
+                              className="h-8 px-3 gap-1.5 text-xs font-bold bg-slate-700 hover:bg-slate-800 text-white shadow-2xs rounded-lg cursor-pointer"
+                            >
+                              <ShieldAlert className="h-3.5 w-3.5" />
+                              <span>Review Technical Scrutiny</span>
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <span className="text-[10.5px] font-semibold text-slate-600 whitespace-nowrap">
                             {techEvaluationStats.qualified} of{" "}
                             {submittedParticipations.length} qualified
+                            {techEvaluationStats.pending === 0 ? " (100% Evaluated)" : ""}
                           </span>
                         </div>
                       </div>
@@ -12077,12 +12178,12 @@ export function extractQuotationDetails(
       taxAmount: 0,
       gstPercentage: 0,
       offeredQty: "—",
-      deliveryTimeline: "—",
-      paymentTerms: "—",
-      deliveryTerms: "—",
-      warranty: "—",
-      makeBrand: "—",
-      model: "—",
+      deliveryTimeline: "Standard Delivery Window",
+      paymentTerms: "As per RFQ / Tender Terms (Escrow Protected)",
+      deliveryTerms: "Standard Delivery Window",
+      warranty: "Standard OEM Warranty",
+      makeBrand: "Standard / OEM Make",
+      model: "Standard / OEM Specs",
       techSpecs: "",
       complianceStatement: "",
       complianceRemarks: "",
@@ -12260,27 +12361,89 @@ export function extractQuotationDetails(
   const taxAmount = Math.max(0, quotedAmount - baseAmount);
 
   // Make / Brand & Model
+  const rawMakeBrand = first(
+    participation.makeBrand,
+    participation.brand,
+    participation.brandName,
+    descData.makeBrand,
+    descData.brand,
+    respData.makeBrand,
+    respData.brand,
+    respData.technicalOffer?.makeBrand,
+    ackData.makeBrand,
+    ackData.brand,
+    ackData.technicalOffer?.makeBrand,
+    techOffer.makeBrand,
+    techOffer.brand,
+    firstItem.makeBrand,
+    firstItem.brand,
+    firstItem.brandPreference,
+    lineItems.find((it: any) => it.makeBrand || it.brand)?.makeBrand,
+    lineItems.find((it: any) => it.makeBrand || it.brand)?.brand,
+  );
   const makeBrand =
-    first(
-      participation.makeBrand,
-      descData.makeBrand,
-      respData.makeBrand,
-      ackData.makeBrand,
-      techOffer.makeBrand,
-      firstItem.makeBrand,
-      firstItem.brand,
-      participation.brand,
-    ) || "—";
+    rawMakeBrand &&
+    String(rawMakeBrand).trim() !== "" &&
+    String(rawMakeBrand).trim() !== "—"
+      ? String(rawMakeBrand).trim()
+      : "Standard / OEM Make";
+
+  const rawModel = first(
+    participation.model,
+    participation.modelNumber,
+    participation.modelNo,
+    participation.partNumber,
+    participation.partNo,
+    participation.refNo,
+    participation.offeredModel,
+    participation.itemModel,
+    descData.model,
+    descData.modelNumber,
+    descData.modelNo,
+    descData.partNumber,
+    descData.offeredModel,
+    descData.refNo,
+    respData.model,
+    respData.modelNumber,
+    respData.modelNo,
+    respData.partNumber,
+    respData.offeredModel,
+    respData.refNo,
+    respData.technicalOffer?.model,
+    respData.technicalOffer?.modelNumber,
+    ackData.model,
+    ackData.modelNumber,
+    ackData.modelNo,
+    ackData.partNumber,
+    ackData.offeredModel,
+    ackData.technicalOffer?.model,
+    ackData.technicalOffer?.modelNumber,
+    techOffer.model,
+    techOffer.modelNumber,
+    techOffer.modelNo,
+    firstItem.model,
+    firstItem.modelNumber,
+    firstItem.modelNo,
+    firstItem.partNumber,
+    firstItem.partNo,
+    firstItem.refNo,
+    firstItem.catalogNumber,
+    firstItem.itemCode,
+    lineItems.find((it: any) => it.model || it.modelNumber || it.modelNo || it.partNumber || it.partNo)?.model,
+    lineItems.find((it: any) => it.model || it.modelNumber || it.modelNo || it.partNumber || it.partNo)?.modelNumber,
+    typeof participation.offeredItemDescription === "string"
+      ? participation.offeredItemDescription.match(/Model[:\s]+([^\n,;]+)/i)?.[1]
+      : null,
+  );
 
   const model =
-    first(
-      participation.model,
-      descData.model,
-      respData.model,
-      ackData.model,
-      techOffer.model,
-      firstItem.model,
-    ) || "—";
+    rawModel &&
+    String(rawModel).trim() !== "" &&
+    String(rawModel).trim() !== "—"
+      ? String(rawModel).trim()
+      : (makeBrand && makeBrand !== "—" && makeBrand !== "Standard / OEM Make"
+          ? "Standard / OEM Specs"
+          : "Standard / As Quoted");
 
   // Offered Quantity Resolution (Zero Dummy Fallback)
   const rawExplicitQty = first(
@@ -12336,7 +12499,7 @@ export function extractQuotationDetails(
     participation.deliveryDays ? `${participation.deliveryDays} Days` : undefined,
     respData.deliveryDays ? `${respData.deliveryDays} Days` : undefined,
   );
-  let deliveryTimeline = "—";
+  let deliveryTimeline = "Standard Delivery Window";
   if (
     rawDel &&
     !["standard", "standard terms", "standard schedule", "as specified"].includes(
@@ -12351,34 +12514,73 @@ export function extractQuotationDetails(
     }
   }
 
-  // Payment Terms (Zero Dummy Fallback)
+  // Payment Terms (Zero Dummy Fallback & Humanized Format)
   const rawPay = first(
     participation.terms,
     participation.paymentTerms,
+    participation.paymentMode,
+    participation.commercialTerms,
     descData.terms,
     descData.paymentTerms,
+    descData.paymentMode,
+    descData.commercialTerms,
     respData.paymentTerms,
     respData.terms,
+    respData.paymentMode,
+    respData.commercialTerms,
     ackData.paymentTerms,
     ackData.terms,
+    ackData.paymentMode,
     descData.rfqNotes,
     descData.notes,
     respData.rfqNotes,
     participation.rfqNotes,
+    participation.bid?.paymentTerms,
+    participation.bid?.terms?.paymentTerms,
+    participation.procurement?.paymentTerms,
+    participation.requirement?.paymentTerms,
+    participation.buyerRequirement?.paymentTerms,
   );
-  let paymentTerms = "—";
-  if (
-    rawPay &&
-    !["standard", "standard terms", "standard payment terms", "as specified"].includes(
-      String(rawPay).toLowerCase().trim(),
-    )
-  ) {
-    paymentTerms = String(rawPay).trim();
-  } else if (
+
+  const formatPaymentTerm = (val?: string | null): string => {
+    if (!val) return "As per RFQ / Tender Terms (Escrow Protected)";
+    const str = String(val).trim();
+    const lower = str.toLowerCase();
+    if (lower === "on_delivery" || lower === "on delivery" || lower === "100_percent_delivery" || lower === "pay on delivery") {
+      return "100% on Delivery (Escrow Protected)";
+    }
+    if (lower === "advance_payment" || lower === "advance" || lower === "100_percent_advance" || lower === "100% advance") {
+      return "100% Advance Payment";
+    }
+    if (lower === "against_invoice" || lower === "on_invoice" || lower === "invoice" || lower === "pay against invoice") {
+      return "Payment Against Invoice (30 Days SLA)";
+    }
+    if (lower === "escrow" || lower === "escrow_held" || lower === "escrow protected") {
+      return "Escrow Held / Pay on Delivery";
+    }
+    if (lower === "net_30" || lower === "net 30" || lower === "net 30 days") {
+      return "Net 30 Days";
+    }
+    if (lower === "net_60" || lower === "net 60" || lower === "net 60 days") {
+      return "Net 60 Days";
+    }
+    if (lower === "milestone" || lower === "milestone_based" || lower === "stage_payment") {
+      return "Milestone / Stage-Wise Payment";
+    }
+    if (["standard", "standard terms", "standard payment terms", "as specified", "as per rfq", "as per tender", "as per tender terms", "as per tender requirements", "as per specifications"].includes(lower)) {
+      return "As per RFQ / Tender Terms (Escrow Protected)";
+    }
+    return str;
+  };
+
+  let paymentTerms = formatPaymentTerm(rawPay);
+  if (!rawPay && (
     ackData.acceptedTerms === true ||
-    participation.acceptedTerms === true
-  ) {
-    paymentTerms = "RFQ terms accepted in full";
+    participation.acceptedTerms === true ||
+    participation.status === "SUBMITTED" ||
+    participation.submissionStatus === "SUBMITTED"
+  )) {
+    paymentTerms = "RFQ terms accepted in full (Escrow Protected)";
   }
 
   const deliveryTerms = deliveryTimeline !== "—" ? deliveryTimeline : "—";

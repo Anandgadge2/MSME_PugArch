@@ -1398,15 +1398,17 @@ export default function SubmitQuotationPage() {
     if (!resolvedId || isMarketplaceQuoteFlow || isReadOnly || isSubmittedQuote || submitted || submitting || savingDraft) return;
     setSavingDraft(true);
     try {
+      const primaryLineQuote = lineQuotes.find(l => l.unitPrice !== '' || l.makeBrand || l.model) || lineQuotes[0];
       const payload: any = {
         offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
         offeredQuantity: offeredQuantity ? Number(offeredQuantity) : undefined,
         deliveryTimeline: deliveryTimeline.trim() || undefined,
         message: message.trim() || 'Draft quotation response', // default placeholder
         terms: terms.trim() || undefined,
-        makeBrand: offeredMakeBrand.trim() || undefined,
-        model: offeredModel.trim() || undefined,
-        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        paymentTerms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || primaryLineQuote?.makeBrand?.trim() || undefined,
+        model: offeredModel.trim() || primaryLineQuote?.model?.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || primaryLineQuote?.specifications?.trim() || undefined,
         complianceStatement: complianceStatement || undefined,
         status: 'DRAFT'
       };
@@ -2449,15 +2451,17 @@ export default function SubmitQuotationPage() {
 
     setSubmitting(true);
     try {
+      const primaryLineQuote = lineQuotes.find(l => l.unitPrice !== '' || l.makeBrand || l.model) || lineQuotes[0];
       const payload: any = {
         offeredPrice: Number(offeredPrice),
         offeredQuantity: Number(offeredQuantity),
         deliveryTimeline: deliveryTimeline.trim(),
         message: message.trim(),
         terms: terms.trim() || undefined,
-        makeBrand: offeredMakeBrand.trim() || undefined,
-        model: offeredModel.trim() || undefined,
-        technicalSpecifications: technicalSpecifications.trim() || undefined,
+        paymentTerms: terms.trim() || undefined,
+        makeBrand: offeredMakeBrand.trim() || primaryLineQuote?.makeBrand?.trim() || undefined,
+        model: offeredModel.trim() || primaryLineQuote?.model?.trim() || undefined,
+        technicalSpecifications: technicalSpecifications.trim() || primaryLineQuote?.specifications?.trim() || undefined,
         complianceStatement: complianceStatement || undefined,
         status: 'SUBMITTED',
       };

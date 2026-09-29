@@ -197,9 +197,53 @@ export default function BidComparisonPage() {
 
     const firstVal = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
 
+    const rawMakeBrand = firstVal(p.makeBrand, details.makeBrand, respData.makeBrand, ackData.makeBrand, descObj.makeBrand, techOffer.makeBrand, firstItem.makeBrand, firstItem.brand);
+    const resolvedMakeBrand = rawMakeBrand || 'Standard / OEM Make';
+
+    const rawModel = firstVal(
+      p.model,
+      p.modelNumber,
+      details.model,
+      details.modelNumber,
+      respData.model,
+      respData.modelNumber,
+      ackData.model,
+      ackData.modelNumber,
+      descObj.model,
+      descObj.modelNumber,
+      techOffer.model,
+      techOffer.modelNumber,
+      firstItem.model,
+      firstItem.modelNumber,
+      firstItem.partNumber
+    );
+    const resolvedModel = rawModel || (resolvedMakeBrand !== 'Standard / OEM Make' ? 'Standard / OEM Specs' : 'Standard / As Quoted');
+
+    const rawPay = firstVal(
+      p.paymentTerms,
+      details.paymentTerms,
+      respData.paymentTerms,
+      ackData.paymentTerms,
+      p.terms,
+      respData.terms,
+      ackData.terms,
+      descObj.terms,
+      descObj.paymentTerms
+    );
+    const formatPay = (v?: string) => {
+      if (!v) return 'As per tender requirements (Escrow Protected)';
+      const s = String(v).trim();
+      const l = s.toLowerCase();
+      if (l === 'on_delivery' || l === 'on delivery') return '100% on Delivery (Escrow Protected)';
+      if (l === 'advance_payment' || l === 'advance') return '100% Advance Payment';
+      if (l === 'against_invoice' || l === 'invoice') return 'Against Invoice (30 Days SLA)';
+      if (['standard', 'standard terms', 'standard payment terms', 'as specified'].includes(l)) return 'As per tender requirements (Escrow Protected)';
+      return s;
+    };
+
     return {
-      makeBrand: firstVal(p.makeBrand, details.makeBrand, respData.makeBrand, ackData.makeBrand, descObj.makeBrand, techOffer.makeBrand, firstItem.makeBrand, firstItem.brand),
-      model: firstVal(p.model, details.model, respData.model, ackData.model, descObj.model, techOffer.model, firstItem.model, firstItem.modelNumber),
+      makeBrand: resolvedMakeBrand,
+      model: resolvedModel,
       offeredItemDescription: firstVal(descObj.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, p.message, respData.message, firstItem.description),
       complianceRemarks: firstVal(p.complianceRemarks, details.complianceRemarks, respData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstItem.complianceRemarks, firstItem.remarks),
       deliveryTimeline: firstVal(p.deliveryTimeline, details.deliveryTimeline, respData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstItem.deliveryTimeline, firstItem.deliveryRequirement, firstItem.deliverySchedule),
@@ -207,7 +251,7 @@ export default function BidComparisonPage() {
       serviceSupport: firstVal(p.serviceSupport, details.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
       deviation: firstVal(p.deviation, details.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
       rfqNotes: firstVal(p.rfqNotes, details.rfqNotes, respData.rfqNotes, ackData.rfqNotes, details.notes, respData.notes, ackData.notes),
-      paymentTerms: firstVal(p.paymentTerms, details.paymentTerms, respData.paymentTerms, ackData.paymentTerms, p.terms, respData.terms, ackData.terms),
+      paymentTerms: formatPay(rawPay),
     };
   }, []);
 

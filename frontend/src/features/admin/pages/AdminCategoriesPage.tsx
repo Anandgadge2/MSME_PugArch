@@ -1150,8 +1150,8 @@ export default function AdminCategoriesPage() {
                         }}
                       />
                       
-                      {/* Lower side whitish shade overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-white via-white/80 via-[32%] to-transparent" />
+                      {/* Compact lower side shade overlay */}
+                      <div className="pointer-events-none absolute bottom-0 inset-x-0 h-12 bg-gradient-to-t from-white/95 via-white/55 to-transparent" />
                       
                       {/* Live Card Details */}
                       <div className="relative z-10 h-full flex flex-col justify-between p-2.5 text-center">
@@ -1161,7 +1161,7 @@ export default function AdminCategoriesPage() {
                           </span>
                         </div>
                         <div>
-                          <span className="block w-full text-xs font-black leading-tight line-clamp-2 text-slate-900">
+                          <span className="block w-full text-xs font-black leading-tight line-clamp-2 text-slate-950">
                             {formName.trim() || 'Category Name'}
                           </span>
                         </div>

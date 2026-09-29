@@ -798,9 +798,14 @@ const responseSchema = z.object({
     message: z.string().trim().max(3000).optional().nullable(),
     attachmentUrl: z.string().trim().max(500).optional().nullable(),
     terms: z.string().trim().max(2000).optional().nullable(),
+    paymentTerms: z.string().trim().max(2000).optional().nullable(),
+    makeBrand: z.string().trim().max(200).optional().nullable(),
+    model: z.string().trim().max(200).optional().nullable(),
+    technicalSpecifications: z.string().trim().max(5000).optional().nullable(),
+    complianceStatement: z.string().trim().max(100).optional().nullable(),
     responseData: responseDataSchema,
     status: z.enum(['DRAFT', 'SUBMITTED']).default('SUBMITTED')
-}).superRefine((data, ctx) => {
+}).passthrough().superRefine((data, ctx) => {
     if (data.status === 'SUBMITTED') {
         if (data.offeredPrice === undefined || data.offeredPrice === null) {
             ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Offered price is required for submission", path: ["offeredPrice"] });
@@ -3565,13 +3570,15 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
                         submittedAt: new Date(),
                         technicalSubmittedAt: new Date(),
                         financialSubmittedAt: new Date(),
-                        makeBrand: (body as any).makeBrand || (body.responseData as any)?.makeBrand || null,
-                        model: (body as any).model || (body.responseData as any)?.model || null,
-                        offeredItemDescription: (body as any).technicalSpecifications || (body.responseData as any)?.technicalSpecifications || body.message || 'Quotation submitted via marketplace',
-                        acknowledgement: (body.responseData || body.deliveryTimeline) ? {
+                        makeBrand: (body as any).makeBrand || (body.responseData as any)?.makeBrand || (body.responseData as any)?.lineItems?.[0]?.makeBrand || null,
+                        model: (body as any).model || (body.responseData as any)?.model || (body.responseData as any)?.lineItems?.[0]?.model || null,
+                        offeredItemDescription: (body as any).technicalSpecifications || (body.responseData as any)?.technicalSpecifications || (body.responseData as any)?.lineItems?.[0]?.specifications || body.message || 'Quotation submitted via marketplace',
+                        acknowledgement: {
                             ...(body.responseData || {}),
-                            deliveryTimeline: body.deliveryTimeline || (body.responseData as any)?.deliveryTimeline
-                        } : undefined
+                            deliveryTimeline: body.deliveryTimeline || (body.responseData as any)?.deliveryTimeline,
+                            terms: body.terms || body.paymentTerms || (body.responseData as any)?.terms || (body.responseData as any)?.paymentTerms,
+                            paymentTerms: body.paymentTerms || body.terms || (body.responseData as any)?.paymentTerms || (body.responseData as any)?.terms
+                        }
                     };
 
                     if (existingPart) {

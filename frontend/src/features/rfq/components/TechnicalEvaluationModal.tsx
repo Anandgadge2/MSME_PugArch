@@ -306,12 +306,31 @@ export function TechnicalEvaluationModal({
     respData.sellerMobile,
     ackData.sellerMobile,
   );
+  const rawMakeBrand = firstValid(
+    participation.makeBrand,
+    participation.brand,
+    participation.brandName,
+    detailsData.makeBrand,
+    detailsData.brand,
+    respData.makeBrand,
+    respData.brand,
+    respData.technicalOffer?.makeBrand,
+    ackData.makeBrand,
+    ackData.brand,
+    ackData.technicalOffer?.makeBrand,
+    descData.makeBrand,
+    descData.brand,
+    rawPart.makeBrand,
+    rawPart.brand,
+    firstLine.makeBrand,
+    firstLine.brand,
+  );
+  const makeBrand = (rawMakeBrand && rawMakeBrand !== "—") ? rawMakeBrand : "Standard / OEM Make";
 
-  const model = firstValid(
+  const rawModel = firstValid(
     participation.model,
-    participation.offeredModel,
     participation.modelNumber,
-    participation.modelRef,
+    participation.modelNo,
     participation.partNumber,
     participation.catalogNumber,
     participation.itemModel,
@@ -349,29 +368,8 @@ export function TechnicalEvaluationModal({
           /Model[:\s]+([^\n,;]+)/i,
         )?.[1]
       : null,
-    "—",
   );
-
-  const makeBrand = firstValid(
-    participation.makeBrand,
-    participation.brand,
-    participation.brandName,
-    detailsData.makeBrand,
-    detailsData.brand,
-    respData.makeBrand,
-    respData.brand,
-    respData.technicalOffer?.makeBrand,
-    ackData.makeBrand,
-    ackData.brand,
-    ackData.technicalOffer?.makeBrand,
-    descData.makeBrand,
-    descData.brand,
-    rawPart.makeBrand,
-    rawPart.brand,
-    firstLine.makeBrand,
-    firstLine.brand,
-    "—",
-  );
+  const model = (rawModel && rawModel !== "—") ? rawModel : (makeBrand !== "Standard / OEM Make" ? "Standard / OEM Specs" : "Standard / As Quoted");
 
   const techSpecs = firstValid(
     participation.technicalSpecifications,

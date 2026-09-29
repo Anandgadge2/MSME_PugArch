@@ -128,6 +128,11 @@ const nextConfig: NextConfig = {
       fallback: [],
     };
   },
+  turbopack: {
+    resolveAlias: {
+      "react-router-dom": "./src/lib/next-router-dom.tsx",
+    },
+  },
   webpack: (config) => {
     // Keep Next.js' default persistent/incremental cache. Disabling it made the
     // catch-all portal route rebuild thousands of modules from scratch.

@@ -71,16 +71,16 @@ function CategoryCardItem({ category, selected, priority = false, onSelect, onCl
             {/* Ambient 3D Glass Light Sweep */}
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-out" />
 
-            {/* Lower side whitish shade overlay with high-contrast mobile legibility */}
-            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/95 via-45% to-transparent sm:via-white/75 sm:via-[4%] transition-opacity duration-300" />
+            {/* Compact bottom gradient overlay to keep >75% of the image crisp and vibrant */}
+            <div className="pointer-events-none absolute bottom-0 inset-x-0 h-14 sm:h-20 bg-gradient-to-t from-white/95 via-white/55 to-transparent transition-opacity duration-300" />
             
-            {/* Category Name with subtle 3D lift */}
-            <div className="relative z-10 w-full px-2 py-2 sm:p-4 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
+            {/* Category Name */}
+            <div className="relative z-10 w-full px-2 py-1.5 sm:p-3 text-center transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5">
                 <span className={cn(
                     "block w-full text-[11px] sm:text-[13px] font-extrabold sm:font-black leading-snug line-clamp-2 transition-colors duration-300",
                     selected
                         ? "text-blue-700 font-black"
-                        : "text-slate-900 group-hover:text-blue-700"
+                        : "text-slate-950 group-hover:text-blue-700"
                 )}>
                     {category.name}
                 </span>
