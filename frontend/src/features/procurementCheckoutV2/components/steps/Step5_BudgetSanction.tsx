@@ -7,6 +7,7 @@ import { openFileAsset } from '../../../../lib/files';
 import { uploadProcurementDocument } from '../../api';
 import { formatCurrency } from '../../../shared/format';
 import { Input, Select } from '../../../../components/ui/input';
+import { DateTimePicker } from '../../../../components/ui/DateTimePicker';
 import { SearchableSelect } from '../../../../components/ui/SearchableSelect';
 import { api, readJsonResponse, unwrapApiData } from '../../../../lib/api';
 import { cn } from '../../../../lib/utils';
@@ -372,13 +373,15 @@ export default function Step5_BudgetSanction({
               </div>
 
               <div className="space-y-1">
-                <Input
+                <DateTimePicker
                   label="Sanction Date"
                   required={Boolean(data.sanctionOrderNumber)}
-                  type="date"
+                  mode="date"
                   value={String(data.sanctionDate || '')}
-                  onChange={e => onChange('sanctionDate', e.target.value)}
+                  onChange={val => onChange('sanctionDate', val)}
+                  max={new Date().toISOString().split('T')[0]}
                   error={errors.sanctionDate}
+                  placeholder="Select sanction date"
                 />
               </div>
 

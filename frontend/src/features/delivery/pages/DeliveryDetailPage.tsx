@@ -53,6 +53,7 @@ import {
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { useAuth } from '../../../hooks/useAuth';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
 import { CardSkeleton, Skeleton } from '../../../components/ui/skeleton';
@@ -2358,8 +2359,15 @@ function DpExtensionSection({ delivery, accessRole }: { delivery: DeliveryDetail
               </Button>
             ) : (
               <div className="space-y-2 rounded-xl border border-teal-100 bg-teal-50/30 p-3 dt-fade-in-up">
-                <p className={fieldLabel}>New Requested Delivery Date</p>
-                <Input type="date" value={reqDate} onChange={e => setReqDate(e.target.value)} />
+                <DateTimePicker
+                  label="New Requested Delivery Date"
+                  labelClassName={fieldLabel}
+                  mode="date"
+                  min={new Date().toISOString().split('T')[0]}
+                  value={reqDate}
+                  onChange={val => setReqDate(val)}
+                  placeholder="Select new requested delivery date"
+                />
                 <textarea
                   className={textareaBase}
                   placeholder="Provide reason for extension request..."

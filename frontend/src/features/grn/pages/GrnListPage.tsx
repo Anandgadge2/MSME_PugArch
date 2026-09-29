@@ -8,6 +8,7 @@ import { CheckCircle2, ClipboardList, Clock, FileCheck2, Plus, RefreshCw, Search
 import { Loader2 } from '@/components/ui/loader';
 import { useRouter } from 'next/navigation';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { Card, CardContent } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
@@ -107,20 +108,18 @@ function DateFilterPopover({
                         <button type="button" onClick={closePopover} aria-label="Close date filters" className="text-slate-400 hover:text-slate-600"><X className="h-4 w-4"/></button>
                     </div>
                     <div className="p-4 space-y-4">
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Received</label>
-                            <div className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}>
-                                <input type="date" value={receivedFrom} onChange={e => setReceivedFrom(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="From Date" />
-                                <span className="text-[10px] text-slate-400 font-bold text-center">-</span>
-                                <input type="date" value={receivedTo} onChange={e => setReceivedTo(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="To Date" />
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <DateTimePicker mode="date" size="sm" placeholder="From" value={receivedFrom} onChange={val => setReceivedFrom(val)} />
+                                <DateTimePicker mode="date" size="sm" placeholder="To" min={receivedFrom} value={receivedTo} onChange={val => setReceivedTo(val)} />
                             </div>
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">Updated</label>
-                            <div className="grid items-center gap-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}>
-                                <input type="date" value={updatedFrom} onChange={e => setUpdatedFrom(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="From Date" />
-                                <span className="text-[10px] text-slate-400 font-bold text-center">-</span>
-                                <input type="date" value={updatedTo} onChange={e => setUpdatedTo(e.target.value)} className="h-9 w-full min-w-0 rounded-lg bg-slate-50 px-2 text-[11px] font-bold text-slate-700 border border-slate-200 outline-none focus:border-[#12335f] focus:bg-white" title="To Date" />
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <DateTimePicker mode="date" size="sm" placeholder="From" value={updatedFrom} onChange={val => setUpdatedFrom(val)} />
+                                <DateTimePicker mode="date" size="sm" placeholder="To" min={updatedFrom} value={updatedTo} onChange={val => setUpdatedTo(val)} />
                             </div>
                         </div>
                     </div>

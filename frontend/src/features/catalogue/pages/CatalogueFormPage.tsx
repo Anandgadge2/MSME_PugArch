@@ -38,6 +38,7 @@ import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Badge, Card, CardContent } from '../../../components/ui/card';
 import { Input, Select } from '../../../components/ui/input';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { useAuth } from '../../../hooks/useAuth';
 import { cn } from '../../../lib/utils';
 import { InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -1522,26 +1523,25 @@ export default function CatalogueFormPage() {
                         {/* Validity Dates & Quick Durations */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Offer Start Date
-                            </label>
-                            <input
-                              type="date"
+                            <DateTimePicker
+                              label="Offer Start Date"
+                              labelClassName="block text-xs font-bold text-slate-700 mb-1"
+                              mode="date"
                               value={form.offerStartAt}
-                              onChange={e => updateForm('offerStartAt', e.target.value)}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                              onChange={val => updateForm('offerStartAt', val)}
+                              placeholder="Select offer start date"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1">
-                              Offer End Date
-                            </label>
-                            <input
-                              type="date"
+                            <DateTimePicker
+                              label="Offer End Date"
+                              labelClassName="block text-xs font-bold text-slate-700 mb-1"
+                              mode="date"
                               value={form.offerEndAt}
-                              onChange={e => updateForm('offerEndAt', e.target.value)}
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/15"
+                              min={form.offerStartAt}
+                              onChange={val => updateForm('offerEndAt', val)}
+                              placeholder="Select offer end date"
                             />
                           </div>
                         </div>

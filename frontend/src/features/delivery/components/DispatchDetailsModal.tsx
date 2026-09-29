@@ -44,6 +44,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
 import { openFileAsset } from '../../../lib/files';
@@ -1268,40 +1269,26 @@ export function DispatchDetailsModal({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Clock className="h-3 w-3 text-slate-400" />
-                      Dispatch Timestamp
-                    </label>
-                    <input
-                      type="datetime-local"
+                    <DateTimePicker
+                      label="Dispatch Timestamp"
+                      labelClassName="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500"
+                      mode="datetime"
                       value={dispatchTimestamp}
-                      onChange={e => setDispatchTimestamp(e.target.value)}
+                      onChange={val => setDispatchTimestamp(val)}
                       disabled={isAlreadyDispatched}
-                      className={cn(
-                        "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
-                        isAlreadyDispatched
-                          ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
-                          : "bg-white text-slate-800"
-                      )}
+                      placeholder="Select dispatch date & time"
                     />
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Calendar className="h-3 w-3 text-slate-400" />
-                      Expected Delivery Date (ETA)
-                    </label>
-                    <input
-                      type="date"
+                    <DateTimePicker
+                      label="Expected Delivery Date (ETA)"
+                      labelClassName="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500"
+                      mode="date"
                       value={eta}
-                      onChange={e => setEta(e.target.value)}
+                      onChange={val => setEta(val)}
                       disabled={isAlreadyDispatched}
-                      className={cn(
-                        "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
-                        isAlreadyDispatched
-                          ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
-                          : "bg-white text-slate-800"
-                      )}
+                      placeholder="Select expected delivery date"
                     />
                   </div>
                 </div>

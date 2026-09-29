@@ -29,6 +29,7 @@ import {
 import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
 import { Button } from '../../../components/ui/button';
 import { Input, Select } from '../../../components/ui/input';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { useAuth } from '../../../hooks/useAuth';
 import { usePermissions } from '../../../hooks/useOrgRole';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
@@ -530,25 +531,27 @@ export function DeliveryListPage({ scope = 'all', title, subtitle }: Props) {
               </div>
 
               {expectedDateFilter === 'Custom Date Range' && (
-                <div 
-                  className="grid items-center gap-1 w-full sm:w-auto h-10"
-                  style={{ gridTemplateColumns: 'minmax(0, 1fr) 20px minmax(0, 1fr)' }}
-                >
-                  <input 
-                    type="date" 
-                    value={customDate.start} 
-                    onChange={e => setCustomDate({ ...customDate, start: e.target.value })} 
-                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-                    title="Start Date" 
-                  />
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                  <div className="w-full sm:w-[130px]">
+                    <DateTimePicker
+                      mode="date"
+                      size="sm"
+                      value={customDate.start}
+                      onChange={val => setCustomDate({ ...customDate, start: val })}
+                      placeholder="Start date"
+                    />
+                  </div>
                   <span className="text-slate-400 font-bold text-center">-</span>
-                  <input 
-                    type="date" 
-                    value={customDate.end} 
-                    onChange={e => setCustomDate({ ...customDate, end: e.target.value })} 
-                    className="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-2 text-xs font-bold text-slate-700 outline-none" 
-                    title="End Date" 
-                  />
+                  <div className="w-full sm:w-[130px]">
+                    <DateTimePicker
+                      mode="date"
+                      size="sm"
+                      value={customDate.end}
+                      min={customDate.start}
+                      onChange={val => setCustomDate({ ...customDate, end: val })}
+                      placeholder="End date"
+                    />
+                  </div>
                 </div>
               )}
 

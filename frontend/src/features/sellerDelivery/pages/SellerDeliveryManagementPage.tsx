@@ -29,6 +29,7 @@ import { PdfEngine, type DocumentConfig, moneyPdf } from '../../../lib/pdfEngine
 import { TaxInvoiceCard } from '../../invoices/components/TaxInvoiceCard';
 import { generateTaxInvoicePdf, type TaxInvoiceData, type TaxInvoiceItem } from '../../invoices/lib/invoicePdfGenerator';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { Card, CardContent } from '../../../components/ui/card';
 import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
@@ -1218,9 +1219,15 @@ function AcceptForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: () =>
     const mut = useSellerAccept();
     return (
         <div className="space-y-3">
-            <Field label="Expected Delivery Date">
-                <input type="date" value={eta} onChange={e => setEta(e.target.value)} className="h-9 w-full rounded border border-slate-200 px-3 text-xs font-semibold" />
-            </Field>
+            <div className="space-y-1">
+                <DateTimePicker
+                    label="Expected Delivery Date"
+                    mode="date"
+                    value={eta}
+                    onChange={val => setEta(val)}
+                    placeholder="Select expected delivery date"
+                />
+            </div>
             <Field label="Remarks (optional)">
                 <textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2} className="w-full rounded border border-slate-200 px-3 py-2 text-xs font-semibold" />
             </Field>
@@ -2338,14 +2345,15 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                         </div>
                     </div>
 
-                    <Field label="Expected Delivery Date (ETA)">
-                        <input
-                            type="date"
+                    <div className="space-y-1">
+                        <DateTimePicker
+                            label="Expected Delivery Date (ETA)"
+                            mode="date"
                             value={eta}
-                            onChange={e => setEta(e.target.value)}
-                            className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
+                            onChange={val => setEta(val)}
+                            placeholder="Select expected delivery date"
                         />
-                    </Field>
+                    </div>
 
                     <div>
                         <Field label="E-Way Bill Number (Optional)">
@@ -3744,15 +3752,17 @@ function UploadPodForm({ delivery, onDone }: { delivery: DeliveryDto; onDone: ()
 
             {/* Delivery Date & Received By */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <Field label="Delivery Date *">
-                    <input
-                        type="date"
-                        value={deliveryDate}
-                        onChange={e => setDeliveryDate(e.target.value)}
-                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                <div className="space-y-1">
+                    <DateTimePicker
+                        label="Delivery Date"
                         required
+                        mode="date"
+                        max={new Date().toISOString().split('T')[0]}
+                        value={deliveryDate}
+                        onChange={val => setDeliveryDate(val)}
+                        placeholder="Select delivery date"
                     />
-                </Field>
+                </div>
                 <Field label="Received By *">
                     <input
                         type="text"

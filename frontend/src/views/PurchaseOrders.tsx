@@ -51,6 +51,7 @@ const moneyPdf = (val: any, currency = 'INR') => {
   return `${currency} ${num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 import { Button } from '../components/ui/button';
+import { DateTimePicker } from '../components/ui/DateTimePicker';
 import { Card, CardContent } from '../components/ui/card';
 import { api, readJsonResponse, resolveMediaUrl } from '../lib/api';
 import { openFileAsset, prewarmFileAssetPreview } from '../lib/files';
@@ -1681,19 +1682,53 @@ export default function PurchaseOrders() {
               </div>
               
               {expectedDateFilter === 'Custom Date Range' && (
-                <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto h-9">
-                  <input type="date" value={expectedDateCustom.start} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, start: e.target.value })} className="h-9 w-full sm:w-[95px] rounded-lg border border-slate-200 px-1.5 text-[11px] font-bold text-slate-700 outline-none" title="Start Date" />
+                <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto">
+                  <div className="w-full sm:w-[125px]">
+                    <DateTimePicker
+                      mode="date"
+                      size="sm"
+                      value={expectedDateCustom.start}
+                      onChange={val => setExpectedDateCustom({ ...expectedDateCustom, start: val })}
+                      placeholder="Start date"
+                    />
+                  </div>
                   <span className="text-slate-400 font-bold shrink-0">-</span>
-                  <input type="date" value={expectedDateCustom.end} onChange={e => setExpectedDateCustom({ ...expectedDateCustom, end: e.target.value })} className="h-9 w-full sm:w-[95px] rounded-lg border border-slate-200 px-1.5 text-[11px] font-bold text-slate-700 outline-none" title="End Date" />
+                  <div className="w-full sm:w-[125px]">
+                    <DateTimePicker
+                      mode="date"
+                      size="sm"
+                      value={expectedDateCustom.end}
+                      min={expectedDateCustom.start}
+                      onChange={val => setExpectedDateCustom({ ...expectedDateCustom, end: val })}
+                      placeholder="End date"
+                    />
+                  </div>
                 </div>
               )}
 
               {/* Updated Date */}
-              <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 bg-slate-50/70 border border-slate-200 rounded-lg px-2 h-9 w-full sm:w-auto shrink-0">
+              <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto shrink-0">
                 <span className="text-[10px] font-black uppercase text-slate-400 px-0.5 shrink-0 hidden xl:inline-block">Updated</span>
-                <input type="date" value={updatedDateFilter.start} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, start: e.target.value })} className="h-7 w-full sm:w-[92px] shrink-0 rounded border-none bg-transparent px-0.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated Start" />
+                <div className="w-full sm:w-[120px]">
+                  <DateTimePicker
+                    mode="date"
+                    size="sm"
+                    value={updatedDateFilter.start}
+                    onChange={val => setUpdatedDateFilter({ ...updatedDateFilter, start: val })}
+                    placeholder="Updated from"
+                  />
+                </div>
                 <span className="text-slate-300 font-black shrink-0">-</span>
-                <input type="date" value={updatedDateFilter.end} onChange={e => setUpdatedDateFilter({ ...updatedDateFilter, end: e.target.value })} className="h-7 w-full sm:w-[92px] shrink-0 rounded border-none bg-transparent px-0.5 text-[11px] font-bold text-slate-700 outline-none focus:bg-white focus:ring-1 focus:ring-slate-300" title="Updated End" />
+                <div className="w-full sm:w-[120px]">
+                  <DateTimePicker
+                    mode="date"
+                    size="sm"
+                    value={updatedDateFilter.end}
+                    min={updatedDateFilter.start}
+                    onChange={val => setUpdatedDateFilter({ ...updatedDateFilter, end: val })}
+                    placeholder="Updated to"
+                  />
+                </div>
               </div>
               {activeFiltersCount > 0 && (
                 <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2.5 text-[11px] font-bold uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg shrink-0">

@@ -37,25 +37,23 @@ export const INSPECTION_TYPE_OPTIONS = [
 ];
 
 export const PAYMENT_MODE_OPTIONS = [
-  'PFMS',
-  'State Treasury',
-  'GeM Pool Account',
-  'Department Payment System',
+
+ 
   'Bank Transfer',
   'Online Payment Gateway',
   'Other',
 ];
 
-export const PAC_TECHNICAL_REASONS = [
-  'Compatibility with existing system',
-  'OEM spare part',
-  'Patented technology',
-  'Standardization with existing installed base',
-  'Warranty continuity',
-  'Safety / regulatory requirement',
-  'No equivalent alternative available',
-  'Other',
-];
+// export const PAC_TECHNICAL_REASONS = [
+//   'Compatibility with existing system',
+//   'OEM spare part',
+//   'Patented technology',
+//   'Standardization with existing installed base',
+//   'Warranty continuity',
+//   'Safety / regulatory requirement',
+//   'No equivalent alternative available',
+//   'Other',
+// ];
 
 export const DEFAULT_CHECKOUT_FORM = {
   selectedMethod: '' as const,

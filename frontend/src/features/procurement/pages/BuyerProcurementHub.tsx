@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { Skeleton } from '../../../components/ui/skeleton';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useQuery } from '@tanstack/react-query';
@@ -872,21 +873,24 @@ export default function BuyerProcurementHub() {
             {/* Date From & Date To */}
             <div className="grid grid-cols-2 gap-1.5">
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Date From</label>
-                <input
-                  type="date"
+                <DateTimePicker
+                  label="Date From"
+                  labelClassName="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider"
+                  mode="date"
                   value={startDateFilter}
-                  onChange={e => setStartDateFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs"
+                  onChange={val => setStartDateFilter(val)}
+                  placeholder="From date"
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Date To</label>
-                <input
-                  type="date"
+                <DateTimePicker
+                  label="Date To"
+                  labelClassName="block text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider"
+                  mode="date"
                   value={endDateFilter}
-                  onChange={e => setEndDateFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs"
+                  min={startDateFilter}
+                  onChange={val => setEndDateFilter(val)}
+                  placeholder="To date"
                 />
               </div>
             </div>

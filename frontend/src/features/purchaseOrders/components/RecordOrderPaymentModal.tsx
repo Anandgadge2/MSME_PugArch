@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { api } from '../../../lib/api';
 import { postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
@@ -412,20 +413,16 @@ export function RecordOrderPaymentModal({
 
               {/* Payment Transfer Date */}
               <div>
-                <label
-                  htmlFor="payment-date"
-                  className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
-                >
-                  Payment Transfer Date <span className="text-rose-500">*</span>
-                </label>
-                <input
+                <DateTimePicker
                   id="payment-date"
-                  type="date"
+                  label="Payment Transfer Date"
+                  labelClassName="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
                   required
+                  mode="date"
                   value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
+                  onChange={(val) => setPaymentDate(val)}
                   max={new Date().toISOString().split('T')[0]}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-xs font-bold text-slate-900 focus:border-[#12335f] focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+                  placeholder="Select payment transfer date"
                 />
               </div>
 

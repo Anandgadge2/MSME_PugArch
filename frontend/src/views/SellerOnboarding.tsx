@@ -5,6 +5,7 @@ import { openFileAsset } from '../lib/files';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
+import { DateTimePicker } from '../components/ui/DateTimePicker';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
 import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle } from 'lucide-react';
@@ -1663,7 +1664,25 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         />
                         <Input label="Business PAN Number" name="pan" value={formData.pan} onChange={handleChange} placeholder="ABCDE1234F" maxLength={10} required error={panErrors.pan} />
                         <Input label="Name (As in PAN)" name="nameAsInPan" value={formData.nameAsInPan} onChange={handleChange} placeholder="Autofetched from PAN" required error={panErrors.nameAsInPan} />
-                        <Input label="Date (As in PAN)" name="dateAsInPan" type="date" value={formData.dateAsInPan} onChange={handleChange} required error={panErrors.dateAsInPan} />
+                        <DateTimePicker
+                          label="Date (As in PAN)"
+                          name="dateAsInPan"
+                          mode="date"
+                          size="lg"
+                          max={new Date().toISOString().split('T')[0]}
+                          value={formData.dateAsInPan}
+                          placeholder="Select date as in PAN"
+                          onChange={(val) => {
+                            setFormData((prev: any) => ({ ...prev, dateAsInPan: val }));
+                            setPanErrors((prev: any) => {
+                              const next = { ...prev };
+                              delete next.dateAsInPan;
+                              return next;
+                            });
+                          }}
+                          required
+                          error={panErrors.dateAsInPan}
+                        />
                       </div>
                       <div className="flex justify-end gap-2.5 sm:gap-3 pt-4">
                         <Button onClick={verifyAndContinue} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
@@ -1684,7 +1703,25 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           required
                           className="bg-slate-50 border-slate-200"
                         />
-                        <Input label="Date of Incorporation" name="dateOfIncorporation" type="date" value={formData.dateOfIncorporation} onChange={handleChange} required error={detailsErrors.dateOfIncorporation} />
+                        <DateTimePicker
+                          label="Date of Incorporation"
+                          name="dateOfIncorporation"
+                          mode="date"
+                          size="lg"
+                          max={new Date().toISOString().split('T')[0]}
+                          value={formData.dateOfIncorporation}
+                          placeholder="Select date of incorporation"
+                          onChange={(val) => {
+                            setFormData((prev: any) => ({ ...prev, dateOfIncorporation: val }));
+                            setDetailsErrors((prev: any) => {
+                              const next = { ...prev };
+                              delete next.dateOfIncorporation;
+                              return next;
+                            });
+                          }}
+                          required
+                          error={detailsErrors.dateOfIncorporation}
+                        />
                         <Input
                           label="Registered Mobile Number"
                           name="mobile"

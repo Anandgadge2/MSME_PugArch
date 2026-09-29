@@ -3,6 +3,7 @@ import { api } from '../../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input, Select } from '../ui/input';
+import { DateTimePicker } from '../ui/DateTimePicker';
 import { toast } from 'sonner';
 import {
   Building2,
@@ -1820,24 +1821,26 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               {panErrors.personalName && <p id="reg-flow-pan-name-err" role="alert" className="text-[11px] font-medium text-red-600">{panErrors.personalName}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label htmlFor="reg-flow-pan-dob" className="text-xs font-bold text-slate-700">Date Of Birth*</label>
-                              <Input
+                              <DateTimePicker
                                 id="reg-flow-pan-dob"
-                                type="date"
+                                label="Date Of Birth"
+                                labelClassName="text-xs font-bold text-slate-700"
+                                required
+                                mode="date"
+                                size="lg"
+                                max={new Date().toISOString().split('T')[0]}
+                                placeholder="DD Month YYYY"
                                 value={formData.dob}
-                                aria-invalid={!!(submitErrors.dob || panErrors.dob)}
-                                aria-describedby={submitErrors.dob || panErrors.dob ? "reg-flow-pan-dob-err" : undefined}
-                                onChange={(event) => {
+                                error={submitErrors.dob || panErrors.dob}
+                                onChange={(val) => {
                                   setSubmitErrors(prev => {
                                     const { dob, ...rest } = prev;
                                     return rest;
                                   });
                                   setIsPanVerified(false);
-                                  setFormData({ ...formData, dob: event.target.value });
+                                  setFormData({ ...formData, dob: val });
                                 }}
-                                className={cn("h-11 rounded-lg border-slate-200 bg-white text-xs", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
                               />
-                              {(submitErrors.dob || panErrors.dob) && <p id="reg-flow-pan-dob-err" role="alert" className="text-[11px] font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
                             </div>
                           </div>
                           <div className="flex justify-end">
@@ -2144,24 +2147,26 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                               {panErrors.personalName && <p id="reg-flow-seller-pan-name-err" role="alert" className="text-xs font-medium text-red-600">{panErrors.personalName}</p>}
                             </div>
                             <div className="space-y-1.5">
-                              <label htmlFor="reg-flow-seller-pan-dob" className="text-sm font-semibold text-slate-800">Date Of Birth*</label>
-                              <Input
+                              <DateTimePicker
                                 id="reg-flow-seller-pan-dob"
-                                type="date"
+                                label="Date Of Birth"
+                                labelClassName="text-sm font-semibold text-slate-800"
+                                required
+                                mode="date"
+                                size="lg"
+                                max={new Date().toISOString().split('T')[0]}
+                                placeholder="DD Month YYYY"
                                 value={formData.dob}
-                                aria-invalid={!!(submitErrors.dob || panErrors.dob)}
-                                aria-describedby={submitErrors.dob || panErrors.dob ? "reg-flow-seller-pan-dob-err" : undefined}
-                                onChange={(event) => {
+                                error={submitErrors.dob || panErrors.dob}
+                                onChange={(val) => {
                                   setSubmitErrors(prev => {
                                     const { dob, ...rest } = prev;
                                     return rest;
                                   });
                                   setIsPanVerified(false);
-                                  setFormData({ ...formData, dob: event.target.value });
+                                  setFormData({ ...formData, dob: val });
                                 }}
-                                className={cn("h-11 rounded border-slate-300 bg-white", (submitErrors.dob || panErrors.dob) && "border-red-400 focus-visible:ring-red-500")}
                               />
-                              {(submitErrors.dob || panErrors.dob) && <p id="reg-flow-seller-pan-dob-err" role="alert" className="text-xs font-medium text-red-600">{submitErrors.dob || panErrors.dob}</p>}
                             </div>
                           </div>
                           <div className="flex justify-end">

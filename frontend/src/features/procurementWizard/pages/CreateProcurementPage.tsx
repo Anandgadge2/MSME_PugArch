@@ -6604,22 +6604,29 @@ function ScheduleStepForm({
               <span>Agreement Validity &amp; Supplier Allocation</span>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label="Agreement Effective Start Date" required>
-                <input
-                  type="date"
+              <div className="space-y-1">
+                <DateTimePicker
+                  label="Agreement Effective Start Date"
+                  labelClassName="block text-xs font-semibold text-slate-700"
+                  required
+                  mode="date"
                   value={draft.rateContractConfig.periodStartDate}
-                  onChange={e => updateRateContract('periodStartDate', e.target.value)}
-                  className={inputClass}
+                  onChange={val => updateRateContract('periodStartDate', val)}
+                  placeholder="Select agreement start date"
                 />
-              </Field>
-              <Field label="Agreement Expiry Date" required>
-                <input
-                  type="date"
+              </div>
+              <div className="space-y-1">
+                <DateTimePicker
+                  label="Agreement Expiry Date"
+                  labelClassName="block text-xs font-semibold text-slate-700"
+                  required
+                  mode="date"
                   value={draft.rateContractConfig.periodEndDate}
-                  onChange={e => updateRateContract('periodEndDate', e.target.value)}
-                  className={inputClass}
+                  onChange={val => updateRateContract('periodEndDate', val)}
+                  min={draft.rateContractConfig.periodStartDate}
+                  placeholder="Select agreement expiry date"
                 />
-              </Field>
+              </div>
               <Field label="Rate Validity Duration" required>
                 <input
                   value={draft.rateContractConfig.rateValidityPeriod}

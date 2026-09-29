@@ -10,6 +10,7 @@ import {
 import { Card, CardContent, Badge } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { KpiCard } from '../../shared/KpiCard';
 import { Pagination } from '../../shared/Pagination';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
@@ -617,12 +618,17 @@ export default function RateContractsPage() {
                     className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-medium min-h-[60px]" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Expected Delivery Date *</label>
-                  <input type="date" value={poExpectedDelivery} onChange={e => setPoExpectedDelivery(e.target.value)}
-                    className="mt-1 block w-full rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-medium" />
-                  <span className="mt-1 block text-[10px] text-slate-400">
-                    Auto-calculated from {poContract.metadata?.deliverySlaDays || 15}-day delivery SLA.
-                  </span>
+                  <DateTimePicker
+                    label="Expected Delivery Date"
+                    labelClassName="text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    required
+                    mode="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={poExpectedDelivery}
+                    onChange={val => setPoExpectedDelivery(val)}
+                    placeholder="Select expected delivery date"
+                    hint={`Auto-calculated from ${poContract.metadata?.deliverySlaDays || 15}-day delivery SLA.`}
+                  />
                 </div>
               </div>
 

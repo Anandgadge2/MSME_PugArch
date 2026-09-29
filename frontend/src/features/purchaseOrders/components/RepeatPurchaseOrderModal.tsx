@@ -15,6 +15,7 @@ import {
   DollarSign
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { api } from '../../../lib/api';
 import { formatCurrency, formatDate } from '../../shared/format';
 import type { PurchaseOrderDto } from '../../shared/types';
@@ -321,25 +322,18 @@ export function RepeatPurchaseOrderModal({
 
             {/* Expected Delivery Date with Timeline Chips */}
             <div className="rounded-2xl bg-white p-4 border border-slate-200/80 shadow-2xs space-y-2.5">
-              <div>
-                <label htmlFor="repeat-date-input" className="block text-xs font-black uppercase tracking-wider text-slate-800">
-                  Expected Delivery Date
-                </label>
-                <p className="text-[10px] font-semibold text-slate-400">Target fulfillment timeline for this shipment</p>
-              </div>
-
-              <div className="relative">
-                <Calendar className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                <input
-                  id="repeat-date-input"
-                  type="date"
-                  required
-                  value={expectedDelivery}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setExpectedDelivery(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-xs font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs transition-colors"
-                />
-              </div>
+              <DateTimePicker
+                id="repeat-date-input"
+                label="Expected Delivery Date"
+                labelClassName="block text-xs font-black uppercase tracking-wider text-slate-800"
+                hint="Target fulfillment timeline for this shipment"
+                required
+                mode="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={expectedDelivery}
+                onChange={(val) => setExpectedDelivery(val)}
+                placeholder="Select expected delivery date"
+              />
 
               {/* Quick Date Chips */}
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">

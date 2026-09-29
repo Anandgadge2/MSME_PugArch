@@ -23,6 +23,7 @@
 import React, { useMemo, useState } from 'react';
 import { Filter, RefreshCw, Search } from 'lucide-react';
 import { Button } from '../../components/ui/button';
+import { DateTimePicker } from '../../components/ui/DateTimePicker';
 import { cn } from '../../lib/utils';
 
 export type ToolbarFilterOption = { value: string; label: string };
@@ -91,15 +92,16 @@ const renderFilter = (f: ToolbarFilter, idx: number) => {
     }
     if (f.kind === 'date') {
         return (
-            <input
-                key={idx}
-                type="date"
-                value={f.value}
-                onChange={e => f.onChange(e.target.value)}
-                aria-label={f.ariaLabel || 'Date filter'}
-                placeholder={f.placeholder}
-                className={cn(inputBase, 'w-full sm:w-auto sm:min-w-[140px] font-semibold', f.className)}
-            />
+            <div key={idx} className={cn('w-full sm:w-auto sm:min-w-[140px]', f.className)}>
+                <DateTimePicker
+                    mode="date"
+                    size="sm"
+                    value={f.value}
+                    onChange={val => f.onChange(val)}
+                    aria-label={f.ariaLabel || 'Date filter'}
+                    placeholder={f.placeholder || 'Filter date'}
+                />
+            </div>
         );
     }
     return (

@@ -19,6 +19,7 @@ import { api } from '../../../lib/api';
 import { getApi, normalizeList, postApi } from '../../shared/apiClient';
 import { formatCurrency } from '../../shared/format';
 import { Button } from '../../../components/ui/button';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
 
@@ -530,17 +531,16 @@ export function PaymentReceiptUploadModal({
               {/* Bank & Date Details */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
-                  <label htmlFor="transfer-date" className="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                    Transfer Date *
-                  </label>
-                  <input
+                  <DateTimePicker
                     id="transfer-date"
-                    type="date"
+                    label="Transfer Date"
+                    labelClassName="block text-[10px] font-black uppercase tracking-wider text-slate-700 mb-1.5"
                     required
+                    mode="date"
                     max={new Date().toISOString().split('T')[0]}
                     value={paymentDate}
-                    onChange={e => setPaymentDate(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-shadow"
+                    onChange={val => setPaymentDate(val)}
+                    placeholder="Select transfer date"
                   />
                 </div>
 

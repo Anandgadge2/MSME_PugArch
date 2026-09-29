@@ -22,8 +22,13 @@ export interface DateTimePickerProps {
   error?: string;
   min?: string;
   max?: string;
+  minYear?: number;
+  maxYear?: number;
+  size?: 'sm' | 'md' | 'lg';
   placeholder?: string;
   className?: string;
+  triggerClassName?: string;
+  labelClassName?: string;
   hint?: string;
   'aria-label'?: string;
   'aria-describedby'?: string;
@@ -146,8 +151,13 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       error,
       min,
       max,
+      minYear,
+      maxYear,
+      size = 'md',
       placeholder,
       className,
+      triggerClassName,
+      labelClassName,
       hint,
       'aria-label': ariaLabel,
       'aria-describedby': ariaDescribedBy,
@@ -199,6 +209,35 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       }
       return today.getMonth();
     });
+
+    // Effective min and max year bounds for wide range support (e.g. DOB, incorporation)
+    const effectiveMinYear = React.useMemo(() => {
+      if (typeof minYear === 'number') return minYear;
+      if (min) {
+        const parsedMinYear = parseInt(min.slice(0, 4), 10);
+        if (!Number.isNaN(parsedMinYear)) return parsedMinYear;
+      }
+      return mode === 'date' ? 1940 : today.getFullYear() - 10;
+    }, [minYear, min, mode, today]);
+
+    const effectiveMaxYear = React.useMemo(() => {
+      if (typeof maxYear === 'number') return maxYear;
+      if (max) {
+        const parsedMaxYear = parseInt(max.slice(0, 4), 10);
+        if (!Number.isNaN(parsedMaxYear)) return parsedMaxYear;
+      }
+      return today.getFullYear() + 25;
+    }, [maxYear, max, today]);
+
+    const yearOptions = React.useMemo(() => {
+      const start = Math.min(effectiveMinYear, viewYear);
+      const end = Math.max(effectiveMaxYear, viewYear);
+      const list: number[] = [];
+      for (let y = start; y <= end; y++) {
+        list.push(y);
+      }
+      return list;
+    }, [effectiveMinYear, effectiveMaxYear, viewYear]);
 
     // When value changes from outside, sync view month & year if valid
     React.useEffect(() => {
@@ -403,12 +442,26 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       return base;
     }, [parsed.minute]);
 
+    const sizeClasses: Record<'sm' | 'md' | 'lg', string> = {
+      sm: 'h-8 px-2.5 py-1 text-xs rounded-lg',
+      md: 'h-10 px-3 py-2 text-xs font-semibold rounded-xl',
+      lg: 'h-11 sm:h-12 px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-xl',
+    };
+
+    const minDateStr = min ? (min.includes('T') ? min.split('T')[0] : min) : undefined;
+    const maxDateStr = max ? (max.includes('T') ? max.split('T')[0] : max) : undefined;
+    const isTodayDisabled = Boolean((minDateStr && todayIsoDate < minDateStr) || (maxDateStr && todayIsoDate > maxDateStr));
+
     return (
       <div ref={containerRef} className={cn('relative w-full min-w-0 space-y-1', className)}>
+        {name && <input type="hidden" name={name} value={value || ''} />}
         {label && (
           <label
             htmlFor={inputId}
-            className="block break-words text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-600 leading-none sm:text-[11px]"
+            className={cn(
+              "block break-words text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-600 leading-none sm:text-[11px]",
+              labelClassName
+            )}
           >
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
@@ -431,11 +484,13 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
             aria-invalid={!!error}
             aria-describedby={cn(error ? errorId : undefined, hint ? hintId : undefined, ariaDescribedBy)}
             className={cn(
-              'group flex h-10 w-full min-w-0 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-2xs transition-all outline-none',
+              'group flex w-full min-w-0 items-center justify-between border border-slate-200 bg-white text-left shadow-2xs transition-all outline-none',
+              sizeClasses[size || 'md'],
               'hover:border-slate-300 hover:bg-slate-50/50',
               'focus-visible:border-[#12335f] focus-visible:ring-2 focus-visible:ring-[#12335f]/20',
               disabled && 'cursor-not-allowed bg-slate-100/70 text-slate-400 opacity-60',
-              error && 'border-red-500 bg-red-50/20 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-500/20'
+              error && 'border-red-500 bg-red-50/20 text-red-900 focus-visible:border-red-500 focus-visible:ring-red-500/20',
+              triggerClassName
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
@@ -534,7 +589,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                   aria-label="Select year"
                   className="rounded-md border-0 bg-transparent py-0.5 px-1 text-xs font-bold text-slate-800 outline-none hover:bg-slate-100 cursor-pointer"
                 >
-                  {Array.from({ length: 15 }, (_, i) => today.getFullYear() - 2 + i).map(y => (
+                  {yearOptions.map(y => (
                     <option key={y} value={y}>
                       {y}
                     </option>
@@ -691,8 +746,14 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  disabled={isTodayDisabled}
                   onClick={handleSetNow}
-                  className="text-[11px] font-bold text-slate-500 hover:text-[#12335f] transition"
+                  className={cn(
+                    "text-[11px] font-bold transition",
+                    isTodayDisabled
+                      ? "text-slate-300 cursor-not-allowed pointer-events-none"
+                      : "text-slate-500 hover:text-[#12335f]"
+                  )}
                 >
                   {mode === 'date' ? 'Today' : 'Now'}
                 </button>

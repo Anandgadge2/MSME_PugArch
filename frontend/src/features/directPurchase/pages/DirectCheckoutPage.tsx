@@ -26,6 +26,7 @@ import {
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DateTimePicker } from '@/components/ui/DateTimePicker';
 import { Loader2 } from '@/components/ui/loader';
 import { CheckoutSkeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -470,15 +471,14 @@ export default function DirectCheckoutPage() {
             <CardContent className="p-5 space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    Expected Delivery Date (Optional)
-                  </label>
-                  <input
-                    type="date"
+                  <DateTimePicker
+                    label="Expected Delivery Date (Optional)"
+                    labelClassName="text-[10px] font-black uppercase tracking-wider text-slate-500"
+                    mode="date"
                     min={new Date().toISOString().split('T')[0]}
                     value={expectedDeliveryDate}
-                    onChange={e => setExpectedDeliveryDate(e.target.value)}
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    onChange={val => setExpectedDeliveryDate(val)}
+                    placeholder="Select expected delivery date"
                   />
                 </div>
 

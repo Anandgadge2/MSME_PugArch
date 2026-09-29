@@ -33,6 +33,7 @@ import type { DocumentPreview } from '../../../lib/files';
 import { getDocumentPreviewMode } from '../../../lib/files';
 import { useAuth } from '../../../hooks/useAuth';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
+import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import {
   LifecycleTracker,
   PageShell,
@@ -1479,16 +1480,17 @@ function FinancialQuoteStep({
 
       {isRateContract && (
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label>
-            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500">Rate Validity Date <span className="text-red-500">*</span></span>
-            <input
-              type="date"
-              value={rateContractData.validityDate}
-              onChange={e => setRateContractData(prev => ({ ...prev, validityDate: e.target.value }))}
-              disabled={!canEdit}
-              className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
-            />
-          </label>
+          <DateTimePicker
+            label="Rate Validity Date"
+            labelClassName="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+            required
+            mode="date"
+            min={new Date().toISOString().split('T')[0]}
+            value={rateContractData.validityDate}
+            onChange={val => setRateContractData(prev => ({ ...prev, validityDate: val }))}
+            disabled={!canEdit}
+            placeholder="Select rate validity date"
+          />
           <Field
             label="Rate Schedule / Commercial Notes"
             value={rateContractData.notes}

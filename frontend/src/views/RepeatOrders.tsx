@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent } from '../components/ui/card';
+import { DateTimePicker } from '../components/ui/DateTimePicker';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { EmptyState } from '../features/shared/FeatureStates';
@@ -1087,58 +1088,49 @@ export default function RepeatOrders() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
                     {/* 1. Repeat Order Date */}
                     <div>
-                      <label htmlFor="repeat-order-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                        Repeat Order Date <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <input
-                          id="repeat-order-date"
-                          type="date"
-                          value={repeatOrderDate}
-                          onChange={(e) => setRepeatOrderDate(e.target.value)}
-                          className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none transition-all cursor-pointer"
-                        />
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">Date when this repeat order is initiated.</p>
+                      <DateTimePicker
+                        id="repeat-order-date"
+                        label="Repeat Order Date"
+                        labelClassName="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                        required
+                        mode="date"
+                        value={repeatOrderDate}
+                        onChange={(val) => setRepeatOrderDate(val)}
+                        placeholder="Select repeat order date"
+                        hint="Date when this repeat order is initiated."
+                      />
                     </div>
 
                     {/* 2. Required By Date */}
                     <div>
-                      <label htmlFor="required-by-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                        Required By Date <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <CalendarClock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
-                        <input
-                          id="required-by-date"
-                          type="date"
-                          min={todayIso}
-                          value={requiredByDate}
-                          onChange={(e) => setRequiredByDate(e.target.value)}
-                          className="w-full h-10 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 outline-none transition-all cursor-pointer"
-                        />
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">Target date by which materials are required.</p>
+                      <DateTimePicker
+                        id="required-by-date"
+                        label="Required By Date"
+                        labelClassName="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                        required
+                        mode="date"
+                        min={todayIso}
+                        value={requiredByDate}
+                        onChange={(val) => setRequiredByDate(val)}
+                        placeholder="Select required-by date"
+                        hint="Target date by which materials are required."
+                      />
                     </div>
 
                     {/* 3. New Delivery Date */}
                     <div>
-                      <label htmlFor="new-delivery-date" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1">
-                        New Delivery Date <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Truck className="absolute left-3 top-2.5 h-4 w-4 text-emerald-600 pointer-events-none" />
-                        <input
-                          id="new-delivery-date"
-                          type="date"
-                          min={todayIso}
-                          value={newDeliveryDate}
-                          onChange={(e) => setNewDeliveryDate(e.target.value)}
-                          className="w-full h-10 pl-9 pr-3 rounded-xl border-2 border-emerald-500 bg-emerald-50/20 text-xs font-black text-slate-900 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
-                        />
-                      </div>
-                      <p className="text-[10px] text-emerald-700 font-bold mt-1">Contractual delivery deadline for the supplier.</p>
+                      <DateTimePicker
+                        id="new-delivery-date"
+                        label="New Delivery Date"
+                        labelClassName="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1"
+                        required
+                        mode="date"
+                        min={todayIso}
+                        value={newDeliveryDate}
+                        onChange={(val) => setNewDeliveryDate(val)}
+                        placeholder="Select new delivery date"
+                        hint="Contractual delivery deadline for the supplier."
+                      />
                     </div>
 
                     {/* 4. Remarks / Justification */}

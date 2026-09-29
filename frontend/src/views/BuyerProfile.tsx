@@ -5,6 +5,7 @@ import { api, BASE_URL, resolveMediaUrl } from '../lib/api';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input, Select } from '../components/ui/input';
+import { DateTimePicker } from '../components/ui/DateTimePicker';
 import {
   Building2,
   MapPin,
@@ -3000,13 +3001,15 @@ export default function BuyerProfile() {
                       error={formErrors.designation}
                       className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
                     />
-                    <Input
-                      label="Date of Retirement *"
-                      type="date"
+                    <DateTimePicker
+                      label="Date of Retirement"
+                      mode="date"
+                      size="lg"
                       value={formData.dateOfRetirement}
-                      onChange={(e) => handleFieldChange('dateOfRetirement', e.target.value)}
+                      onChange={(val) => handleFieldChange('dateOfRetirement', val)}
+                      placeholder="Select date of retirement"
                       error={formErrors.dateOfRetirement}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      required
                     />
                   </div>
 
@@ -3027,13 +3030,16 @@ export default function BuyerProfile() {
                       error={formErrors.orgPan}
                       className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
                     />
-                    <Input
-                      label="Date (As in Pan) *"
-                      type="date"
+                    <DateTimePicker
+                      label="Date (As in Pan)"
+                      mode="date"
+                      size="lg"
+                      max={new Date().toISOString().split('T')[0]}
                       value={formData.dateAsInPan}
-                      onChange={(e) => handleFieldChange('dateAsInPan', e.target.value)}
+                      onChange={(val) => handleFieldChange('dateAsInPan', val)}
+                      placeholder="Select date as in PAN"
                       error={formErrors.dateAsInPan}
-                      className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
+                      required
                     />
 
                     <div className="space-y-4 pt-2">

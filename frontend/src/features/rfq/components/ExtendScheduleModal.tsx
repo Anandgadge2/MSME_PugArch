@@ -478,102 +478,72 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
 
             {/* Closing Date Picker */}
             <div>
-              <label
-                htmlFor="extend-closing-date-input"
-                className="block text-xs font-bold text-slate-800 mb-1"
-              >
-                New Submission Closing Date &amp; Time <span className="text-rose-500">*</span>
-              </label>
               <DateTimePicker
                 id="extend-closing-date-input"
+                label="New Submission Closing Date & Time"
+                labelClassName="text-xs font-bold text-slate-800 mb-1"
                 value={closingDate}
                 onChange={handleClosingDateChange}
                 required
                 placeholder="Select submission closing date & time"
                 min={new Date().toISOString()}
+                hint="Vendors cannot submit new bids or revise existing proposals once this clock expires."
               />
-              <p className="text-[11px] text-slate-500 mt-1">
-                Vendors cannot submit new bids or revise existing proposals once this clock expires.
-              </p>
             </div>
 
             {/* Downstream Dates Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
               <div>
-                <label
-                  htmlFor="extend-tech-date-input"
-                  className="block text-xs font-bold text-slate-800 mb-1"
-                >
-                  Technical Opening Date &amp; Time
-                </label>
                 <DateTimePicker
                   id="extend-tech-date-input"
+                  label="Technical Opening Date & Time"
+                  labelClassName="text-xs font-bold text-slate-800 mb-1"
                   value={technicalOpeningDate}
                   onChange={setTechnicalOpeningDate}
                   placeholder="Select technical opening date & time"
                   min={closingDate || new Date().toISOString()}
+                  hint="Must be on or after the new closing date."
                 />
-                <p className="text-[10.5px] text-slate-500 mt-0.5">
-                  Must be on or after the new closing date.
-                </p>
               </div>
 
               <div>
-                <label
-                  htmlFor="extend-fin-date-input"
-                  className="block text-xs font-bold text-slate-800 mb-1"
-                >
-                  Financial Opening Date &amp; Time
-                </label>
                 <DateTimePicker
                   id="extend-fin-date-input"
+                  label="Financial Opening Date & Time"
+                  labelClassName="text-xs font-bold text-slate-800 mb-1"
                   value={financialOpeningDate}
                   onChange={setFinancialOpeningDate}
                   placeholder="Select financial opening date & time"
                   min={technicalOpeningDate || closingDate || new Date().toISOString()}
+                  hint="Must be on or after technical opening."
                 />
-                <p className="text-[10.5px] text-slate-500 mt-0.5">
-                  Must be on or after technical opening.
-                </p>
               </div>
 
               <div>
-                <label
-                  htmlFor="extend-reqby-date-input"
-                  className="block text-xs font-bold text-slate-800 mb-1"
-                >
-                  Required-By / Delivery Date &amp; Time
-                </label>
                 <DateTimePicker
                   id="extend-reqby-date-input"
+                  label="Required-By / Delivery Date & Time"
+                  labelClassName="text-xs font-bold text-slate-800 mb-1"
                   value={requiredByDate}
                   onChange={setRequiredByDate}
                   placeholder="Select required delivery date & time"
                   min={closingDate || new Date().toISOString()}
+                  hint="Contractual goods/services delivery deadline (date & time)."
                 />
-                <p className="text-[10.5px] text-slate-500 mt-0.5">
-                  Contractual goods/services delivery deadline (date &amp; time).
-                </p>
               </div>
 
               <div>
-                <label
-                  htmlFor="extend-validity-date-input"
-                  className="block text-xs font-bold text-slate-800 mb-1"
-                >
-                  Bid Validity Expiry Date
-                </label>
                 <DateTimePicker
                   id="extend-validity-date-input"
+                  label="Bid Validity Expiry Date"
+                  labelClassName="text-xs font-bold text-slate-800 mb-1"
                   mode="date"
                   value={bidValidityDate}
                   onChange={setBidValidityDate}
                   placeholder="Select bid validity expiry date"
                   min={closingDate ? closingDate.split("T")[0] : undefined}
+                  hint="Validity guarantee period for submitted quotes."
                 />
-                <p className="text-[10.5px] text-slate-500 mt-0.5">
-                  Validity guarantee period for submitted quotes.
-                </p>
               </div>
             </div>
 
