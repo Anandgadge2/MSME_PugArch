@@ -286,3 +286,35 @@ export const cleanDeliveryAddress = (raw?: string | null): string => {
   return dedupedSegments.join(', ');
 };
 
+/**
+ * Formats a clean, non-redundant delivery address string from an address record.
+ */
+export const formatDeliveryAddressString = (addr?: {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  district?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+} | null): string => {
+  if (!addr) return '';
+  const street = [addr.addressLine1, addr.addressLine2].filter(Boolean).map(s => s?.trim()).filter(Boolean).join(', ');
+  const city = addr.city?.trim() || '';
+  const dist = addr.district?.trim() || '';
+  const isCitySameDist = city && dist && (
+    city.toLowerCase() === dist.toLowerCase() ||
+    (city.length >= 5 && dist.length >= 5 && (
+      city.toLowerCase().startsWith(dist.toLowerCase().slice(0, 5)) ||
+      dist.toLowerCase().startsWith(city.toLowerCase().slice(0, 5))
+    ))
+  );
+  const locParts = [
+    isCitySameDist ? (dist.length >= city.length ? dist : city) : [city, dist].filter(Boolean).join(', '),
+    addr.state?.trim(),
+  ].filter(Boolean).join(', ');
+  const pin = addr.pincode ? ` - ${addr.pincode.trim()}` : '';
+  const raw = `${street}${street && locParts ? ', ' : ''}${locParts}${pin}`;
+  return cleanDeliveryAddress(raw) || raw;
+};
+
+

@@ -7123,9 +7123,12 @@ for (const [path, status, action] of [
     const { id } = parse(idParams, req.params);
     await assertBuyerProcurementApproved(req);
     const response = await db.quoteResponse.findUnique({ where: { id }, include: { quoteRequest: true } });
-    if (!response || (!isAdmin(req) && response.quoteRequest.buyerId !== userId(req))) throw new ApiError(404, 'Quote response not found', 'QUOTE_RESPONSE_NOT_FOUND');
+    const isAuthorizedBuyer = isAdmin(req) ||
+      response?.quoteRequest?.buyerId === userId(req) ||
+      (Boolean(req.user?.organizationId) && (response?.quoteRequest as any)?.organizationId === req.user.organizationId);
+    if (!response || !isAuthorizedBuyer) throw new ApiError(404, 'Quote response not found', 'QUOTE_RESPONSE_NOT_FOUND');
     if (status === 'ACCEPTED') {
-      const body = parse(z.object({ tenderId: z.coerce.number().int().positive().optional(), bidId: z.coerce.number().int().positive().optional(), title: z.string().trim().min(3).max(200).optional() }), req.body);
+      const body = parse(z.object({ tenderId: z.coerce.number().int().positive().optional(), bidId: z.coerce.number().int().positive().optional(), title: z.string().trim().min(3).max(200).optional() }).passthrough().optional().default({}), req.body || {});
       ok(res, await procurementWorkflow.acceptQuoteResponseAndGeneratePO(actorFrom(req), id, body));
       return;
     }
@@ -8789,9 +8792,16 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
 }));
 
 router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
-  const po = await db.purchaseOrder.findUnique({
-    where: { id },
+  const rawId = String(req.params.id || '').trim();
+  const numId = Number(rawId);
+  const isNumeric = Number.isInteger(numId) && numId > 0 && numId <= 2147483647;
+  const po = await db.purchaseOrder.findFirst({
+    where: {
+      OR: [
+        ...(isNumeric ? [{ id: numId }] : []),
+        { poNumber: rawId }
+      ]
+    },
     include: {
       buyer: {
         select: {
@@ -13929,7 +13939,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this procurement bid', 'FORBIDDEN');
     }
     if (bid.status === 'CANCELLED') {
-      throw new ApiError(409, 'Bid is already cancelled', 'ALREADY_CANCELLED');
+      return ok(res, { success: true, message: 'Bid is already cancelled', procurement: bid });
     }
     const nonCancellable = ['PO_GENERATED', 'AWARDED', 'DELIVERED', 'PAYMENT_COMPLETED'];
     if (nonCancellable.includes(bid.status)) {
@@ -13980,7 +13990,11 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this requirement', 'FORBIDDEN');
     }
     if (requirement.status === 'CANCELLED') {
-      throw new ApiError(409, 'Requirement is already cancelled', 'ALREADY_CANCELLED');
+      await db.auction.updateMany({
+        where: { linkedRequirementId: id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+        data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
+      }).catch(() => undefined);
+      return ok(res, { success: true, message: 'Requirement is already cancelled', procurement: requirement });
     }
     if (requirement.status === 'FULFILLED') {
       throw new ApiError(409, 'Cannot cancel a fulfilled requirement', 'REQUIREMENT_FULFILLED');
@@ -14006,20 +14020,23 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     await db.auction.updateMany({
       where: { linkedRequirementId: id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
       data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
-    });
+    }).catch(() => undefined);
 
     const responses = await db.requirementResponse.findMany({
       where: { requirementId: id },
-      select: { sellerId: true }
-    });
+      select: { sellerUserId: true }
+    }).catch(() => []);
+
     for (const resp of responses) {
-      notifySafe(
-        resp.sellerId,
-        'Procurement Requirement Cancelled',
-        `Requirement "${requirement.title}" (${requirement.requirementNumber}) was cancelled by the buyer. Reason: ${reason}`,
-        'requirement_cancelled',
-        '/seller/opportunities'
-      );
+      if (resp.sellerUserId) {
+        notifySafe(
+          resp.sellerUserId,
+          'Procurement Requirement Cancelled',
+          `Requirement "${requirement.title}" (${requirement.requirementNumber}) was cancelled by the buyer. Reason: ${reason}`,
+          'requirement_cancelled',
+          '/seller/opportunities'
+        );
+      }
     }
 
     await auditWrite(req, 'requirement.cancelled', 'requirement', id, { reason, remarks });
@@ -14034,7 +14051,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this direct purchase', 'FORBIDDEN');
     }
     if (dp.status === 'CANCELLED') {
-      throw new ApiError(409, 'Direct purchase is already cancelled', 'ALREADY_CANCELLED');
+      return ok(res, { success: true, message: 'Direct purchase is already cancelled', procurement: dp });
     }
     if (dp.status === 'APPROVED' && (dp as any).purchaseOrderId) {
       throw new ApiError(409, 'Cannot cancel direct purchase after purchase order has been generated.', 'PO_EXISTS');
@@ -14048,13 +14065,15 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       }
     });
 
-    notifySafe(
-      dp.sellerId,
-      'Direct Purchase Cancelled',
-      `Direct purchase request ${dp.purchaseNumber} was cancelled by the buyer. Reason: ${reason}`,
-      'direct_purchase_cancelled',
-      '/seller/orders'
-    );
+    if (dp.sellerId) {
+      notifySafe(
+        dp.sellerId,
+        'Direct Purchase Cancelled',
+        `Direct purchase request ${dp.purchaseNumber} was cancelled by the buyer. Reason: ${reason}`,
+        'direct_purchase_cancelled',
+        '/seller/orders'
+      );
+    }
 
     await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
@@ -14068,7 +14087,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       throw new ApiError(403, 'You do not have permission to cancel this auction', 'FORBIDDEN');
     }
     if (auc.statusEnum === 'CANCELLED' || auc.status === 'CANCELLED') {
-      throw new ApiError(409, 'Auction is already cancelled', 'ALREADY_CANCELLED');
+      return ok(res, { success: true, message: 'Auction is already cancelled', procurement: auc });
     }
     if (auc.statusEnum === 'CLOSED' || auc.status === 'CLOSED') {
       throw new ApiError(409, 'Cannot cancel a closed auction', 'AUCTION_CLOSED');
@@ -14085,6 +14104,24 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     await auditWrite(req, 'reverse_auction.cancelled', 'auction', id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Reverse auction cancelled successfully', procurement: updated });
+  }
+
+  if (normalizedType === 'rate_contract' || normalizedType === 'contract') {
+    const contract = await db.contract.findUnique({ where: { id } });
+    if (!contract) throw new ApiError(404, 'Contract not found', 'NOT_FOUND');
+    if (contract.status === 'CANCELLED' || contract.status === 'TERMINATED') {
+      return ok(res, { success: true, message: 'Rate contract is already cancelled', procurement: contract });
+    }
+    const updated = await db.contract.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        remarks: `Cancelled by buyer: ${reason}${remarks ? ` - ${remarks}` : ''}`
+      }
+    });
+    await auditWrite(req, 'rate_contract.cancelled', 'contract', id, { reason, remarks });
+    await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
+    return ok(res, { success: true, message: 'Rate contract cancelled successfully', procurement: updated });
   }
 
   throw new ApiError(400, `Unsupported procurement type: ${type}`, 'INVALID_TYPE');

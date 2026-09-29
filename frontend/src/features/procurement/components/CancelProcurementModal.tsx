@@ -6,10 +6,11 @@ import {
   X,
   Loader2,
   Ban,
+  Check,
+  Download,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
-import { ComplianceConsentCard } from '../../../components/compliance/ComplianceConsentCard';
-import { CancellationRefundPolicyContent } from '../../../components/compliance/CompliancePoliciesText';
+import { cn } from '../../../lib/utils';
 
 export interface CancelTargetProcurement {
   id: number;
@@ -286,21 +287,77 @@ export function CancelProcurementModal({
             />
           </div>
 
-          {/* Policy Compliance Card */}
+          {/* Terms & Conditions Consent */}
           <div className="pt-2">
-            <ComplianceConsentCard
-              title="Order Cancellation, Withdrawal & Refund Policy"
-              subtitle="Statutory framework governing cancellation stages, supplier compensation, and refund eligibility."
-              pdfFile="Order_Cancellation_Refund_Policy.pdf"
-              accepted={policyAccepted}
-              onAcceptedChange={setPolicyAccepted}
-              checkboxLabel="I accept the Order Cancellation, Withdrawal & Refund Policy"
-              checkboxDescription="I acknowledge that this cancellation is recorded in the statutory audit trail, and agree to the legal terms governing cancellation rights, settlement pauses, and refund handling under JSG SMILE."
-              readerHeightClassName="h-[100px] sm:h-[120px]"
-              showPolicyLibrary
+            <div
+              className={cn(
+                'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+                policyAccepted
+                  ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+                  : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+              )}
             >
-              <CancellationRefundPolicyContent />
-            </ComplianceConsentCard>
+              <label
+                htmlFor="cancel-procurement-policy-consent"
+                className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+              >
+                <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                  <input
+                    type="checkbox"
+                    id="cancel-procurement-policy-consent"
+                    checked={policyAccepted}
+                    onChange={(e) => setPolicyAccepted(e.target.checked)}
+                    aria-required="true"
+                    className="peer sr-only"
+                  />
+                  <div
+                    className={cn(
+                      'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                      policyAccepted
+                        ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                        : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                    )}
+                    aria-hidden="true"
+                  >
+                    <Check
+                      className={cn(
+                        'h-3 w-3 stroke-[3] transition-transform duration-150',
+                        policyAccepted ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                      )}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+                  <span className="font-bold">
+                    I accept the{' '}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const pdfUrl = '/docs/Order_Cancellation_Refund_Policy.pdf';
+                        const link = document.createElement('a');
+                        link.href = pdfUrl;
+                        link.download = 'Order_Cancellation_Refund_Policy.pdf';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      }}
+                      className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                      title="Click to download Order Cancellation, Withdrawal & Refund Policy (PDF)"
+                    >
+                      <span>Order Cancellation, Withdrawal &amp; Refund Policy (T&amp;C)</span>
+                      <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                    </button>
+                    <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+                  </span>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                    I acknowledge that this cancellation is recorded in the statutory audit trail, and agree to the legal terms governing cancellation rights, settlement pauses, and refund handling under JSG SMILE.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
 
           {/* Error Message */}

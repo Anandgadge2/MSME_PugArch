@@ -17,6 +17,8 @@ export interface OrgStatus {
         acceptedAt?: string;
     } | null;
     isApproved: boolean;
+    memberCount?: number;
+    hasFinanceOfficer?: boolean;
 }
 
 interface PermissionPayload {
@@ -39,6 +41,8 @@ interface UseOrgRoleReturn {
     permissions: string[];
     loading: boolean;
     reload: () => void;
+    memberCount: number;
+    hasFinanceOfficer: boolean;
 }
 
 export const DEFAULT_BUYER_PERMISSIONS: string[] = [
@@ -248,6 +252,27 @@ export function useOrgRole(): UseOrgRoleReturn {
         void load();
     }, [load]);
 
+    // Fallback if backend /api/org/status didn't provide memberCount yet
+    useEffect(() => {
+        if (!orgStatus || orgStatus.memberCount !== undefined || !token || !user) return;
+        getApi<any[]>('/api/org/members').then((members) => {
+            if (Array.isArray(members)) {
+                const count = members.filter(m => m.isActive).length;
+                const hasFinance = members.some(m =>
+                    m.isActive && (
+                        m.orgRole === 'FINANCE_OFFICER' ||
+                        m.customRole?.roleKey === 'finance_officer' ||
+                        m.customRole?.roleKey === 'finance' ||
+                        (typeof m.customRole?.name === 'string' && m.customRole.name.toLowerCase().includes('finance'))
+                    )
+                );
+                setOrgStatus(prev => prev ? { ...prev, memberCount: count, hasFinanceOfficer: hasFinance } : prev);
+            }
+        }).catch(() => {
+            setOrgStatus(prev => prev ? { ...prev, memberCount: 1, hasFinanceOfficer: false } : prev);
+        });
+    }, [orgStatus, token, user]);
+
     const hasPermission = permissionState.hasPermission;
     const orgRole = orgStatus?.membership?.orgRole ?? null;
     const isApproved = orgStatus?.isApproved ?? false;
@@ -270,6 +295,8 @@ export function useOrgRole(): UseOrgRoleReturn {
         reload: () => {
             void load(true);
             void permissionState.reload();
-        }
+        },
+        memberCount: typeof orgStatus?.memberCount === 'number' ? orgStatus.memberCount : 1,
+        hasFinanceOfficer: Boolean(orgStatus?.hasFinanceOfficer)
     };
 }

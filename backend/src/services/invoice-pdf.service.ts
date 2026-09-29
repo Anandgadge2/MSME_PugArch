@@ -1136,7 +1136,7 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
         `New Purchase Order Received: ${poNum}`,
         `A new Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been issued to your organization by ${buyerDisplayName}.${emailNote}`,
         'po_generated',
-        '/seller/orders',
+        `/seller/orders?orderId=${po.id}`,
         pdfAttachment ? [pdfAttachment] : undefined,
         {
           emailSubject: `[PO Received] New Purchase Order #${poNum} from ${buyerDisplayName} - MSME Portal`,
@@ -1198,7 +1198,7 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
         `Purchase Order Generated: ${poNum}`,
         `Your Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been generated successfully and issued to ${sellerDisplayName}.${emailNote}`,
         'po_generated',
-        '/buyer/orders',
+        `/buyer/orders?orderId=${po.id}`,
         pdfAttachment ? [pdfAttachment] : undefined,
         {
           emailSubject: `[PO Issued] Purchase Order #${poNum} Generated - MSME Portal`,

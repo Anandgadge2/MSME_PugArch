@@ -519,7 +519,9 @@ export default function MarketplaceProductList() {
             intent: 'quote',
             sellerId: String(sellerUserId),
             subject: `Quote request: ${item.name}`,
-            message: `Hello, I would like to request a quotation for ${item.name}.\n\nCategory: ${item.category?.name || 'Not specified'}\nPlease share best price, availability, delivery timeline, payment terms, and applicable taxes.`
+            message: `Hello, I would like to request a quotation for ${item.name}.\n\nCategory: ${item.category?.name || 'Not specified'}\nPlease share best price, availability, delivery timeline, payment terms, and applicable taxes.`,
+            uom: item.unitOfMeasure || '',
+            quantity: String(item.moq || 1)
         });
         router.push(`/buyer/messages?${params.toString()}`);
     };

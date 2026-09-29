@@ -249,12 +249,28 @@ export const notificationService = {
       const methodStr = (procurement.canonicalMethod || procurement.procurementType || 'Public Sourcing').replace(/_/g, ' ');
       const orgStr = procurement.buyerOrganizationName || 'Verified Buyer';
 
+      const canonicalMethod = String(procurement.canonicalMethod || procurement.procurementType || '').toUpperCase().replace(/[- ]+/g, '_');
+      let targetRedirect = `/bids/${encodeURIComponent(numStr)}`;
+      if (canonicalMethod.includes('REVERSE') || canonicalMethod.includes('AUCTION')) {
+        targetRedirect = `/seller/procurement/reverse-auction/${encodeURIComponent(procurement.id || numStr)}`;
+      } else if (canonicalMethod.includes('RATE') || numStr.startsWith('RC-')) {
+        targetRedirect = `/seller/procurement/rate-contract/${encodeURIComponent(numStr)}`;
+      } else if (canonicalMethod === 'RFQ' || numStr.startsWith('RFQ-')) {
+        targetRedirect = `/seller/procurement/rfq/${encodeURIComponent(numStr)}`;
+      } else if (canonicalMethod === 'RFP' || numStr.startsWith('RFP-')) {
+        targetRedirect = `/seller/procurement/rfp/${encodeURIComponent(numStr)}`;
+      } else if (canonicalMethod === 'OPEN_TENDER' || numStr.startsWith('TND-')) {
+        targetRedirect = `/seller/procurement/open-tender/${encodeURIComponent(numStr)}`;
+      } else if (canonicalMethod === 'LIMITED_TENDER' || numStr.startsWith('LTND-')) {
+        targetRedirect = `/seller/procurement/limited-tender/${encodeURIComponent(numStr)}`;
+      }
+
       const notifyOpts: NotifyOpts = {
         title: `New Procurement Opportunity: ${titleStr}`,
         message: `${orgStr} published a new ${methodStr} requirement (${numStr}). Open portal to view details and submit your proposal.`,
         type: 'procurement.opportunity',
         priority: 'high',
-        redirectUrl: `/seller/opportunities`
+        redirectUrl: targetRedirect
       };
 
       const emailOpts: EmailOpts = {
@@ -286,7 +302,7 @@ export const notificationService = {
           </table>
         `,
         variables: {
-          actionUrl: '/seller/opportunities'
+          actionUrl: targetRedirect
         }
       };
 

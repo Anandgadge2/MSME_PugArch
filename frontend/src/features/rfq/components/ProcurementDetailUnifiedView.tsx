@@ -1968,7 +1968,8 @@ function AuctionWorkflowStepper({
   rankVisibility?: string;
 }) {
   const isLive = auctionStatus === "LIVE";
-  const isClosed = ["CLOSED", "COMPLETED", "AWARDED", "CANCELLED"].includes(
+  const isCancelled = auctionStatus === "CANCELLED";
+  const isClosed = !isCancelled && ["CLOSED", "COMPLETED", "AWARDED"].includes(
     auctionStatus,
   );
 
@@ -2001,6 +2002,11 @@ function AuctionWorkflowStepper({
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
                 Stage 2: Live Auction Active
               </>
+            ) : isCancelled ? (
+              <>
+                <Ban className="h-3.5 w-3.5 text-rose-600" />
+                Auction Cancelled
+              </>
             ) : isClosed ? (
               <>
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -2022,7 +2028,9 @@ function AuctionWorkflowStepper({
           <div
             className={cn(
               "rounded-xl border p-3.5 transition-all flex flex-col justify-between",
-              isLive || isClosed
+              isCancelled
+                ? "border-rose-200 bg-rose-50/40 shadow-2xs"
+                : isLive || isClosed
                 ? "border-emerald-200 bg-emerald-50/50"
                 : "border-purple-200 bg-white shadow-2xs",
             )}
@@ -2032,7 +2040,11 @@ function AuctionWorkflowStepper({
                 <span className="text-[10px] font-black uppercase tracking-wider text-purple-700">
                   Stage 1: Technical &amp; Baseline Qualification
                 </span>
-                {isLive || isClosed ? (
+                {isCancelled ? (
+                  <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-800">
+                    <Ban className="h-3 w-3 text-rose-700" /> Cancelled
+                  </span>
+                ) : isLive || isClosed ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
                     <CheckCircle2 className="h-3 w-3 text-emerald-700" />{" "}
                     Qualified / Completed
@@ -2134,11 +2146,21 @@ function AuctionWorkflowStepper({
             </p>
           </div>
         </div>
-        <span className="inline-flex items-center gap-1.5 self-start sm:self-center px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider bg-white border border-rose-200 text-rose-700 shadow-2xs">
+        <span className={cn(
+          "inline-flex items-center gap-1.5 self-start sm:self-center px-3 py-1 rounded-full text-[10.5px] font-black uppercase tracking-wider shadow-2xs",
+          isCancelled
+            ? "bg-rose-50 border border-rose-200 text-rose-700"
+            : "bg-white border border-rose-200 text-rose-700"
+        )}>
           {isLive ? (
             <>
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
               Live Bidding Window Active
+            </>
+          ) : isCancelled ? (
+            <>
+              <Ban className="h-3.5 w-3.5 text-rose-600" />
+              Auction Cancelled
             </>
           ) : isClosed ? (
             <>
@@ -2165,7 +2187,9 @@ function AuctionWorkflowStepper({
             Terms Acceptance
           </span>
           <span className="text-[10.5px] font-semibold text-emerald-700 mt-1 inline-flex items-center gap-1">
-            {hasJoined ? (
+            {isCancelled ? (
+              <span className="text-rose-600 font-bold">Auction Cancelled</span>
+            ) : hasJoined ? (
               <>
                 <CheckCircle2 className="h-3 w-3" /> Joined &amp; Ready
               </>
@@ -2204,15 +2228,19 @@ function AuctionWorkflowStepper({
               "text-[10.5px] font-bold mt-1 inline-flex items-center gap-1",
               isLive
                 ? "text-emerald-700"
-                : isClosed
-                  ? "text-slate-500"
-                  : "text-amber-700",
+                : isCancelled
+                  ? "text-rose-600"
+                  : isClosed
+                    ? "text-slate-500"
+                    : "text-amber-700",
             )}
           >
             {isLive ? (
               <>
                 <Activity className="h-3 w-3 animate-pulse" /> Live Now
               </>
+            ) : isCancelled ? (
+              "Cancelled"
             ) : isClosed ? (
               "Ended"
             ) : (
@@ -2228,7 +2256,7 @@ function AuctionWorkflowStepper({
             L1 Award
           </span>
           <span className="text-[10.5px] font-semibold text-slate-600 mt-1 block">
-            {isClosed ? "Award Recommendation" : "Post Auction"}
+            {isCancelled ? "Cancelled" : isClosed ? "Award Recommendation" : "Post Auction"}
           </span>
         </div>
       </div>
@@ -4011,6 +4039,16 @@ export function ProcurementDetailUnifiedView(
       !pathname.startsWith("/shg"));
 
   const statusUpper = String(props.status || "").toUpperCase();
+  const isCancelled = statusUpper === "CANCELLED" || statusUpper === "TERMINATED";
+  const isConcludedOrCancelled = [
+    "CANCELLED",
+    "TERMINATED",
+    "CLOSED",
+    "COMPLETED",
+    "AWARDED",
+    "EXPIRED",
+    "REJECTED",
+  ].includes(statusUpper);
   const isPostFinancialOrAwarded = [
     "AWARDED",
     "AWARD_ACCEPTED",
@@ -9608,7 +9646,10 @@ export function ProcurementDetailUnifiedView(
                       Direct Reverse Auction
                     </span>
                   )}
-                  {(props.deadlineDate || closingDateValue) && (
+                  {(props.deadlineDate || closingDateValue) &&
+                    !isCancelled &&
+                    !isConcludedOrCancelled &&
+                    !isBiddingClosed && (
                     <DeadlineCountdown
                       targetDate={props.deadlineDate || closingDateValue || ""}
                       startDate={rawSubmissionStartDate}
@@ -10449,6 +10490,7 @@ export function ProcurementDetailUnifiedView(
               {/* Seller Notification Banner: Upcoming Procurement / Opens Soon */}
               {!isBuyerOrAdmin &&
                 !isSellerParticipated &&
+                !isCancelled &&
                 isBeforeSubmissionStart && (
                   <div
                     role="status"
@@ -10495,6 +10537,7 @@ export function ProcurementDetailUnifiedView(
               {/* Seller Notification Banner: Did Not Participate / Missed Deadline */}
               {!isBuyerOrAdmin &&
                 !isSellerParticipated &&
+                !isCancelled &&
                 !isBeforeSubmissionStart &&
                 (isBiddingClosed || isDeadlinePassed) && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 sm:p-3.5 shadow-2xs transition-all">

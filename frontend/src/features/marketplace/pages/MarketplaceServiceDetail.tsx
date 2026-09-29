@@ -21,6 +21,7 @@ import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils'
 import { useQuery as useTanstackQuery } from '@tanstack/react-query';
 import { CompareToggleButton } from '../components/CompareToggleButton';
 import { CompareTray } from '../components/CompareTray';
+import { CreateConversationModal } from '../../messages/pages/MessagesPage';
 
 const pricingLabels: Record<string, string> = {
     FIXED: 'Fixed Price',
@@ -94,6 +95,7 @@ export default function MarketplaceServiceDetail() {
     const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
     const [selectedImage, setSelectedImage] = useState(0);
     const [failedImages, setFailedImages] = useState<string[]>([]);
+    const [showQuoteModal, setShowQuoteModal] = useState(false);
 
     const { items: cartItems, add: addToCart } = useMarketplaceCart();
 
@@ -278,7 +280,11 @@ export default function MarketplaceServiceDetail() {
             router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
             return;
         }
-        router.push(`/buyer/procurement/rfq/new?serviceId=${service.id}`);
+        if (user.role !== 'buyer') {
+            toast.info('Quote requests are available from buyer accounts.');
+            return;
+        }
+        setShowQuoteModal(true);
     };
 
     return (
@@ -870,6 +876,24 @@ export default function MarketplaceServiceDetail() {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Request Formal Quote Modal */}
+            {showQuoteModal && (
+                <CreateConversationModal
+                    onClose={() => setShowQuoteModal(false)}
+                    onCreated={(convId) => {
+                        setShowQuoteModal(false);
+                        toast.success('Quote request sent to service provider successfully!');
+                        router.push(`/buyer/messages?conversationId=${convId}`);
+                    }}
+                    initialCounterpartyId={sellerUserId > 0 ? String(sellerUserId) : undefined}
+                    initialRecipientRole="seller"
+                    initialSubject={`Quote request: ${service.name}`}
+                    initialMessage={`Hello, I would like to request a quotation for ${service.name}.\n\nCategory: ${service.category?.name || 'Not specified'}\nPricing Model: ${pricingLabels[service.pricingModel] || service.pricingModel || 'Fixed Rate'}\nListed Price: ₹${displayPrice.toLocaleString('en-IN')}\nPlease share best service proposal, timeline, deliverable terms, and applicable taxes.`}
+                    initialIntent="quote"
+                    initialPrice={String(displayPrice)}
+                />
             )}
 
             {!useDashboardShell && <MarketplaceFooter />}

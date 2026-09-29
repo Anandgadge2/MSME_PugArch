@@ -388,6 +388,45 @@ router.post(
         if (!cart) throw new ApiError(404, 'No active cart to submit', 'CART_NOT_FOUND');
         if (cart.items.length === 0) throw new ApiError(400, 'Cart is empty', 'CART_EMPTY');
 
+        // Verify organization has more than 1 member and has a Financial Officer
+        const [activeMembersCount, userCount, financeCount] = await Promise.all([
+            prisma.orgMembership.count({
+                where: { organizationId: orgId(req), isActive: true }
+            }),
+            prisma.user.count({
+                where: { organizationId: orgId(req) }
+            }),
+            prisma.orgMembership.count({
+                where: {
+                    organizationId: orgId(req),
+                    isActive: true,
+                    OR: [
+                        { orgRole: 'FINANCE_OFFICER' },
+                        { customRole: { roleKey: { in: ['finance_officer', 'finance'] } } },
+                        { customRole: { name: { contains: 'Finance', mode: 'insensitive' } } },
+                        {
+                            customRole: {
+                                permissions: {
+                                    some: {
+                                        permissionKey: { in: ['payment.verify', 'payment.initiate', 'invoice.approve'] },
+                                        allowed: true
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            })
+        ]);
+
+        const memberCount = Math.max(activeMembersCount, userCount);
+        if (memberCount <= 1) {
+            throw new ApiError(400, 'Single-user organizations cannot submit carts for approval. You can proceed directly to checkout.', 'APPROVAL_NOT_REQUIRED');
+        }
+        if (financeCount === 0) {
+            throw new ApiError(400, 'No Financial Officer is assigned to your organization to review this cart.', 'NO_FINANCE_OFFICER');
+        }
+
         const updated = await prisma.cart.update({
             where: { id: cart.id },
             data: { status: 'SUBMITTED_FOR_APPROVAL', notes: body.notes }

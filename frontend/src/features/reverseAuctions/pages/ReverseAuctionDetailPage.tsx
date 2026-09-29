@@ -291,12 +291,15 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       )
   );
 
+  const isAuctionCancelled = status === 'CANCELLED';
+
   const canCancel =
-    isBuyerOrAdmin && !['CANCELLED', 'CLOSED', 'AWARDED', 'COMPLETED'].includes(status);
+    isBuyerOrAdmin && !isAuctionCancelled && !['CLOSED', 'AWARDED', 'COMPLETED'].includes(status);
 
   const isAuctionClosed =
-    ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'].includes(status) ||
-    (auctionData.endTime ? new Date(auctionData.endTime).getTime() < Date.now() : false);
+    !isAuctionCancelled &&
+    (['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status) ||
+      (auctionData.endTime ? new Date(auctionData.endTime).getTime() < Date.now() : false));
 
   // Requirement data fallback (typed safely)
   const reqData: any = auctionData.linkedRequirement || {};
@@ -477,7 +480,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       )}
 
       {/* 4. Active Joined Seller Ready Alert */}
-      {hasJoined && !isAuctionClosed && myStatus !== 'DISQUALIFIED' && !evalPending && (
+      {hasJoined && !isAuctionClosed && !isAuctionCancelled && myStatus !== 'DISQUALIFIED' && !evalPending && (
         <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -502,7 +505,35 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 5. Closed / Concluded Auction Notice */}
+      {/* 5. Cancelled Auction Notice */}
+      {isAuctionCancelled && (
+        <div className="rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50 via-red-50/30 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Ban className="h-5 w-5" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-wider text-rose-950">
+                Reverse Auction Cancelled
+              </h4>
+              <p className="text-xs font-semibold text-rose-800/90 mt-0.5">
+                This reverse auction has been officially cancelled. No further bidding, evaluation, or contract award can take place.
+              </p>
+            </div>
+          </div>
+          {participants.length > 0 && hasJoined && (
+            <button
+              type="button"
+              onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
+              className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
+            >
+              View Auction Results
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 6. Closed / Concluded Auction Notice */}
       {isAuctionClosed && (
         <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
@@ -528,8 +559,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 6. Not Joined Public Auction Notice (Only when auction is active and open) */}
-      {!hasJoined && isPublicAuction && !isAuctionClosed && (
+      {/* 7. Not Joined Public Auction Notice (Only when auction is active and open) */}
+      {!hasJoined && isPublicAuction && !isAuctionClosed && !isAuctionCancelled && (
         <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -558,33 +589,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     </div>
   ) : null;
 
-  // Buyer Action Buttons
+  // Buyer Action Buttons (Lifecycle Controls)
   const buyerAuctionActions = isBuyerOrAdmin ? (
     <div className="flex flex-wrap items-center gap-2">
-      {!isAuctionClosed ? (
-        <Link href={`/seller/procurement/reverse-auction/${canonicalCode}/live`}>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-extrabold shadow-sm flex items-center gap-1.5"
-          >
-            <Activity className="h-3.5 w-3.5" />
-            <span>Live Console</span>
-          </Button>
-        </Link>
-      ) : (
-        <Link href={`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`}>
-          <Button
-            type="button"
-            size="sm"
-            className="h-9 rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white font-extrabold shadow-sm flex items-center gap-1.5"
-          >
-            <Trophy className="h-3.5 w-3.5 text-amber-400" />
-            <span>Auction Results</span>
-          </Button>
-        </Link>
-      )}
-      {!isAuctionClosed && (
+      {!isAuctionClosed && !isAuctionCancelled && (
         <Button
           ref={inviteButtonRef}
           type="button"
@@ -720,10 +728,14 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             closed={['CLOSED', 'COMPLETED', 'CANCELLED'].includes(status)}
           />
         }
-        isSubmitDisabled={isAuctionClosed && !hasJoined}
+        isSubmitDisabled={(isAuctionClosed || isAuctionCancelled) && !hasJoined}
         submitButtonLabel={
           isSeller
-            ? isAuctionClosed
+            ? isAuctionCancelled
+              ? hasJoined && participants.length > 0
+                ? 'View Auction Results'
+                : undefined
+              : isAuctionClosed
               ? hasJoined
                 ? 'View Auction Results'
                 : undefined
@@ -733,14 +745,22 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
               ? 'Join to Bid'
               : undefined
             : isBuyerOrAdmin
-            ? isAuctionClosed
+            ? isAuctionCancelled
+              ? participants.length > 0
+                ? 'View Auction Results'
+                : undefined
+              : isAuctionClosed
               ? 'View Auction Results'
               : 'Open Live Console'
             : undefined
         }
         onSubmitClick={
           isSeller
-            ? isAuctionClosed
+            ? isAuctionCancelled
+              ? hasJoined && participants.length > 0
+                ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
+                : undefined
+              : isAuctionClosed
               ? hasJoined
                 ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
                 : undefined
@@ -750,7 +770,11 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
               ? () => joinAuction.mutate()
               : undefined
             : isBuyerOrAdmin
-            ? isAuctionClosed
+            ? isAuctionCancelled
+              ? participants.length > 0
+                ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
+                : undefined
+              : isAuctionClosed
               ? () => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)
               : () => router.push(`/seller/procurement/reverse-auction/${canonicalCode}/live`)
             : undefined

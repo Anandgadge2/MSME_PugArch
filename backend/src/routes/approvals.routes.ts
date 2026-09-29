@@ -63,6 +63,14 @@ const getOrgRole = async (userId: number, organizationId: number): Promise<OrgRo
         select: { orgRole: true, isActive: true }
     });
     if (!m || !m.isActive) {
+        // Fallback for primary buyer/admin owner of the organization
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { role: true, organizationId: true }
+        });
+        if (user && user.organizationId === organizationId && (user.role === 'buyer' || user.role === 'admin' || user.role === 'master_admin')) {
+            return 'ORG_ADMIN' as OrgRole;
+        }
         throw new ApiError(403, 'You are not an active member of this organisation', 'ORG_MEMBERSHIP_INACTIVE');
     }
     return m.orgRole;

@@ -5,7 +5,7 @@
 
 // ── Quantity / Unit of Measure ──────────────────────────────────────────────
 export const QUANTITY_UNITS = [
-  { value: 'Nos', label: 'Nos.' },
+  { value: 'Nos', label: 'Nos' },
   { value: 'Kg', label: 'Kg' },
   { value: 'Ton', label: 'Ton' },
   { value: 'MT', label: 'MT' },

@@ -177,6 +177,9 @@ const COMMON_UOMS = [
   'unit', 'units', 'lot', 'lots', 'job', 'jobs', 'pair', 'pairs',
   'bag', 'bags', 'bundle', 'bundles', 'roll', 'rolls', 'drum', 'drums',
   'barrel', 'barrels', 'can', 'cans', 'bottle', 'bottles', 'sheet', 'sheets',
+  'feet', 'ft', 'coil', 'coils', 'carton', 'cartons', 'cylinder', 'cylinders',
+  'dozen', 'dozens', 'doz', 'plate', 'plates', 'bucket', 'buckets', 'kit', 'kits',
+  'container', 'containers',
   'hour', 'hours', 'day', 'days', 'month', 'months', 'year', 'years'
 ];
 

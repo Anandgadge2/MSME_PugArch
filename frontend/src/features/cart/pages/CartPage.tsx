@@ -50,7 +50,8 @@ const STATUS_TONE: Record<CartStatus, string> = {
 
 export default function CartPage() {
     const { user } = useAuth();
-    const { isApproved } = useOrgRole();
+    const { isApproved, memberCount = 1, hasFinanceOfficer = false, loading: orgLoading } = useOrgRole();
+    const hasApprovalWorkflow = !orgLoading && memberCount > 1 && hasFinanceOfficer;
     const { permissions, hasPermission, loading: permissionsLoading } = usePermissions();
     const canViewCart = hasPermission('cart.view') || user?.role === 'buyer' || user?.role === 'admin';
     const canEditCart = hasPermission('cart.add') || user?.role === 'buyer' || user?.role === 'admin';
@@ -92,6 +93,8 @@ export default function CartPage() {
         subject: string;
         message: string;
         estimatedPrice: string;
+        uom?: string;
+        quantity?: number;
     } | null>(null);
 
     const cart = cartQuery.data;
@@ -168,13 +171,20 @@ export default function CartPage() {
             ? `Quote request: ${firstItem.itemName}`
             : `Quote request: ${firstItem.itemName} + ${items.length - 1} other item(s)`;
 
+        // If single item, CreateConversationModal already captures Quantity, UOM, Location, Timeline, Specs.
+        // Leaving message empty keeps the cover note clean and avoids duplicating product/quantities/closing phrases.
+        if (items.length <= 1) {
+            return { subject, message: '', totalValue };
+        }
+
+        // For multiple items, list the breakdown cleanly without duplicate preamble or closing boilerplate
         const itemsText = items.map((item, idx) => {
             const lineTotal = Number(item.quantity) * Number(item.unitPrice);
             const unit = item.unitOfMeasure || (item.serviceId ? 'Service' : 'PCS');
             return `${idx + 1}. ${item.itemName}\n   Quantity: ${item.quantity} ${unit}\n   Reference Unit Price: ${formatCurrency(item.unitPrice)}\n   Estimated Line Total: ${formatCurrency(lineTotal)}`;
         }).join('\n\n');
 
-        const message = `Hello, I would like to request a formal quotation for the following ${items.length} item(s) from my cart:\n\n${itemsText}\n\nEstimated Total: ${formatCurrency(totalValue)}\n\nPlease share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.`;
+        const message = `Cart Items Breakdown (${items.length} items):\n\n${itemsText}\n\nEstimated Cart Total: ${formatCurrency(totalValue)}`;
 
         return { subject, message, totalValue };
     };
@@ -212,7 +222,9 @@ export default function CartPage() {
             sellerId: sellerId > 0 ? String(sellerId) : '',
             subject,
             message,
-            estimatedPrice: String(totalValue)
+            estimatedPrice: String(totalValue),
+            uom: primaryItem?.unitOfMeasure,
+            quantity: primaryItem?.quantity ? Number(primaryItem.quantity) : 1
         });
     };
 
@@ -697,25 +709,6 @@ export default function CartPage() {
                                 </span>
                             )}
                         </div>
-                        {cart && cart.items.length > 0 && (
-                            <div className="flex items-center gap-2">
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    onClick={handleRequestQuote}
-                                    className={cn(
-                                        "h-8 gap-1.5 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer",
-                                        selectedItemIds.size > 0
-                                            ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm"
-                                            : "border border-emerald-300 text-emerald-800 bg-emerald-50 hover:bg-emerald-100"
-                                    )}
-                                    title={selectedItemIds.size === 0 ? "Request quote for all items in cart" : `Send quote request for ${selectedItemIds.size} selected item(s)`}
-                                >
-                                    <FileText className="h-3.5 w-3.5" />
-                                    <span>Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : '(All)'}</span>
-                                </Button>
-                            </div>
-                        )}
                     </div>
                     {!cart || cart.items.length === 0 ? (
                         <EmptyState
@@ -773,7 +766,7 @@ export default function CartPage() {
                                     <span>Request Quote {selectedItemIds.size > 0 ? `(${selectedItemIds.size} Selected)` : ''}</span>
                                 </Button>
 
-                                {canSubmitCart && cart?.status === 'ACTIVE' && (
+                                {canSubmitCart && hasApprovalWorkflow && cart?.status === 'ACTIVE' && (
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -904,6 +897,8 @@ export default function CartPage() {
                     initialMessage={quoteModalState.message}
                     initialIntent="quote"
                     initialPrice={quoteModalState.estimatedPrice}
+                    initialUom={quoteModalState.uom}
+                    initialQuantity={quoteModalState.quantity}
                     onClose={() => setQuoteModalState(null)}
                     onCreated={handleQuoteCreated}
                 />

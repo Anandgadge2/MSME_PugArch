@@ -35,6 +35,8 @@ import {
     AlertCircle,
     Eye,
     Package,
+    Calendar,
+    MapPin,
     X
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
@@ -44,9 +46,15 @@ import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
 import { Badge, Card, CardContent } from '../../../components/ui/card';
 import { Input, Select } from '../../../components/ui/input';
+import { QUANTITY_UNITS } from '../../../constants/dropdowns';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { EmptyState, InlineError } from '../../shared/FeatureStates';
-import { formatDate, formatDateTime, formatRelative, formatTime } from '../../shared/format';
+import { formatDate, formatDateTime, formatRelative, formatTime, formatDeliveryAddressString } from '../../shared/format';
+import { useOrgRole } from '../../../hooks/useOrgRole';
+import { getResolvedBuyerAddressInfo } from '../../../utils/organizationUtils';
+import { fetchDeliveryAddresses, type DeliveryAddressDto } from '../../directPurchase/api';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
+import { AddDeliveryAddressModal } from '../../directPurchase/components/AddDeliveryAddressModal';
 import { runWithToast } from '../../../lib/toast';
 import { compressImage } from '../../../lib/compress';
 import { postApi } from '../../shared/apiClient';
@@ -282,7 +290,9 @@ export default function MessagesPage() {
             intent: searchParams?.get('intent') || '',
             price: searchParams?.get('price') || '',
             productId: searchParams?.get('productId') || '',
-            productName: searchParams?.get('productName') || ''
+            productName: searchParams?.get('productName') || '',
+            uom: searchParams?.get('uom') || searchParams?.get('unit') || '',
+            quantity: Number(searchParams?.get('quantity') || searchParams?.get('qty') || 0) || undefined
         };
     }, [searchParams, user?.role]);
 
@@ -375,6 +385,8 @@ export default function MessagesPage() {
                     initialMessage={initialModalValues.message}
                     initialIntent={initialModalValues.intent}
                     initialPrice={initialModalValues.price}
+                    initialUom={initialModalValues.uom}
+                    initialQuantity={initialModalValues.quantity}
                     onClose={() => setShowCreate(false)}
                     onCreated={handleCreated}
                 />
@@ -626,6 +638,68 @@ function parseQuotationMessage(content?: string): ParsedQuoteData | null {
         amount: amountMatch ? amountMatch[1].trim() : null,
         timeline: timelineMatch ? timelineMatch[1].trim() : null,
         notes: notesMatch ? notesMatch[1].trim() : null
+    };
+}
+
+interface ParsedQuoteRequestData {
+    rfqId: string | null;
+    title: string;
+    quantity: string | null;
+    location: string | null;
+    timeline: string | null;
+    specifications: string | null;
+    additionalNotes: string | null;
+    closingNote: string | null;
+}
+
+function parseQuoteRequestMessage(content?: string): ParsedQuoteRequestData | null {
+    if (!content) return null;
+    const hasRfqTag = content.includes('[Quote Request');
+    const hasRfqFields = content.includes('Delivery Location:') && content.includes('Quantity:');
+    if (!hasRfqTag && !hasRfqFields) return null;
+
+    let rfqId: string | null = null;
+    let title = 'Requested Product / Service';
+
+    const rfqTagMatch = content.match(/\[Quote Request\s*(?:#(\d+))?:?\s*([^\]]*)\]/i);
+    if (rfqTagMatch) {
+        rfqId = rfqTagMatch[1]?.trim() || null;
+        if (rfqTagMatch[2]?.trim()) {
+            title = rfqTagMatch[2].replace(/^Quote request:?\s*/i, '').trim();
+        }
+    }
+
+    const itemMatch = content.match(/1\.\s*([^\n]+)/);
+    if (itemMatch && (!title || title === 'Requested Product / Service')) {
+        title = itemMatch[1].trim();
+    }
+
+    const quantityMatch = content.match(/Quantity:\s*([^\n]+)/i);
+    const locationMatch = content.match(/Delivery Location:\s*([^\n]+)/i);
+    const timelineMatch = content.match(/Required Timeline:\s*([^\n]+)/i);
+    const specsMatch = content.match(/Specifications:\s*([^\n]+)/i);
+
+    let additionalNotes: string | null = null;
+    const notesMatch = content.match(/Additional Notes:\s*([\s\S]*?)(?:Please share your best offered unit prices|$)/i);
+    if (notesMatch && notesMatch[1]?.trim()) {
+        let rawNotes = notesMatch[1].trim();
+        rawNotes = rawNotes.replace(/Please share your best offered unit prices[^\n]*\n?/gi, '').trim();
+        if (rawNotes) {
+            additionalNotes = rawNotes;
+        }
+    }
+
+    const closingMatch = content.match(/Please share your best offered unit prices[^\n]*/i);
+
+    return {
+        rfqId,
+        title,
+        quantity: quantityMatch ? quantityMatch[1].trim() : null,
+        location: locationMatch ? locationMatch[1].trim() : null,
+        timeline: timelineMatch ? timelineMatch[1].trim() : null,
+        specifications: specsMatch ? specsMatch[1].trim() : null,
+        additionalNotes,
+        closingNote: closingMatch ? closingMatch[0].trim() : 'Please share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.'
     };
 }
 
@@ -1190,6 +1264,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                 const showDateHeader = msgDate !== lastDate;
                                 lastDate = msgDate;
                                 const parsedQuote = !isDeleted ? parseQuotationMessage(message.content) : null;
+                                const parsedQuoteRequest = !isDeleted && !parsedQuote ? parseQuoteRequestMessage(message.content) : null;
 
                                 return (
                                     <div key={message.id} className="space-y-3">
@@ -1246,7 +1321,7 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                             <div
                                                 className={cn(
                                                     'relative rounded-2xl px-3.5 py-2 text-xs shadow-xs transition',
-                                                    parsedQuote ? 'w-full max-w-[95%] sm:max-w-[460px]' : 'max-w-[85%] sm:max-w-[72%]',
+                                                    parsedQuote || parsedQuoteRequest ? 'w-full max-w-[95%] sm:max-w-[480px]' : 'max-w-[85%] sm:max-w-[72%]',
                                                     isMe
                                                         ? 'bg-[#12335f] text-white rounded-br-xs'
                                                         : 'bg-white text-slate-900 border border-slate-200/80 rounded-bl-xs'
@@ -1426,6 +1501,130 @@ function ConversationDetail({ id, onBack }: { id: number; onBack: () => void }) 
                                                                         <FileCheck className="mr-1 h-3 w-3" /> Edit Quote
                                                                     </Button>
                                                                 )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : parsedQuoteRequest ? (
+                                                    <div className={cn(
+                                                        "my-1 rounded-xl border p-3.5 transition shadow-2xs",
+                                                        isMe
+                                                            ? "border-blue-400/40 bg-white/10 text-white"
+                                                            : "border-blue-200/80 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white text-slate-900"
+                                                    )}>
+                                                        {/* Header with icon, title, and status */}
+                                                        <div className="flex items-center justify-between gap-2 border-b border-blue-200/40 pb-2 mb-2.5">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={cn(
+                                                                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-2xs",
+                                                                    isMe ? "bg-blue-500 text-white" : "bg-[#12335f] text-white"
+                                                                )}>
+                                                                    <Package className="h-4 w-4" />
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className={cn("text-xs font-black uppercase tracking-wider", isMe ? "text-white" : "text-[#12335f]")}>
+                                                                        Quote Request (RFQ)
+                                                                    </h4>
+                                                                    {parsedQuoteRequest.rfqId && (
+                                                                        <p className={cn("text-[10px] font-mono", isMe ? "text-blue-200" : "text-slate-500")}>
+                                                                            RFQ #{parsedQuoteRequest.rfqId}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <span className={cn(
+                                                                "rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide",
+                                                                isMe
+                                                                    ? "bg-blue-900/40 text-blue-200 border border-blue-400/30"
+                                                                    : "bg-blue-100 text-blue-800 border border-blue-300"
+                                                            )}>
+                                                                Quote Request
+                                                            </span>
+                                                        </div>
+
+                                                        {/* Product / Requirement Title */}
+                                                        <div className="mb-2">
+                                                            <p className={cn("text-xs font-bold leading-snug", isMe ? "text-white" : "text-slate-900")}>
+                                                                {parsedQuoteRequest.title}
+                                                            </p>
+                                                        </div>
+
+                                                        {/* Key Specification Badges & Details */}
+                                                        <div className="grid grid-cols-2 gap-2 my-2">
+                                                            <div className={cn("rounded-lg p-2 border", isMe ? "bg-black/20 border-white/10" : "bg-white border-slate-200/80")}>
+                                                                <p className={cn("text-[9px] font-black uppercase tracking-wider flex items-center gap-1", isMe ? "text-blue-200" : "text-slate-500")}>
+                                                                    <Package className="h-3 w-3" /> Quantity
+                                                                </p>
+                                                                <p className={cn("text-xs font-black mt-0.5", isMe ? "text-blue-200" : "text-blue-700")}>
+                                                                    {parsedQuoteRequest.quantity || 'As required'}
+                                                                </p>
+                                                            </div>
+                                                            <div className={cn("rounded-lg p-2 border", isMe ? "bg-black/20 border-white/10" : "bg-white border-slate-200/80")}>
+                                                                <p className={cn("text-[9px] font-black uppercase tracking-wider flex items-center gap-1", isMe ? "text-blue-200" : "text-slate-500")}>
+                                                                    <Clock className="h-3 w-3" /> Delivery Timeline
+                                                                </p>
+                                                                <p className={cn("text-xs font-bold mt-0.5", isMe ? "text-white" : "text-slate-800")}>
+                                                                    {parsedQuoteRequest.timeline || 'Standard'}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Delivery Location */}
+                                                        {parsedQuoteRequest.location && (
+                                                            <div className={cn("mb-2 rounded-lg p-2 border flex items-start gap-1.5", isMe ? "bg-black/20 border-white/10" : "bg-white border-slate-200/80")}>
+                                                                <MapPin className={cn("h-3.5 w-3.5 shrink-0 mt-0.5", isMe ? "text-blue-300" : "text-slate-500")} />
+                                                                <div>
+                                                                    <p className={cn("text-[9px] font-black uppercase tracking-wider", isMe ? "text-blue-200" : "text-slate-500")}>
+                                                                        Delivery Location
+                                                                    </p>
+                                                                    <p className={cn("text-[11px] font-semibold mt-0.5", isMe ? "text-white" : "text-slate-800")}>
+                                                                        {parsedQuoteRequest.location}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Specifications */}
+                                                        {parsedQuoteRequest.specifications && (
+                                                            <div className={cn("mb-2 rounded-lg px-2.5 py-1.5 text-[10px] border", isMe ? "bg-black/20 border-white/10 text-blue-100" : "bg-white border-slate-200/80 text-slate-700")}>
+                                                                <span className="font-bold">Specifications: </span>
+                                                                <span>{parsedQuoteRequest.specifications}</span>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Additional Notes (if any) */}
+                                                        {parsedQuoteRequest.additionalNotes && (
+                                                            <div className={cn("mb-2 rounded-lg px-2.5 py-1.5 text-[10px] border whitespace-pre-wrap", isMe ? "bg-white/5 border-white/10 text-white/90" : "bg-slate-50 border-slate-200/60 text-slate-700")}>
+                                                                <span className="font-bold block mb-0.5">Additional Remarks:</span>
+                                                                {parsedQuoteRequest.additionalNotes}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Closing Note */}
+                                                        {parsedQuoteRequest.closingNote && (
+                                                            <p className={cn("text-[10px] italic leading-tight mt-2 pt-2 border-t", isMe ? "border-white/10 text-blue-200" : "border-slate-200/60 text-slate-500")}>
+                                                                {parsedQuoteRequest.closingNote}
+                                                            </p>
+                                                        )}
+
+                                                        {/* Seller Action Button: Submit Quotation */}
+                                                        {user?.role === 'seller' && (
+                                                            <div className="mt-2.5 pt-2 border-t border-blue-200/30 flex items-center justify-between gap-2">
+                                                                <span className={cn("text-[10px] font-medium", isMe ? "text-blue-200" : "text-slate-600")}>
+                                                                    Please submit your official quotation.
+                                                                </span>
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="h-7 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shrink-0"
+                                                                    onClick={() => {
+                                                                        const targetRfqId = parsedQuoteRequest.rfqId || quoteReqId;
+                                                                        const url = targetRfqId
+                                                                            ? `/seller/rfq/submit-quotation?conversationId=${conversation.id}&quoteRequestId=${targetRfqId}`
+                                                                            : `/seller/rfq/submit-quotation?conversationId=${conversation.id}`;
+                                                                        router.push(url);
+                                                                    }}
+                                                                >
+                                                                    <FileCheck className="mr-1 h-3 w-3" /> Submit Quotation
+                                                                </Button>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1835,7 +2034,9 @@ export function CreateConversationModal({
     initialSubject = '',
     initialMessage = '',
     initialIntent,
-    initialPrice
+    initialPrice,
+    initialQuantity,
+    initialUom
 }: {
     onClose: () => void;
     onCreated: (id: number, conversation?: ConversationDto) => void;
@@ -1845,8 +2046,11 @@ export function CreateConversationModal({
     initialMessage?: string;
     initialIntent?: string;
     initialPrice?: string;
+    initialQuantity?: number;
+    initialUom?: string;
 }) {
     const { user } = useAuth();
+    const { orgStatus } = useOrgRole();
     const queryClient = useQueryClient();
     const [recipientRole, setRecipientRole] = useState(initialRecipientRole || (user?.role === 'buyer' ? 'seller' : 'buyer'));
     const [counterpartyId, setCounterpartyId] = useState<number | ''>(() => {
@@ -1856,11 +2060,85 @@ export function CreateConversationModal({
     const [filterQuery, setFilterQuery] = useState('');
     const [subject, setSubject] = useState(initialSubject);
     const [message, setMessage] = useState(initialMessage);
-    const [quoteQuantity, setQuoteQuantity] = useState<number>(1);
-    const [quoteUom, setQuoteUom] = useState<string>('Nos');
+    const [quoteQuantity, setQuoteQuantity] = useState<number>(() => (initialQuantity && initialQuantity > 0 ? initialQuantity : 1));
+    const [quoteUom, setQuoteUom] = useState<string>(() => {
+        if (initialUom) {
+            const trimmed = initialUom.trim();
+            const matched = QUANTITY_UNITS.find(
+                u => u.value.toLowerCase() === trimmed.toLowerCase() || u.label.toLowerCase() === trimmed.toLowerCase()
+            );
+            if (matched) return matched.value;
+            return trimmed;
+        }
+        return 'Nos';
+    });
     const [quoteLocation, setQuoteLocation] = useState<string>('');
     const [quoteTimeline, setQuoteTimeline] = useState<string>('15 days');
     const [quoteSpecifications, setQuoteSpecifications] = useState<string>('');
+    const [deliveryAddressesList, setDeliveryAddressesList] = useState<DeliveryAddressDto[]>([]);
+    const [loadingAddresses, setLoadingAddresses] = useState(false);
+    const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+
+    const resolvedAddressInfo = useMemo(() => getResolvedBuyerAddressInfo(user, orgStatus), [user, orgStatus]);
+    const resolvedAddress = resolvedAddressInfo.address;
+
+    useEffect(() => {
+        let active = true;
+        setLoadingAddresses(true);
+        fetchDeliveryAddresses()
+            .then(res => {
+                if (active) {
+                    const list = res || [];
+                    setDeliveryAddressesList(list);
+
+                    // If delivery location is not filled yet, auto-select default saved address or resolved profile/GST address
+                    setQuoteLocation(prev => {
+                        if (prev && prev.trim()) return prev;
+                        const def = list.find(a => a.isDefault) || list[0];
+                        if (def) {
+                            return formatDeliveryAddressString(def);
+                        } else if (resolvedAddress) {
+                            return resolvedAddress;
+                        }
+                        return '';
+                    });
+                }
+            })
+            .catch(err => {
+                console.warn('Failed to load saved addresses:', err);
+                if (active) {
+                    setQuoteLocation(prev => {
+                        if (prev && prev.trim()) return prev;
+                        return resolvedAddress || '';
+                    });
+                }
+            })
+            .finally(() => {
+                if (active) setLoadingAddresses(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [resolvedAddress]);
+
+    const selectedAddressId = useMemo(() => {
+        if (!quoteLocation?.trim()) return '';
+        const currentLoc = quoteLocation.trim().toLowerCase();
+        const match = deliveryAddressesList.find(a => {
+            const formatted = formatDeliveryAddressString(a).toLowerCase();
+            return formatted === currentLoc ||
+                Boolean(a.addressLine1 && currentLoc.includes(a.addressLine1.trim().toLowerCase()));
+        });
+        return match ? String(match.id) : '';
+    }, [deliveryAddressesList, quoteLocation]);
+
+    const handleAddressCreated = (newAddr: DeliveryAddressDto) => {
+        setDeliveryAddressesList(prev => [newAddr, ...prev]);
+        const fullAddr = formatDeliveryAddressString(newAddr);
+        setQuoteLocation(fullAddr);
+    };
+
     const mut = useCreateConversation();
     const users = useMessageUserSearch({ role: recipientRole }, true);
     const isPrefilledCounterparty = Boolean(initialCounterpartyId);
@@ -1893,7 +2171,16 @@ export function CreateConversationModal({
     const getFinalMessage = () => {
         if (!isMarketplaceQuoteRequest) return message.trim();
         const cleanedTitle = subject.replace(/^Quote request:?\s*/i, '').replace(/^Quote Request #?\d*:?\s*/i, '').trim() || 'Requested Product';
-        return `1. ${cleanedTitle}\n   Quantity: ${quoteQuantity} ${quoteUom}\n   Delivery Location: ${quoteLocation.trim() || 'Not specified'}\n   Required Timeline: ${quoteTimeline.trim() || 'Standard'}\n   Specifications: ${quoteSpecifications.trim() || 'Standard catalog specifications'}\n\n${message.trim() ? `Additional Notes:\n${message.trim()}\n\n` : ''}Please share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.`;
+
+        // Strip any residual duplicate boilerplate phrases from the user message note
+        const cleanedNotes = (message || '')
+            .replace(/Please share your best offered unit prices[^\n]*\n?/gi, '')
+            .replace(/Hello, I would like to request a formal quotation[^\n]*\n?/gi, '')
+            .trim();
+
+        const notesBlock = cleanedNotes ? `\n\nAdditional Notes:\n${cleanedNotes}` : '';
+
+        return `1. ${cleanedTitle}\n   Quantity: ${quoteQuantity} ${quoteUom}\n   Delivery Location: ${quoteLocation.trim() || 'Not specified'}\n   Required Timeline: ${quoteTimeline.trim() || 'Standard'}\n   Specifications: ${quoteSpecifications.trim() || 'Standard catalog specifications'}${notesBlock}\n\nPlease share your best offered unit prices, delivery timeline, payment terms, and applicable GST/taxes.`;
     };
 
     const payloadForRole = () => {
@@ -2002,38 +2289,131 @@ export function CreateConversationModal({
                                         value={quoteUom}
                                         onChange={e => setQuoteUom(e.target.value)}
                                     >
-                                        <option value="Nos">Nos / Pieces</option>
-                                        <option value="PCS">PCS</option>
-                                        <option value="Sets">Sets</option>
-                                        <option value="Units">Units</option>
-                                        <option value="Kg">Kg</option>
-                                        <option value="Boxes">Boxes</option>
-                                        <option value="Meters">Meters</option>
-                                        <option value="Liters">Liters</option>
+                                        {QUANTITY_UNITS.map(u => (
+                                            <option key={u.value} value={u.value}>
+                                                {u.label}
+                                            </option>
+                                        ))}
+                                        {quoteUom && !QUANTITY_UNITS.some(u => u.value.toLowerCase() === quoteUom.toLowerCase()) && (
+                                            <option value={quoteUom}>{quoteUom}</option>
+                                        )}
                                     </Select>
                                 </div>
                             </div>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
-                                        Delivery Location / Pincode
-                                    </label>
+                            {/* Saved Address Selector & Delivery Location (similar to Create Procurement) */}
+                            <div className="space-y-3 rounded-xl border border-slate-200/90 bg-white/95 p-3.5 shadow-2xs">
+                                <div className="w-full min-w-0">
+                                    {deliveryAddressesList.length > 0 ? (
+                                        <div className="w-full min-w-0">
+                                            <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1 block">
+                                                Select From Saved Addresses
+                                            </label>
+                                            <div className="flex gap-2 items-center w-full min-w-0">
+                                                <div className="flex-1 min-w-0">
+                                                    <SearchableSelect
+                                                        placeholder={loadingAddresses ? "Loading addresses..." : "Search and select a saved address..."}
+                                                        options={deliveryAddressesList.map(addr => {
+                                                            const labelParts = [addr.addressLabel || 'Address'];
+                                                            if (addr.city || addr.district) {
+                                                                labelParts.push(addr.city || addr.district);
+                                                            }
+                                                            const line = addr.addressLine1
+                                                                ? (addr.addressLine1.length > 45 ? `${addr.addressLine1.slice(0, 42)}...` : addr.addressLine1)
+                                                                : '';
+                                                            if (line) labelParts.push(line);
+                                                            const contact = addr.contactPersonName ? `(${addr.contactPersonName})` : '';
+                                                            return {
+                                                                value: String(addr.id),
+                                                                label: `${labelParts.join(' — ')}${contact ? ` ${contact}` : ''}`
+                                                            };
+                                                        })}
+                                                        value={selectedAddressId}
+                                                        onChange={(val) => {
+                                                            if (!val) return;
+                                                            const selected = deliveryAddressesList.find(a => String(a.id) === String(val));
+                                                            if (selected) {
+                                                                const fullAddr = formatDeliveryAddressString(selected);
+                                                                setQuoteLocation(fullAddr);
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    onClick={() => setIsAddressModalOpen(true)}
+                                                    className="h-10 text-xs font-bold shrink-0 whitespace-nowrap border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
+                                                >
+                                                    + Add Address
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
+                                            <span className="text-xs text-slate-500 font-semibold">
+                                                {loadingAddresses ? "Checking saved addresses..." : "No saved addresses found."}
+                                            </span>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                onClick={() => setIsAddressModalOpen(true)}
+                                                className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 text-slate-700 cursor-pointer"
+                                            >
+                                                + Add Address
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <label htmlFor="quote-delivery-location" className="text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                                            Delivery Location / Pincode <span className="text-rose-600">*</span>
+                                        </label>
+                                        {resolvedAddress && quoteLocation?.trim().toLowerCase() !== resolvedAddress.trim().toLowerCase() && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setQuoteLocation(resolvedAddress)}
+                                                className="text-[11px] font-bold text-[#12335f] hover:text-[#0d2342] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-lg transition inline-flex items-center gap-1 cursor-pointer"
+                                                title="Auto-fill with authentic address from verified onboarding / GST"
+                                            >
+                                                Auto-fill from profile / GST
+                                            </button>
+                                        )}
+                                    </div>
                                     <Input
+                                        id="quote-delivery-location"
                                         value={quoteLocation}
                                         onChange={e => setQuoteLocation(e.target.value)}
                                         placeholder="e.g. Pune - 411001, Maharashtra"
                                     />
+                                    {Boolean(
+                                        quoteLocation?.trim() &&
+                                        (
+                                            (resolvedAddress && quoteLocation.trim().toLowerCase() === resolvedAddress.trim().toLowerCase()) ||
+                                            deliveryAddressesList.some(a => formatDeliveryAddressString(a).toLowerCase() === quoteLocation.trim().toLowerCase())
+                                        )
+                                    ) && (
+                                        <p className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                                            Auto-fetched from {resolvedAddress && quoteLocation.trim().toLowerCase() === resolvedAddress.trim().toLowerCase()
+                                                ? (resolvedAddressInfo?.source === 'gst' ? 'verified GST registration' : 'verified onboarding profile')
+                                                : 'saved delivery address'}
+                                        </p>
+                                    )}
                                 </div>
-                                <div>
-                                    <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
-                                        Required Delivery Timeline
-                                    </label>
-                                    <Input
-                                        value={quoteTimeline}
-                                        onChange={e => setQuoteTimeline(e.target.value)}
-                                        placeholder="e.g. Within 15 days"
-                                    />
-                                </div>
+                            </div>
+
+                            <div>
+                                <label htmlFor="quote-timeline" className="block text-[11px] font-bold uppercase tracking-wide text-slate-600 mb-1">
+                                    Required Delivery Timeline
+                                </label>
+                                <Input
+                                    id="quote-timeline"
+                                    value={quoteTimeline}
+                                    onChange={e => setQuoteTimeline(e.target.value)}
+                                    placeholder="e.g. Within 15 days"
+                                />
                             </div>
                             <div className="space-y-1">
                                 <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-600">
@@ -2136,6 +2516,15 @@ export function CreateConversationModal({
                     </Button>
                 </div>
             </div>
+
+            {isAddressModalOpen && (
+                <AddDeliveryAddressModal
+                    isOpen={isAddressModalOpen}
+                    onClose={() => setIsAddressModalOpen(false)}
+                    onAddressCreated={handleAddressCreated}
+                    hasExistingAddresses={deliveryAddressesList.length > 0}
+                />
+            )}
         </div>
     );
 }

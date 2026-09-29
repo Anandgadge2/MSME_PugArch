@@ -13,7 +13,8 @@ import {
   ArrowUpRight,
   Eye,
   FileSpreadsheet,
-  Clock
+  Clock,
+  Ban
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -461,6 +462,11 @@ export function ProcurementLifecycleStepper({
     return s === 'SETTLED' || s === 'PAID';
   });
 
+  const isCancelled = useMemo(() => {
+    const statusUpper = String(status || '').toUpperCase().trim();
+    return statusUpper === 'CANCELLED' || statusUpper === 'TERMINATED';
+  }, [status]);
+
   const isContractSettled = useMemo(() => {
     const statusUpper = String(status || '').toUpperCase().trim();
     const poStatusUpper = String(effectiveActiveOrder?.poStatus || effectiveActiveOrder?.status || '').toUpperCase().trim();
@@ -468,7 +474,9 @@ export function ProcurementLifecycleStepper({
   }, [status, effectiveActiveOrder, hasSettledInvoice]);
 
   const currentStageConfig = LIFECYCLE_STAGES.find(s => s.id === currentStageId) || LIFECYCLE_STAGES[0];
-  const stageHint = isContractSettled
+  const stageHint = isCancelled
+    ? 'This procurement event has been officially cancelled.'
+    : isContractSettled
     ? 'All contract milestones successfully completed & funds settled'
     : isBuyer
       ? currentStageConfig.buyerHint
@@ -485,6 +493,12 @@ export function ProcurementLifecycleStepper({
     onClick?: () => void;
     isPrimary?: boolean;
   } => {
+    if (isCancelled) {
+      return {
+        hasAction: false,
+        idleStatusText: 'Cancelled',
+      };
+    }
     switch (stageId) {
       case 1: {
         // Stage 1: Evaluation / Quotation
@@ -911,7 +925,7 @@ export function ProcurementLifecycleStepper({
               Procurement Highway
             </h2>
             <span className="inline-flex items-center rounded-md bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 px-2 py-0.5 text-[9.5px] font-extrabold text-indigo-900 shadow-2xs">
-              {isContractSettled ? '5 / 5 Completed' : `Stage ${currentStageId}/5: ${currentStageConfig.name}`}
+              {isCancelled ? 'Procurement Cancelled' : isContractSettled ? '5 / 5 Completed' : `Stage ${currentStageId}/5: ${currentStageConfig.name}`}
             </span>
             <span className="hidden md:inline-block text-[10px] text-slate-300">|</span>
             <p className="hidden md:inline-block text-[11px] font-medium text-slate-600 leading-tight truncate">
@@ -921,7 +935,12 @@ export function ProcurementLifecycleStepper({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {isContractSettled ? (
+          {isCancelled ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10.5px] font-black text-rose-800 border border-rose-200 shadow-2xs">
+              <Ban className="h-3.5 w-3.5 text-rose-600 shrink-0" aria-hidden="true" />
+              Procurement Cancelled
+            </span>
+          ) : isContractSettled ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-800 border border-emerald-300 shadow-2xs">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
               Contract Fully Settled
@@ -946,7 +965,9 @@ export function ProcurementLifecycleStepper({
           <div
             className="h-full bg-gradient-to-r from-indigo-500 via-sky-500 via-amber-500 via-fuchsia-500 to-emerald-500 transition-all duration-700 ease-out shadow-xs"
             style={{
-              width: isContractSettled
+              width: isCancelled
+                ? '0%'
+                : isContractSettled
                 ? '100%'
                 : `${Math.min(100, Math.max(14, ((currentStageId - 1) / 4) * 86 + 14))}%`
             }}
@@ -960,9 +981,9 @@ export function ProcurementLifecycleStepper({
         className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-2 relative z-10"
       >
         {LIFECYCLE_STAGES.map((stage) => {
-          const isCompleted = currentStageId > stage.id || (stage.id === 5 && isContractSettled);
-          const isActive = currentStageId === stage.id && !isContractSettled;
-          const isUpcoming = currentStageId < stage.id;
+          const isCompleted = !isCancelled && (currentStageId > stage.id || (stage.id === 5 && isContractSettled));
+          const isActive = !isCancelled && currentStageId === stage.id && !isContractSettled;
+          const isUpcoming = isCancelled || currentStageId < stage.id;
           const stageAction = getStageAction(stage.id);
           const theme = STAGE_VISUAL_THEMES[stage.id] || STAGE_VISUAL_THEMES[1];
 
@@ -1050,8 +1071,9 @@ export function ProcurementLifecycleStepper({
                     isUpcoming && 'text-slate-400 bg-slate-100/80 border border-slate-200/60'
                   )}
                 >
-                  {isCompleted && (stage.id === 5 ? 'Settled ✓' : 'Done ✓')}
-                  {isActive && (
+                  {isCancelled && 'Cancelled'}
+                  {!isCancelled && isCompleted && (stage.id === 5 ? 'Settled ✓' : 'Done ✓')}
+                  {!isCancelled && isActive && (
                     <span className="flex items-center gap-1 font-black">
                       <span className="relative flex h-1.5 w-1.5 shrink-0">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -1060,7 +1082,7 @@ export function ProcurementLifecycleStepper({
                       <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'Active'}</span>
                     </span>
                   )}
-                  {isUpcoming && 'Pending'}
+                  {!isCancelled && isUpcoming && 'Pending'}
                 </span>
               </div>
 

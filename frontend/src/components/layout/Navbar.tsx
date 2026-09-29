@@ -549,13 +549,15 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     // Buyer Marketplace
     { label: 'Marketplace', icon: ShoppingCart, roles: ['buyer'], children: [
       { label: 'Products & Services', path: '/buyer/marketplace', icon: Store, roles: ['buyer'], permission: 'marketplace.view' },
-      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'], permission: 'cart.view' }
+      { label: 'Cart', path: '/cart', icon: ShoppingCart, roles: ['buyer'], permission: 'cart.view' },
+      { label: 'Cart Approvals', path: '/cart/approvals', icon: CheckSquare, roles: ['buyer'], permission: 'cart.view' }
     ] },
     // Buyer Procurement
     { label: 'Procurement', icon: ClipboardCheck, roles: ['buyer'], children: [
       { label: 'Create Procurement', path: '/buyer/procurement/create', icon: PlusCircle, roles: ['buyer'], permission: 'requirement.create' },
       { label: 'My Procurements', path: '/buyer/my-procurements', icon: ClipboardList, roles: ['buyer'], permission: 'requirement.view' },
-      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' }
+      { label: 'Draft Procurements', path: '/buyer/procurement/drafts', icon: FileText, roles: ['buyer'], permission: 'requirement.create' },
+      { label: 'Approvals', path: '/approvals', icon: CheckSquare, roles: ['buyer'], permission: 'approval.view' }
     ] },
     // Buyer Orders
     { label: 'Orders', icon: Truck, roles: ['buyer'], children: [

@@ -139,12 +139,15 @@ export const procurementWorkflow = {
           }
         });
       }
+      const cleanSubject = String(input.subject || '').replace(/^Quote\s+request:\s*/i, '').trim();
+      const chatSubject = cleanSubject ? `Quote Request #${quoteRequest.id}: ${cleanSubject}` : `Quote Request #${quoteRequest.id}`;
+
       if (!conversation) {
         conversation = await db.conversation.create({
           data: {
             buyerId: actor.id,
             sellerId: input.sellerId,
-            subject: `Quote Request #${quoteRequest.id}: ${input.subject}`,
+            subject: chatSubject,
             lastMessageAt: new Date()
           }
         });
@@ -152,7 +155,7 @@ export const procurementWorkflow = {
         await db.conversation.update({
           where: { id: conversation.id },
           data: {
-            subject: `Quote Request #${quoteRequest.id}: ${input.subject}`,
+            subject: chatSubject,
             lastMessageAt: new Date()
           }
         });
@@ -162,14 +165,14 @@ export const procurementWorkflow = {
         data: {
           conversationId: conversation.id,
           senderId: actor.id,
-          content: input.message ? `[Quote Request #${quoteRequest.id}: ${input.subject}]\n\n${input.message}${input.documentUrl ? `\n\nAttachment: ${input.documentUrl}` : ''}` : `[Quote Request #${quoteRequest.id}: ${input.subject}]`
+          content: input.message ? `[Quote Request #${quoteRequest.id}: ${cleanSubject || 'Formal RFQ'}]\n\n${input.message}${input.documentUrl ? `\n\nAttachment: ${input.documentUrl}` : ''}` : `[Quote Request #${quoteRequest.id}: ${cleanSubject || 'Formal RFQ'}]`
         }
       });
     } catch (chatErr) {
       console.error('Failed to link chat conversation for RFQ:', chatErr);
     }
 
-    notifyWorkflowSoon(input.sellerId, 'New RFQ received', input.subject, 'quote_request_created', '/quotations');
+    notifyWorkflowSoon(input.sellerId, 'New RFQ received', input.subject, 'quote_request_created', `/seller/rfq/submit-quotation?quoteRequestId=${quoteRequest.id}`);
     await auditWorkflow(actor, 'workflow.rfq.created', 'quoteRequest', quoteRequest.id);
     return quoteRequest;
   },
@@ -263,7 +266,7 @@ export const procurementWorkflow = {
         console.error('Failed to notify chat for quotation submission:', chatNotifyErr);
       }
 
-      notifyWorkflowSoon(quoteRequest.buyerId, 'RFQ response received', quoteRequest.subject, 'quote_response_created', '/quotations');
+      notifyWorkflowSoon(quoteRequest.buyerId, 'RFQ response received', quoteRequest.subject, 'quote_response_created', `/buyer/rfq/detail?requirementId=${quoteRequest.id}&tab=clarifications`);
       auditWorkflowSoon(actor, 'workflow.rfq.response_created', 'quoteResponse', response.id);
     } else {
       auditWorkflowSoon(actor, 'workflow.rfq.response_draft_created', 'quoteResponse', response.id);
@@ -275,7 +278,10 @@ export const procurementWorkflow = {
     assertBuyer(actor);
     const result = await db.$transaction(async (tx: any) => {
       const response = await tx.quoteResponse.findUnique({ where: { id: quoteResponseId }, include: { quoteRequest: true } });
-      if (!response || (actor.role !== 'admin' && response.quoteRequest.buyerId !== actor.id)) {
+      const isAuthorizedBuyer = actor.role === 'admin' ||
+        response.quoteRequest.buyerId === actor.id ||
+        (Boolean((actor as any).organizationId) && (response.quoteRequest as any).organizationId === (actor as any).organizationId);
+      if (!response || !isAuthorizedBuyer) {
         throw new ApiError(404, 'Quote response not found', 'QUOTE_RESPONSE_NOT_FOUND');
       }
       if (response.status === 'REJECTED') {
@@ -323,17 +329,20 @@ export const procurementWorkflow = {
       result.reused ? 'RFQ purchase order reopened' : 'RFQ response accepted',
       `Your response for "${result.purchaseOrder.title}" was accepted${result.reused ? ' and the existing purchase order is available.' : ' and a purchase order was generated.'}`,
       'quote_response_accepted',
-      '/quotations'
+      `/seller/orders?orderId=${result.purchaseOrder.id}`
     );
     notifyWorkflowSoon(
       result.quoteResponse.quoteRequest.buyerId,
       'RFQ Closed',
       `RFQ "${result.purchaseOrder.title}" has been awarded and closed.`,
       'quote_request_closed',
-      '/quotations'
+      `/buyer/orders?orderId=${result.purchaseOrder.id}`
     );
-    notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
-    await auditWorkflow(actor, 'workflow.rfq.accepted_po_generated', 'purchaseOrder', result.purchaseOrder.id, { quoteResponseId });
+    // Non-blocking notification dispatch
+    setTimeout(() => {
+      notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
+    }, 150);
+    auditWorkflowSoon(actor, 'workflow.rfq.accepted_po_generated', 'purchaseOrder', result.purchaseOrder.id, { quoteResponseId });
     return result;
   },
 
@@ -375,7 +384,7 @@ export const procurementWorkflow = {
       result.reused ? 'Direct purchase PO reopened' : 'Purchase order generated',
       `A purchase order was ${result.reused ? 'opened again' : 'generated'} for ${result.purchaseOrder.title}.`,
       'direct_purchase_po_generated',
-      '/seller/orders'
+      `/seller/orders?orderId=${result.purchaseOrder.id}`
     );
     notifyPurchaseOrderCreated(result.purchaseOrder.id).catch(() => undefined);
     await auditWorkflow(actor, 'workflow.direct_purchase.po_generated', 'purchaseOrder', result.purchaseOrder.id, { directPurchaseId });

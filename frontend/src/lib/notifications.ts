@@ -20,7 +20,7 @@ function normalizeExplicitRoute(url: string, role?: string): string | null {
   const trimmed = url.trim();
   if (!trimmed) return null;
 
-  // If the redirect is explicitly a generic dashboard/notifications home,
+  // If the redirect is explicitly a generic dashboard/notifications home or dead route,
   // return null so our intelligent type-and-content inference can route
   // to the specific section instead of dropping the user onto the main page.
   const lower = trimmed.toLowerCase();
@@ -30,13 +30,17 @@ function normalizeExplicitRoute(url: string, role?: string): string | null {
     lower === '/home' ||
     lower === '/notifications' ||
     lower === '/shg/dashboard' ||
-    lower === '/master-admin'
+    lower === '/master-admin' ||
+    lower === '/quotations' ||
+    lower === '/seller/opportunities' ||
+    lower === '/shg/opportunities' ||
+    lower === '/opportunities'
   ) {
     return null;
   }
 
   // Rewrite legacy procurement orders -> canonical Purchase Order routes
-  const orderProcMatch = trimmed.match(/^\/(?:procurement-orders|orders\/procurement)\/(\d+)/i);
+  const orderProcMatch = trimmed.match(/^\/(?:procurement-orders|orders\/procurement)\/([A-Za-z0-9-_]+)/i);
   if (orderProcMatch) {
     const id = orderProcMatch[1];
     return role === 'seller' || role === 'shg'
@@ -79,45 +83,53 @@ function normalizeExplicitRoute(url: string, role?: string): string | null {
 }
 
 /**
- * Extracts specific entity IDs (bid ID, order ID, invoice ID) from notification
+ * Extracts specific entity IDs (bid ID, order ID, invoice ID, quoteRequestId) from notification
  * text, title, or raw URLs.
  */
 function extractEntityReferences(item: PortalNotification): {
   bidId?: string;
   orderId?: string;
   invoiceId?: string;
+  quoteRequestId?: string;
 } {
   const combined = `${item.route || ''} ${item.redirectUrl || ''} ${item.title || ''} ${item.message || ''}`;
 
-  // Bid references: e.g. /bids/123, BID-123, PRC-123, Bid #123, requirement 123
+  // Bid references: e.g. /bids/123, PRC-24, RC-2026-22135, RA-2026-001, RFQ-2026-001, RFP-2026-001, TND-123, BID-123
   const bidMatch =
     combined.match(/\/bids\/([A-Za-z0-9-_]+)/i) ||
-    combined.match(/\b(?:BID|PRC|TND)-([A-Za-z0-9-_]+)/i) ||
-    combined.match(/\b(?:bid|requirement|tender)\s+#?([0-9]+)\b/i);
+    combined.match(/\/(?:rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([A-Za-z0-9-_]+)/i) ||
+    combined.match(/\b((?:RC|RA|PRC|RFQ|RFP|TND|TENDER|LTND|BID|DP)-[A-Za-z0-9-_]+)\b/i) ||
+    combined.match(/\b(?:bid|requirement|tender|opportunity)\s+#?([A-Za-z0-9-_]+)\b/i);
 
-  // Order references: e.g. /procurement-orders/123, /orders?orderId=123, PO-PB-123, PO-123, Purchase Order #123, /orders/123
+  // Order references: e.g. /orders?orderId=123, PO-RFQ-2026-82662, PO-PB-123, PO-123, WO-PB-123, Purchase Order #123
   const orderMatch =
-    combined.match(/[?&]orderId=(\d+)/i) ||
-    combined.match(/\/(?:procurement-orders|orders\/procurement|purchase-orders|orders)\/(\d+)/i) ||
-    combined.match(/\b(?:PO-PB-[A-Za-z0-9-_]+|PO-[A-Za-z0-9-_]+)/i) ||
-    combined.match(/\b(?:purchase\s+order|order)\s+#?([0-9]+)\b/i);
+    combined.match(/[?&]orderId=([A-Za-z0-9-_]+)/i) ||
+    combined.match(/\/(?:procurement-orders|orders\/procurement|purchase-orders|orders)\/([A-Za-z0-9-_]+)/i) ||
+    combined.match(/\b((?:PO-PB-|PO-RFQ-|PO-DP-|PO-|WO-PB-|WO-)[A-Za-z0-9-_]+)\b/i) ||
+    combined.match(/\b(?:purchase\s+order|order|po)\s+#?([A-Za-z0-9-_]+)\b/i);
 
   // Invoice references: e.g. /invoices/123, INV-123, Invoice #123
   const invoiceMatch =
     combined.match(/\/invoices\/([A-Za-z0-9-_]+)/i) ||
-    combined.match(/\bINV-([A-Za-z0-9-_]+)/i) ||
-    combined.match(/\binvoice\s+#?([0-9]+)\b/i);
+    combined.match(/\b(INV-[A-Za-z0-9-_]+)\b/i) ||
+    combined.match(/\binvoice\s+#?([A-Za-z0-9-_]+)\b/i);
+
+  // Quote Request references: e.g. quoteRequestId=7, Quote Request #7
+  const qrMatch =
+    combined.match(/[?&]quoteRequestId=(\d+)/i) ||
+    combined.match(/\bQuote\s+Request\s+#?(\d+)\b/i);
 
   return {
     bidId: bidMatch ? bidMatch[1] : undefined,
     orderId: orderMatch ? orderMatch[1] : undefined,
-    invoiceId: invoiceMatch ? invoiceMatch[1] : undefined
+    invoiceId: invoiceMatch ? invoiceMatch[1] : undefined,
+    quoteRequestId: qrMatch ? qrMatch[1] : undefined,
   };
 }
 
 /**
  * Intelligently computes the target destination page/section when a notification
- * is clicked, preventing unintended bounces to the main dashboard.
+ * is clicked, opening the proper details view page ID-wise and preventing unintended bounces.
  */
 export const routeForNotification = (
   item: PortalNotification,
@@ -126,8 +138,14 @@ export const routeForNotification = (
 ): string => {
   const userRole = (role || user?.role || '').toLowerCase();
   const rawExplicit = item.route || item.redirectUrl;
+  const { bidId, orderId, invoiceId, quoteRequestId } = extractEntityReferences(item);
 
-  if (rawExplicit) {
+  // Check if explicit route is merely a generic listing that should yield to entity extraction
+  const isGenericExplicit =
+    !rawExplicit ||
+    ['/dashboard', '/', '/home', '/notifications', '/shg/dashboard', '/master-admin', '/quotations', '/seller/opportunities', '/shg/opportunities', '/opportunities', '/seller/orders', '/buyer/orders', '/orders'].includes(rawExplicit.trim().toLowerCase());
+
+  if (rawExplicit && (!isGenericExplicit || (!orderId && !bidId && !quoteRequestId && !invoiceId))) {
     const normalized = normalizeExplicitRoute(rawExplicit, userRole);
     if (normalized) {
       return safeInternalPath(normalized, '/notifications');
@@ -136,9 +154,31 @@ export const routeForNotification = (
 
   const type = String(item.type || '').toLowerCase();
   const text = `${item.title || ''} ${item.message || ''}`.toLowerCase();
-  const { bidId, orderId } = extractEntityReferences(item);
 
-  // 1. Bid Award & Counter-Offer Notifications
+  // 1. Purchase Orders & Direct Purchases (ID-wise opening)
+  if (
+    orderId ||
+    type.includes('purchase_order') ||
+    type.includes('po_') ||
+    type.includes('quotation_accepted') ||
+    type.includes('quote_response_accepted') ||
+    type.includes('quote_request_closed') ||
+    text.includes('purchase order') ||
+    text.includes('quotation accepted') ||
+    text.includes('response was accepted') ||
+    type.includes('direct_purchase')
+  ) {
+    if (orderId) {
+      if (userRole === 'seller' || userRole === 'shg') return `/seller/orders?orderId=${encodeURIComponent(orderId)}`;
+      if (userRole === 'buyer') return `/buyer/orders?orderId=${encodeURIComponent(orderId)}`;
+      return `/orders?orderId=${encodeURIComponent(orderId)}`;
+    }
+    if (userRole === 'seller' || userRole === 'shg') return '/seller/orders';
+    if (userRole === 'buyer') return '/buyer/orders';
+    return '/orders';
+  }
+
+  // 2. Bid Award & Counter-Offer Notifications
   if (
     type.includes('award') ||
     type.includes('counter_offer') ||
@@ -148,37 +188,14 @@ export const routeForNotification = (
     text.includes('awarded')
   ) {
     if (userRole === 'seller' || userRole === 'shg') {
-      if (bidId) return `/bids/${bidId}`;
+      if (bidId) return `/bids/${encodeURIComponent(bidId)}`;
       return '/seller/awards';
     }
     if (userRole === 'buyer') {
-      if (bidId) return `/bids/${bidId}`;
+      if (bidId) return `/bids/${encodeURIComponent(bidId)}`;
       return '/buyer/my-procurements';
     }
-    return bidId ? `/bids/${bidId}` : '/admin/delivery';
-  }
-
-  // 2. Purchase Order & Direct Orders
-  if (
-    type.includes('purchase_order') ||
-    type.includes('po_') ||
-    type.includes('quotation_accepted') ||
-    text.includes('purchase order') ||
-    text.includes('quotation accepted') ||
-    type.includes('direct_purchase')
-  ) {
-    if (orderId && /^\d+$/.test(orderId)) {
-      if (userRole === 'seller' || userRole === 'shg') return `/seller/orders?orderId=${orderId}`;
-      if (userRole === 'buyer') return `/buyer/orders?orderId=${orderId}`;
-      return `/orders?orderId=${orderId}`;
-    }
-    if (userRole === 'seller' || userRole === 'shg') {
-      return '/seller/orders';
-    }
-    if (userRole === 'buyer') {
-      return '/buyer/orders';
-    }
-    return '/orders';
+    return bidId ? `/bids/${encodeURIComponent(bidId)}` : '/admin/delivery';
   }
 
   // 3. Delivery, Shipment, Logistics, GRN & Inspection
@@ -192,9 +209,9 @@ export const routeForNotification = (
     text.includes('delivery') ||
     text.includes('dispatched')
   ) {
-    if (orderId && /^\d+$/.test(orderId)) {
-      if (userRole === 'seller' || userRole === 'shg') return `/seller/delivery-management?search=${orderId}`;
-      return `/orders/tracking?search=${orderId}`;
+    if (orderId) {
+      if (userRole === 'seller' || userRole === 'shg') return `/seller/delivery-management?search=${encodeURIComponent(orderId)}`;
+      return `/orders/tracking?search=${encodeURIComponent(orderId)}`;
     }
     if (userRole === 'seller' || userRole === 'shg') {
       return '/seller/delivery-management';
@@ -247,32 +264,96 @@ export const routeForNotification = (
     return userRole === 'buyer' ? '/buyer/messages' : '/seller/messages';
   }
 
-  // 9. Invitations & Procurement Opportunities
-  if (type.includes('invit') || text.includes('invited')) {
-    if (bidId) return `/bids/${bidId}`;
-    return userRole === 'buyer' ? '/buyer/my-procurements' : '/seller/procurement/events';
-  }
-
-  // 10. RFQ, Quotes & Clarifications
-  if (type.includes('quote') || type.includes('rfq') || type.includes('rfp')) {
-    if (userRole === 'buyer') return '/buyer/my-procurements';
-    return '/quotations';
-  }
-
-  // 11. Bids, Tenders & Auctions
+  // 9. RFQ & Quote Requests (e.g. "NEW RFQ RECEIVED", "Quote request: ...")
   if (
-    type.includes('tender') ||
-    type.includes('auction') ||
-    type.includes('bid') ||
-    type.includes('procurement')
+    type.includes('quote') ||
+    type.includes('rfq') ||
+    text.includes('quote request') ||
+    text.includes('rfq')
   ) {
-    if (bidId) return `/bids/${bidId}`;
+    if (quoteRequestId) {
+      if (userRole === 'seller' || userRole === 'shg') {
+        return `/seller/rfq/submit-quotation?quoteRequestId=${encodeURIComponent(quoteRequestId)}`;
+      }
+      return `/buyer/rfq/detail?requirementId=${encodeURIComponent(quoteRequestId)}&tab=clarifications`;
+    }
+    if (bidId) {
+      if (userRole === 'seller' || userRole === 'shg') {
+        return `/seller/procurement/rfq/${encodeURIComponent(bidId)}`;
+      }
+      return `/bids/${encodeURIComponent(bidId)}`;
+    }
     if (userRole === 'buyer') return '/buyer/my-procurements';
-    if (userRole === 'seller' || userRole === 'shg') return '/seller/procurement/events';
+    return '/seller/opportunities/rfqs';
+  }
+
+  // 10. Reverse Auction (e.g. "NEW PROCUREMENT OPPORTUNITY: REVERSE AUCTION", PRC-24, RA-...)
+  if (
+    type.includes('auction') ||
+    text.includes('reverse auction') ||
+    text.includes('auction') ||
+    (bidId && bidId.startsWith('RA-'))
+  ) {
+    const auctionId = bidId ? (bidId.startsWith('PRC-') ? bidId.replace(/^PRC-/, '') : bidId) : undefined;
+    if (auctionId) {
+      if (userRole === 'seller' || userRole === 'shg') {
+        return `/seller/procurement/reverse-auction/${encodeURIComponent(auctionId)}`;
+      }
+      if (userRole === 'buyer') {
+        return `/buyer/procurement/reverse-auction/${encodeURIComponent(auctionId)}`;
+      }
+      return `/reverse-auctions/${encodeURIComponent(auctionId)}`;
+    }
+    return userRole === 'buyer' ? '/buyer/my-procurements' : '/seller/opportunities/auctions';
+  }
+
+  // 11. Rate Contract (e.g. "NEW PROCUREMENT OPPORTUNITY: RATE CONTRACT 1", RC-2026-22135)
+  if (
+    text.includes('rate contract') ||
+    type.includes('rate_contract') ||
+    (bidId && bidId.startsWith('RC-'))
+  ) {
+    if (bidId) {
+      if (userRole === 'seller' || userRole === 'shg') {
+        return `/seller/procurement/rate-contract/${encodeURIComponent(bidId)}`;
+      }
+      if (userRole === 'buyer') {
+        return `/buyer/rate-contracts?search=${encodeURIComponent(bidId)}`;
+      }
+      return `/bids/${encodeURIComponent(bidId)}`;
+    }
+    return userRole === 'buyer' ? '/buyer/rate-contracts' : '/seller/opportunities/rate-contracts';
+  }
+
+  // 12. Invitations & Procurement Opportunities (Tenders, RFPs, Bids)
+  if (
+    type.includes('invit') ||
+    text.includes('invited') ||
+    type.includes('tender') ||
+    type.includes('bid') ||
+    type.includes('procurement') ||
+    type.includes('opportunity')
+  ) {
+    if (bidId) {
+      if (userRole === 'seller' || userRole === 'shg') {
+        if (text.includes('open tender') || bidId.startsWith('TND-') || bidId.startsWith('TENDER-')) {
+          return `/seller/procurement/open-tender/${encodeURIComponent(bidId)}`;
+        }
+        if (text.includes('limited tender') || bidId.startsWith('LTND-')) {
+          return `/seller/procurement/limited-tender/${encodeURIComponent(bidId)}`;
+        }
+        if (text.includes('rfp') || bidId.startsWith('RFP-')) {
+          return `/seller/procurement/rfp/${encodeURIComponent(bidId)}`;
+        }
+      }
+      return `/bids/${encodeURIComponent(bidId)}`;
+    }
+    if (userRole === 'buyer') return '/buyer/my-procurements';
+    if (userRole === 'seller' || userRole === 'shg') return '/seller/opportunities';
     return '/admin/delivery';
   }
 
-  // 12. Organization & Categories
+  // 13. Organization & Categories
   if (type.includes('organization')) {
     return userRole === 'admin' ? '/admin/organizations' : (userRole === 'buyer' ? '/buyer/profile' : '/seller/profile');
   }
@@ -280,7 +361,7 @@ export const routeForNotification = (
     return '/admin/categories';
   }
 
-  // Fallback to role-specific active section rather than the generic dashboard home
+  // Fallback to role-specific active section rather than generic dashboard
   if (userRole === 'seller' || userRole === 'shg') return '/seller/orders';
   if (userRole === 'buyer') return '/buyer/my-procurements';
   if (userRole === 'admin') return '/admin/onboarding';

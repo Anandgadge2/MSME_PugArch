@@ -331,6 +331,56 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
     }
   }
 
+  // Check if token refers to a Reverse Auction
+  if (token.startsWith('RA-') || token.startsWith('PRC-') || token.startsWith('AUCTION-')) {
+    try {
+      const stripped = token.replace(/^(RA-|PRC-|AUCTION-)/i, '');
+      const rawNum = Number(stripped);
+      const validId = (Number.isFinite(rawNum) && rawNum > 0 && rawNum <= 2147483647) ? rawNum : 0;
+      const auction = await (prisma as any).auction.findFirst({
+        where: {
+          OR: [
+            { auctionCode: token },
+            { referenceNo: token },
+            { auctionCode: stripped },
+            { referenceNo: stripped },
+            ...(validId > 0 ? [{ id: validId }, { linkedRequirementId: validId }, { linkedBidId: validId }] : [])
+          ]
+        }
+      });
+      if (auction) {
+        const synthesizedAuctionBid = {
+          id: auction.auctionCode || `RA-${auction.id}`,
+          bidNumber: auction.auctionCode || `RA-${auction.id}`,
+          referenceNumber: auction.referenceNo || auction.auctionCode || `RA-${auction.id}`,
+          title: auction.title || `Reverse Auction ${auction.auctionCode || auction.id}`,
+          description: auction.description || '',
+          bidType: 'Reverse Auction',
+          procurementType: 'Reverse Auction',
+          procurementMethod: 'REVERSE_AUCTION',
+          sourcingMethod: 'REVERSE_AUCTION',
+          status: auction.status || 'ACTIVE',
+          estimatedValue: Number(auction.reservePrice || auction.budgetMax || 0),
+          auctionCode: auction.auctionCode,
+          auctionId: auction.id,
+          sourceModel: 'AUCTION',
+          sourceId: auction.id,
+          payload: {
+            basics: {
+              title: auction.title || `Reverse Auction ${auction.auctionCode || auction.id}`,
+              description: auction.description || '',
+              procurementMethod: 'REVERSE_AUCTION',
+              procurementType: 'Reverse Auction'
+            }
+          }
+        };
+        return apiResponse.success(res, synthesizedAuctionBid, 200, 'Reverse auction details fetched successfully');
+      }
+    } catch {
+      // Continue to next fallbacks
+    }
+  }
+
   // Check if token refers to a Rate Contract in db.contract first
   if (token.startsWith('RC-') || token.startsWith('RATE-') || /^\d+$/.test(token)) {
     const rawNum = Number(token.replace(/^(RC-|RATE-)/, '')) || (/^\d+$/.test(token) ? Number(token) : 0);

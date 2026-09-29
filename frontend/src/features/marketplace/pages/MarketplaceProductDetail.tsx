@@ -20,6 +20,7 @@ import { CompareTray } from '../components/CompareTray';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
 import { useQuery as useTanstackQuery } from '@tanstack/react-query';
+import { CreateConversationModal } from '../../messages/pages/MessagesPage';
 
 const isImageFile = (file: any) => {
     const mime = String(file?.mimeType || file?.fileAsset?.mimeType || '').toLowerCase();
@@ -85,6 +86,7 @@ export default function MarketplaceProductDetail() {
     const [selectedImage, setSelectedImage] = useState(0);
     const [failedImages, setFailedImages] = useState<string[]>([]);
     const [orderQuantity, setOrderQuantity] = useState<number>(1);
+    const [showQuoteModal, setShowQuoteModal] = useState(false);
 
     const { items: cartItems, add: addToCart } = useMarketplaceCart();
 
@@ -271,7 +273,11 @@ export default function MarketplaceProductDetail() {
             router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`);
             return;
         }
-        router.push(`/buyer/procurement/rfq/new?productId=${product.id}`);
+        if (user.role !== 'buyer') {
+            toast.info('Quote requests are available from buyer accounts.');
+            return;
+        }
+        setShowQuoteModal(true);
     };
 
     return (
@@ -884,6 +890,26 @@ export default function MarketplaceProductDetail() {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Request Formal Quote Modal */}
+            {showQuoteModal && (
+                <CreateConversationModal
+                    onClose={() => setShowQuoteModal(false)}
+                    onCreated={(convId) => {
+                        setShowQuoteModal(false);
+                        toast.success('Formal quote request sent to seller successfully!');
+                        router.push(`/buyer/messages?conversationId=${convId}`);
+                    }}
+                    initialCounterpartyId={sellerUserId > 0 ? String(sellerUserId) : undefined}
+                    initialRecipientRole="seller"
+                    initialSubject={`Quote request: ${product.name}`}
+                    initialMessage={`Hello, I would like to request a formal quotation for ${product.name}.\n\nCategory: ${product.category?.name || 'Not specified'}\nListed Unit Price: ₹${displayPrice.toLocaleString('en-IN')}\nPlease share best price, availability, delivery timeline, payment terms, and applicable taxes.`}
+                    initialIntent="quote"
+                    initialPrice={String(displayPrice * orderQuantity)}
+                    initialQuantity={orderQuantity}
+                    initialUom={product.unitOfMeasure || 'Nos'}
+                />
             )}
 
             {!useDashboardShell && <MarketplaceFooter />}

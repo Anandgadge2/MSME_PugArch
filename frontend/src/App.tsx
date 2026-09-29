@@ -70,6 +70,8 @@ const TeamManagementPage = lazy(() => import('./features/orgTeam/pages/TeamManag
 const AcceptInvitePage = lazy(() => import('./features/orgTeam/pages/AcceptInvitePage'));
 const InviteSignupPage = lazy(() => import('./features/orgTeam/pages/InviteSignupPage'));
 const CartPage = lazy(() => import('./features/cart/pages/CartPage'));
+const CartApprovalPage = lazy(() => import('./features/cart/pages/CartApprovalPage'));
+const ApprovalQueuePage = lazy(() => import('./features/approvals/pages/ApprovalQueuePage'));
 const GrnListPage = lazy(() => import('./features/grn/pages/GrnListPage'));
 const GrnDetailPage = lazy(() => import('./features/grn/pages/GrnDetailPage'));
 const TenderEvaluationPage = lazy(() => import('./features/tenderEval/pages/TenderEvaluationPage'));
@@ -260,6 +262,9 @@ export const routeLoaders: Record<string, () => Promise<unknown>> = {
   '/admin/reports': () => import('./views/MISReports'),
   '/messages': () => import('./features/messages/pages/MessagesPage'),
   '/org/team': () => import('./features/orgTeam/pages/TeamManagementPage'),
+  '/approvals': () => import('./features/approvals/pages/ApprovalQueuePage'),
+  '/buyer/procurement/approvals': () => import('./features/approvals/pages/ApprovalQueuePage'),
+  '/cart/approvals': () => import('./features/cart/pages/CartApprovalPage'),
 };
 
 export const preloadRoute = (path: string) => {
@@ -332,6 +337,8 @@ const rolePreloaders = {
     () => import('./views/RepeatOrders'),
     () => import('./features/delivery/pages/DeliveryListPage'),
     () => import('./features/procurementWizard/pages/CreateProcurementPage'),
+    () => import('./features/approvals/pages/ApprovalQueuePage'),
+    () => import('./features/cart/pages/CartApprovalPage'),
   ],
   seller: [
     () => import('./views/PurchaseOrders'),
@@ -816,8 +823,12 @@ export default function App({
     {
       const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
-        const [, , typeSlug, rawId] = procDetailMatch;
+        const [, role, typeSlug, rawId] = procDetailMatch;
         const id = decodeURIComponent(rawId);
+        if (id.toLowerCase() === 'new' || id.toLowerCase() === 'create') {
+          const methodParam = typeSlug ? `?method=${typeSlug.toUpperCase()}` : '';
+          return <Redirect to={`/buyer/procurement/create${methodParam}`} />;
+        }
         switch (typeSlug.toLowerCase()) {
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
@@ -1055,13 +1066,19 @@ export default function App({
       if (roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/orders" />;
       return <Redirect to="/orders" />;
     }
+    if (pathname === '/quotations') {
+      if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to="/seller/opportunities/rfqs" />;
+      return <Redirect to="/buyer/my-procurements" />;
+    }
     {
-      const directPoMatch = pathname.match(/^\/(?:seller\/|buyer\/|shg\/)?(?:orders|purchase-orders)\/(\d+)$/);
+      const directPoMatch = pathname.match(/^\/(?:seller\/|buyer\/|shg\/)?(?:orders|purchase-orders)\/([A-Za-z0-9-_]+)$/);
       if (directPoMatch && roleOk(user.role, ['buyer', 'seller', 'admin', 'shg'])) {
         const id = directPoMatch[1];
-        if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders?orderId=${id}`} />;
-        if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders?orderId=${id}`} />;
-        return <Redirect to={`/orders?orderId=${id}`} />;
+        if (!['tracking', 'delivery', 'delivery-confirmation', 'repeat'].includes(id.toLowerCase())) {
+          if (roleOk(user.role, ['seller', 'shg'])) return <Redirect to={`/seller/orders?orderId=${encodeURIComponent(id)}`} />;
+          if (roleOk(user.role, ['buyer'])) return <Redirect to={`/buyer/orders?orderId=${encodeURIComponent(id)}`} />;
+          return <Redirect to={`/orders?orderId=${encodeURIComponent(id)}`} />;
+        }
       }
     }
     if (pathname === '/orders/delivery-confirmation' && roleOk(user.role, ['buyer'])) return <Redirect to="/orders/tracking?tab=confirmation" />;
@@ -1107,6 +1124,12 @@ export default function App({
     if (pathname === '/notifications') return <NotificationCenter />;
     if (pathname === '/org/team') return <PermissionRouteGuard permission="team.member.view"><TeamManagementPage /></PermissionRouteGuard>;
     if (pathname === '/cart') return <PermissionRouteGuard permission="cart.view"><CartPage /></PermissionRouteGuard>;
+    if (pathname === '/cart/approvals' && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
+      return <PermissionRouteGuard permission="cart.view"><CartApprovalPage /></PermissionRouteGuard>;
+    }
+    if ((pathname === '/approvals' || pathname === '/buyer/procurement/approvals') && roleOk(user.role, ['buyer', 'admin', 'master_admin'])) {
+      return <PermissionRouteGuard permission="approval.view"><ApprovalQueuePage /></PermissionRouteGuard>;
+    }
     
     if (pathname === '/grn' || pathname === '/buyer/grn') return <PermissionRouteGuard permission="grn.view"><GrnListPage /></PermissionRouteGuard>;
     {

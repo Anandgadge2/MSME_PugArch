@@ -178,13 +178,25 @@ const resolveAuctionId = async (rawId: number | string): Promise<number | null> 
   });
   if (byCode) return byCode.id;
 
-  // 2. If it has a prefix like "RA-" followed by an integer, try direct ID fallback
-  if (str.toUpperCase().startsWith('RA-')) {
-    const stripped = str.replace(/^RA-/i, '');
+  // 2. If it has a prefix like "RA-" or "PRC-" followed by an integer, try direct ID fallback or linked lookups
+  if (str.toUpperCase().startsWith('RA-') || str.toUpperCase().startsWith('PRC-')) {
+    const stripped = str.replace(/^(RA-|PRC-)/i, '');
     const numStripped = Number(stripped);
     if (Number.isFinite(numStripped) && numStripped > 0) {
       const byStrippedId = await db.auction.findUnique({ where: { id: numStripped }, select: { id: true } });
       if (byStrippedId) return byStrippedId.id;
+      const linked = await db.auction.findFirst({
+        where: { linkedRequirementId: numStripped },
+        select: { id: true },
+        orderBy: { id: 'desc' }
+      });
+      if (linked) return linked.id;
+      const linkedBid = await db.auction.findFirst({
+        where: { linkedBidId: numStripped },
+        select: { id: true },
+        orderBy: { id: 'desc' }
+      });
+      if (linkedBid) return linkedBid.id;
     }
   }
 

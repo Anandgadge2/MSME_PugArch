@@ -9,6 +9,8 @@ import RfqDetailPage from '../../rfq/pages/RfqDetailPage';
 import RateContractDetailPage from '../../rfq/pages/RateContractDetailPage';
 import OpenTenderDetailPage from '../../rfq/pages/OpenTenderDetailPage';
 import LimitedTenderDetailPage from '../../rfq/pages/LimitedTenderDetailPage';
+import ReverseAuctionDetailPage from '../../reverseAuctions/pages/ReverseAuctionDetailPage';
+import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { procurementBidApi } from '../api';
 import { getApi } from '../../shared/apiClient';
 import { Skeleton, ProcurementDetailSkeleton } from '../../../components/ui/skeleton';
@@ -27,6 +29,20 @@ export default function BidDetailsPage() {
     queryKey: ['bid-dispatcher-meta', requestId],
     queryFn: async () => {
       if (!requestId) return null;
+
+      if (/^RA[-_]?/i.test(requestId) || /^PRC[-_]?/i.test(requestId)) {
+        try {
+          const auction = await reverseAuctionApi.get(requestId);
+          if (auction && (auction.id || auction.auctionCode || auction.title)) {
+            return {
+              ...auction,
+              procurementMethod: 'REVERSE_AUCTION',
+              procurementType: 'Reverse Auction',
+              bidType: 'Reverse Auction'
+            };
+          }
+        } catch {}
+      }
 
       const isReqPattern = /^REQ[-_]?\d+/i.test(requestId);
 
@@ -109,18 +125,50 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
-  const isRfq =
-    queryType.includes('RFQ') ||
-    rawMethod.includes('RFQ') ||
-    rawMethod.includes('QUOTATION') ||
-    title.includes('RFQ') ||
-    title.includes('REQUEST FOR QUOTATION') ||
-    desc.includes('SOURCING METHOD: RFQ') ||
-    desc.includes('METHOD: RFQ') ||
-    reqNum.startsWith('RFQ-');
+  const isReverseAuction =
+    rawMethod.includes('REVERSE') ||
+    rawMethod.includes('AUCTION') ||
+    title.includes('REVERSE AUCTION') ||
+    title.includes('AUCTION') ||
+    desc.includes('REVERSE AUCTION') ||
+    reqNum.startsWith('RA-') ||
+    queryType.includes('AUCTION') ||
+    queryType.includes('REVERSE');
 
-  if (isRfq) {
-    return <RfqDetailPage initialData={validInitialData} />;
+  if (isReverseAuction) {
+    return <ReverseAuctionDetailPage id={bidObj?.auctionCode || bidObj?.id || requestId} />;
+  }
+
+  const isRateContract =
+    rawMethod.includes('RATE') ||
+    title.includes('RATE CONTRACT') ||
+    reqNum.startsWith('RC-');
+
+  if (isRateContract) {
+    return <RateContractDetailPage initialData={validInitialData} />;
+  }
+
+  const isLimitedTender =
+    rawMethod.includes('LIMITED') ||
+    title.includes('LIMITEDTENDER') ||
+    title.includes('LIMITED TENDER') ||
+    reqNum.startsWith('LTND-');
+
+  if (isLimitedTender) {
+    return <LimitedTenderDetailPage initialData={validInitialData} />;
+  }
+
+  const isOpenTender =
+    rawMethod.includes('OPEN_TENDER') ||
+    rawMethod.includes('OPEN TENDER') ||
+    title.includes('OPENTENDER') ||
+    title.includes('OPEN TENDER') ||
+    reqNum.startsWith('TND-') ||
+    reqNum.startsWith('TENDER-') ||
+    ((rawMethod.includes('OPEN') || rawMethod.includes('TENDER')) && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP'));
+
+  if (isOpenTender) {
+    return <OpenTenderDetailPage initialData={validInitialData} />;
   }
 
   const isExplicitRfp =
@@ -137,25 +185,18 @@ export default function BidDetailsPage() {
     return <RfpDetailPage initialData={validInitialData} />;
   }
 
-  const isOpenTender =
-    rawMethod.includes('OPEN_TENDER') ||
-    rawMethod.includes('OPEN TENDER') ||
-    title.includes('OPENTENDER') ||
-    title.includes('OPEN TENDER') ||
-    reqNum.startsWith('TND-') ||
-    reqNum.startsWith('TENDER-') ||
-    ((rawMethod.includes('OPEN') || rawMethod.includes('TENDER')) && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP'));
+  const isRfq =
+    queryType.includes('RFQ') ||
+    rawMethod.includes('RFQ') ||
+    rawMethod.includes('QUOTATION') ||
+    title.includes('RFQ') ||
+    title.includes('REQUEST FOR QUOTATION') ||
+    desc.includes('SOURCING METHOD: RFQ') ||
+    desc.includes('METHOD: RFQ') ||
+    reqNum.startsWith('RFQ-');
 
-  if (isOpenTender) {
-    return <OpenTenderDetailPage initialData={validInitialData} />;
-  }
-
-  if (rawMethod.includes('LIMITED') || title.includes('LIMITEDTENDER') || title.includes('LIMITED TENDER') || reqNum.startsWith('LTND-')) {
-    return <LimitedTenderDetailPage initialData={validInitialData} />;
-  }
-
-  if (rawMethod.includes('RATE') || title.includes('RATE CONTRACT') || reqNum.startsWith('RC-')) {
-    return <RateContractDetailPage initialData={validInitialData} />;
+  if (isRfq) {
+    return <RfqDetailPage initialData={validInitialData} />;
   }
 
   // Default for standard procurement requirement/bid is Request for Quotation

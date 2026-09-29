@@ -116,19 +116,35 @@ export function BuyerUrgentActionsInbox() {
       });
     }
 
-    // 4. Cart / Requisition Approvals (If department approver)
-    const pendingApprovals = (summaryData?.pendingApprovalsCount || 0) + (summaryData?.cartApprovalsCount || 0);
-    if (pendingApprovals > 0) {
+    // 4. Procurement Multi-Stage Approvals (Department Head, Finance, Procurement Head)
+    const procurementApprovals = summaryData?.pendingApprovalsCount || 0;
+    if (procurementApprovals > 0) {
       items.push({
-        id: 'act-appr',
+        id: 'act-proc-appr',
         type: 'approval',
-        title: `${pendingApprovals} Internal Requisitions to Approve`,
-        subtitle: 'Department purchases submitted for authorization and budget sign-off.',
+        title: `${procurementApprovals} Procurement Approvals Awaiting Decision`,
+        subtitle: 'Requisitions and purchase orders requiring your authorization before proceeding.',
         badge: 'Approval Queue',
         badgeTone: 'bg-purple-50 text-purple-700 border-purple-200',
+        actionHref: '/approvals',
+        actionLabel: 'Review Approvals',
+        icon: Inbox
+      });
+    }
+
+    // 5. Cart / Requisition Finance Approvals
+    const cartApprovals = summaryData?.cartApprovalsCount || 0;
+    if (cartApprovals > 0) {
+      items.push({
+        id: 'act-cart-appr',
+        type: 'approval',
+        title: `${cartApprovals} Internal Requisitions to Approve`,
+        subtitle: 'Department purchases submitted for finance authorization and budget sign-off.',
+        badge: 'Finance Queue',
+        badgeTone: 'bg-indigo-50 text-indigo-700 border-indigo-200',
         actionHref: '/cart/approvals',
         actionLabel: 'Review Cart',
-        icon: Inbox
+        icon: ShoppingBag
       });
     }
 

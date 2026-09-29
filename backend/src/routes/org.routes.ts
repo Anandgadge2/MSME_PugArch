@@ -228,10 +228,49 @@ router.get('/org/status', authenticate, asyncRoute(async (req, res) => {
         })
         : null;
 
+    let memberCount = 0;
+    let hasFinanceOfficer = false;
+
+    if (user?.organizationId) {
+        const [userCount, activeMembershipCount, financeCount] = await Promise.all([
+            prisma.user.count({
+                where: { organizationId: user.organizationId }
+            }),
+            prisma.orgMembership.count({
+                where: { organizationId: user.organizationId, isActive: true }
+            }),
+            prisma.orgMembership.count({
+                where: {
+                    organizationId: user.organizationId,
+                    isActive: true,
+                    OR: [
+                        { orgRole: 'FINANCE_OFFICER' },
+                        { customRole: { roleKey: { in: ['finance_officer', 'finance'] } } },
+                        { customRole: { name: { contains: 'Finance', mode: 'insensitive' } } },
+                        {
+                            customRole: {
+                                permissions: {
+                                    some: {
+                                        permissionKey: { in: ['payment.verify', 'payment.initiate', 'invoice.approve'] },
+                                        allowed: true
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                }
+            })
+        ]);
+        memberCount = Math.max(userCount, activeMembershipCount);
+        hasFinanceOfficer = financeCount > 0;
+    }
+
     ok(res, {
         organization: user?.organization || null,
         membership: membership || null,
-        isApproved: user?.organization?.verificationStatus === 'VERIFIED'
+        isApproved: user?.organization?.verificationStatus === 'VERIFIED',
+        memberCount,
+        hasFinanceOfficer
     });
 }));
 
