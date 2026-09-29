@@ -745,6 +745,11 @@ export default function PurchaseOrders() {
   useEffect(() => {
     const targetId = searchParams?.get('orderId') || searchParams?.get('id') || searchParams?.get('poId');
     const searchParam = searchParams?.get('search') || searchParams?.get('po');
+    const tabParam = searchParams?.get('tab');
+
+    if (tabParam && ['Open', 'Delivered', 'Cancelled', 'All'].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
 
     if (searchParam && !searchTerm) {
       setSearchTerm(searchParam);

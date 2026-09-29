@@ -82,9 +82,9 @@ const ok = (res: Response, data: unknown, status = 200) =>
 const userId = (req: AuthRequest) => req.user!.id;
 const orgId = (req: AuthRequest) => req.user!.organizationId!;
 const activePoStatuses = [
-    'generated', 'issued', 'accepted', 'in_fulfillment', 'delivered', 'processing', 'approved', 'paid', 'signed', 'in_transit', 'partially_delivered',
-    'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT', 'DELIVERED', 'CLOSED',
-    'ORDER_PLACED', 'order_placed', 'escrow_held', 'inspection_accepted', 'payment_initiated', 'invoice_submitted'
+    'generated', 'issued', 'accepted', 'in_fulfillment', 'processing', 'approved', 'signed', 'in_transit', 'partially_delivered',
+    'GENERATED', 'ISSUED', 'ACCEPTED', 'IN_FULFILLMENT',
+    'ORDER_PLACED', 'order_placed', 'escrow_held', 'inspection_accepted', 'payment_initiated', 'invoice_submitted', 'pending_approval'
 ];
 const pendingInvoiceStatuses = [
     'draft', 'submitted', 'under_review', 'approved',
@@ -531,7 +531,9 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 sellerReceivedRfqs,
                 buyerProcurementActiveBids,
                 buyerProcurementTotalSpent,
-                sellerRealizedRevenue
+                sellerRealizedRevenue,
+                totalGrns,
+                buyerPayments
             ] = await Promise.all([
                     // cart item count
                     orgId
@@ -568,8 +570,14 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     // GRNs awaiting approval
                     orgId
                         ? prisma.goodsReceiptNote.count({
-                            where: { organizationId: orgId, status: 'SUBMITTED' }
-                        })
+                            where: {
+                                OR: [
+                                    { organizationId: orgId },
+                                    { purchaseOrder: buyerRecordWhere }
+                                ],
+                                status: { in: ['SUBMITTED', 'DRAFT', 'PARTIAL'] }
+                            }
+                        }).catch(() => 0)
                         : Promise.resolve(0),
                     // active deliveries (only useful for sellers)
                     isSeller
@@ -677,7 +685,34 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             where: { ...sellerRecordWhere, status: { notIn: ['cancelled', 'CANCELLED', 'DRAFT'] } },
                             select: { amount: true, totalValue: true }
                         }).then(orders => (orders as any[]).reduce((sum, o) => sum + Number(o.amount || o.totalValue || 0), 0)).catch(() => 0)
-                        : Promise.resolve(0)
+                        : Promise.resolve(0),
+                    // buyer total GRNs
+                    isBuyer && orgId
+                        ? prisma.goodsReceiptNote.count({
+                            where: {
+                                OR: [
+                                    { organizationId: orgId },
+                                    { purchaseOrder: buyerRecordWhere }
+                                ]
+                            }
+                        }).catch(() => 0)
+                        : Promise.resolve(0),
+                    // buyer payment transactions total
+                    isBuyer
+                        ? prisma.paymentTransaction.findMany({
+                            where: {
+                                OR: [
+                                    { payerId: userIdNum },
+                                    { purchaseOrder: buyerRecordWhere },
+                                    { invoice: buyerRecordWhere }
+                                ]
+                            },
+                            select: { amount: true }
+                        }).then(txs => ({
+                            count: txs.length,
+                            totalAmount: (txs as any[]).reduce((sum, t) => sum + Number(t.amount || 0), 0)
+                        })).catch(() => ({ count: 0, totalAmount: 0 }))
+                        : Promise.resolve({ count: 0, totalAmount: 0 })
             ]);
 
             // Synchronize buyer procurement metrics with the unified procurement engine
@@ -836,19 +871,16 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
             }
 
             const finalMyTenders = buyerProcData ? buyerProcData.kpis.active : myTenders;
-            const finalBuyerProcurementActiveBids = buyerProcData
-                ? buyerProcData.all.filter((p: any) => (p.type === 'bid_tender' || p.type === 'requirement') && p.statusGroup === 'active').length
-                : buyerProcurementActiveBids;
+            const totalSupplierResponses = buyerProcData
+                ? (buyerProcData.kpis.totalResponses ?? buyerProcData.all.reduce((s: number, p: any) => s + (p.participantsCount || 0), 0))
+                : myRfqs;
+            const finalBuyerProcurementActiveBids = totalSupplierResponses || buyerProcurementActiveBids;
             const reverseAuctionsActive = buyerProcData
                 ? buyerProcData.all.filter((p: any) => p.type === 'reverse_auction' && ['LIVE', 'ACTIVE'].includes(p.status)).length
                 : 0;
             const reverseAuctionsScheduled = buyerProcData
                 ? buyerProcData.all.filter((p: any) => p.type === 'reverse_auction' && ['SCHEDULED'].includes(p.status)).length
                 : 0;
-
-            const totalSupplierResponses = buyerProcData
-                ? (buyerProcData.kpis.totalResponses ?? buyerProcData.all.reduce((s: number, p: any) => s + (p.participantsCount || 0), 0))
-                : myRfqs;
 
             // ─── Usability Engine: Compute Onboarding Checklist & Next Best Action ───
             const isShgAccount = req.user!.role === 'shg';
@@ -1108,6 +1140,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 cartApprovalsCount: cartApprovals,
                 techReviewCount: techReview,
                 grnsToApproveCount: grnsToApprove,
+                grnsCount: totalGrns,
                 activeDeliveriesCount: activeDeliveries,
                 // Buyer-side
                 totalProcurementsCount: buyerProcData?.kpis.totalProcurements ?? finalMyTenders,
@@ -1119,6 +1152,8 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                 supplierResponsesCount: totalSupplierResponses,
                 buyerProcurementActiveBidsCount: finalBuyerProcurementActiveBids,
                 buyerProcurementTotalSpentValue: buyerProcurementTotalSpent,
+                buyerPaymentTransactionsCount: buyerPayments.count,
+                buyerPaymentTransactionsTotal: buyerPayments.totalAmount,
                 reverseAuctionsActive,
                 reverseAuctionsScheduled,
                 // Seller-side

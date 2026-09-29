@@ -24,6 +24,7 @@ interface DashboardSummary {
     cartApprovalsCount?: number;
     techReviewCount?: number;
     grnsToApproveCount?: number;
+    grnsCount?: number;
     activeDeliveriesCount?: number;
     // Buyer-side
     totalProcurementsCount?: number;
@@ -54,6 +55,8 @@ interface DashboardSummary {
     reverseAuctionBidsSubmitted?: number;
     buyerProcurementActiveBidsCount?: number;
     buyerProcurementTotalSpentValue?: number;
+    buyerPaymentTransactionsCount?: number;
+    buyerPaymentTransactionsTotal?: number;
     orgRole?: string;
     isAdmin?: boolean;
 }
@@ -136,7 +139,7 @@ function RoleAwareActionCards() {
                 {
                     label: 'Active Orders',
                     count: data.myActivePOsCount || 0,
-                    href: '/orders',
+                    href: '/orders?tab=Open',
                     icon: Package,
                     tone: 'blue',
                     show: true,
@@ -144,25 +147,29 @@ function RoleAwareActionCards() {
                     subtext: 'Orders in fulfillment'
                 },
                 {
-                    label: 'Procurement Spend',
-                    count: data.buyerProcurementTotalSpentValue || 0,
+                    label: 'Payment Outflow',
+                    count: data.buyerPaymentTransactionsTotal ?? 0,
                     href: '/payments/transactions',
                     icon: IndianRupee,
                     tone: 'emerald',
                     show: true,
                     priority: false,
                     isCurrency: true,
-                    subtext: 'Cumulative purchase value'
+                    subtext: `${data.buyerPaymentTransactionsCount || 0} transactions processed`
                 },
                 {
-                    label: 'Pending Approvals',
-                    count: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0),
-                    href: '/cart/approvals',
+                    label: 'Goods Receipt (GRN)',
+                    count: data.grnsCount ?? data.grnsToApproveCount ?? 0,
+                    href: '/buyer/grn',
                     icon: ClipboardCheck,
                     tone: 'amber',
                     show: true,
-                    priority: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0) > 0,
-                    subtext: (data.pendingApprovalsCount || 0) + (data.cartApprovalsCount || 0) > 0 ? 'Requires sign-off' : 'All cleared'
+                    priority: (data.grnsToApproveCount ?? 0) > 0,
+                    subtext: (data.grnsToApproveCount ?? 0) > 0 
+                        ? `${data.grnsToApproveCount} pending inspection` 
+                        : (data.grnsCount ?? 0) > 0 
+                            ? `${data.grnsCount} verified receipts` 
+                            : 'Consignments received'
                 },
                 {
                     label: 'Pending Invoices',
