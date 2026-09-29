@@ -42,7 +42,7 @@ router.get('/admin/notices/recipient-counts', ...adminOnly, wrap(async (_req, re
     }),
     db.user.count({
       where: {
-        role: { in: ['buyer', 'dept_admin'] as any },
+        role: 'buyer' as any,
         accountStatus: { not: 'BLOCKED' as any }
       }
     })
@@ -87,12 +87,12 @@ router.post('/admin/notices/broadcast', ...adminOnly, wrap(async (req, res) => {
       audienceLabel = 'Self-Help Groups (SHG)';
       break;
     case 'BUYERS_ONLY':
-      roleFilter = ['buyer', 'dept_admin'];
+      roleFilter = ['buyer'];
       audienceLabel = 'Procurement Buyers & Departments';
       break;
     case 'ALL_USERS':
     default:
-      roleFilter = ['seller', 'shg', 'buyer', 'dept_admin', 'admin', 'master_admin'];
+      roleFilter = ['seller', 'shg', 'buyer', 'admin', 'master_admin', 'financier'];
       audienceLabel = 'All Portal Users';
       break;
   }
