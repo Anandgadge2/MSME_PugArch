@@ -8871,7 +8871,16 @@ router.get('/purchase-orders/:id', authenticate, asyncRoute(async (req, res) => 
       invoices: true,
       deliveryTrackings: true,
       inspectionReports: true,
-      grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
+      grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } },
+      payments: {
+        include: {
+          escrowAccount: true,
+          ledgerEntries: { orderBy: { createdAt: 'asc' } },
+          payee: { select: { id: true, name: true, email: true } },
+          payer: { select: { id: true, name: true, email: true } }
+        },
+        orderBy: { createdAt: 'desc' }
+      }
     }
   });
   
@@ -13935,7 +13944,7 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
 
 const cancelProcurementSchema = z.object({
   type: z.string().trim().min(1).max(80),
-  id: z.coerce.number().int().positive(),
+  id: z.union([z.coerce.number().int().positive(), z.string().trim().min(1)]),
   reason: z.string().trim().min(5, 'Cancellation reason must be at least 5 characters').max(1000),
   remarks: z.string().trim().max(2000).optional(),
 });
@@ -13946,23 +13955,37 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
   const privileged = isAdmin(req) || req.user?.role === 'master_admin';
 
   const body = parse(cancelProcurementSchema, req.body);
-  const { type, id, reason, remarks } = body;
+  const { type, id: rawId, reason, remarks } = body;
   const normalizedType = type.toLowerCase().trim();
+  const numId = typeof rawId === 'number' ? rawId : (!isNaN(Number(rawId)) ? Number(rawId) : -1);
+  const strId = String(rawId).trim();
 
   if (normalizedType === 'procurement_request' || normalizedType.includes('checkout') || normalizedType === 'cart') {
-    const pr = await db.procurementRequest.findUnique({ where: { id } });
+    const pr = await db.procurementRequest.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { requestNumber: strId }
+        ]
+      }
+    });
     if (!pr) throw new ApiError(404, 'Procurement request not found', 'NOT_FOUND');
     if (!privileged && pr.buyerId !== buyerId && pr.organizationId !== buyerOrgId) {
       throw new ApiError(403, 'You do not have permission to cancel this procurement request', 'FORBIDDEN');
     }
-    const updated = await cancelProcurementRequest(id, pr.organizationId, buyerId, `${reason}${remarks ? ` - ${remarks}` : ''}`);
+    const updated = await cancelProcurementRequest(pr.id, pr.organizationId, buyerId, `${reason}${remarks ? ` - ${remarks}` : ''}`);
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement request cancelled successfully', procurement: updated });
   }
 
   if (normalizedType === 'bid_tender' || normalizedType === 'procurement_bid' || normalizedType === 'bid' || normalizedType === 'tender') {
-    const bid = await db.procurementBid.findUnique({
-      where: { id },
+    const bid = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { bidNumber: strId }
+        ]
+      },
       include: { participations: true }
     });
     if (!bid) throw new ApiError(404, 'Procurement bid not found', 'NOT_FOUND');
@@ -13979,7 +14002,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
 
     const currentPacket = (bid.technicalPacket as Record<string, unknown>) || {};
     const updated = await db.procurementBid.update({
-      where: { id },
+      where: { id: bid.id },
       data: {
         status: 'CANCELLED',
         technicalPacket: {
@@ -13994,6 +14017,34 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       }
     });
 
+    // Also cancel any linked active reverse auctions
+    const linkedAuctions = await db.auction.findMany({
+      where: { linkedBidId: bid.id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+      include: { participants: true }
+    }).catch(() => []);
+
+    if (linkedAuctions.length > 0) {
+      await db.auction.updateMany({
+        where: { linkedBidId: bid.id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+        data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
+      }).catch(() => undefined);
+
+      for (const la of linkedAuctions) {
+        for (const ap of la.participants || []) {
+          const sellerUserId = ap.sellerId || (ap as any).sellerUserId;
+          if (sellerUserId) {
+            notifySafe(
+              sellerUserId,
+              'Reverse Auction Cancelled',
+              `The reverse auction linked to "${bid.title}" (${la.auctionCode}) has been cancelled due to procurement cancellation.`,
+              'auction_cancelled',
+              `/reverse-auctions/${la.id}`
+            );
+          }
+        }
+      }
+    }
+
     for (const p of bid.participations) {
       if (p.sellerUserId) {
         notifySafe(
@@ -14001,19 +14052,24 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
           'Bid Cancelled by Buyer',
           `The tender/bid "${bid.title}" (${bid.bidNumber}) has been cancelled by the buyer. Reason: ${reason}`,
           'bid_cancelled',
-          `/bids/${id}`
+          `/bids/${bid.id}`
         );
       }
     }
 
-    await auditWrite(req, 'procurement_bid.cancelled', 'procurementBid', id, { reason, remarks });
+    await auditWrite(req, 'procurement_bid.cancelled', 'procurementBid', bid.id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Procurement bid cancelled successfully', procurement: updated });
   }
 
   if (normalizedType === 'requirement' || normalizedType === 'rfq' || normalizedType === 'rfp') {
-    const requirement = await db.requirement.findUnique({
-      where: { id },
+    const requirement = await db.requirement.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { requirementNumber: strId }
+        ]
+      },
       include: { tenders: { select: { id: true, status: true } } }
     });
     if (!requirement) throw new ApiError(404, 'Requirement not found', 'NOT_FOUND');
@@ -14022,7 +14078,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
     if (requirement.status === 'CANCELLED') {
       await db.auction.updateMany({
-        where: { linkedRequirementId: id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+        where: { linkedRequirementId: requirement.id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
         data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
       }).catch(() => undefined);
       return ok(res, { success: true, message: 'Requirement is already cancelled', procurement: requirement });
@@ -14033,7 +14089,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
 
     const currentPayload = (requirement.payload as Record<string, unknown>) || {};
     const updated = await db.requirement.update({
-      where: { id },
+      where: { id: requirement.id },
       data: {
         status: 'CANCELLED',
         payload: {
@@ -14048,13 +14104,33 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       }
     });
 
+    const linkedAuctions = await db.auction.findMany({
+      where: { linkedRequirementId: requirement.id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+      include: { participants: true }
+    }).catch(() => []);
+
     await db.auction.updateMany({
-      where: { linkedRequirementId: id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
+      where: { linkedRequirementId: requirement.id, statusEnum: { notIn: ['CANCELLED', 'CLOSED'] } },
       data: { status: 'CANCELLED', statusEnum: 'CANCELLED' }
     }).catch(() => undefined);
 
+    for (const la of linkedAuctions) {
+      for (const ap of la.participants || []) {
+        const sellerUserId = ap.sellerId || (ap as any).sellerUserId;
+        if (sellerUserId) {
+          notifySafe(
+            sellerUserId,
+            'Reverse Auction Cancelled',
+            `The reverse auction linked to requirement "${requirement.title}" (${la.auctionCode}) was cancelled.`,
+            'auction_cancelled',
+            `/reverse-auctions/${la.id}`
+          );
+        }
+      }
+    }
+
     const responses = await db.requirementResponse.findMany({
-      where: { requirementId: id },
+      where: { requirementId: requirement.id },
       select: { sellerUserId: true }
     }).catch(() => []);
 
@@ -14070,13 +14146,20 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       }
     }
 
-    await auditWrite(req, 'requirement.cancelled', 'requirement', id, { reason, remarks });
+    await auditWrite(req, 'requirement.cancelled', 'requirement', requirement.id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Requirement cancelled successfully', procurement: updated });
   }
 
   if (normalizedType === 'direct_purchase') {
-    const dp = await db.directPurchase.findUnique({ where: { id } });
+    const dp = await db.directPurchase.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { purchaseNumber: strId }
+        ]
+      }
+    });
     if (!dp) throw new ApiError(404, 'Direct purchase not found', 'NOT_FOUND');
     if (!privileged && dp.buyerId !== buyerId) {
       throw new ApiError(403, 'You do not have permission to cancel this direct purchase', 'FORBIDDEN');
@@ -14089,7 +14172,7 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     const updated = await db.directPurchase.update({
-      where: { id },
+      where: { id: dp.id },
       data: {
         status: 'CANCELLED',
         remarks: `Cancelled by buyer: ${reason}${remarks ? ` - ${remarks}` : ''}`
@@ -14106,13 +14189,21 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
       );
     }
 
-    await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', id, { reason, remarks });
+    await auditWrite(req, 'direct_purchase.cancelled', 'directPurchase', dp.id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Direct purchase cancelled successfully', procurement: updated });
   }
 
   if (normalizedType === 'reverse_auction' || normalizedType === 'auction') {
-    const auc = await db.auction.findUnique({ where: { id } });
+    const auc = await db.auction.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { auctionCode: strId }
+        ]
+      },
+      include: { participants: true }
+    });
     if (!auc) throw new ApiError(404, 'Auction not found', 'NOT_FOUND');
     if (!privileged && auc.createdByUserId !== buyerId && auc.buyerOrgId !== buyerOrgId) {
       throw new ApiError(403, 'You do not have permission to cancel this auction', 'FORBIDDEN');
@@ -14125,32 +14216,129 @@ router.post('/buyer/procurements/cancel', authenticate, authorize('buyer', 'admi
     }
 
     const updated = await db.auction.update({
-      where: { id },
+      where: { id: auc.id },
       data: {
         status: 'CANCELLED',
         statusEnum: 'CANCELLED'
       }
     });
 
-    await auditWrite(req, 'reverse_auction.cancelled', 'auction', id, { reason, remarks });
+    for (const p of auc.participants || []) {
+      const sellerUserId = p.sellerId || (p as any).sellerUserId;
+      if (sellerUserId) {
+        notifySafe(
+          sellerUserId,
+          'Reverse Auction Cancelled by Buyer',
+          `The reverse auction "${auc.title}" (${auc.auctionCode}) has been cancelled by the buyer. Reason: ${reason}`,
+          'auction_cancelled',
+          `/reverse-auctions/${auc.id}`
+        );
+      }
+    }
+
+    await auditWrite(req, 'reverse_auction.cancelled', 'auction', auc.id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Reverse auction cancelled successfully', procurement: updated });
   }
 
   if (normalizedType === 'rate_contract' || normalizedType === 'contract') {
-    const contract = await db.contract.findUnique({ where: { id } });
-    if (!contract) throw new ApiError(404, 'Contract not found', 'NOT_FOUND');
+    let contract = await db.contract.findFirst({
+      where: {
+        OR: [
+          ...(numId > 0 ? [{ id: numId }] : []),
+          { contractNumber: strId }
+        ]
+      }
+    });
+
+    // Fallback: If not found in contract table, search procurementBid or requirement
+    if (!contract) {
+      const fallbackBid = await db.procurementBid.findFirst({
+        where: {
+          OR: [
+            ...(numId > 0 ? [{ id: numId }] : []),
+            { bidNumber: strId }
+          ]
+        },
+        include: { participations: true }
+      });
+      if (fallbackBid) {
+        const currentPacket = (fallbackBid.technicalPacket as Record<string, unknown>) || {};
+        const updated = await db.procurementBid.update({
+          where: { id: fallbackBid.id },
+          data: {
+            status: 'CANCELLED',
+            technicalPacket: {
+              ...currentPacket,
+              cancellation: {
+                reason,
+                remarks: remarks || '',
+                cancelledAt: new Date().toISOString(),
+                cancelledBy: buyerId,
+              }
+            }
+          }
+        });
+        for (const p of fallbackBid.participations) {
+          if (p.sellerUserId) {
+            notifySafe(
+              p.sellerUserId,
+              'Rate Contract Bid Cancelled',
+              `Rate Contract procurement "${fallbackBid.title}" (${fallbackBid.bidNumber}) has been cancelled by the buyer. Reason: ${reason}`,
+              'bid_cancelled',
+              `/bids/${fallbackBid.id}`
+            );
+          }
+        }
+        await auditWrite(req, 'rate_contract.cancelled', 'procurementBid', fallbackBid.id, { reason, remarks });
+        await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
+        return ok(res, { success: true, message: 'Rate contract cancelled successfully', procurement: updated });
+      }
+
+      const fallbackReq = await db.requirement.findFirst({
+        where: {
+          OR: [
+            ...(numId > 0 ? [{ id: numId }] : []),
+            { requirementNumber: strId }
+          ]
+        }
+      });
+      if (fallbackReq) {
+        const currentPayload = (fallbackReq.payload as Record<string, unknown>) || {};
+        const updated = await db.requirement.update({
+          where: { id: fallbackReq.id },
+          data: {
+            status: 'CANCELLED',
+            payload: {
+              ...currentPayload,
+              cancellation: {
+                reason,
+                remarks: remarks || '',
+                cancelledAt: new Date().toISOString(),
+                cancelledBy: buyerId,
+              }
+            }
+          }
+        });
+        await auditWrite(req, 'rate_contract.cancelled', 'requirement', fallbackReq.id, { reason, remarks });
+        await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
+        return ok(res, { success: true, message: 'Rate contract cancelled successfully', procurement: updated });
+      }
+
+      throw new ApiError(404, 'Rate Contract not found', 'NOT_FOUND');
+    }
+
     if (contract.status === 'CANCELLED' || contract.status === 'TERMINATED') {
       return ok(res, { success: true, message: 'Rate contract is already cancelled', procurement: contract });
     }
     const updated = await db.contract.update({
-      where: { id },
+      where: { id: contract.id },
       data: {
         status: 'CANCELLED',
         remarks: `Cancelled by buyer: ${reason}${remarks ? ` - ${remarks}` : ''}`
       }
     });
-    await auditWrite(req, 'rate_contract.cancelled', 'contract', id, { reason, remarks });
+    await auditWrite(req, 'rate_contract.cancelled', 'contract', contract.id, { reason, remarks });
     await invalidateByPattern(`cache:buyer:procurements:${buyerId}*`).catch(() => undefined);
     return ok(res, { success: true, message: 'Rate contract cancelled successfully', procurement: updated });
   }

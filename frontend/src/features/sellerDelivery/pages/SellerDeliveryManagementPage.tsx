@@ -1679,8 +1679,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                         const match = list.find((i: any) =>
                             (poId && Number(i.purchaseOrderId) === Number(poId)) ||
                             (poNo && i.purchaseOrder?.poNumber === poNo) ||
-                            (poNo && i.invoiceNumber?.includes(poNo))
-                        ) || list[0];
+                            (delivery?.id && Number(i.deliveryId) === Number(delivery.id)) ||
+                            (poNo && i.invoiceNumber && i.invoiceNumber.includes(poNo))
+                        );
                         if (match) {
                             if (match.id) {
                                 try {
@@ -1695,6 +1696,8 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                                 }
                             }
                             setFetchedInvoice(match);
+                        } else {
+                            setFetchedInvoice(null);
                         }
                     }
                 }
@@ -1762,26 +1765,38 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
         const accountName = sellerReg?.bankDetails?.accountHolderName || sellerReg?.accountHolderName || sellerProfile?.bankAccounts?.[0]?.holderName || sellerProfile?.accountHolderName || sellerProfile?.businessName || sellerName;
 
         const rawItems: any[] = fetchedInvoice?.items || po?.items || [];
+        const baseTaxableVal = Number(
+            fetchedInvoice?.taxableAmount ||
+            (totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0)
+        );
+
         const items: TaxInvoiceItem[] = rawItems.length > 0
             ? rawItems.map((item, idx) => {
                 const qty = Number(item.quantity || 1);
                 let price = Number(item.unitPrice || 0);
-                let amount = Number(item.taxableAmount || item.totalAmount || (qty * price) || totalVal);
-                if (qty > 1 && totalVal > 0 && (price * qty) > (totalVal * 1.5)) {
-                    price = Number((price / qty).toFixed(2));
-                    amount = Number((price * qty).toFixed(2));
-                } else if (!amount && price > 0) {
-                    amount = Number((price * qty).toFixed(2));
-                } else if (amount > 0 && (!price || price === amount)) {
-                    price = Number((amount / qty).toFixed(2));
+                let taxableAmt = Number(item.taxableAmount || 0);
+
+                if (!taxableAmt && price > 0) {
+                    taxableAmt = Number((price * qty).toFixed(2));
+                } else if (!taxableAmt && item.totalAmount) {
+                    taxableAmt = Number((Number(item.totalAmount) / 1.18).toFixed(2));
                 }
+
+                if (price === 0 && taxableAmt > 0 && qty > 0) {
+                    price = Number((taxableAmt / qty).toFixed(2));
+                } else if (qty > 1 && totalVal > 0 && (price * qty) > (totalVal * 1.5)) {
+                    price = Number((price / qty).toFixed(2));
+                    taxableAmt = Number((price * qty).toFixed(2));
+                }
+
                 return {
                     srNo: idx + 1,
                     description: item.itemName || item.description || po?.title || 'Order Item',
                     hsn: (item as any).hsnCode || (item as any).hsn || '-',
                     qty,
-                    priceUnit: price || (amount / Math.max(qty, 1)),
-                    amount
+                    unit: (item as any).unitOfMeasure || 'units',
+                    priceUnit: price || (taxableAmt / Math.max(qty, 1)),
+                    amount: taxableAmt || (price * qty)
                 };
             })
             : [
@@ -1790,8 +1805,8 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     description: po?.title || `Purchase Order #${delivery.purchaseOrderId}`,
                     hsn: '-',
                     qty: 1,
-                    priceUnit: totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0,
-                    amount: totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0
+                    priceUnit: baseTaxableVal,
+                    amount: baseTaxableVal
                 }
             ];
 
@@ -1799,7 +1814,9 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
         items.forEach(it => {
             computedTaxable += Number(it.amount) || 0;
         });
-        const subtotal = computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : Number(fetchedInvoice?.taxableAmount || (totalVal > 0 ? Number((totalVal / 1.18).toFixed(2)) : 0));
+        const subtotal = fetchedInvoice?.taxableAmount
+            ? Number(fetchedInvoice.taxableAmount)
+            : (computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : baseTaxableVal);
 
         // Interstate detection based on GSTIN codes or different registered states
         const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
@@ -1817,10 +1834,14 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
             ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
             : `${sellerProfile?.state || sellerReg?.state || 'Maharashtra'} - State (CGST + SGST)`;
 
-        const cgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.cgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
-        const sgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.sgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
-        const igstAmount = isInterstate ? (Number(fetchedInvoice?.igstAmount) || Math.round(subtotal * 0.18 * 100) / 100) : undefined;
-        const grandTotal = isInterstate ? Math.round((subtotal + (igstAmount || 0)) * 100) / 100 : Math.round((subtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100;
+        const cgstAmount = isInterstate ? undefined : (fetchedInvoice?.cgstAmount !== undefined && fetchedInvoice?.cgstAmount !== null ? Number(fetchedInvoice.cgstAmount) : Math.round(subtotal * 0.09 * 100) / 100);
+        const sgstAmount = isInterstate ? undefined : (fetchedInvoice?.sgstAmount !== undefined && fetchedInvoice?.sgstAmount !== null ? Number(fetchedInvoice.sgstAmount) : Math.round(subtotal * 0.09 * 100) / 100);
+        const igstAmount = isInterstate ? (fetchedInvoice?.igstAmount !== undefined && fetchedInvoice?.igstAmount !== null && Number(fetchedInvoice.igstAmount) > 0 ? Number(fetchedInvoice.igstAmount) : Math.round(subtotal * 0.18 * 100) / 100) : undefined;
+        const grandTotal = (fetchedInvoice?.totalAmount || fetchedInvoice?.amount)
+            ? Number(fetchedInvoice.totalAmount || fetchedInvoice.amount)
+            : (isInterstate
+                ? Math.round((subtotal + (igstAmount || 0)) * 100) / 100
+                : Math.round((subtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100);
 
         return {
             copyType,

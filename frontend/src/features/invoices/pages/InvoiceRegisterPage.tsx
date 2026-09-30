@@ -29,6 +29,7 @@ import { SignatureStampUploadModal } from '../components/SignatureStampUploadMod
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
+import { canDisburseInvoicePayment } from '../../shared/procurementLifecycleUtils';
 
 type InvoiceRow = {
   id: number;
@@ -542,8 +543,29 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         setDetailedLoading(false);
       }
     };
-    void fetchDetailedInvoice();
   }, [selectedInvoice]);
+
+  const [isRefreshingSelected, setIsRefreshingSelected] = useState(false);
+
+  const handleRefreshSelectedInvoice = async () => {
+    if (!selectedInvoice?.id || isRefreshingSelected) return;
+    setIsRefreshingSelected(true);
+    try {
+      invoiceDetailCache.current.delete(selectedInvoice.id);
+      const data = await getApi<any>(`/api/invoices/${selectedInvoice.id}`, true);
+      if (data) {
+        invoiceDetailCache.current.set(selectedInvoice.id, data);
+        setDetailedInvoice(data);
+        setSelectedInvoice(prev => prev && prev.id === data.id ? { ...prev, ...data } : prev);
+      }
+      await reload();
+      toast.success('Tax invoice details refreshed');
+    } catch {
+      toast.error('Failed to refresh invoice details');
+    } finally {
+      setIsRefreshingSelected(false);
+    }
+  };
 
   // Checkout modal state variables
   const [checkoutInvoice, setCheckoutInvoice] = useState<InvoiceRow | null>(null);
@@ -1784,9 +1806,19 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={handleRefreshSelectedInvoice}
+                  disabled={isRefreshingSelected || detailedLoading}
+                  title="Refresh invoice details"
+                  aria-label="Refresh invoice details"
+                  className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
+                >
+                  <RefreshCw className={cn("h-4 w-4", (isRefreshingSelected || detailedLoading) && "animate-spin text-[#12335f]")} />
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsInvoiceFullscreen(prev => !prev)}
                   title={isInvoiceFullscreen ? "Restore window size" : "Full screen view"}
-                  className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 transition"
+                  className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
                 >
                   {isInvoiceFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                 </button>
@@ -1794,7 +1826,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                   type="button"
                   onClick={closeInvoiceDetails}
                   title="Close invoice view"
-                  className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition"
+                  className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition cursor-pointer"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1880,15 +1912,16 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </Button>
                         )}
 
-                        {((selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId) && (
+                        {((selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId || detailedInvoice?.purchaseOrderId || detailedInvoice?.purchaseOrder?.id) && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => {
-                              const poSearch = (selectedInvoice as any).poNumber || (selectedInvoice as any).purchaseOrderId || '';
+                              const poId = detailedInvoice?.purchaseOrderId || detailedInvoice?.purchaseOrder?.id || (selectedInvoice as any).purchaseOrderId || (selectedInvoice as any).purchaseOrder?.id;
+                              const poSearch = poId || (selectedInvoice as any).poNumber || detailedInvoice?.poNumber || '';
                               const poRoute = role === 'buyer' ? '/buyer/orders' : '/seller/orders';
-                              router.push(`${poRoute}?search=${encodeURIComponent(poSearch)}`);
+                              router.push(`${poRoute}?orderId=${encodeURIComponent(poSearch)}`);
                             }}
                             className="h-7 border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
                           >
@@ -1897,34 +1930,63 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           </Button>
                         )}
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const delSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
-                            const delRoute = role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
-                            router.push(`${delRoute}?search=${encodeURIComponent(delSearch)}`);
-                          }}
-                          className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                        >
-                          <Truck className="h-3 w-3 text-blue-600" />
-                          <span>View Delivery</span>
-                        </Button>
+                        {/* View Delivery: ONLY if delivery is generated */}
+                        {(() => {
+                          const delId =
+                            (selectedInvoice as any).deliveryId ||
+                            (selectedInvoice as any).delivery?.id ||
+                            detailedInvoice?.deliveryId ||
+                            detailedInvoice?.delivery?.id ||
+                            detailedInvoice?.purchaseOrder?.deliveryId ||
+                            detailedInvoice?.purchaseOrder?.deliveries?.[0]?.id ||
+                            (selectedInvoice as any).purchaseOrder?.deliveryId ||
+                            (selectedInvoice as any).purchaseOrder?.deliveries?.[0]?.id ||
+                            null;
+                          if (!delId) return null;
+                          return (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                router.push(`/delivery/${delId}`);
+                              }}
+                              className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                            >
+                              <Truck className="h-3 w-3 text-blue-600" />
+                              <span>View Delivery</span>
+                            </Button>
+                          );
+                        })()}
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const grnSearch = (selectedInvoice as any).poNumber || selectedInvoice.invoiceNumber || '';
-                            router.push(`/grn?search=${encodeURIComponent(grnSearch)}`);
-                          }}
-                          className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                        >
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                          <span>View GRN</span>
-                        </Button>
+                        {/* View GRN: ONLY if GRN is generated */}
+                        {(() => {
+                          const grnId =
+                            (selectedInvoice as any).grnId ||
+                            (selectedInvoice as any).goodsReceiptNoteId ||
+                            detailedInvoice?.grnId ||
+                            detailedInvoice?.goodsReceiptNoteId ||
+                            detailedInvoice?.purchaseOrder?.grnId ||
+                            detailedInvoice?.purchaseOrder?.grns?.[0]?.id ||
+                            (selectedInvoice as any).purchaseOrder?.grnId ||
+                            (selectedInvoice as any).purchaseOrder?.grns?.[0]?.id ||
+                            null;
+                          if (!grnId) return null;
+                          return (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                router.push(`/grn/${grnId}`);
+                              }}
+                              className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                            >
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              <span>View GRN</span>
+                            </Button>
+                          );
+                        })()}
 
                         {(() => {
                           const invState = statusOf(selectedInvoice);
@@ -1966,6 +2028,28 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                                 </div>
                               );
                             }
+
+                            // Payment Gating: delivery status or advance payment required
+                            const { canPay: canDisbursePayment, reason: paymentGateReason } = canDisburseInvoicePayment({
+                              invoice: detailedInvoice || selectedInvoice,
+                              order: detailedInvoice?.purchaseOrder || (selectedInvoice as any).purchaseOrder,
+                              delivery: detailedInvoice?.delivery || (selectedInvoice as any).delivery,
+                              grn: detailedInvoice?.grn || (selectedInvoice as any).grn,
+                              isApproved: true
+                            });
+
+                            if (!canDisbursePayment) {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg cursor-not-allowed"
+                                  title={paymentGateReason}
+                                >
+                                  <Lock className="h-3 w-3 text-slate-400" />
+                                  <span>Payment Locked (Awaiting Delivery)</span>
+                                </span>
+                              );
+                            }
+
                             return (
                               <Button
                                 type="button"

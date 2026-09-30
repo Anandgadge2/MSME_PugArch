@@ -17,6 +17,7 @@ import {
   Ban
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { isAdvancePaymentTerms, isDeliveryDeliveredOrApproved } from '../../shared/procurementLifecycleUtils';
 
 export type LifecycleStageId = 1 | 2 | 3 | 4 | 5;
 
@@ -70,6 +71,8 @@ export interface ProcurementLifecycleStepperProps {
   onOpenSettlementModal?: (order?: any) => void;
   onOpenViewPaymentProof?: (order?: any) => void;
   fulfillmentPhase?: string;
+  /** Connected delivery record ID for `:id` routing */
+  deliveryId?: string | number | null;
 }
 
 export const LIFECYCLE_STAGES: StageConfig[] = [
@@ -426,7 +429,8 @@ export function ProcurementLifecycleStepper({
   onOpenPaymentModal,
   onOpenSettlementModal,
   onOpenViewPaymentProof,
-  fulfillmentPhase
+  fulfillmentPhase,
+  deliveryId
 }: ProcurementLifecycleStepperProps) {
   const router = useRouter();
 
@@ -710,14 +714,16 @@ export function ProcurementLifecycleStepper({
             };
           }
           // If stage is already past delivery/GRN (e.g. Invoicing or Settlement stage)
-          if (currentStageId > 3) {
+          // ONLY show button if a GRN or delivery actually exists
+          if (currentStageId > 3 && (targetGrnId || deliveryId)) {
             return {
               hasAction: true,
               actionLabel: targetGrnNumber ? `📋 View GRN #${targetGrnNumber}` : '📋 Delivery & GRN Done',
               actionHint: 'Goods delivery and receipt verified',
               onClick: () => {
-                if (onViewGrn) onViewGrn(effectiveGrn);
+                if (onViewGrn && targetGrnId) onViewGrn(effectiveGrn);
                 else if (targetGrnId) router.push(`/grn/${targetGrnId}`);
+                else if (deliveryId) router.push(`/delivery/${deliveryId}`);
                 else if (onNavigateDelivery) onNavigateDelivery();
               },
               isPrimary: false
@@ -844,13 +850,25 @@ export function ProcurementLifecycleStepper({
               isPrimary: false
             };
           }
-          // STRICT BUYER GATING: Buyer can ONLY pay once in Stage 4/5 with an active PO & invoice/GRN!
-          const canBuyerPay = currentStageId >= 4 && (hasApprovedGrn || allInvoicesList.length > 0 || currentStageId === 5);
+          // STRICT BUYER GATING:
+          // Payment unlocked only if:
+          //   - Invoice is approved AND consignment is delivered, OR
+          //   - Advance payment terms → unlocked upon invoice approval
+          const hasValidInvoice = allInvoicesList.some(inv => {
+            const invStatus = String(inv.invoiceStatus || inv.status || '').toUpperCase();
+            return ['APPROVED', 'PAYMENT_PENDING', 'PAYMENT_SUBMITTED', 'SETTLED', 'PAID'].includes(invStatus);
+          });
+          const isAdvance = isAdvancePaymentTerms(effectiveActiveOrder);
+          const isDelivered = isDeliveryDeliveredOrApproved(effectiveActiveOrder, activeGrn || (effectiveActiveOrder?.grns && effectiveActiveOrder.grns[0]));
+
+          const canBuyerPay = currentStageId >= 4 && hasValidInvoice && (isAdvance || isDelivered);
           if (canBuyerPay) {
             return {
               hasAction: true,
               actionLabel: '💰 Make Payment',
-              actionHint: 'Pay online or record UTR and payment proof',
+              actionHint: isAdvance
+                ? 'Advance payment terms: unlocked upon invoice approval'
+                : 'Consignment delivered & verified: payment unlocked',
               onClick: () => {
                 if (onOpenPaymentModal) onOpenPaymentModal(effectiveActiveOrder);
                 else if (onNavigateSettlement) onNavigateSettlement();
@@ -858,9 +876,14 @@ export function ProcurementLifecycleStepper({
               isPrimary: true
             };
           } else {
+            const reason = !hasValidInvoice
+              ? 'Pending Invoice Approval'
+              : !isDelivered && !isAdvance
+              ? 'Pending Delivery'
+              : currentStageId < 2 ? 'Pending Evaluation' : currentStageId === 2 ? 'Pending PO Issue' : currentStageId === 3 ? 'Pending Delivery/GRN' : 'Pending Invoice';
             return {
               hasAction: false,
-              idleStatusText: currentStageId < 2 ? 'Pending Evaluation' : currentStageId === 2 ? 'Pending PO Issue' : currentStageId === 3 ? 'Pending Delivery/GRN' : 'Pending Invoice'
+              idleStatusText: reason
             };
           }
         } else {

@@ -38,7 +38,8 @@ import {
   User,
   Clock,
   Copy,
-  ClipboardCheck
+  ClipboardCheck,
+  RefreshCw
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
@@ -114,9 +115,24 @@ export function DispatchDetailsModal({
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const { data: freshDelivery } = useDeliveryDetail(delivery?.id || 0);
+  const { data: freshDelivery, refetch: refetchDelivery } = useDeliveryDetail(delivery?.id || 0);
   const activeDelivery = freshDelivery || delivery;
   const po = activeDelivery?.purchaseOrder || delivery?.purchaseOrder;
+
+  const [isRefreshingDispatch, setIsRefreshingDispatch] = useState(false);
+  const handleRefreshDispatch = async () => {
+    if (isRefreshingDispatch) return;
+    setIsRefreshingDispatch(true);
+    try {
+      await invalidateDeliveryCache(qc);
+      await refetchDelivery();
+      toast.success('Dispatch details refreshed');
+    } catch {
+      toast.error('Failed to refresh dispatch details');
+    } finally {
+      setIsRefreshingDispatch(false);
+    }
+  };
 
   const existingGrn = useMemo(() => {
     const list = (activeDelivery as any)?.grns || (delivery as any)?.grns || (po as any)?.grns || [];
@@ -282,13 +298,13 @@ export function DispatchDetailsModal({
           const data = await res.json();
           const list = data?.invoices || data?.records || data?.items || (Array.isArray(data) ? data : []);
           if (Array.isArray(list) && list.length > 0) {
-            const match =
-              list.find(
-                (i: any) =>
-                  (poId && Number(i.purchaseOrderId) === Number(poId)) ||
-                  (poNo && i.purchaseOrder?.poNumber === poNo) ||
-                  (poNo && i.invoiceNumber?.includes(poNo))
-              ) || list[0];
+            const match = list.find(
+              (i: any) =>
+                (poId && Number(i.purchaseOrderId) === Number(poId)) ||
+                (poNo && i.purchaseOrder?.poNumber === poNo) ||
+                (delivery?.id && Number(i.deliveryId) === Number(delivery.id)) ||
+                (poNo && i.invoiceNumber && i.invoiceNumber.includes(poNo))
+            );
             if (match) {
               if (match.id) {
                 try {
@@ -303,6 +319,8 @@ export function DispatchDetailsModal({
                 }
               }
               setFetchedInvoice(match);
+            } else {
+              setFetchedInvoice(null);
             }
           }
         }
@@ -313,6 +331,17 @@ export function DispatchDetailsModal({
 
     void loadCreatedInvoice();
   }, [isOpen, delivery]);
+
+  // Determine if seller has generated an official invoice
+  const hasGeneratedInvoice = useMemo(() => {
+    return Boolean(
+      fetchedInvoice?.id ||
+      fetchedInvoice?.invoiceNumber ||
+      (activeDelivery?.purchaseOrder?.invoices && activeDelivery.purchaseOrder.invoices.length > 0) ||
+      (delivery?.purchaseOrder?.invoices && delivery.purchaseOrder.invoices.length > 0) ||
+      existingInvoiceDoc
+    );
+  }, [fetchedInvoice, activeDelivery?.purchaseOrder?.invoices, delivery?.purchaseOrder?.invoices, existingInvoiceDoc]);
 
   // Keyboard accessibility: Close on Escape
   useEffect(() => {
@@ -340,6 +369,10 @@ export function DispatchDetailsModal({
     const dateStr = formatDate(dateRaw || new Date());
     const poVal = Number(activePo?.amount ?? activePo?.totalValue ?? delivery?.purchaseOrder?.amount ?? 0);
     const invoiceTotal = Number(fetchedInvoice?.totalAmount || fetchedInvoice?.amount || poVal || 0);
+    const baseTaxableVal = Number(
+      fetchedInvoice?.taxableAmount ||
+      (invoiceTotal > 0 ? Number((invoiceTotal / 1.18).toFixed(2)) : 0)
+    );
 
     const formatAddress = (...parts: (string | null | undefined)[]) => {
       const valid = parts.filter(
@@ -382,23 +415,29 @@ export function DispatchDetailsModal({
       ? rawItems.map((item, idx) => {
           const qty = Number(item.quantity || 1);
           let price = Number(item.unitPrice || 0);
-          let amount = Number(item.taxableAmount || item.totalAmount || (qty * price) || invoiceTotal);
-          // Prevent 10x inflation if unitPrice was saved as total
-          if (qty > 1 && invoiceTotal > 0 && (price * qty) > (invoiceTotal * 1.5)) {
-            price = Number((price / qty).toFixed(2));
-            amount = Number((price * qty).toFixed(2));
-          } else if (!amount && price > 0) {
-            amount = Number((price * qty).toFixed(2));
-          } else if (amount > 0 && (!price || price === amount)) {
-            price = Number((amount / qty).toFixed(2));
+          let taxableAmt = Number(item.taxableAmount || 0);
+
+          if (!taxableAmt && price > 0) {
+            taxableAmt = Number((price * qty).toFixed(2));
+          } else if (!taxableAmt && item.totalAmount) {
+            taxableAmt = Number((Number(item.totalAmount) / 1.18).toFixed(2));
           }
+
+          if (price === 0 && taxableAmt > 0 && qty > 0) {
+            price = Number((taxableAmt / qty).toFixed(2));
+          } else if (qty > 1 && invoiceTotal > 0 && (price * qty) > (invoiceTotal * 1.5)) {
+            price = Number((price / qty).toFixed(2));
+            taxableAmt = Number((price * qty).toFixed(2));
+          }
+
           return {
             srNo: idx + 1,
             description: item.itemName || item.description || activePo?.title || 'Order Item',
             hsn: item.hsnCode || item.hsn || '-',
             qty,
-            priceUnit: price || (amount / Math.max(qty, 1)),
-            amount
+            unit: item.unitOfMeasure || 'units',
+            priceUnit: price || (taxableAmt / Math.max(qty, 1)),
+            amount: taxableAmt || (price * qty)
           };
         })
       : [
@@ -407,8 +446,8 @@ export function DispatchDetailsModal({
             description: activePo?.title || `Purchase Order #${delivery?.purchaseOrderId}`,
             hsn: '-',
             qty: 1,
-            priceUnit: invoiceTotal > 0 ? Number((invoiceTotal / 1.18).toFixed(2)) : 0,
-            amount: invoiceTotal > 0 ? Number((invoiceTotal / 1.18).toFixed(2)) : 0
+            priceUnit: baseTaxableVal,
+            amount: baseTaxableVal
           }
         ];
 
@@ -416,7 +455,9 @@ export function DispatchDetailsModal({
     items.forEach(it => {
       computedTaxable += Number(it.amount) || 0;
     });
-    const subtotal = computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : Number(fetchedInvoice?.taxableAmount || (invoiceTotal > 0 ? Number((invoiceTotal / 1.18).toFixed(2)) : 0));
+    const subtotal = fetchedInvoice?.taxableAmount
+      ? Number(fetchedInvoice.taxableAmount)
+      : (computedTaxable > 0 ? Number(computedTaxable.toFixed(2)) : baseTaxableVal);
 
     // Interstate detection based on GSTIN codes or different registered states
     const sellerGstinCode = (sellerGstin || '').trim().substring(0, 2);
@@ -434,10 +475,15 @@ export function DispatchDetailsModal({
       ? `${buyerStateName}${buyerGstinCode ? ` (${buyerGstinCode})` : ''} - Inter-State (IGST)`
       : `${sellerProfile?.state || sellerReg?.state || 'Maharashtra'} - State (CGST + SGST)`;
 
-    const cgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.cgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
-    const sgstAmount = isInterstate ? undefined : (Number(fetchedInvoice?.sgstAmount) || Math.round(subtotal * 0.09 * 100) / 100);
-    const igstAmount = isInterstate ? (Number(fetchedInvoice?.igstAmount) || Math.round(subtotal * 0.18 * 100) / 100) : undefined;
-    const grandTotal = isInterstate ? Math.round((subtotal + (igstAmount || 0)) * 100) / 100 : Math.round((subtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100;
+    const cgstAmount = isInterstate ? undefined : (fetchedInvoice?.cgstAmount !== undefined && fetchedInvoice?.cgstAmount !== null ? Number(fetchedInvoice.cgstAmount) : Math.round(subtotal * 0.09 * 100) / 100);
+    const sgstAmount = isInterstate ? undefined : (fetchedInvoice?.sgstAmount !== undefined && fetchedInvoice?.sgstAmount !== null ? Number(fetchedInvoice.sgstAmount) : Math.round(subtotal * 0.09 * 100) / 100);
+    const igstAmount = isInterstate ? (fetchedInvoice?.igstAmount !== undefined && fetchedInvoice?.igstAmount !== null && Number(fetchedInvoice.igstAmount) > 0 ? Number(fetchedInvoice.igstAmount) : Math.round(subtotal * 0.18 * 100) / 100) : undefined;
+
+    const grandTotal = (fetchedInvoice?.totalAmount || fetchedInvoice?.amount)
+      ? Number(fetchedInvoice.totalAmount || fetchedInvoice.amount)
+      : (isInterstate
+          ? Math.round((subtotal + (igstAmount || 0)) * 100) / 100
+          : Math.round((subtotal + (cgstAmount || 0) + (sgstAmount || 0)) * 100) / 100);
 
     const bankName = sellerReg?.bankDetails?.bankName || sellerReg?.bankName || sellerProfile?.bankAccounts?.[0]?.bankName || sellerProfile?.bankName || 'Kotak Mahindra Bank';
     const accountNo = sellerReg?.bankDetails?.accountNumber || sellerReg?.accountNumber || sellerProfile?.bankAccounts?.[0]?.accountNumberMasked || sellerProfile?.bankAccounts?.[0]?.accountNumber || sellerProfile?.bankAccountNo || 'N/A';
@@ -724,15 +770,27 @@ export function DispatchDetailsModal({
               </h2>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
-            aria-label="Close dialog"
-            title="Close dialog"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleRefreshDispatch}
+              disabled={isRefreshingDispatch}
+              title="Refresh dispatch details"
+              aria-label="Refresh dispatch details"
+              className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
+            >
+              <RefreshCw className={cn("h-5 w-5", isRefreshingDispatch && "animate-spin")} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-white/80 hover:bg-white/15 hover:text-white transition focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
+              aria-label="Close dialog"
+              title="Close dialog"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Scrollable Body */}
@@ -1021,48 +1079,50 @@ export function DispatchDetailsModal({
                   )}
                 </div>
 
-                {/* Tax Invoice */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Receipt className="h-4 w-4 text-emerald-700" />
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                        Statutory Tax Invoice
-                      </h4>
+                {/* Tax Invoice (Only shown if generated by seller) */}
+                {hasGeneratedInvoice && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Receipt className="h-4 w-4 text-emerald-700" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                          Statutory Tax Invoice
+                        </h4>
+                      </div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                        GST Compliant
+                      </span>
                     </div>
-                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                      GST Compliant
-                    </span>
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-slate-900">{invData.invoiceNumber}</p>
+                        <p className="text-[10px] text-slate-500 font-semibold">{formatCurrency(invData.totalAmount)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAndAttachPdf('Original Copy', 'download')}
+                          disabled={isGeneratingInvoice}
+                          className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50"
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAndAttachPdf('Original Copy', 'print')}
+                          disabled={isGeneratingInvoice}
+                          className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50"
+                        >
+                          <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{invData.invoiceNumber}</p>
-                      <p className="text-[10px] text-slate-500 font-semibold">{formatCurrency(invData.totalAmount)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateAndAttachPdf('Original Copy', 'download')}
-                        disabled={isGeneratingInvoice}
-                        className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50"
-                      >
-                        <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateAndAttachPdf('Original Copy', 'print')}
-                        disabled={isGeneratingInvoice}
-                        className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50"
-                      >
-                        <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </>
           ) : (
@@ -1315,7 +1375,7 @@ export function DispatchDetailsModal({
               </div>
 
               {/* Delivery Challan & Tax Invoice Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className={cn("grid grid-cols-1 gap-4", hasGeneratedInvoice ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
                 {/* Delivery Challan */}
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1396,68 +1456,71 @@ export function DispatchDetailsModal({
                   </div>
                 </div>
 
-                {/* Tax Invoice */}
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                    <div className="flex items-center gap-2">
-                      <Receipt className="h-4 w-4 text-emerald-700" />
-                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                        Statutory Tax Invoice
-                      </h4>
+                {/* Tax Invoice (Only shown if generated by seller) */}
+                {hasGeneratedInvoice && (
+                  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Receipt className="h-4 w-4 text-emerald-700" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                          Statutory Tax Invoice
+                        </h4>
+                      </div>
+                      <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                        GST Compliant
+                      </span>
                     </div>
-                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                      GST Compliant
-                    </span>
-                  </div>
 
-                  <div className="flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{invData.invoiceNumber}</p>
-                      <p className="text-[10px] text-slate-500">{formatCurrency(invData.totalAmount)}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateAndAttachPdf('Original Copy', 'download')}
-                        disabled={isGeneratingInvoice}
-                        className="h-8 text-xs font-bold"
-                      >
-                        <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateAndAttachPdf('Original Copy', 'print')}
-                        disabled={isGeneratingInvoice}
-                        className="h-8 text-xs font-bold"
-                      >
-                        <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
-                      </Button>
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-slate-900">{invData.invoiceNumber}</p>
+                        <p className="text-[10px] text-slate-500">{formatCurrency(invData.totalAmount)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAndAttachPdf('Original Copy', 'download')}
+                          disabled={isGeneratingInvoice}
+                          className="h-8 text-xs font-bold"
+                        >
+                          <Download className="mr-1.5 h-3.5 w-3.5" /> PDF
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleGenerateAndAttachPdf('Original Copy', 'print')}
+                          disabled={isGeneratingInvoice}
+                          className="h-8 text-xs font-bold"
+                        >
+                          <Printer className="mr-1.5 h-3.5 w-3.5" /> Print
+                        </Button>
+                      </div>
                     </div>
                   </div>
+                )}
+              </div>
 
-                  <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Fulfillment Remarks
-                    </label>
-                    <textarea
-                      value={remarks}
-                      onChange={e => setRemarks(e.target.value)}
-                      rows={2}
-                      disabled={isAlreadyDispatched}
-                      placeholder="e.g. Carrier collected 2 sealed boxes, driver instructed for express priority…"
-                      className={cn(
-                        "w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none",
-                        isAlreadyDispatched
-                          ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
-                          : "bg-white text-slate-800"
-                      )}
-                    />
-                  </div>
-                </div>
+              {/* Fulfillment Remarks Section */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-2">
+                <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  Fulfillment Remarks
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={e => setRemarks(e.target.value)}
+                  rows={2}
+                  disabled={isAlreadyDispatched}
+                  placeholder="e.g. Carrier collected 2 sealed boxes, driver instructed for express priority…"
+                  className={cn(
+                    "w-full rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 resize-none",
+                    isAlreadyDispatched
+                      ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
+                      : "bg-white text-slate-800"
+                  )}
+                />
               </div>
             </>
           )}

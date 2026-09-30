@@ -2511,7 +2511,7 @@ export default function BidResultsPage() {
                   rows={2}
                   value={priceMatchModal.justificationReason}
                   onChange={e => setPriceMatchModal(prev => ({ ...prev, justificationReason: e.target.value }))}
-                  placeholder="e.g. Higher technical score, local service center, superior warranty support, faster delivery timeline..."
+                  placeholder="e.g. local service center, superior warranty support, faster delivery timeline..."
                   className="w-full rounded-xl border border-slate-200 p-2.5 text-xs focus:border-indigo-500 focus:outline-none"
                 />
               </div>

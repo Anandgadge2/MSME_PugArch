@@ -371,7 +371,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: Number(bid.id || reqObj.id || requestId),
+            id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || openTenderNumber || String(requestId),
             type: 'bid_tender',
             title: title,
             referenceNumber: openTenderNumber,

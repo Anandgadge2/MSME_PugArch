@@ -95,60 +95,68 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // ─────────────────────────────────────────────────────────────
   // 1. TOP HEADER BOX: Seller details (left) & Logo + CIN (right)
   // ─────────────────────────────────────────────────────────────
-  const headerBoxHeight = 36;
+  const headerLeftWidth = (contentWidth / 2) - 8;
+  const sellerNameLines = doc.splitTextToSize(data.seller.name || 'N/A', headerLeftWidth);
+  const sellerAddressLines = doc.splitTextToSize(data.seller.address || 'N/A', headerLeftWidth);
+  
+  let headerContentHeight = 6.5 + (sellerNameLines.length * 4.2) + (sellerAddressLines.length * 3.5);
+  if (data.seller.gstin) headerContentHeight += 4.2;
+  if (data.seller.phone && data.seller.phone !== 'N/A') headerContentHeight += 4.2;
+  if (data.seller.email && data.seller.email !== 'N/A') headerContentHeight += 4.2;
+
+  const headerBoxHeight = Math.max(36, headerContentHeight + 4);
   doc.rect(marginX, currentY, contentWidth, headerBoxHeight);
 
   // Left Side: Seller Info
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
-  doc.text(data.seller.name || 'N/A', marginX + 3.5, currentY + 6.5);
+  doc.text(sellerNameLines, marginX + 3.5, currentY + 6.5);
 
+  let curSellerY = currentY + 6.5 + (sellerNameLines.length * 4.2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.2);
-  const sellerAddressLines = doc.splitTextToSize(data.seller.address || 'N/A', (contentWidth / 2) + 10);
-  doc.text(sellerAddressLines, marginX + 3.5, currentY + 11.5);
-
-  const addressOffset = Math.min(sellerAddressLines.length * 3.6, 7.5);
-  let detailY = currentY + 11.5 + addressOffset + 1;
+  doc.text(sellerAddressLines, marginX + 3.5, curSellerY);
+  curSellerY += (sellerAddressLines.length * 3.5);
 
   if (data.seller.gstin) {
     doc.setFont('helvetica', 'bold');
-    doc.text(`GST NO: ${data.seller.gstin}`, marginX + 3.5, detailY);
-    detailY += 4.2;
+    doc.text(`GST NO: ${data.seller.gstin}`, marginX + 3.5, curSellerY);
+    curSellerY += 4.2;
   }
 
   if (data.seller.phone && data.seller.phone !== 'N/A') {
     doc.setFont('helvetica', 'normal');
-    doc.text(`Phone: ${data.seller.phone}`, marginX + 3.5, detailY);
-    detailY += 4.2;
+    doc.text(`Phone: ${data.seller.phone}`, marginX + 3.5, curSellerY);
+    curSellerY += 4.2;
   }
 
   if (data.seller.email && data.seller.email !== 'N/A') {
     doc.setFont('helvetica', 'normal');
-    doc.text(`Email: ${data.seller.email}`, marginX + 3.5, detailY);
+    doc.text(`Email: ${data.seller.email}`, marginX + 3.5, curSellerY);
   }
 
   // Right Side: Dynamic Logo and CIN as per respective company
-  const logoBoxWidth = 46;
+  const logoBoxWidth = 48;
   const logoBoxHeight = 17;
   const logoBoxX = rightX - logoBoxWidth - 3.5;
   if (logoDataUrl) {
     try {
       drawFitImage(doc, logoDataUrl, logoBoxX, currentY + 3.5, logoBoxWidth, logoBoxHeight, 'right');
     } catch {
-      // If image draw fails, show company name text
+      // If image draw fails, show company name text wrapped
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(12.5);
+      doc.setFontSize(11);
       doc.setTextColor(30, 58, 138);
-      doc.text(data.seller.name || 'N/A', rightX - 3.5, currentY + 12, { align: 'right' });
+      const rightSellerLines = doc.splitTextToSize(data.seller.name || 'N/A', 55);
+      doc.text(rightSellerLines, rightX - 3.5, currentY + 9, { align: 'right' });
     }
   } else if (data.seller.name) {
-    // Elegant seller brand title if no logo uploaded
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12.5);
+    doc.setFontSize(11);
     doc.setTextColor(30, 58, 138);
-    doc.text(data.seller.name, rightX - 3.5, currentY + 12, { align: 'right' });
+    const rightSellerLines = doc.splitTextToSize(data.seller.name, 55);
+    doc.text(rightSellerLines, rightX - 3.5, currentY + 9, { align: 'right' });
   }
 
   // CIN Text below Logo
@@ -157,7 +165,7 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
     doc.setTextColor(15, 23, 42);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
-    doc.text(`CIN : ${sellerCin}`, rightX - 3.5, currentY + 28, { align: 'right' });
+    doc.text(`CIN : ${sellerCin}`, rightX - 3.5, currentY + headerBoxHeight - 4, { align: 'right' });
   }
 
   currentY += headerBoxHeight;
@@ -200,25 +208,41 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
   // ─────────────────────────────────────────────────────────────
   // 4. BILL TO & SHIP TO SECTION (2 Equal Columns with Divider)
   // ─────────────────────────────────────────────────────────────
-  const billShipBoxHeight = 36;
+  const billColWidth = (contentWidth / 2) - 16;
+  const shipColWidth = (contentWidth / 2) - 12;
+
+  // Calculate Left Column: Bill To
+  let bY = currentY + 4.5;
+  const billNameLines = doc.splitTextToSize(data.billTo.name || 'N/A', billColWidth);
+  const billAddressLines = doc.splitTextToSize(data.billTo.address || 'N/A', billColWidth);
+  
+  let calcBy = bY + 4 + (billNameLines.length * 3.8) + (billAddressLines.length * 3.4) + 1.2;
+  if (data.billTo.pan && data.billTo.pan !== 'N/A') calcBy += 3.8;
+  if (data.billTo.gstin && data.billTo.gstin !== 'N/A') calcBy += 3.8;
+
+  // Calculate Right Column: Ship To
+  let sY = currentY + 4.5;
+  const shipNameLines = doc.splitTextToSize(data.shipTo.name || data.billTo.name || 'N/A', shipColWidth);
+  const effectiveShipAddress = data.shipTo.address && data.shipTo.address.trim() !== 'INDIA'
+    ? data.shipTo.address
+    : (data.billTo.address || 'N/A');
+  const shipAddressLines = doc.splitTextToSize(effectiveShipAddress, shipColWidth);
+  const calcSy = sY + 4 + (shipNameLines.length * 3.8) + (shipAddressLines.length * 3.4) + 1.2;
+
+  const billShipBoxHeight = Math.max(36, Math.max(calcBy, calcSy) - currentY + 4);
   doc.rect(marginX, currentY, contentWidth, billShipBoxHeight);
   doc.line(midX - 10, currentY, midX - 10, currentY + billShipBoxHeight);
 
-  // Left Column: Bill To
-  let bY = currentY + 4.5;
+  // Render Left Column: Bill To
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.text('Bill To', marginX + 3.5, bY);
   bY += 4;
-  doc.text(data.billTo.name || 'N/A', marginX + 3.5, bY);
-  bY += 3.8;
+  doc.text(billNameLines, marginX + 3.5, bY);
+  bY += (billNameLines.length * 3.8);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.8);
-  const billAddressLines = doc.splitTextToSize(
-    data.billTo.address || 'N/A',
-    (contentWidth / 2) - 18
-  );
   doc.text(billAddressLines, marginX + 3.5, bY);
   bY += (billAddressLines.length * 3.4) + 1.2;
 
@@ -235,25 +259,16 @@ export async function generateTaxInvoicePdf(data: TaxInvoiceData): Promise<jsPDF
     doc.text(`GST No: ${billGst}`, marginX + 3.5, bY);
   }
 
-  // Right Column: Ship To
-  let sY = currentY + 4.5;
+  // Render Right Column: Ship To
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.text('Ship To', midX - 6.5, sY);
   sY += 4;
-  doc.text(data.shipTo.name || data.billTo.name || 'N/A', midX - 6.5, sY);
-  sY += 3.8;
+  doc.text(shipNameLines, midX - 6.5, sY);
+  sY += (shipNameLines.length * 3.8);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.8);
-  const effectiveShipAddress = data.shipTo.address && data.shipTo.address.trim() !== 'INDIA'
-    ? data.shipTo.address
-    : (data.billTo.address || 'N/A');
-
-  const shipAddressLines = doc.splitTextToSize(
-    effectiveShipAddress,
-    (contentWidth / 2) + 4
-  );
   doc.text(shipAddressLines, midX - 6.5, sY);
 
   currentY += billShipBoxHeight;

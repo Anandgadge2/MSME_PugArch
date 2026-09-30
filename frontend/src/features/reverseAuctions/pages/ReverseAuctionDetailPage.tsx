@@ -877,7 +877,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: Number(effectiveId),
+            id: auctionData?.id || (!isNaN(Number(effectiveId)) ? Number(effectiveId) : 0) || auctionData?.auctionCode || String(effectiveId),
             type: 'reverse_auction',
             title: auctionData.title || 'Reverse Auction Sourcing',
             referenceNumber: auctionData.auctionCode || `RA-${effectiveId}`,

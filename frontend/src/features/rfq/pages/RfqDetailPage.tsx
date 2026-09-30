@@ -1421,7 +1421,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         isOpen={cancelModalOpen}
         onClose={() => setCancelModalOpen(false)}
         procurement={{
-          id: Number(rawBid?.id || reqObj?.id || targetReqId || requestId),
+          id: rawBid?.id || reqObj?.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || ref || String(requestId || targetReqId),
           type: requirementId || rawBid?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
           title: title,
           referenceNumber: ref,

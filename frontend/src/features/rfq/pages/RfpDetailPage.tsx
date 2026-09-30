@@ -402,7 +402,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: Number(reqObj.id || bid.id || requirementId || requestId),
+            id: reqObj.id || bid.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || rfpNumber || String(requestId),
             type: bidData?.sourceModel === 'REQUIREMENT' || requirementId ? 'requirement' : 'bid_tender',
             title: title,
             referenceNumber: rfpNumber,

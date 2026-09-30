@@ -573,9 +573,13 @@ router.post('/invoice/:invoiceId/offline-proof', requirePermission('payment.init
           metadata: {
             source: 'offline_payment_proof',
             invoiceId: invoice.id,
+            purchaseOrderId: invoice.purchaseOrderId || undefined,
             transactionReference: parsed.transactionReference,
+            payerBankName: parsed.payerBankName,
+            payerAccountLast4: parsed.payerAccountLast4 || undefined,
             receiptFileUrl: parsed.receiptFileUrl,
-            receiptFileId: parsed.receiptFileId
+            receiptFileId: parsed.receiptFileId,
+            offlineProofUploadedAt: new Date().toISOString()
           }
         }
       });
@@ -596,7 +600,7 @@ router.post('/invoice/:invoiceId/offline-proof', requirePermission('payment.init
           receiptFileId: parsed.receiptFileId || null,
           receiptFileUrl: parsed.receiptFileUrl || null,
           remarks: parsed.remarks || null,
-          status: 'UNDER_REVIEW',
+          status: 'UPLOADED',
           uploadedByUserId: req.user?.id
         }
       });
@@ -642,7 +646,16 @@ router.get('/invoice/:invoiceId/offline-proof', requirePermission('payment.view'
       where: { id: invoiceId },
       include: {
         buyer: { select: { id: true, organizationId: true } },
-        purchaseOrder: { select: { id: true, buyerId: true, sellerId: true } }
+        seller: { select: { id: true, organizationId: true } },
+        purchaseOrder: {
+          select: {
+            id: true,
+            buyerId: true,
+            sellerId: true,
+            buyer: { select: { organizationId: true } },
+            seller: { select: { organizationId: true } }
+          }
+        }
       }
     });
     if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
@@ -651,23 +664,48 @@ router.get('/invoice/:invoiceId/offline-proof', requirePermission('payment.view'
       invoice.sellerId === req.user?.id ||
       invoice.purchaseOrder?.buyerId === req.user?.id ||
       invoice.purchaseOrder?.sellerId === req.user?.id ||
-      (Boolean(invoice.buyer?.organizationId) && invoice.buyer?.organizationId === req.user?.organizationId);
+      (Boolean(invoice.buyer?.organizationId) && invoice.buyer?.organizationId === req.user?.organizationId) ||
+      (Boolean(invoice.seller?.organizationId) && invoice.seller?.organizationId === req.user?.organizationId) ||
+      (Boolean(invoice.purchaseOrder?.buyer?.organizationId) && invoice.purchaseOrder?.buyer?.organizationId === req.user?.organizationId) ||
+      (Boolean(invoice.purchaseOrder?.seller?.organizationId) && invoice.purchaseOrder?.seller?.organizationId === req.user?.organizationId);
     if (!allowed) throw new ApiError(403, 'Access denied', 'INVOICE_ACCESS_DENIED');
 
     const payment = await prisma.paymentTransaction.findFirst({
-      where: { invoiceId },
+      where: {
+        OR: [
+          { invoiceId },
+          ...(invoice.purchaseOrderId ? [{ purchaseOrderId: invoice.purchaseOrderId }] : [])
+        ]
+      },
+      include: {
+        payer: { select: { id: true, name: true, email: true } },
+        payee: { select: { id: true, name: true, email: true } },
+        escrowAccount: { include: { milestones: true, transactions: true } },
+        ledgerEntries: { orderBy: { createdAt: 'asc' } }
+      },
       orderBy: { createdAt: 'desc' }
     });
 
-    const proof = payment
+    let proof = payment
       ? await (prisma as any).offlinePaymentProof.findFirst({
           where: { paymentTransactionId: payment.id },
           orderBy: { createdAt: 'desc' }
         })
       : null;
 
+    if (!proof && invoice.purchaseOrderId) {
+      proof = await (prisma as any).offlinePaymentProof.findFirst({
+        where: { purchaseOrderId: invoice.purchaseOrderId },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+
     const enriched = await enrichProofsWithFileMetadata(proof ? [proof] : []);
-    res.json({ success: true, proof: maskSensitive(enriched[0] || null) });
+    res.json({
+      success: true,
+      proof: maskSensitive(enriched[0] || null),
+      payment: maskSensitive(payment || null)
+    });
   } catch (err: any) {
     return handleError(res, err);
   }
@@ -746,8 +784,8 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
     const po = await prisma.purchaseOrder.findUnique({
       where: { id: orderId },
       include: {
-        buyer: { select: { organizationId: true } },
-        seller: { select: { organizationId: true } },
+        buyer: { select: { id: true, organizationId: true } },
+        seller: { select: { id: true, organizationId: true } },
         payments: { orderBy: { createdAt: 'desc' }, take: 1 }
       }
     });
@@ -792,7 +830,16 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
           methodEnum: effectivePaymentMethod,
           status: 'OFFLINE_PROOF_UPLOADED',
           paymentStatus: 'OFFLINE_PROOF_UPLOADED' as any,
-          metadata: { source: 'offline_payment_proof' }
+          metadata: {
+            source: 'offline_payment_proof',
+            purchaseOrderId: po.id,
+            transactionReference: parsed.transactionReference,
+            payerBankName: parsed.payerBankName,
+            payerAccountLast4: parsed.payerAccountLast4 || undefined,
+            receiptFileUrl: parsed.receiptFileUrl,
+            receiptFileId: parsed.receiptFileId,
+            offlineProofUploadedAt: new Date().toISOString()
+          }
         }
       });
       if (po.payments?.[0]) {
@@ -803,6 +850,17 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
             paymentStatus: 'OFFLINE_PROOF_UPLOADED' as any,
             method: parsed.method,
             methodEnum: effectivePaymentMethod,
+            metadata: {
+              ...(typeof targetPayment.metadata === 'object' && targetPayment.metadata !== null ? (targetPayment.metadata as any) : {}),
+              source: 'offline_payment_proof',
+              purchaseOrderId: po.id,
+              transactionReference: parsed.transactionReference,
+              payerBankName: parsed.payerBankName,
+              payerAccountLast4: parsed.payerAccountLast4 || undefined,
+              receiptFileUrl: parsed.receiptFileUrl,
+              receiptFileId: parsed.receiptFileId,
+              offlineProofUploadedAt: new Date().toISOString()
+            },
             version: { increment: 1 }
           }
         });
@@ -823,7 +881,7 @@ router.post('/:orderId/offline-proof', requirePermission('payment.initiate', org
           receiptFileId: parsed.receiptFileId || null,
           receiptFileUrl: parsed.receiptFileUrl || null,
           remarks: parsed.remarks || null,
-          status: 'UNDER_REVIEW',
+          status: 'UPLOADED',
           uploadedByUserId: req.user?.id
         }
       });
@@ -852,13 +910,60 @@ router.get('/:orderId/offline-proof', requirePermission('payment.view', orgScope
   try {
     const orderId = Number(req.params.orderId);
     if (!Number.isInteger(orderId) || orderId <= 0) throw new ApiError(400, 'Invalid order id', 'ORDER_ID_INVALID');
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: orderId } });
+    const po = await prisma.purchaseOrder.findUnique({
+      where: { id: orderId },
+      include: {
+        buyer: { select: { id: true, organizationId: true } },
+        seller: { select: { id: true, organizationId: true } },
+        invoices: { select: { id: true } }
+      }
+    });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    const allowed = isPlatformFinanceUser(req) || po.buyerId === req.user?.id || po.sellerId === req.user?.id;
-    if (!allowed) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    const proofs = await (prisma as any).offlinePaymentProof.findMany({ where: { purchaseOrderId: orderId }, orderBy: { createdAt: 'desc' } });
+    const allowed = isPlatformFinanceUser(req) ||
+      po.buyerId === req.user?.id ||
+      po.sellerId === req.user?.id ||
+      (Boolean((po as any).buyerOrganizationId) && (po as any).buyerOrganizationId === req.user?.organizationId) ||
+      (Boolean((po as any).sellerOrganizationId) && (po as any).sellerOrganizationId === req.user?.organizationId) ||
+      (Boolean(po.buyer?.organizationId) && po.buyer?.organizationId === req.user?.organizationId) ||
+      (Boolean(po.seller?.organizationId) && po.seller?.organizationId === req.user?.organizationId);
+    if (!allowed) throw new ApiError(403, 'Access denied to purchase order proof', 'PO_ACCESS_DENIED');
+
+    const invoiceIds = (po.invoices || []).map((inv: any) => inv.id);
+    const payments = await prisma.paymentTransaction.findMany({
+      where: {
+        OR: [
+          { purchaseOrderId: orderId },
+          ...(invoiceIds.length > 0 ? [{ invoiceId: { in: invoiceIds } }] : [])
+        ]
+      },
+      include: {
+        payer: { select: { id: true, name: true, email: true } },
+        payee: { select: { id: true, name: true, email: true } },
+        escrowAccount: { include: { milestones: true, transactions: true } },
+        ledgerEntries: { orderBy: { createdAt: 'asc' } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const paymentIds = payments.map(p => p.id);
+
+    const proofs = await (prisma as any).offlinePaymentProof.findMany({
+      where: {
+        OR: [
+          { purchaseOrderId: orderId },
+          ...(paymentIds.length > 0 ? [{ paymentTransactionId: { in: paymentIds } }] : [])
+        ]
+      },
+      orderBy: { createdAt: 'desc' }
+    });
     const enriched = await enrichProofsWithFileMetadata(proofs);
-    res.json({ success: true, proofs: maskSensitive(enriched), proof: maskSensitive(enriched[0] || null) });
+    res.json({
+      success: true,
+      proofs: maskSensitive(enriched),
+      proof: maskSensitive(enriched[0] || null),
+      payment: maskSensitive(payments[0] || null),
+      payments: maskSensitive(payments)
+    });
   } catch (err: any) {
     return handleError(res, err);
   }

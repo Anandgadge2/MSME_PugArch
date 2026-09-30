@@ -24,7 +24,8 @@ import {
   Printer,
   Clock3,
   Upload,
-  RotateCcw
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -57,61 +58,160 @@ export interface PaymentReceiptViewModalProps {
   isSettled?: boolean;
 }
 
-const buildPaymentTimeline = (payment: any) => {
-  if (!payment) return [];
-  const events: Array<{ title: string; timestamp?: string; detail?: string }> = [];
+export interface TimelineEventItem {
+  title: string;
+  timestamp: string;
+  detail: string;
+  type?: 'order' | 'invoice' | 'initiated' | 'transfer' | 'proof' | 'escrow' | 'ledger' | 'verified' | 'rejected' | 'refunded';
+  statusBadge?: string;
+}
 
-  if (payment.createdAt) {
+export const buildPaymentTimeline = (
+  payment: any,
+  proof: any,
+  po: any,
+  invoice: any
+): TimelineEventItem[] => {
+  const events: TimelineEventItem[] = [];
+
+  // 1. Purchase Order Created
+  if (po?.createdAt) {
     events.push({
-      title: 'Payment Initiated',
-      timestamp: payment.createdAt,
-      detail: `Transaction initialized via ${payment.gateway || 'banking system'}`
+      title: 'Purchase Order Issued',
+      timestamp: po.createdAt,
+      detail: `Official Purchase Order #${po.poNumber || po.id} created for ${formatCurrency(po.totalValue || po.amount || 0)}`,
+      type: 'order'
     });
   }
-  if (payment.metadata?.offlineProofUploadedAt || payment.metadata?.offlineProofId) {
+
+  // 2. Tax Invoice Raised
+  if (invoice?.createdAt && invoice.createdAt !== po?.createdAt) {
+    events.push({
+      title: 'Tax Invoice Raised',
+      timestamp: invoice.createdAt,
+      detail: `Commercial invoice #${invoice.invoiceNumber || invoice.id} generated for statutory billing`,
+      type: 'invoice'
+    });
+  }
+
+  // 3. Payment Transaction Initialized
+  if (payment?.createdAt) {
+    events.push({
+      title: 'Payment Transaction Initialized',
+      timestamp: payment.createdAt,
+      detail: `Transaction reference ${payment.referenceId || payment.id} initialized via ${payment.gateway || payment.method || 'Banking Gateway'}`,
+      type: 'initiated'
+    });
+  }
+
+  // 4. Remittance Execution (Bank Transfer Date)
+  if (proof?.paymentDate) {
+    events.push({
+      title: 'Bank Remittance Executed',
+      timestamp: proof.paymentDate,
+      detail: `Payer executed fund transfer via ${proof.method || 'Direct Remittance'}${proof.transactionReference ? ` (UTR: ${proof.transactionReference})` : ''}`,
+      type: 'transfer'
+    });
+  }
+
+  // 5. Payment Proof Slip Uploaded
+  const proofUploadTime = proof?.createdAt || payment?.metadata?.offlineProofUploadedAt;
+  if (proofUploadTime && proofUploadTime !== proof?.paymentDate) {
     events.push({
       title: 'Payment Proof Slip Uploaded',
-      timestamp: payment.metadata?.offlineProofUploadedAt || payment.createdAt,
-      detail: payment.metadata?.transactionReference ? `UTR: ${payment.metadata.transactionReference}` : 'Offline bank remittance slip submitted'
-    });
-  }
-  if (payment.escrowAccount?.fundedAt) {
-    events.push({
-      title: `Escrow Custody ${payment.escrowAccount.status === 'held' ? 'Secured' : (payment.escrowAccount.status || 'Funded')}`,
-      timestamp: payment.escrowAccount.fundedAt,
-      detail: `Escrow Vault #${payment.escrowAccount.id} funded (${formatCurrency(payment.escrowAccount.amount || payment.amount)})`
-    });
-  }
-  payment.ledgerEntries?.forEach((entry: any) => {
-    events.push({
-      title: `${String(entry.entryType || 'ledger').replace(/_/g, ' ')} entry recorded`,
-      timestamp: entry.createdAt,
-      detail: `${formatCurrency(entry.amount)} | ${entry.debitAccount || 'Debit'} → ${entry.creditAccount || 'Credit'}`
-    });
-  });
-  if (payment.status && ['success', 'escrow_released', 'offline_proof_verified'].includes(String(payment.status).toLowerCase())) {
-    events.push({
-      title: 'Settlement Confirmed & Verified',
-      timestamp: payment.completedAt || payment.createdAt,
-      detail: 'Treasury funds reconciled and credited to seller'
-    });
-  } else if (payment.status === 'refunded') {
-    events.push({
-      title: 'Payment Refunded',
-      timestamp: payment.completedAt || payment.createdAt,
-      detail: 'Funds refunded to payer account'
-    });
-  } else if (payment.completedAt && payment.completedAt !== payment.createdAt) {
-    events.push({
-      title: `Status: ${String(payment.status).replace(/_/g, ' ')}`,
-      timestamp: payment.completedAt,
-      detail: `Payment processing completed on ${formatDate(payment.completedAt)}`
+      timestamp: proofUploadTime,
+      detail: proof?.transactionReference || payment?.metadata?.transactionReference
+        ? `Remittance slip submitted with UTR: ${proof?.transactionReference || payment?.metadata?.transactionReference}`
+        : 'Bank remittance receipt / payment advice submitted for audit',
+      type: 'proof'
     });
   }
 
-  return events
-    .filter(event => event.timestamp)
-    .sort((a, b) => new Date(a.timestamp || '').getTime() - new Date(b.timestamp || '').getTime());
+  // 6. Escrow Vault Funded
+  if (payment?.escrowAccount?.fundedAt) {
+    events.push({
+      title: `Escrow Custody ${payment.escrowAccount.status === 'held' ? 'Secured' : 'Funded'}`,
+      timestamp: payment.escrowAccount.fundedAt,
+      detail: `Escrow Vault #${payment.escrowAccount.id} funded (${formatCurrency(payment.escrowAccount.amount || payment.amount)})`,
+      type: 'escrow'
+    });
+  }
+
+  // 7. Escrow Released
+  if (payment?.escrowAccount?.releasedAt) {
+    events.push({
+      title: 'Escrow Custody Released',
+      timestamp: payment.escrowAccount.releasedAt,
+      detail: 'Escrow custody funds released to supplier settlement account',
+      type: 'escrow'
+    });
+  }
+
+  // 8. Financial Ledger Entries
+  payment?.ledgerEntries?.forEach((entry: any) => {
+    if (entry?.createdAt) {
+      events.push({
+        title: `${String(entry.entryType || 'ledger').replace(/_/g, ' ')} Entry Recorded`,
+        timestamp: entry.createdAt,
+        detail: `${formatCurrency(entry.amount)} | ${entry.debitAccount || 'Debit'} → ${entry.creditAccount || 'Credit'}`,
+        type: 'ledger'
+      });
+    }
+  });
+
+  // 9. Verified / Settled
+  const isVerified = ['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED'].includes(
+    String(proof?.status || payment?.status || payment?.paymentStatus || '').toUpperCase()
+  );
+  if (isVerified) {
+    const verifiedTime = proof?.verifiedAt || payment?.completedAt || payment?.updatedAt || proof?.updatedAt;
+    if (verifiedTime) {
+      events.push({
+        title: 'Settlement Confirmed & Verified',
+        timestamp: verifiedTime,
+        detail: 'Payment proof verified by statutory auditor / supplier. Treasury ledger reconciled.',
+        type: 'verified',
+        statusBadge: 'Verified'
+      });
+    }
+  }
+
+  // 10. Rejected
+  const isRejected = ['REJECTED', 'FAILED', 'OFFLINE_PROOF_REJECTED'].includes(
+    String(proof?.status || payment?.status || payment?.paymentStatus || '').toUpperCase()
+  );
+  if (isRejected) {
+    const rejectedTime = proof?.rejectedAt || payment?.updatedAt || proof?.updatedAt;
+    if (rejectedTime) {
+      events.push({
+        title: 'Payment Proof Rejected',
+        timestamp: rejectedTime,
+        detail: proof?.rejectionReason || payment?.metadata?.rejectionReason
+          ? `Audit Rejection Notice: ${proof?.rejectionReason || payment?.metadata?.rejectionReason}`
+          : 'Remittance proof rejected during audit review.',
+        type: 'rejected',
+        statusBadge: 'Rejected'
+      });
+    }
+  }
+
+  // 11. Refunded
+  if (String(payment?.status || '').toLowerCase() === 'refunded') {
+    events.push({
+      title: 'Payment Refunded',
+      timestamp: payment.completedAt || payment.updatedAt,
+      detail: 'Funds reversed and credited back to payer originating account',
+      type: 'refunded',
+      statusBadge: 'Refunded'
+    });
+  }
+
+  // Deduplicate and Sort chronologically
+  const uniqueEvents = events.filter((evt, index, self) =>
+    index === self.findIndex(t => t.title === evt.title && t.timestamp === evt.timestamp)
+  );
+
+  return uniqueEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 };
 
 export function PaymentReceiptViewModal({
@@ -151,6 +251,7 @@ export function PaymentReceiptViewModal({
 
   const [linkedPo, setLinkedPo] = useState<any | null>(null);
   const [linkedInvoice, setLinkedInvoice] = useState<any | null>(null);
+  const [isRefreshingPayment, setIsRefreshingPayment] = useState(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -199,6 +300,7 @@ export function PaymentReceiptViewModal({
         let currentPayment = initialPayment || null;
         const targetPaymentId = paymentId || initialPayment?.id;
 
+        // 1. Fetch payment if ID is available
         if (targetPaymentId && !currentPayment) {
           try {
             const payRes = await getApi<any>(`/api/payments/${targetPaymentId}`);
@@ -215,79 +317,115 @@ export function PaymentReceiptViewModal({
         const targetInvId = invoiceId || currentPayment?.invoiceId || currentPayment?.invoice?.id;
         const targetOrderId = orderId || currentPayment?.purchaseOrderId || currentPayment?.purchaseOrder?.id;
 
-        if (!proofData && targetInvId) {
+        // 2. Fetch linked Purchase Order if ID is available
+        if (targetOrderId && !linkedPo) {
           try {
-            const res = await getApi<any>(`/api/payments/invoice/${targetInvId}/offline-proof`);
-            proofData = res?.proof;
-          } catch {}
+            const poRes = await getApi<any>(`/api/purchase-orders/${targetOrderId}`);
+            const poData = poRes?.data || poRes;
+            if (poData) {
+              setLinkedPo(poData);
+              if (!currentPayment && Array.isArray(poData.payments) && poData.payments.length > 0) {
+                const matched = poData.payments.find((p: any) =>
+                  ['success', 'escrow_released', 'offline_proof_verified', 'offline_proof_uploaded'].includes(String(p.status).toLowerCase())
+                ) || poData.payments[0];
+                if (matched) {
+                  currentPayment = matched;
+                  setFetchedPayment(matched);
+                }
+              }
+              if (!targetInvId && Array.isArray(poData.invoices) && poData.invoices.length > 0) {
+                setLinkedInvoice(poData.invoices[0]);
+              }
+            }
+          } catch {
+            // Non-blocking
+          }
         }
+
+        // 3. Fetch linked Invoice if ID is available
+        const resolvedTargetInvId = targetInvId || linkedPo?.invoices?.[0]?.id;
+        if (resolvedTargetInvId && !linkedInvoice) {
+          try {
+            const invRes = await getApi<any>(`/api/invoices/${resolvedTargetInvId}`);
+            const invData = invRes?.data || invRes;
+            if (invData) {
+              setLinkedInvoice(invData);
+            }
+          } catch {
+            // Non-blocking
+          }
+        }
+
+        // 4. Fetch offline proof from order or invoice endpoints
         if (!proofData && targetOrderId) {
           try {
             const res = await getApi<any>(`/api/payments/${targetOrderId}/offline-proof`);
             proofData = res?.proof || (res?.proofs || [])[0];
-          } catch {}
+            if (!currentPayment && res?.payment) {
+              currentPayment = res.payment;
+              setFetchedPayment(res.payment);
+            }
+          } catch {
+            // Non-blocking
+          }
         }
+
+        if (!proofData && resolvedTargetInvId) {
+          try {
+            const res = await getApi<any>(`/api/payments/invoice/${resolvedTargetInvId}/offline-proof`);
+            proofData = res?.proof;
+            if (!currentPayment && res?.payment) {
+              currentPayment = res.payment;
+              setFetchedPayment(res.payment);
+            }
+          } catch {
+            // Non-blocking
+          }
+        }
+
         if (!proofData && proofId) {
           try {
             const res = await getApi<any>(`/api/payments/offline-proofs`);
-            proofData = (res?.proofs || []).find((p: any) => p.id === proofId);
-          } catch {}
+            proofData = (res?.proofs || res?.records || []).find((p: any) => p.id === proofId);
+          } catch {
+            // Non-blocking
+          }
         }
+
         if (!proofData && (targetPaymentId || targetOrderId)) {
           try {
             const res = await getApi<any>(`/api/payments/offline-proofs`);
-            proofData = (res?.proofs || []).find(
+            const list = res?.proofs || res?.records || [];
+            proofData = list.find(
               (p: any) => (targetPaymentId && p.paymentTransactionId === targetPaymentId) || (targetOrderId && p.purchaseOrderId === targetOrderId)
             );
-          } catch {}
+          } catch {
+            // Non-blocking
+          }
         }
 
-        if (proofData?.receiptFileId && !proofData?.receiptFileName) {
+        // 5. Enrich file metadata if receiptFileId is present
+        const effectiveFileId = proofData?.receiptFileId || currentPayment?.metadata?.receiptFileId;
+        if (effectiveFileId && (!proofData?.receiptFileName || !currentPayment?.metadata?.receiptFileName)) {
           try {
-            const fileRes = await getApi<any>(`/api/files/${proofData.receiptFileId}/signed-url`);
+            const fileRes = await getApi<any>(`/api/files/${effectiveFileId}/signed-url`);
             const fileObj = fileRes?.file || fileRes?.data?.file;
             if (fileObj) {
-              proofData = {
-                ...proofData,
-                receiptFileName: fileObj.originalName || proofData.receiptFileName,
-                receiptFileMimeType: fileObj.mimeType || proofData.receiptFileMimeType
-              };
+              if (proofData) {
+                proofData = {
+                  ...proofData,
+                  receiptFileName: fileObj.originalName || proofData.receiptFileName,
+                  receiptFileMimeType: fileObj.mimeType || proofData.receiptFileMimeType,
+                  receiptFileSize: fileObj.size || proofData.receiptFileSize
+                };
+              }
             }
-          } catch {}
+          } catch {
+            // Non-blocking
+          }
         }
 
         setProof(proofData || null);
-
-        // Auto-fetch linked Purchase Order
-        const resolvedTargetPoId = targetOrderId || proofData?.purchaseOrderId;
-        if (resolvedTargetPoId && !linkedPo) {
-          try {
-            const poRes = await getApi<any>(`/api/purchase-orders/${resolvedTargetPoId}`);
-            const poData = poRes?.data || poRes;
-            setLinkedPo(poData);
-            if (!currentPayment && Array.isArray(poData?.payments) && poData.payments.length > 0) {
-              const matched = poData.payments.find((p: any) =>
-                ['success', 'escrow_released', 'offline_proof_verified'].includes(String(p.status).toLowerCase())
-              ) || poData.payments[0];
-              if (matched) {
-                currentPayment = matched;
-                setFetchedPayment(matched);
-              }
-            }
-            if (!targetInvId && poData?.invoices?.length > 0) {
-              setLinkedInvoice(poData.invoices[0]);
-            }
-          } catch {}
-        }
-
-        // Auto-fetch linked Invoice
-        const resolvedTargetInvId = targetInvId || proofData?.invoiceId;
-        if (resolvedTargetInvId && !linkedInvoice) {
-          try {
-            const invRes = await getApi<any>(`/api/invoices/${resolvedTargetInvId}`);
-            setLinkedInvoice(invRes?.data || invRes);
-          } catch {}
-        }
       } catch {
         toast.error('Unable to fetch complete payment receipt details');
       } finally {
@@ -300,6 +438,7 @@ export function PaymentReceiptViewModal({
 
   const activePayment = fetchedPayment || initialPayment;
 
+  // Authentic resolution of proof details (Zero mock fallback)
   const resolvedProof = useMemo(() => {
     if (proof) return proof;
     if (!activePayment) return null;
@@ -308,9 +447,13 @@ export function PaymentReceiptViewModal({
     const slipFileId = meta.offlineProofId || meta.receiptFileId;
     const slipFileUrl = meta.receiptFileUrl;
     const utrNumber = meta.transactionReference || meta.utr || activePayment.referenceId;
-    const rawStatus = String(activePayment.status || '').toLowerCase();
+    const rawStatus = String(activePayment.status || activePayment.paymentStatus || '').toLowerCase();
     const isVerified = ['success', 'escrow_released', 'offline_proof_verified'].includes(rawStatus);
-    const isRejected = ['failed', 'cancelled', 'rejected'].includes(rawStatus);
+    const isRejected = ['failed', 'cancelled', 'rejected', 'offline_proof_rejected'].includes(rawStatus);
+
+    if (!utrNumber && !slipFileId && !slipFileUrl && !meta.payerBankName && !meta.offlineProofUploadedAt) {
+      return null;
+    }
 
     const resolvedFileName =
       meta.receiptFileName ||
@@ -323,9 +466,9 @@ export function PaymentReceiptViewModal({
       currency: activePayment.currency || 'INR',
       method: activePayment.method || (activePayment.gateway === 'bank_transfer' ? 'NEFT / RTGS / Bank Transfer' : 'Electronic Transfer'),
       transactionReference: utrNumber,
-      paymentDate: activePayment.completedAt || activePayment.createdAt,
-      payerBankName: meta.bankName || (activePayment.gateway === 'bank_transfer' ? 'State Bank of India / Scheduled Commercial Bank' : `${activePayment.gateway || 'Bank'} Clearing Gateway`),
-      payerAccountLast4: meta.payerAccountLast4 || (activePayment.payer?.id ? `84${String(activePayment.payer.id).padStart(2, '0')}` : undefined),
+      paymentDate: activePayment.paidAt || activePayment.completedAt || activePayment.createdAt,
+      payerBankName: meta.payerBankName || meta.bankName || (activePayment.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'offline' ? `${activePayment.gateway.toUpperCase()} Gateway` : undefined),
+      payerAccountLast4: meta.payerAccountLast4 || undefined,
       receiptFileId: slipFileId,
       receiptFileUrl: slipFileUrl,
       receiptFileName: resolvedFileName,
@@ -333,9 +476,58 @@ export function PaymentReceiptViewModal({
       status: isVerified ? 'VERIFIED' : isRejected ? 'REJECTED' : 'UPLOADED',
       purchaseOrderId: activePayment.purchaseOrderId,
       invoiceId: activePayment.invoiceId,
-      remarks: meta.remarks || `Settlement reference ${activePayment.referenceId}`
+      remarks: meta.remarks || undefined
     };
   }, [proof, activePayment]);
+
+  // Authentic amount and currency
+  const displayAmount = useMemo(() => {
+    if (resolvedProof?.amount !== undefined && resolvedProof?.amount !== null) return Number(resolvedProof.amount);
+    if (activePayment?.amount !== undefined && activePayment?.amount !== null) return Number(activePayment.amount);
+    if (linkedInvoice?.totalAmount || linkedInvoice?.amount) return Number(linkedInvoice.totalAmount || linkedInvoice.amount);
+    if (linkedPo?.totalValue || linkedPo?.amount) return Number(linkedPo.totalValue || linkedPo.amount);
+    return 0;
+  }, [resolvedProof, activePayment, linkedInvoice, linkedPo]);
+
+  const displayCurrency = useMemo(() => {
+    return resolvedProof?.currency || activePayment?.currency || linkedInvoice?.currency || linkedPo?.currency || 'INR';
+  }, [resolvedProof, activePayment, linkedInvoice, linkedPo]);
+
+  const displayUtr = useMemo(() => {
+    return resolvedProof?.transactionReference || activePayment?.metadata?.transactionReference || activePayment?.referenceId || null;
+  }, [resolvedProof, activePayment]);
+
+  const displayBankName = useMemo(() => {
+    return resolvedProof?.payerBankName || activePayment?.metadata?.payerBankName || activePayment?.metadata?.bankName || (activePayment?.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'offline' ? `${activePayment.gateway.toUpperCase()} Gateway` : null);
+  }, [resolvedProof, activePayment]);
+
+  const displayAccountLast4 = useMemo(() => {
+    return resolvedProof?.payerAccountLast4 || activePayment?.metadata?.payerAccountLast4 || null;
+  }, [resolvedProof, activePayment]);
+
+  const displayPaymentDate = useMemo(() => {
+    return resolvedProof?.paymentDate || activePayment?.paidAt || activePayment?.completedAt || activePayment?.createdAt || linkedPo?.createdAt || null;
+  }, [resolvedProof, activePayment, linkedPo]);
+
+  const displayMethod = useMemo(() => {
+    return resolvedProof?.method || activePayment?.method || (activePayment?.gateway ? activePayment.gateway.toUpperCase() : null) || 'Direct Bank Remittance';
+  }, [resolvedProof, activePayment]);
+
+  const resolvedPoNumber = useMemo(() => {
+    return activePayment?.purchaseOrder?.poNumber || linkedPo?.poNumber || orderPoNumber || (resolvedProof?.purchaseOrderId ? `PO #${resolvedProof.purchaseOrderId}` : null);
+  }, [activePayment, linkedPo, orderPoNumber, resolvedProof]);
+
+  const resolvedInvoiceNumber = useMemo(() => {
+    return activePayment?.invoice?.invoiceNumber || linkedInvoice?.invoiceNumber || invoiceNumber || (resolvedProof?.invoiceId ? `INV #${resolvedProof.invoiceId}` : null);
+  }, [activePayment, linkedInvoice, invoiceNumber, resolvedProof]);
+
+  const resolvedSellerName = useMemo(() => {
+    return linkedPo?.seller?.organization?.organizationName || linkedPo?.seller?.name || activePayment?.payee?.name || linkedInvoice?.seller?.name || linkedInvoice?.party || sellerName || null;
+  }, [linkedPo, activePayment, linkedInvoice, sellerName]);
+
+  const resolvedBuyerName = useMemo(() => {
+    return linkedPo?.buyer?.organization?.organizationName || linkedPo?.buyer?.name || activePayment?.payer?.name || linkedInvoice?.buyer?.name || buyerName || null;
+  }, [linkedPo, activePayment, linkedInvoice, buyerName]);
 
   if (!isOpen) return null;
 
@@ -418,35 +610,6 @@ export function PaymentReceiptViewModal({
     }
   };
 
-  const resolvedPoNumber =
-    activePayment?.purchaseOrder?.poNumber ||
-    linkedPo?.poNumber ||
-    orderPoNumber ||
-    (resolvedProof?.purchaseOrderId ? `PO #${resolvedProof.purchaseOrderId}` : null);
-
-  const resolvedInvoiceNumber =
-    activePayment?.invoice?.invoiceNumber ||
-    linkedInvoice?.invoiceNumber ||
-    invoiceNumber ||
-    (resolvedProof?.invoiceId ? `INV #${resolvedProof.invoiceId}` : null);
-
-  const resolvedSellerName =
-    activePayment?.payee?.name ||
-    linkedPo?.seller?.name ||
-    linkedPo?.sellerOrganization?.name ||
-    linkedInvoice?.seller?.name ||
-    linkedInvoice?.party ||
-    sellerName ||
-    'Supplier Organization';
-
-  const resolvedBuyerName =
-    activePayment?.payer?.name ||
-    linkedPo?.buyer?.name ||
-    linkedPo?.buyerOrganization?.name ||
-    linkedInvoice?.buyer?.name ||
-    buyerName ||
-    'Procuring Buyer Authority';
-
   const handleOpenPo = () => {
     const poNum = resolvedPoNumber || linkedPo?.id || orderId || activePayment?.purchaseOrderId;
     if (!poNum) return;
@@ -471,13 +634,13 @@ export function PaymentReceiptViewModal({
     window.open(`/api/purchase-orders/${poId}/pdf`, '_blank');
   };
 
-  const status = String(resolvedProof?.status || activePayment?.status || 'UPLOADED').toUpperCase();
+  const rawStatus = String(resolvedProof?.status || activePayment?.status || activePayment?.paymentStatus || 'UPLOADED').toUpperCase();
 
   const isSettledState = Boolean(
     isSettledProp ||
     ['SETTLED', 'COMPLETED', 'ORDER_COMPLETED'].includes(String(linkedPo?.status || linkedPo?.poStatus || '').toUpperCase()) ||
     ['SETTLED', 'PAID'].includes(String(linkedInvoice?.status || linkedInvoice?.invoiceStatus || '').toUpperCase()) ||
-    ['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED'].includes(status)
+    ['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED'].includes(rawStatus)
   );
 
   const handleOpenFile = async () => {
@@ -523,16 +686,16 @@ export function PaymentReceiptViewModal({
     setPreviewingFile(true);
     try {
       const fileTarget = {
-        id: fileId,
-        fileAssetId: fileId,
-        fileUrl: resolvedUrl || undefined,
-        url: resolvedUrl || undefined,
+        id: proof?.receiptFileId || fileId,
+        fileAssetId: proof?.receiptFileId || fileId,
+        fileUrl: proof?.receiptFileUrl || resolvedUrl || undefined,
+        url: proof?.receiptFileUrl || resolvedUrl || undefined,
         mimeType,
         originalName: fileName,
         fileName
       };
 
-      // 1. Prioritize in-app DocumentPreviewModal (guaranteed seamless preview, no popup blocker friction)
+      // 1. Prioritize in-app DocumentPreviewModal
       try {
         const preview = await getFileAssetPreview(fileTarget, fileName);
         if (preview && preview.url) {
@@ -544,7 +707,16 @@ export function PaymentReceiptViewModal({
       }
 
       // 2. Fallback to openFileAsset
-      await openFileAsset(fileTarget, fileName);
+      await openFileAsset(
+        {
+          id: proof?.receiptFileId || fileTarget.id,
+          fileUrl: proof?.receiptFileUrl || fileTarget.fileUrl,
+          mimeType,
+          originalName: fileName,
+          fileName
+        },
+        fileName
+      );
     } catch (err: any) {
       toast.error(err?.message || 'Unable to open payment receipt document');
     } finally {
@@ -553,11 +725,10 @@ export function PaymentReceiptViewModal({
   };
 
   const handlePrintOfficialReceipt = () => {
-
     const ref = activePayment?.referenceId || resolvedProof?.transactionReference || `PAY-REC-${Date.now()}`;
-    const amountVal = resolvedProof?.amount || activePayment?.amount || 0;
-    const currency = resolvedProof?.currency || activePayment?.currency || 'INR';
-    const dateVal = formatDate(resolvedProof?.paymentDate || activePayment?.completedAt || activePayment?.createdAt);
+    const amountVal = displayAmount;
+    const currency = displayCurrency;
+    const dateVal = displayPaymentDate ? formatDate(displayPaymentDate) : '—';
     const tax = activePayment?.metadata?.taxSummary || {};
     const escrow = activePayment?.escrowAccount;
 
@@ -597,7 +768,7 @@ export function PaymentReceiptViewModal({
               <div class="subtitle">System certified audit receipt for reference: <strong>${ref}</strong></div>
             </div>
             <div style="text-align: right;">
-              <div class="status-badge">${status}</div>
+              <div class="status-badge">${rawStatus}</div>
               <div class="label" style="margin-top: 8px;">Settlement Date: ${dateVal}</div>
             </div>
           </div>
@@ -609,40 +780,40 @@ export function PaymentReceiptViewModal({
             </div>
             <div class="box">
               <div class="label">Bank UTR / Transaction Ref</div>
-              <div class="val" style="font-family: monospace;">${resolvedProof?.transactionReference || 'N/A — Digital Remittance'}</div>
+              <div class="val" style="font-family: monospace;">${displayUtr || 'N/A — Reference Not Specified'}</div>
             </div>
             <div class="box">
               <div class="label">Remittance Channel</div>
-              <div class="val">${resolvedProof?.method || activePayment?.gateway || 'Direct Fund Settlement'}</div>
+              <div class="val">${displayMethod}</div>
             </div>
           </div>
 
           <div class="grid-2">
             <div class="box">
               <div class="label">Purchase Order</div>
-              <div class="val">${resolvedPoNumber || '-'}</div>
+              <div class="val">${resolvedPoNumber || '—'}</div>
             </div>
             <div class="box">
               <div class="label">Tax Invoice</div>
-              <div class="val">${resolvedInvoiceNumber || '-'}</div>
+              <div class="val">${resolvedInvoiceNumber || '—'}</div>
             </div>
           </div>
 
           <div class="grid-2">
             <div class="box">
               <div class="label">Payer / Procuring Buyer</div>
-              <div class="val">${resolvedBuyerName}</div>
+              <div class="val">${resolvedBuyerName || '—'}</div>
             </div>
             <div class="box">
               <div class="label">Beneficiary / Supplier</div>
-              <div class="val">${resolvedSellerName}</div>
+              <div class="val">${resolvedSellerName || '—'}</div>
             </div>
           </div>
 
           <div class="amount-box">
             <div class="label" style="color: #1d4ed8;">Total Settlement Amount</div>
             <div class="amount-val">${currency === 'INR' ? '₹' : ''}${Number(amountVal).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${currency}</div>
-            <div style="font-size: 11px; color: #475569; font-weight: 700;">Status: ${status} | Verified via MSME Treasury Core</div>
+            <div style="font-size: 11px; color: #475569; font-weight: 700;">Status: ${rawStatus} | Verified via MSME Treasury Core</div>
           </div>
 
           ${tax.taxableAmount ? `
@@ -700,17 +871,17 @@ export function PaymentReceiptViewModal({
     printHtmlContent(html);
   };
 
-  const timelineEvents = buildPaymentTimeline(activePayment || {
-    createdAt: resolvedProof?.paymentDate,
-    status: resolvedProof?.status,
-    amount: resolvedProof?.amount,
-    gateway: resolvedProof?.method
-  });
+  const timelineEvents = useMemo(() => {
+    return buildPaymentTimeline(activePayment, resolvedProof, linkedPo, linkedInvoice);
+  }, [activePayment, resolvedProof, linkedPo, linkedInvoice]);
 
   const hasAttachedFile = Boolean(
     resolvedProof?.receiptFileUrl ||
     resolvedProof?.receiptFileId ||
-    activePayment?.metadata?.receiptFileUrl
+    proof?.receiptFileUrl ||
+    proof?.receiptFileId ||
+    activePayment?.metadata?.receiptFileUrl ||
+    activePayment?.metadata?.receiptFileId
   );
 
   return (
@@ -744,7 +915,7 @@ export function PaymentReceiptViewModal({
                   <button
                     type="button"
                     onClick={() => handleCopy(activePayment.referenceId, 'ref')}
-                    className="group inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-500 hover:text-slate-900 transition-colors"
+                    className="group inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-500 hover:text-slate-900 transition-colors cursor-pointer"
                     title="Click to copy payment reference"
                   >
                     <span>{activePayment.referenceId}</span>
@@ -778,6 +949,79 @@ export function PaymentReceiptViewModal({
               <span>Print Receipt</span>
             </Button>
 
+            <button
+              type="button"
+              onClick={async () => {
+                if (isRefreshingPayment) return;
+                setIsRefreshingPayment(true);
+                try {
+                  setLinkedPo(null);
+                  setLinkedInvoice(null);
+                  setProof(null);
+                  setFetchedPayment(null);
+                  // Trigger re-fetch by toggling a dummy re-render
+                  setLoading(true);
+                  const targetPaymentIdVal = paymentId || initialPayment?.id;
+                  let currentPayment: any = null;
+                  if (targetPaymentIdVal) {
+                    try {
+                      const payRes = await getApi<any>(`/api/payments/${targetPaymentIdVal}`);
+                      if (payRes?.payment) {
+                        currentPayment = payRes.payment;
+                        setFetchedPayment(payRes.payment);
+                      }
+                    } catch { /* non-blocking */ }
+                  }
+                  const targetOrderIdVal = orderId || currentPayment?.purchaseOrderId || currentPayment?.purchaseOrder?.id;
+                  if (targetOrderIdVal) {
+                    try {
+                      const poRes = await getApi<any>(`/api/purchase-orders/${targetOrderIdVal}`);
+                      const poData = poRes?.data || poRes;
+                      if (poData) {
+                        setLinkedPo(poData);
+                        if (!currentPayment && Array.isArray(poData.payments) && poData.payments.length > 0) {
+                          const matched = poData.payments.find((p: any) =>
+                            ['success', 'escrow_released', 'offline_proof_verified', 'offline_proof_uploaded'].includes(String(p.status).toLowerCase())
+                          ) || poData.payments[0];
+                          if (matched) {
+                            currentPayment = matched;
+                            setFetchedPayment(matched);
+                          }
+                        }
+                      }
+                    } catch { /* non-blocking */ }
+                  }
+                  const targetInvIdVal = invoiceId || currentPayment?.invoiceId || currentPayment?.invoice?.id;
+                  if (targetInvIdVal) {
+                    try {
+                      const invRes = await getApi<any>(`/api/invoices/${targetInvIdVal}`);
+                      const invData = invRes?.data || invRes;
+                      if (invData) setLinkedInvoice(invData);
+                    } catch { /* non-blocking */ }
+                  }
+                  if (targetOrderIdVal) {
+                    try {
+                      const res = await getApi<any>(`/api/payments/${targetOrderIdVal}/offline-proof`);
+                      const pd = res?.proof || (res?.proofs || [])[0];
+                      if (pd) setProof(pd);
+                    } catch { /* non-blocking */ }
+                  }
+                  setLoading(false);
+                  toast.success('Payment details refreshed');
+                } catch {
+                  toast.error('Failed to refresh payment details');
+                  setLoading(false);
+                } finally {
+                  setIsRefreshingPayment(false);
+                }
+              }}
+              disabled={isRefreshingPayment || loading}
+              aria-label="Refresh payment details"
+              title="Refresh payment details"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-800 transition cursor-pointer shrink-0 border border-transparent hover:border-slate-200"
+            >
+              <RefreshCw className={cn("h-4 w-4", (isRefreshingPayment || loading) && "animate-spin text-[#12335f]")} aria-hidden="true" />
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -821,6 +1065,11 @@ export function PaymentReceiptViewModal({
           >
             <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
             <span>Timeline</span>
+            {timelineEvents.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-blue-100 text-blue-800">
+                {timelineEvents.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -842,7 +1091,7 @@ export function PaymentReceiptViewModal({
                   </h3>
                 </div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  Audit Log
+                  Audit Log ({timelineEvents.length} Milestones)
                 </span>
               </div>
 
@@ -850,18 +1099,45 @@ export function PaymentReceiptViewModal({
                 <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-200">
                   {timelineEvents.map((evt, idx) => (
                     <div key={idx} className="relative flex items-start gap-3.5 group">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#12335f] text-white shrink-0 ring-4 ring-white shadow-2xs z-10">
-                        <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      <div className={cn(
+                        "flex h-7 w-7 items-center justify-center rounded-full text-white shrink-0 ring-4 ring-white shadow-2xs z-10",
+                        evt.type === 'verified' ? "bg-emerald-600" :
+                        evt.type === 'rejected' ? "bg-rose-600" :
+                        evt.type === 'escrow' ? "bg-indigo-600" :
+                        evt.type === 'transfer' ? "bg-blue-600" :
+                        "bg-[#12335f]"
+                      )}>
+                        {evt.type === 'verified' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : evt.type === 'rejected' ? (
+                          <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : evt.type === 'transfer' ? (
+                          <CreditCard className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : evt.type === 'escrow' ? (
+                          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
                       </div>
-                      <div className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-2xs">
+                      <div className="flex-1 rounded-xl border border-slate-200 bg-slate-50/70 p-3 shadow-2xs hover:bg-slate-50 transition-colors">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                          <p className="text-xs font-black text-slate-900">{evt.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-slate-900">{evt.title}</p>
+                            {evt.statusBadge && (
+                              <span className={cn(
+                                "px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider",
+                                evt.statusBadge === 'Verified' ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+                              )}>
+                                {evt.statusBadge}
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[10px] font-bold uppercase text-slate-500">
                             {formatDate(evt.timestamp)}
                           </span>
                         </div>
                         {evt.detail && (
-                          <p className="text-[11px] text-slate-600 mt-1 font-medium">{evt.detail}</p>
+                          <p className="text-[11px] text-slate-600 mt-1 font-medium leading-relaxed">{evt.detail}</p>
                         )}
                       </div>
                     </div>
@@ -885,20 +1161,20 @@ export function PaymentReceiptViewModal({
                     </span>
                     <div className="flex items-baseline gap-2">
                       <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                        {formatCurrency(resolvedProof?.amount || activePayment?.amount || 0)}
+                        {formatCurrency(displayAmount)}
                       </span>
                       <span className="text-xs font-bold text-slate-500">
-                        ({resolvedProof?.currency || activePayment?.currency || 'INR'})
+                        ({displayCurrency})
                       </span>
                     </div>
                     <div className="flex items-center gap-2 pt-0.5 flex-wrap">
                       <span className="inline-flex items-center gap-1 rounded-md bg-white/90 border border-slate-200 px-2 py-0.5 text-[10.5px] font-bold text-slate-700 shadow-2xs">
                         <CreditCard className="h-3 w-3 text-blue-600" aria-hidden="true" />
-                        {resolvedProof?.method || activePayment?.gateway || 'Bank Transfer / Remittance'}
+                        {displayMethod}
                       </span>
-                      {(resolvedProof?.paymentDate || activePayment?.completedAt || activePayment?.createdAt) && (
+                      {displayPaymentDate && (
                         <span className="text-[11px] font-medium text-slate-500">
-                          on {formatDate(resolvedProof?.paymentDate || activePayment?.completedAt || activePayment?.createdAt)}
+                          on {formatDate(displayPaymentDate)}
                         </span>
                       )}
                     </div>
@@ -909,39 +1185,39 @@ export function PaymentReceiptViewModal({
                     <span
                       className={cn(
                         "inline-flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-black uppercase tracking-wider shadow-2xs",
-                        isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
+                        isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED'
                           ? "bg-emerald-600 text-white border border-emerald-700 shadow-emerald-600/20"
-                          : status === 'REJECTED' || status === 'FAILED'
+                          : rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED'
                           ? "bg-rose-600 text-white border border-rose-700 shadow-rose-600/20"
-                          : status === 'REFUNDED'
+                          : rawStatus === 'REFUNDED'
                           ? "bg-indigo-600 text-white border border-indigo-700 shadow-indigo-600/20"
                           : "bg-amber-500 text-white border border-amber-600 shadow-amber-500/20"
                       )}
                     >
-                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED' ? (
+                      {isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED' ? (
                         <ShieldCheck className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
-                      ) : status === 'REJECTED' || status === 'FAILED' ? (
+                      ) : rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED' ? (
                         <XCircle className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
-                      ) : status === 'REFUNDED' ? (
+                      ) : rawStatus === 'REFUNDED' ? (
                         <RotateCcw className="h-4 w-4 stroke-[2.5]" aria-hidden="true" />
                       ) : (
                         <Clock className="h-4 w-4 stroke-[2.5] animate-pulse" aria-hidden="true" />
                       )}
-                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
+                      {isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED'
                         ? 'Settlement Verified'
-                        : status === 'REJECTED' || status === 'FAILED'
+                        : rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED'
                         ? 'Proof Rejected'
-                        : status === 'REFUNDED'
+                        : rawStatus === 'REFUNDED'
                         ? 'Payment Refunded'
                         : 'Under Verification'}
                     </span>
 
                     <span className="text-[10px] font-semibold text-slate-500">
-                      {isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED'
+                      {isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED'
                         ? 'Funds confirmed & ledger updated'
-                        : status === 'REJECTED' || status === 'FAILED'
+                        : rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED'
                         ? 'Proof rejected or remittance failed'
-                        : status === 'REFUNDED'
+                        : rawStatus === 'REFUNDED'
                         ? 'Transferred back to payer account'
                         : 'Awaiting auditor verification'}
                     </span>
@@ -950,7 +1226,7 @@ export function PaymentReceiptViewModal({
               </div>
 
               {/* 2. Rejection Reason Alert (if applicable) */}
-              {(status === 'REJECTED' || status === 'FAILED') && (resolvedProof?.rejectionReason || activePayment?.metadata?.rejectionReason) && (
+              {(rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED') && (resolvedProof?.rejectionReason || activePayment?.metadata?.rejectionReason) && (
                 <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-4 text-xs text-rose-950 shadow-2xs flex items-start gap-3">
                   <ShieldAlert className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="space-y-0.5 min-w-0">
@@ -986,13 +1262,13 @@ export function PaymentReceiptViewModal({
                         Bank UTR / Transaction Reference Number
                       </span>
                       <p className="font-mono text-sm sm:text-base font-black text-[#12335f] mt-0.5 truncate select-all">
-                        {resolvedProof?.transactionReference || activePayment?.referenceId || 'N/A — Reference Not Specified'}
+                        {displayUtr || 'N/A — Reference Not Specified'}
                       </p>
                     </div>
-                    {(resolvedProof?.transactionReference || activePayment?.referenceId) && (
+                    {displayUtr && (
                       <button
                         type="button"
-                        onClick={() => handleCopy(resolvedProof?.transactionReference || activePayment?.referenceId, 'utr')}
+                        onClick={() => handleCopy(displayUtr, 'utr')}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-900 hover:bg-blue-50 transition-colors shadow-2xs cursor-pointer shrink-0"
                         title="Copy UTR to Clipboard"
                       >
@@ -1017,7 +1293,7 @@ export function PaymentReceiptViewModal({
                       Payer Remitting Bank
                     </span>
                     <p className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                      {resolvedProof?.payerBankName || (activePayment?.gateway === 'bank_transfer' ? 'State Bank of India / Scheduled Bank' : `${activePayment?.gateway || 'Commercial Bank'} Gateway`)}
+                      {displayBankName || '—'}
                     </p>
                   </div>
 
@@ -1027,7 +1303,7 @@ export function PaymentReceiptViewModal({
                       Payer Account (Masked)
                     </span>
                     <p className="font-mono font-bold text-xs sm:text-sm text-slate-900 truncate">
-                      {resolvedProof?.payerAccountLast4 ? `•••• •••• •••• ${resolvedProof.payerAccountLast4}` : 'Verified Corporate Treasury Account'}
+                      {displayAccountLast4 ? `•••• •••• •••• ${displayAccountLast4}` : '—'}
                     </p>
                   </div>
 
@@ -1037,7 +1313,7 @@ export function PaymentReceiptViewModal({
                       Remittance Execution Date
                     </span>
                     <p className="font-bold text-xs text-slate-900">
-                      {resolvedProof?.paymentDate ? formatDate(resolvedProof.paymentDate) : formatDate(activePayment?.completedAt || activePayment?.createdAt)}
+                      {displayPaymentDate ? formatDate(displayPaymentDate) : '—'}
                     </p>
                   </div>
 
@@ -1047,7 +1323,7 @@ export function PaymentReceiptViewModal({
                       Remittance Channel
                     </span>
                     <p className="font-bold text-xs text-slate-900">
-                      {resolvedProof?.method || activePayment?.method || 'Electronic Fund Transfer (NEFT/RTGS)'}
+                      {displayMethod}
                     </p>
                   </div>
                 </div>
@@ -1074,8 +1350,8 @@ export function PaymentReceiptViewModal({
                         <FileText className="h-5 w-5" aria-hidden="true" />
                       </div>
                       <div className="min-w-0 space-y-0.5">
-                        <p className="text-xs font-bold text-slate-900 truncate" title={resolvedProof?.receiptFileName || 'Official_Payment_Slip'}>
-                          {resolvedProof?.receiptFileName || 'Official_Payment_Slip'}
+                        <p className="text-xs font-bold text-slate-900 truncate" title={resolvedProof?.receiptFileName || proof?.receiptFileName || 'Official_Payment_Slip'}>
+                          {resolvedProof?.receiptFileName || proof?.receiptFileName || 'Official_Payment_Slip'}
                         </p>
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                           Official Bank Slip / Payment Proof Document
@@ -1098,7 +1374,7 @@ export function PaymentReceiptViewModal({
                                 fileUrl: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl,
                                 url: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl
                               },
-                              resolvedProof?.receiptFileName || 'Official_Payment_Slip'
+                              resolvedProof?.receiptFileName || proof?.receiptFileName || 'Official_Payment_Slip'
                             );
                           }
                         }}
@@ -1112,7 +1388,7 @@ export function PaymentReceiptViewModal({
                                 fileUrl: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl,
                                 url: resolvedProof?.receiptFileUrl || proof?.receiptFileUrl
                               },
-                              resolvedProof?.receiptFileName || 'Official_Payment_Slip'
+                              resolvedProof?.receiptFileName || proof?.receiptFileName || 'Official_Payment_Slip'
                             );
                           }
                         }}
@@ -1131,12 +1407,12 @@ export function PaymentReceiptViewModal({
                   <div className="rounded-xl border border-dashed border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/40">
                     <div className="space-y-1 text-center sm:text-left">
                       <p className="text-xs font-bold text-slate-700">
-                        {activePayment?.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'bank_transfer'
+                        {activePayment?.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'offline'
                           ? 'Digital Gateway Settlement Record'
                           : 'No Electronic Bank Slip Uploaded'}
                       </p>
                       <p className="text-[11px] text-slate-500">
-                        {activePayment?.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'bank_transfer'
+                        {activePayment?.gateway && activePayment.gateway !== 'manual' && activePayment.gateway !== 'offline'
                           ? 'Verified electronically via payment gateway clearance. Physical slip is not required.'
                           : 'A bank transfer slip or payment advice can be attached for auditing.'}
                       </p>
@@ -1193,7 +1469,7 @@ export function PaymentReceiptViewModal({
                       )}
                     </div>
                     <p className="text-xs sm:text-sm font-black text-slate-900 truncate">
-                      {resolvedPoNumber || 'PO Not Specified'}
+                      {resolvedPoNumber || '—'}
                     </p>
                     {linkedPo?.title && (
                       <p className="text-[11px] font-medium text-slate-500 truncate" title={linkedPo.title}>
@@ -1232,11 +1508,11 @@ export function PaymentReceiptViewModal({
                       )}
                     </div>
                     <p className="text-xs sm:text-sm font-black text-slate-900 truncate">
-                      {resolvedInvoiceNumber || 'Direct PO Settlement'}
+                      {resolvedInvoiceNumber || '—'}
                     </p>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
-                        {linkedInvoice?.status || activePayment?.invoice?.status || 'Tax Invoice Record'}
+                        {linkedInvoice?.status || activePayment?.invoice?.status || 'Tax Invoice'}
                       </span>
                     </div>
                   </div>
@@ -1247,8 +1523,8 @@ export function PaymentReceiptViewModal({
                       <User className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
                       <span>Payer / Procuring Buyer</span>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 truncate" title={resolvedBuyerName}>
-                      {resolvedBuyerName}
+                    <p className="text-xs font-bold text-slate-900 truncate" title={resolvedBuyerName || '—'}>
+                      {resolvedBuyerName || '—'}
                     </p>
                     {activePayment?.payer?.email && (
                       <p className="text-[10.5px] text-slate-500 truncate">{activePayment.payer.email}</p>
@@ -1261,8 +1537,8 @@ export function PaymentReceiptViewModal({
                       <Building2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
                       <span>Beneficiary / Supplier</span>
                     </div>
-                    <p className="text-xs font-bold text-slate-900 truncate" title={resolvedSellerName}>
-                      {resolvedSellerName}
+                    <p className="text-xs font-bold text-slate-900 truncate" title={resolvedSellerName || '—'}>
+                      {resolvedSellerName || '—'}
                     </p>
                     {activePayment?.payee?.email && (
                       <p className="text-[10.5px] text-slate-500 truncate">{activePayment.payee.email}</p>
@@ -1272,13 +1548,13 @@ export function PaymentReceiptViewModal({
               </div>
 
               {/* 6. Remarks / Notes */}
-              {resolvedProof?.remarks && (
+              {(resolvedProof?.remarks || activePayment?.metadata?.remarks) && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-1.5 shadow-2xs">
                   <span className="text-[9.5px] font-black uppercase tracking-widest text-slate-400 block">
                     Payer Cover Note &amp; Audit Remarks
                   </span>
                   <p className="text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
-                    {resolvedProof.remarks}
+                    {resolvedProof?.remarks || activePayment?.metadata?.remarks}
                   </p>
                 </div>
               )}
@@ -1337,17 +1613,17 @@ export function PaymentReceiptViewModal({
                 <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-hidden="true" />
                 Checking settlement status...
               </span>
-            ) : isSettledState || status === 'VERIFIED' || status === 'SUCCESS' || status === 'ESCROW_RELEASED' || status === 'OFFLINE_PROOF_VERIFIED' || status === 'SETTLED' ? (
+            ) : isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED' ? (
               <span className="text-xs font-bold text-emerald-800 flex items-center gap-1.5">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
                 Verified &amp; Settled
               </span>
-            ) : status === 'REJECTED' || status === 'FAILED' ? (
+            ) : rawStatus === 'REJECTED' || rawStatus === 'FAILED' || rawStatus === 'OFFLINE_PROOF_REJECTED' ? (
               <span className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
                 <XCircle className="h-4 w-4 text-rose-600" aria-hidden="true" />
                 Proof Rejected
               </span>
-            ) : status === 'REFUNDED' ? (
+            ) : rawStatus === 'REFUNDED' ? (
               <span className="text-xs font-bold text-indigo-800 flex items-center gap-1.5">
                 <RotateCcw className="h-4 w-4 text-indigo-600" aria-hidden="true" />
                 Payment Refunded
@@ -1362,7 +1638,7 @@ export function PaymentReceiptViewModal({
 
           <div className="flex items-center gap-2.5">
             {/* Seller Verification Buttons (Admin is strictly View-Only) */}
-            {!loading && !isSettledState && isSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED', 'REJECTED', 'FAILED', 'REFUNDED'].includes(status) && !showRejectBox && activeTab === 'receipt' && (
+            {!loading && !isSettledState && isSeller && !['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED', 'REJECTED', 'FAILED', 'REFUNDED', 'OFFLINE_PROOF_REJECTED'].includes(rawStatus) && !showRejectBox && activeTab === 'receipt' && (
               <>
                 <Button
                   type="button"

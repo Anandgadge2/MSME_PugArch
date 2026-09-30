@@ -13,7 +13,7 @@ import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
 
 export interface CancelTargetProcurement {
-  id: number;
+  id: number | string;
   type: string;
   title: string;
   referenceNumber: string;
@@ -27,7 +27,7 @@ interface CancelProcurementModalProps {
   isOpen: boolean;
   onClose: () => void;
   procurement: CancelTargetProcurement | null;
-  onConfirm: (params: { type: string; id: number; reason: string; remarks?: string }) => Promise<void>;
+  onConfirm: (params: { type: string; id: number | string; reason: string; remarks?: string }) => Promise<void>;
 }
 
 const STANDARD_CANCELLATION_REASONS = [
@@ -135,11 +135,20 @@ export function CancelProcurementModal({
       return;
     }
 
+    const targetId = (procurement.id !== undefined && procurement.id !== null && !Number.isNaN(procurement.id) && procurement.id !== '' && procurement.id !== 0)
+      ? procurement.id
+      : (procurement.referenceNumber || undefined);
+
+    if (!targetId) {
+      setError('Unable to identify this procurement record. Please refresh the page and try again.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       await onConfirm({
         type: procurement.type,
-        id: procurement.id,
+        id: targetId,
         reason: effectiveReason,
         remarks: remarks.trim() || undefined,
       });

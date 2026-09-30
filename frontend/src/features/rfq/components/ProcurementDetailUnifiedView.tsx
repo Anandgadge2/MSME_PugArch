@@ -56,6 +56,7 @@ import {
   Zap,
   SlidersHorizontal,
   Repeat,
+  RefreshCw,
 } from "lucide-react";
 import { IssueCallOffModal } from "../../rateContract/components/IssueCallOffModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -4447,6 +4448,7 @@ export function ProcurementDetailUnifiedView(
   const [selectedInvoiceModalData, setSelectedInvoiceModalData] = useState<any | null>(null);
   const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const [isDownloadingQuotationPdf, setIsDownloadingQuotationPdf] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -8476,6 +8478,245 @@ export function ProcurementDetailUnifiedView(
     }
   };
 
+  const handleDownloadSubmittedQuotationPdf = async () => {
+    let targetPart = effectiveMyParticipation;
+    if (!targetPart) {
+      targetPart =
+        submittedParticipations.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        allParticipationsList.find(
+          (p: any) =>
+            (currentUserId &&
+              String(
+                p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
+              ) === currentUserId) ||
+            (currentOrgId &&
+              String(
+                p.sellerOrganizationId ||
+                  p.sellerOrganization?.id ||
+                  p.seller?.organizationId ||
+                  p.sellerOrgId,
+              ) === currentOrgId),
+        ) ||
+        (submittedParticipations.length === 1 && !isBuyerOrAdmin
+          ? submittedParticipations[0]
+          : null) ||
+        {
+          id: `my-quote-${targetId}`,
+          sellerOrgName:
+            currentUser?.organization?.organizationName ||
+            currentUser?.organization?.name ||
+            currentUser?.companyName ||
+            currentUser?.name ||
+            "My Quoting Organization",
+          sellerName: currentUser?.name || "Authorized Representative",
+          sellerEmail: currentUser?.email || "N/A",
+          sellerPhone: currentUser?.mobile || currentUser?.phone || "N/A",
+          submissionStatus: "SUBMITTED",
+          status: "SUBMITTED",
+          quotedAmount: Number(props.rawBid?.quotedAmount || props.rawBid?.totalAmount || 0),
+          totalAmount: Number(props.rawBid?.totalAmount || props.rawBid?.quotedAmount || 0),
+          lineItems: props.rawBid?.lineItems || props.items || [],
+          documents: props.rawBid?.documents || [],
+          submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
+          deliveryTimeline: props.rawBid?.deliveryTimeline || "—",
+          paymentTerms: props.rawBid?.paymentTerms || "—",
+        };
+    }
+
+    if (!targetPart) {
+      toast.error("Submitted quotation details not found.");
+      return;
+    }
+
+    setIsDownloadingQuotationPdf(true);
+    const toastId = toast.loading("Generating submitted quotation PDF...");
+    try {
+      const details = extractQuotationDetails(targetPart);
+      const {
+        sellerOrg,
+        contactPerson,
+        email,
+        phone,
+        quotedAmount: rawQuotedAmount,
+        gstPercentage,
+        offeredQty,
+        deliveryTimeline,
+        paymentTerms,
+        makeBrand,
+        model,
+        statusStr,
+        submittedAt,
+        lineItems,
+        message,
+      } = details;
+
+      const calculatedTotal = lineItems.reduce((acc: number, it: any) => {
+        const uPrice = Number(
+          it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
+        );
+        const q = Number(it.quantity ?? it.qty ?? 1);
+        const gst = Number(
+          it.gstPercent ??
+            it.gstPercentage ??
+            it.gstRate ??
+            it.gst ??
+            gstPercentage ??
+            18,
+        );
+        const lineTot =
+          it.lineTotal != null ||
+          it.totalAmount != null ||
+          it.totalPrice != null
+            ? Number(it.lineTotal ?? it.totalAmount ?? it.totalPrice)
+            : uPrice * q * (1 + gst / 100);
+        return acc + (isNaN(lineTot) ? 0 : lineTot);
+      }, 0);
+
+      const quotedAmount = rawQuotedAmount > 0 ? rawQuotedAmount : calculatedTotal;
+      const effectiveTotalAmount = quotedAmount;
+
+      const supplierReg =
+        (targetPart.supplier?.registrationDetails as Record<string, any>) ||
+        (targetPart.seller?.registrationDetails as Record<string, any>) ||
+        (currentUser?.organization?.registrationDetails as Record<string, any>) ||
+        {};
+      const supplierLogo =
+        targetPart.supplier?.organization?.profile?.logoUrl ||
+        targetPart.seller?.organization?.profile?.logoUrl ||
+        supplierReg.logoUrl ||
+        currentUser?.organization?.profile?.logoUrl ||
+        targetPart.supplier?.organization?.logoFile?.url ||
+        targetPart.supplier?.organization?.logoFile?.fileUrl ||
+        (targetPart.supplier?.organization?.organizationLogoFileId
+          ? `/api/files/${targetPart.supplier.organization.organizationLogoFileId}/view`
+          : null);
+
+      const supplierSig = supplierReg.signatureUrl || null;
+      const supplierStamp = supplierReg.stampUrl || null;
+
+      const engine = new PdfEngine("p");
+      const hasLineItems = lineItems.length > 0;
+      const doc = await engine.generate({
+        documentTitle: "SUPPLIER QUOTATION RESPONSE",
+        documentNumber: `QUOTE-${targetId}`,
+        dateStr: formatDate(submittedAt || new Date()),
+        status: statusStr || "SUBMITTED",
+        issuerName: sellerOrg,
+        issuerSubtitle: "Supplier Official Quotation Response",
+        issuerLogo: supplierLogo,
+        sellerSignatureUrl: supplierSig,
+        sellerStampUrl: supplierStamp,
+        parties: [
+          {
+            title: "BUYER ORGANIZATION",
+            name: props.title || props.subject || buyerOrgName || "Procurement Buyer",
+            details: [`Procurement ID: ${targetId}`],
+          },
+          {
+            title: "SUPPLIER / QUOTING ORGANIZATION",
+            name: sellerOrg,
+            email: email !== "N/A" ? email : "N/A",
+            phone: phone !== "N/A" ? phone : "N/A",
+            details: [
+              `Contact Person: ${contactPerson !== "N/A" ? contactPerson : "Authorized Representative"}`,
+              `Submitted Date: ${formatDateTime(submittedAt)}`,
+            ],
+          },
+        ],
+        infoGrid: {
+          "Make / Brand": makeBrand,
+          "Model / Specs": model,
+          "Delivery Timeline": deliveryTimeline,
+          "Payment Terms": paymentTerms,
+          "Offered Quantity": String(offeredQty),
+        },
+        tableHeaders: hasLineItems
+          ? [
+              "#",
+              "Item Description",
+              "Make / Brand",
+              "Qty",
+              "Unit Price",
+              "GST %",
+              "Line Total",
+            ]
+          : ["#", "Offered Item Description", "Offered Qty", "Quoted Value"],
+        tableData: hasLineItems
+          ? lineItems.map((item: any, idx: number) => {
+              const uPrice = Number(
+                item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
+              );
+              const q = Number(item.quantity ?? item.qty ?? 1);
+              const gst = Number(
+                item.gstPercent ??
+                  item.gstPercentage ??
+                  item.gstRate ??
+                  item.gst ??
+                  gstPercentage ??
+                  18,
+              );
+              const tot =
+                item.lineTotal != null ||
+                item.totalAmount != null ||
+                item.totalPrice != null
+                  ? Number(item.lineTotal ?? item.totalAmount ?? item.totalPrice)
+                  : uPrice * q * (1 + gst / 100);
+              return [
+                String(idx + 1),
+                item.itemName ||
+                  item.name ||
+                  item.description ||
+                  `Item #${idx + 1}`,
+                item.makeBrand || item.brand || "—",
+                `${q} ${item.unitOfMeasure || item.unit || "Nos"}`,
+                moneyPdf(uPrice),
+                `${gst}%`,
+                moneyPdf(tot),
+              ];
+            })
+          : [
+              [
+                "1",
+                message || "Procurement item quotation",
+                String(offeredQty),
+                effectiveTotalAmount > 0
+                  ? moneyPdf(effectiveTotalAmount)
+                  : "As Quoted",
+              ],
+            ],
+        financials: {
+          grandTotal: effectiveTotalAmount,
+        },
+        terms: message ? [`Supplier Remarks: ${message}`] : [],
+        footerNote:
+          "MSME Enterprise Procurement Portal — Official Quotation Record",
+      });
+
+      doc.save(
+        `Quotation_${sellerOrg.replace(/[^a-zA-Z0-9]/g, "_")}_${targetId}.pdf`,
+      );
+      toast.success("Submitted Quotation PDF downloaded successfully!", { id: toastId });
+    } catch (err: any) {
+      console.error("Quotation PDF generation error:", err);
+      toast.error("Failed to generate Quotation PDF", { id: toastId });
+    } finally {
+      setIsDownloadingQuotationPdf(false);
+    }
+  };
+
   const isPreBidConfigured = Boolean(
     preBidDateFormatted ||
     schedule.preBidMeeting === true ||
@@ -8536,6 +8777,29 @@ export function ProcurementDetailUnifiedView(
                 </span>
               </button>
             </nav>
+            <button
+              type="button"
+              onClick={async () => {
+                const toastId = toast.loading('Refreshing procurement details…');
+                try {
+                  await Promise.allSettled([
+                    queryClient.refetchQueries({ queryKey: ['procurement-active-order'] }),
+                    queryClient.refetchQueries({ queryKey: ['rfq-detail-bid'] }),
+                    queryClient.refetchQueries({ queryKey: ['bid-dispatcher-meta'] }),
+                    deliveryQuery.refetch(),
+                  ]);
+                  toast.success('Details refreshed', { id: toastId });
+                } catch {
+                  toast.error('Failed to refresh', { id: toastId });
+                }
+              }}
+              title="Refresh procurement details"
+              aria-label="Refresh procurement details"
+              className="h-7 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors cursor-pointer"
+            >
+              <RefreshCw className="h-3 w-3 text-slate-400" aria-hidden="true" />
+              <span>Refresh</span>
+            </button>
           </div>
 
           {/* Unified 5-Stage Procurement Lifecycle Progression Bar */}
@@ -8594,6 +8858,7 @@ export function ProcurementDetailUnifiedView(
               }
             }}
             fulfillmentPhase={fulfillmentPhase}
+            deliveryId={delivery?.id || effectiveActiveOrder?.deliveryId || effectiveActiveOrder?.deliveries?.[0]?.id || null}
             onOpenPackDialog={handleOpenPackDialog}
             onOpenDispatchDialog={handleOpenDispatchDialog}
             onOpenGrnCreate={() => setIsGrnCreateOpen(true)}
@@ -10393,48 +10658,35 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label="Jump to your submitted quotation on page"
-                    onClick={() => {
-                      if (
-                        isReverseAuctionType &&
-                        !isBiddingClosed &&
-                        props.onSubmitClick
-                      ) {
-                        props.onSubmitClick();
-                      } else {
-                        setActiveTab("clarifications");
-                        setTimeout(() => {
-                          const targetEl =
-                            document.getElementById("my-submitted-quotation-card") ||
-                            document.getElementById("tabpanel-clarifications") ||
-                            document.getElementById("tabs-navigation-section");
-                          if (targetEl) {
-                            targetEl.scrollIntoView({
-                              behavior: "smooth",
-                              block: "center",
-                            });
-                          }
-                        }, 50);
-                      }
-                    }}
-                    className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                    disabled={isDownloadingQuotationPdf}
+                    aria-label="Download your submitted quotation PDF"
+                    onClick={handleDownloadSubmittedQuotationPdf}
+                    className="h-8 px-3 text-xs font-semibold rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <FileText
-                      className="h-3.5 w-3.5 text-blue-600"
-                      aria-hidden="true"
-                    />
+                    {isDownloadingQuotationPdf ? (
+                      <Loader2
+                        className="h-3.5 w-3.5 animate-spin text-blue-600"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <FileText
+                        className="h-3.5 w-3.5 text-blue-600"
+                        aria-hidden="true"
+                      />
+                    )}
                     <span>
-                      {isRfqType
-                        ? "Quotation Submitted"
-                        : isRateContractType
-                          ? "Rate Proposal Submitted"
-                          : isReverseAuctionType
-                            ? isBiddingClosed
-                              ? "View Auction Results"
-                              : "Live Bid Console"
-                            : "Proposal Submitted"}
+                      {isDownloadingQuotationPdf
+                        ? "Downloading..."
+                        : isRfqType
+                          ? "View Submitted Quotation"
+                          : isRateContractType
+                            ? "View Submitted Rate Proposal"
+                            : isReverseAuctionType
+                              ? isBiddingClosed
+                                ? "View Auction Results"
+                                : "View Submitted Bid"
+                              : "View Submitted Proposal"}
                     </span>
-                    <ChevronDown className="h-3 w-3 text-slate-400" />
                   </Button>
                 )}
                 {!isBuyerOrAdmin &&
@@ -12552,32 +12804,6 @@ export function ProcurementDetailUnifiedView(
                               ? `Submitted on ${formatDateTime(effectiveMyParticipation.submittedAt || effectiveMyParticipation.createdAt)}`
                               : "Quotation officially received on portal"}
                           </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={handleOpenMyQuotationModal}
-                            className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                            <span>View Full Quotation</span>
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (props.onDownloadClick)
-                                props.onDownloadClick();
-                              else handleDefaultPdfDownload();
-                            }}
-                            className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                            <span>Download PDF</span>
-                          </Button>
                         </div>
                       </div>
 

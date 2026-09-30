@@ -118,10 +118,10 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   let requestId = explicitRequestId;
 
   if (!requirementId && !requestId && rawIdParam) {
-    if (rawIdParam.startsWith('req-')) {
-      requirementId = rawIdParam.replace('req-', '');
-    } else if (rawIdParam.startsWith('bid-') || rawIdParam.startsWith('qr-') || rawIdParam.startsWith('rc-')) {
-      requestId = rawIdParam.replace(/^(bid|qr|rc)-/, '');
+    if (rawIdParam.toLowerCase().startsWith('req-')) {
+      requirementId = rawIdParam.replace(/^req-/i, '');
+    } else if (rawIdParam.toLowerCase().startsWith('bid-') || rawIdParam.toLowerCase().startsWith('qr-') || rawIdParam.toLowerCase().startsWith('rc-')) {
+      requestId = rawIdParam;
     } else {
       requirementId = rawIdParam;
       requestId = rawIdParam;
@@ -905,10 +905,10 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: Number(rcData.id || requirementId || requestId),
-            type: requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
+            id: contractData?.id || bidData?.id || reqData?.id || (typeof rcData?.id === 'number' ? rcData.id : (!isNaN(Number(rcData?.id)) ? Number(rcData.id) : 0)) || contractNumber || String(rcData?.id || activeRcId),
+            type: contractData ? 'rate_contract' : (bidData?.sourceModel === 'REQUIREMENT' || reqData ? 'requirement' : (bidData ? 'bid_tender' : 'rate_contract')),
             title: subject,
-            referenceNumber: contractNumber || String(rcData.id),
+            referenceNumber: contractNumber || String(rcData?.id || activeRcId),
             typeLabel: 'Rate Contract',
             status: statusUpper,
           }}

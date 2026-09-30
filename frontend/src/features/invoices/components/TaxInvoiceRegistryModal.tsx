@@ -27,6 +27,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { TaxInvoiceCard } from './TaxInvoiceCard';
 import { SignatureStampUploadModal } from './SignatureStampUploadModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
+import { canDisburseInvoicePayment } from '../../shared/procurementLifecycleUtils';
 
 export interface TaxInvoiceRegistryModalProps {
   isOpen: boolean;
@@ -53,6 +54,48 @@ export function TaxInvoiceRegistryModal({
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [connectedDeliveryId, setConnectedDeliveryId] = useState<number | string | null>(null);
+  const [connectedGrnId, setConnectedGrnId] = useState<number | string | null>(null);
+
+  // Refresh invoice data handler
+  const handleRefreshInvoice = async () => {
+    const effectiveId = invoiceId || initialInvoiceData?.id || invoice?.id;
+    if (!effectiveId || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      const data = await getApi<any>(`/api/invoices/${effectiveId}`, true);
+      if (data) {
+        setInvoice(prev => ({
+          ...(prev || {}),
+          ...data,
+          purchaseOrder: data.purchaseOrder || prev?.purchaseOrder,
+          seller: data.seller || prev?.seller,
+          buyer: data.buyer || prev?.buyer
+        }));
+      }
+      const effPoId = data?.purchaseOrderId || data?.purchaseOrder?.id || invoice?.purchaseOrderId || invoice?.purchaseOrder?.id;
+      if (effPoId) {
+        const [delRes, grnRes]: any = await Promise.allSettled([
+          getApi<any>(`/api/delivery/by-purchase-order/${effPoId}`, true),
+          getApi<any>(`/api/grn/po/${effPoId}/eligibility`, true)
+        ]);
+        if (delRes?.status === 'fulfilled') {
+          const d = delRes.value?.data || delRes.value;
+          if (d?.id) setConnectedDeliveryId(d.id);
+        }
+        if (grnRes?.status === 'fulfilled') {
+          const list = grnRes.value?.existing || grnRes.value?.data?.existing || [];
+          if (list?.[0]?.id) setConnectedGrnId(list[0].id);
+        }
+      }
+      toast.success('Tax invoice details refreshed successfully');
+    } catch {
+      toast.error('Failed to refresh tax invoice details');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Approve invoice handler
   const handleApproveInvoice = async () => {
@@ -161,6 +204,49 @@ export function TaxInvoiceRegistryModal({
       isMounted = false;
     };
   }, [isOpen, invoiceId, initialInvoiceData]);
+
+  // Synchronize and detect connected delivery and GRN records
+  useEffect(() => {
+    if (!invoice) return;
+    const directDelId =
+      invoice.deliveryId ||
+      (invoice as any).delivery?.id ||
+      invoice.purchaseOrder?.deliveryId ||
+      invoice.purchaseOrder?.deliveries?.[0]?.id ||
+      invoice.purchaseOrder?.deliveryTrackings?.[0]?.id ||
+      null;
+
+    const directGrnId =
+      invoice.grnId ||
+      (invoice as any).goodsReceiptNoteId ||
+      invoice.purchaseOrder?.grnId ||
+      invoice.purchaseOrder?.grns?.[0]?.id ||
+      (invoice as any)?.grn?.id ||
+      null;
+
+    if (directDelId) setConnectedDeliveryId(directDelId);
+    if (directGrnId) setConnectedGrnId(directGrnId);
+
+    const effPoId = invoice.purchaseOrderId || invoice.purchaseOrder?.id;
+    if (effPoId) {
+      if (!directDelId) {
+        getApi<any>(`/api/delivery/by-purchase-order/${effPoId}`, true)
+          .then((res: any) => {
+            const d = res?.data || res;
+            if (d?.id) setConnectedDeliveryId(d.id);
+          })
+          .catch(() => {});
+      }
+      if (!directGrnId) {
+        getApi<any>(`/api/grn/po/${effPoId}/eligibility`, true)
+          .then((res: any) => {
+            const list = res?.existing || res?.data?.existing || [];
+            if (list?.[0]?.id) setConnectedGrnId(list[0].id);
+          })
+          .catch(() => {});
+      }
+    }
+  }, [invoice?.deliveryId, invoice?.grnId, invoice?.purchaseOrderId, invoice?.purchaseOrder]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -434,6 +520,16 @@ export function TaxInvoiceRegistryModal({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleRefreshInvoice}
+              disabled={isRefreshing || loading}
+              title="Refresh invoice details"
+              aria-label="Refresh invoice details"
+              className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
+            >
+              <RefreshCw className={cn("h-4 w-4", (isRefreshing || loading) && "animate-spin text-[#12335f]")} />
+            </button>
+            <button
+              type="button"
               onClick={() => setIsFullscreen(prev => !prev)}
               title={isFullscreen ? "Restore window size" : "Full screen view"}
               aria-label={isFullscreen ? "Restore window size" : "Full screen view"}
@@ -539,7 +635,10 @@ export function TaxInvoiceRegistryModal({
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      router.push(`/seller/orders?search=${encodeURIComponent(poNumber)}`);
+                      const poId = invoice?.purchaseOrderId || invoice?.purchaseOrder?.id;
+                      const orderTarget = poId || poNumber;
+                      const rolePath = user?.role === 'buyer' ? '/buyer/orders' : '/seller/orders';
+                      router.push(`${rolePath}?orderId=${encodeURIComponent(orderTarget)}`);
                     }}
                     className="h-7 border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
                   >
@@ -548,47 +647,37 @@ export function TaxInvoiceRegistryModal({
                   </Button>
                 )}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const search = poNumber || invoice?.invoiceNumber || '';
-                    const delRoute = user?.role === 'buyer' ? '/orders/tracking' : '/seller/delivery-management';
-                    router.push(`${delRoute}?search=${encodeURIComponent(search)}`);
-                  }}
-                  className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                >
-                  <Truck className="h-3 w-3 text-blue-600" />
-                  <span>View Delivery</span>
-                </Button>
+                {/* View Delivery: ONLY if delivery is generated */}
+                {connectedDeliveryId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      router.push(`/delivery/${connectedDeliveryId}`);
+                    }}
+                    className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                  >
+                    <Truck className="h-3 w-3 text-blue-600" />
+                    <span>View Delivery</span>
+                  </Button>
+                )}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={async () => {
-                    const po = invoice?.purchaseOrder;
-                    let grnId = invoice?.grnId || (invoice as any)?.goodsReceiptNoteId || po?.grnId || po?.grns?.[0]?.id;
-                    if (!grnId && po?.id) {
-                      try {
-                        const res: any = await getApi(`/api/grn/po/${po.id}/eligibility`, true);
-                        const existingList = res?.existing || res?.data?.existing || [];
-                        if (existingList?.[0]?.id) grnId = existingList[0].id;
-                      } catch {}
-                    }
-                    if (grnId) {
-                      router.push(`/grn/${grnId}`);
-                    } else {
-                      const search = poNumber || invoice?.invoiceNumber || '';
-                      router.push(`/grn?search=${encodeURIComponent(search)}`);
-                    }
-                  }}
-                  className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                  <span>View GRN</span>
-                </Button>
+                {/* View GRN: ONLY if GRN is generated */}
+                {connectedGrnId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      router.push(`/grn/${connectedGrnId}`);
+                    }}
+                    className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    <span>View GRN</span>
+                  </Button>
+                )}
 
                 {(() => {
                   const payPath = isBuyer ? '/buyer/payments' : '/seller/payments';
@@ -633,25 +722,45 @@ export function TaxInvoiceRegistryModal({
                         </div>
                       );
                     }
-                    return (
-                      <div className="inline-flex items-center gap-1.5 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-                          <span>Approved</span>
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => {
-                            router.push(`${payPath}?search=${searchParam}`);
-                          }}
-                          className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                        >
-                          <CreditCard className="h-3 w-3" />
-                          <span>Pay Now / Upload Payment Proof</span>
-                        </Button>
-                      </div>
-                    );
+                    if (isApproved) {
+                      const { canPay: canDisbursePayment, reason: paymentGateReason } = canDisburseInvoicePayment({
+                        invoice,
+                        order: invoice?.purchaseOrder,
+                        delivery: invoice?.delivery,
+                        grn: invoice?.grn || (connectedGrnId ? { id: connectedGrnId, status: 'APPROVED' } : null),
+                        isApproved: true
+                      });
+
+                      return (
+                        <div className="inline-flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            <span>Approved</span>
+                          </span>
+                          {canDisbursePayment ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                router.push(`${payPath}?search=${searchParam}`);
+                              }}
+                              className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                            >
+                              <CreditCard className="h-3 w-3" />
+                              <span>Pay Now / Upload Payment Proof</span>
+                            </Button>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg cursor-not-allowed"
+                              title={paymentGateReason}
+                            >
+                              <Lock className="h-3 w-3 text-slate-400" />
+                              <span>Payment Locked (Awaiting Delivery)</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
                   }
                   if (isSubmitted) {
                     return (
