@@ -33,6 +33,7 @@ import {
   Download,
   Lock,
   XCircle,
+  Repeat,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -3017,11 +3018,59 @@ export default function SubmitQuotationPage() {
               </div>
             )}
 
+            {/* Rate Contract Aggregate Package L1 Commitment Card */}
+            {isRateContract && (
+              <div className="rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-4 shadow-2xs space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#12335f] text-white">
+                    <Repeat className="h-4 w-4" />
+                  </div>
+                  <div className="space-y-1 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/90 px-2 py-0.5 rounded">
+                        Rate Contract Package Evaluation
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                        Single Supplier Award (No Splitting)
+                      </span>
+                    </div>
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900">
+                      Evaluated Total Annual Package Value (L1 Aggregate Basis)
+                    </h3>
+                    <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                      Under portal Rate Contract rules, 100% of this contract is awarded to a single vendor based on the lowest aggregate annual package value: <code className="font-mono text-indigo-700">∑(Est. Annual Offtake × Quoted Landed Rate)</code>. Item-wise splitting is not permitted; all items must be quoted.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3 pt-2 border-t border-indigo-150/70">
+                  <div className="bg-white/80 rounded-lg p-2.5 border border-indigo-100">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total Package Value (incl. GST)</span>
+                    <span className="text-sm font-black text-indigo-900 font-mono">
+                      ₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="bg-white/80 rounded-lg p-2.5 border border-indigo-100">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Schedule Pricing Progress</span>
+                    <span className="text-sm font-black text-slate-900 font-mono">
+                      {lineTotals.priced} / {lineQuotes.length} items
+                    </span>
+                  </div>
+                  <div className="bg-white/80 rounded-lg p-2.5 border border-indigo-100">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Required Delivery SLA</span>
+                    <span className="text-sm font-black text-emerald-800 font-mono">
+                      Within {buyerSlaDays} days / PO
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid gap-6 md:grid-cols-2">
               {/* Offered Price */}
               <div>
                 <label htmlFor="quotation-price" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                  Offered Price (₹) <span className="text-red-500">*</span>
+                  {isRateContract ? 'Evaluated Annual Package Value (₹)' : 'Offered Price (₹)'} <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -3031,7 +3080,7 @@ export default function SubmitQuotationPage() {
                     step="0.01"
                     value={offeredPrice}
                     onChange={e => { setOfferedPrice(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.offeredPrice; return n; }); }}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isRateContract}
                     placeholder="e.g. 150000"
                     className={cn(
                       "peer h-11 w-full rounded-xl border pl-9 pr-16 text-xs font-bold text-slate-900 outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
@@ -3081,7 +3130,7 @@ export default function SubmitQuotationPage() {
               {/* Offered Quantity */}
               <div>
                 <label htmlFor="quotation-quantity" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                  Offered Quantity <span className="text-red-500">*</span>
+                  {isRateContract ? 'Total Est. Annual Offtake Units' : 'Offered Quantity'} <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
@@ -3094,7 +3143,7 @@ export default function SubmitQuotationPage() {
                     step="any"
                     value={offeredQuantity}
                     onChange={e => { setOfferedQuantity(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.offeredQuantity; return n; }); }}
-                    disabled={isReadOnly}
+                    disabled={isReadOnly || isRateContract}
                     placeholder={`e.g. ${maxQuantity || 100}`}
                     className={cn(
                       "w-full rounded-xl border h-11 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
@@ -3123,30 +3172,121 @@ export default function SubmitQuotationPage() {
               </div>
             </div>
 
-            {/* Delivery Timeline */}
-            <div>
-              <label htmlFor="quotation-timeline" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
-                Delivery Timeline <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                  <Clock className="h-4 w-4 text-slate-400" />
+            {/* Delivery Timeline / Call-Off Turnaround SLA */}
+            {isRateContract ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label htmlFor="rc-turnaround-days" className="text-xs font-bold uppercase text-slate-700 tracking-wider">
+                      Call-Off Order Delivery Turnaround SLA (Days) <span className="text-red-500">*</span>
+                    </label>
+                    <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                      Maximum calendar days to deliver goods after buyer issues a Call-Off PO. (Buyer SLA: {buyerSlaDays} days).
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1 rounded-md self-start sm:self-auto">
+                    Buyer Target SLA: {buyerSlaDays} Days
+                  </span>
                 </div>
-                <input
-                  id="quotation-timeline"
-                  type="text"
-                  value={deliveryTimeline}
-                  onChange={e => { setDeliveryTimeline(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.deliveryTimeline; return n; }); }}
-                  disabled={isReadOnly}
-                  placeholder="e.g. 15 days, 30 days, 4 weeks"
-                  className={cn(
-                    "w-full rounded-xl border h-11 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
-                    errors.deliveryTimeline ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f]"
-                  )}
-                />
+                <div className="flex items-center gap-3">
+                  <input
+                    id="rc-turnaround-days"
+                    type="number"
+                    min="1"
+                    max={buyerSlaDays}
+                    value={callOffTurnaroundDays}
+                    onChange={e => {
+                      setCallOffTurnaroundDays(e.target.value);
+                      setDeliveryTimeline(`${e.target.value} days from Call-Off PO issue`);
+                      setErrors(prev => { const n = { ...prev }; delete n.deliveryTimeline; return n; });
+                    }}
+                    disabled={isReadOnly}
+                    className="w-32 rounded-xl border border-slate-200 h-10 px-3 text-xs font-bold text-slate-800 bg-white"
+                  />
+                  <span className="text-xs text-slate-600 font-medium">calendar days from Call-Off PO release</span>
+                </div>
+                {Number(callOffTurnaroundDays) > buyerSlaDays && (
+                  <p className="text-[11px] font-bold text-rose-600">
+                    Warning: Quoted turnaround ({callOffTurnaroundDays} days) exceeds buyer requirement ({buyerSlaDays} days).
+                  </p>
+                )}
+                {fieldError('deliveryTimeline')}
               </div>
-              {fieldError('deliveryTimeline')}
-            </div>
+            ) : (
+              <div>
+                <label htmlFor="quotation-timeline" className="block text-xs font-bold uppercase text-slate-600 tracking-wider mb-1.5">
+                  Delivery Timeline <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <Clock className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <input
+                    id="quotation-timeline"
+                    type="text"
+                    value={deliveryTimeline}
+                    onChange={e => { setDeliveryTimeline(e.target.value); setErrors(prev => { const n = { ...prev }; delete n.deliveryTimeline; return n; }); }}
+                    disabled={isReadOnly}
+                    placeholder="e.g. 15 days, 30 days, 4 weeks"
+                    className={cn(
+                      "w-full rounded-xl border h-11 pl-9 pr-4 text-xs font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none transition disabled:bg-slate-50 disabled:text-slate-500",
+                      errors.deliveryTimeline ? "border-red-300 focus:ring-red-200 bg-red-50/30" : "border-slate-200 focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f]"
+                    )}
+                  />
+                </div>
+                {fieldError('deliveryTimeline')}
+              </div>
+            )}
+
+            {/* Rate Contract Statutory Undertakings */}
+            {isRateContract && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 space-y-3">
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                  Rate Contract Statutory Undertakings
+                </h4>
+                <div className="space-y-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rateFirmnessAgreed}
+                      onChange={e => {
+                        setRateFirmnessAgreed(e.target.checked);
+                        if (e.target.checked) {
+                          setErrors(prev => { const n = { ...prev }; delete n.rateFirmness; return n; });
+                        }
+                      }}
+                      disabled={isReadOnly}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
+                    />
+                    <div className="text-xs leading-snug">
+                      <span className="font-bold text-slate-900">Rate Firmness Undertaking: </span>
+                      <span className="text-slate-600">I confirm that all quoted unit rates shall remain firm and valid throughout the entire master agreement period without any price escalation whatsoever.</span>
+                    </div>
+                  </label>
+                  {fieldError('rateFirmness')}
+
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={fallClauseAgreed}
+                      onChange={e => {
+                        setFallClauseAgreed(e.target.checked);
+                        if (e.target.checked) {
+                          setErrors(prev => { const n = { ...prev }; delete n.fallClause; return n; });
+                        }
+                      }}
+                      disabled={isReadOnly}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
+                    />
+                    <div className="text-xs leading-snug">
+                      <span className="font-bold text-slate-900">Fall Clause Declaration: </span>
+                      <span className="text-slate-600">I undertake that if at any time during the agreement duration, identical items are supplied to any other buyer at a rate lower than this contract, the contract rate shall stand proportionately reduced.</span>
+                    </div>
+                  </label>
+                  {fieldError('fallClause')}
+                </div>
+              </div>
+            )}
 
           
 
@@ -3445,9 +3585,13 @@ export default function SubmitQuotationPage() {
           >
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
-                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Item-Wise Quotation</h2>
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  {isRateContract ? 'Schedule of Unit Rates (All Items Required)' : 'Item-Wise Quotation'}
+                </h2>
                 <p className="text-xs font-medium text-slate-500 mt-0.5">
-                  Price every line item individually. The totals automatically fill your offered price and quantity.
+                  {isRateContract
+                    ? 'Quote firm unit rates for every item in the schedule. Under Rate Contract rules, item-wise bidding/splitting is not permitted; bidding is evaluated on total package value.'
+                    : 'Price every line item individually. The totals automatically fill your offered price and quantity.'}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -3458,7 +3602,7 @@ export default function SubmitQuotationPage() {
                       <span className="font-bold text-slate-900">{lineTotals.priced} / {lineQuotes.length}</span>
                     </div>
                     <div className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                      <span className="text-slate-600 font-medium">Subtotal (incl. GST): </span>
+                      <span className="text-slate-600 font-medium">Package Total (incl. GST): </span>
                       <span className="font-black text-[#12335f]">₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     {!isReadOnly && lineTotals.total > 0 && (
@@ -3499,7 +3643,7 @@ export default function SubmitQuotationPage() {
                     </span>
                   </Button>
                 )}
-                {!isReadOnly && (
+                {!isReadOnly && !isRateContract && (
                   <Button
                     type="button"
                     onClick={handleAddCustomLine}
@@ -3561,11 +3705,17 @@ export default function SubmitQuotationPage() {
                     <tr>
                       <th scope="col" className="px-3.5 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-12 text-center">#</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider min-w-[260px]">ITEM DESCRIPTION</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-44">QTY / UNIT</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">UNIT PRICE (₹)</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-44">
+                        {isRateContract ? 'EST. ANNUAL OFFTAKE' : 'QTY / UNIT'}
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">
+                        {isRateContract ? 'LOCKED UNIT RATE (₹)' : 'UNIT PRICE (₹)'}
+                      </th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
-                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">LINE TOTAL (₹)</th>
+                      <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">
+                        {isRateContract ? 'ANNUAL LINE TOTAL (₹)' : 'LINE TOTAL (₹)'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -3681,14 +3831,21 @@ export default function SubmitQuotationPage() {
                               </div>
                             </td>
                             <td className="px-4 py-2.5 text-right align-middle">
-                              {isReadOnly ? (
-                                <div className="flex items-center justify-end gap-1.5 min-w-0">
-                                  <span className="text-xs font-bold text-slate-900 tabular-nums">
-                                    {Number(line.quantity || 0).toLocaleString('en-IN')}
-                                  </span>
-                                  <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
-                                    {cleanUom}
-                                  </span>
+                              {isReadOnly || isRateContract ? (
+                                <div className="flex flex-col items-end justify-center min-w-0">
+                                  <div className="flex items-center justify-end gap-1.5 min-w-0">
+                                    <span className="text-xs font-bold text-slate-900 tabular-nums">
+                                      {Number(line.quantity || 0).toLocaleString('en-IN')}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase truncate max-w-[70px] shrink" title={line.unitOfMeasure || 'Nos'}>
+                                      {cleanUom}
+                                    </span>
+                                  </div>
+                                  {isRateContract && (
+                                    <span className="text-[9px] font-black uppercase text-indigo-600 tracking-tight">
+                                      Annual Offtake
+                                    </span>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="flex items-center justify-end gap-1.5 min-w-0">
