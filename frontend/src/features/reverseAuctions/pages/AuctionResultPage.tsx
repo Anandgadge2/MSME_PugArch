@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Award,
   CheckCircle2,
+  ChevronRight,
   Clock,
   ExternalLink,
   FileCheck,
@@ -205,6 +206,24 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
   const backUrl = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}`;
 
+  const isBuyer = rolePrefix === '/buyer';
+  const isSeller = rolePrefix === '/seller';
+  const isShg = rolePrefix === '/shg';
+
+  const rootListingLabel = isBuyer
+    ? 'My Procurements'
+    : isSeller || isShg
+      ? 'Opportunities'
+      : 'Procurements';
+
+  const rootListingUrl = isBuyer
+    ? '/buyer/my-procurements'
+    : isSeller
+      ? '/seller/opportunities?type=reverse-auction'
+      : isShg
+        ? '/shg/opportunities?type=reverse-auction'
+        : '/admin/procurements';
+
   const handleConfirmAward = () => {
     if (!selectedParticipantForAward) return;
     const isNonL1 = (selectedParticipantForAward.currentRank || 1) !== 1;
@@ -230,31 +249,23 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
       {/* 1. Breadcrumbs & Top Navigation Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">
+          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-2">
             <button
               type="button"
-              onClick={() => router.push('/dashboard')}
-              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline"
+              onClick={() => router.push(rootListingUrl)}
+              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline cursor-pointer"
             >
-              Home
+              {rootListingLabel}
             </button>
-            <span>/</span>
-            <button
-              type="button"
-              onClick={() => router.push(`${rolePrefix}/procurement/opportunities?type=reverse-auction`)}
-              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline"
-            >
-              Procurement
-            </button>
-            <span>/</span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
             <button
               type="button"
               onClick={() => router.push(backUrl)}
-              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline font-mono"
+              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline font-mono cursor-pointer"
             >
               {canonicalCode}
             </button>
-            <span>/</span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
             <span className="text-slate-900 font-bold" aria-current="page">Outcomes & Evaluation</span>
           </nav>
 
