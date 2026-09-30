@@ -2423,12 +2423,13 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
           bidId: auction.linkedBidId,
           OR: [
             { sellerId: sellerUserId },
-            ...(winner.sellerOrgId ? [{ organizationId: winner.sellerOrgId }] : [])
+            ...(winner.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
           ]
         }
       });
       const awardAmount = Number(winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice || 0);
       if (bidParticipation) {
+        const finalSellerUserId = bidParticipation.sellerId || sellerUserId;
         const existingAward = await db.procurementBidAward.findFirst({
           where: { bidId: auction.linkedBidId, participationId: bidParticipation.id }
         });
@@ -2449,7 +2450,7 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
             data: {
               bidId: auction.linkedBidId,
               participationId: bidParticipation.id,
-              sellerId: sellerUserId,
+              sellerId: finalSellerUserId,
               awardedAmount: awardAmount,
               originalBidAmount: awardAmount,
               justificationReason: isNonL1 ? payload.remarks : null,
@@ -2563,7 +2564,7 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
           bidId: auction.linkedBidId,
           OR: [
             { sellerId: winner.sellerUserId || auction.winnerSellerId || 0 },
-            ...(winner.sellerOrgId ? [{ participation: { organizationId: winner.sellerOrgId } }] : [])
+            ...(winner.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
           ]
         }
       });
@@ -2672,7 +2673,10 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
       const bidAward = await db.procurementBidAward.findFirst({
         where: {
           bidId: auction.linkedBidId,
-          sellerId: winner?.sellerUserId || auction.winnerSellerId || 0
+          OR: [
+            { sellerId: winner?.sellerUserId || auction.winnerSellerId || 0 },
+            ...(winner?.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
+          ]
         }
       });
       if (bidAward) {
@@ -2683,6 +2687,16 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
             remarks: payload.reason || 'Award declined by supplier'
           }
         }).catch(() => null);
+
+        if (bidAward.participationId) {
+          await db.procurementBidParticipation.update({
+            where: { id: bidAward.participationId },
+            data: {
+              finalStatus: 'AWARD_DECLINED',
+              rejectionReason: payload.reason || 'Award declined by supplier'
+            }
+          }).catch(() => null);
+        }
       }
       await db.procurementBid.update({
         where: { id: auction.linkedBidId },
@@ -2835,6 +2849,29 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
           lifecycleStage: 'PO_ISSUED'
         }
       }).catch(() => null);
+
+      const bidAward = await db.procurementBidAward.findFirst({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            { sellerId: sellerUserId },
+            ...(winner.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
+          ]
+        }
+      });
+      if (bidAward) {
+        await db.procurementBidAward.update({
+          where: { id: bidAward.id },
+          data: { awardStatus: 'ACCEPTED' }
+        }).catch(() => null);
+
+        if (bidAward.participationId) {
+          await db.procurementBidParticipation.update({
+            where: { id: bidAward.participationId },
+            data: { finalStatus: 'AWARDED' }
+          }).catch(() => null);
+        }
+      }
     }
 
     // Write audit event
