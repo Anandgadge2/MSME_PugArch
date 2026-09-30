@@ -37,7 +37,7 @@ export function ResponsiveFilterBar({
   onReset,
   resetLabel = "Reset Filter Options",
   defaultOpen = false,
-  gridColsClassName = "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6",
+  gridColsClassName = "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
 }: ResponsiveFilterBarProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const showFiltersBtn = hasFilters !== false && Boolean(filters);
@@ -63,7 +63,7 @@ export function ResponsiveFilterBar({
               aria-controls="advanced-filters-panel"
               aria-label="Toggle filter options"
               className={cn(
-                "inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3.5 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0",
+                "inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold transition-all shadow-2xs cursor-pointer shrink-0",
                 isOpen || activeFilterCount > 0
                   ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
@@ -72,7 +72,7 @@ export function ResponsiveFilterBar({
               <Filter className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
               <span>Filters</span>
               {activeFilterCount > 0 && (
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#12335f] text-white text-[10px] font-black">
+                <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#12335f] text-white text-[9px] font-black">
                   {activeFilterCount}
                 </span>
               )}
@@ -100,7 +100,7 @@ export function ResponsiveFilterBar({
           id="advanced-filters-panel"
           role="region"
           aria-label="Filter Options"
-          className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 transition-all duration-200 space-y-3 animate-in fade-in slide-in-from-top-1"
+          className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 sm:p-3.5 transition-all duration-200 space-y-2.5 animate-in fade-in slide-in-from-top-1"
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -121,8 +121,13 @@ export function ResponsiveFilterBar({
           </div>
 
           <div className={cn(
-            "grid gap-2.5 sm:gap-3",
+            "grid gap-2 sm:gap-2.5",
             gridColsClassName,
+            // Sleek typography & compact sizing for all controls rendered inside
+            "[&_select]:!text-xs [&_select]:!font-semibold [&_select]:!text-slate-700 [&_select]:!h-9 [&_select]:!px-2.5 [&_select]:!py-1.5 [&_select]:!rounded-xl [&_select]:!border [&_select]:!border-slate-200 [&_select]:!bg-white [&_select]:!shadow-2xs",
+            "[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-wider [&_label]:!text-slate-500 [&_label]:!mb-1 [&_label]:!block",
+            "[&_input]:!text-xs [&_input]:!h-9 [&_input]:!rounded-xl",
+            "[&_button]:!text-xs",
             "[&>div]:!w-full [&>div]:!max-w-none [&>div>select]:!w-full [&>select]:!w-full [&>label]:!w-full [&>div>div]:!w-full",
             filtersClassName
           )}>

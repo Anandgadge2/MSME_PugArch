@@ -706,7 +706,7 @@ export function BuyerRequirementsList({
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+                                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-2.5">
                                     {/* Location */}
                                     <div>
                                         <label htmlFor="req-location" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
@@ -716,7 +716,7 @@ export function BuyerRequirementsList({
                                             id="req-location"
                                             value={location}
                                             onChange={e => { setLocation(e.target.value); setPage(1); }}
-                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                                         >
                                             <option value="">All Locations</option>
                                             {discoveredLocations.map(loc => (
@@ -734,7 +734,7 @@ export function BuyerRequirementsList({
                                             id="req-method"
                                             value={methodFilter}
                                             onChange={e => { setMethodFilter(e.target.value); setPage(1); }}
-                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                                         >
                                             <option value="">All Methods</option>
                                             <option value="RFQ">RFQ</option>
@@ -753,7 +753,7 @@ export function BuyerRequirementsList({
                                             id="req-status"
                                             value={statusFilter}
                                             onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                                         >
                                             <option value="">All Statuses</option>
                                             <option value="OPEN">Open</option>
@@ -773,7 +773,7 @@ export function BuyerRequirementsList({
                                             id="req-timeline"
                                             value={timelineFilter}
                                             onChange={e => { setTimelineFilter(e.target.value); setPage(1); }}
-                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                                         >
                                             <option value="">All Timelines</option>
                                             <option value="7d">Closing Soon (≤ 7D)</option>
@@ -849,7 +849,7 @@ export function BuyerRequirementsList({
                         sortKey={sort}
                         sortDirection={sortDir}
                         onSort={handleSortHeader}
-                        minWidth="min-w-[1000px]"
+                        minWidth="min-w-[1060px] w-full"
                         isLoading={isLoading}
                     />
                 ) : (

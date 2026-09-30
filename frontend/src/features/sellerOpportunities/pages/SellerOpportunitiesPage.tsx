@@ -1921,7 +1921,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         <ResponsiveFilterBar
           singleRowDesktop={true}
           searchWrapperClassName="flex-1 min-w-[170px] max-w-sm xl:max-w-md"
-          filtersClassName="flex items-center gap-1.5 sm:gap-2 shrink-0"
+          onReset={reset}
+          resetLabel="Reset All"
           activeFilterCount={(query ? 1 : 0) + (status !== 'ALL' ? 1 : 0) + (category ? 1 : 0) + (location ? 1 : 0) + (sortOption !== 'newest' ? 1 : 0) + (kpiFilter !== 'all' ? 1 : 0)}
           searchInput={
             <div className="relative w-full">
@@ -1945,13 +1946,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             </div>
           }
           filters={
-            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <>
               {/* Status Dropdown */}
-              <div className="w-auto min-w-[125px] max-w-[155px]">
+              <div className="w-full">
                 <select
                   value={status}
                   onChange={e => { setStatus(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                   aria-label="Filter by status"
                 >
                   <option value="ALL">All Opportunities (Default)</option>
@@ -1964,11 +1965,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Category Dropdown */}
-              <div className="w-auto min-w-[125px] max-w-[150px]">
+              <div className="w-full">
                 <select
                   value={category}
                   onChange={e => { setCategory(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                   aria-label="Filter by category"
                 >
                   <option value="">All Categories</option>
@@ -1977,11 +1978,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Location Dropdown */}
-              <div className="w-auto min-w-[120px] max-w-[145px]">
+              <div className="w-full">
                 <select
                   value={location}
                   onChange={e => { setLocation(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                   aria-label="Filter by location"
                 >
                   <option value="">All Locations</option>
@@ -1990,7 +1991,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               </div>
 
               {/* Sort Filter Dropdown */}
-              <div className="w-auto min-w-[120px] max-w-[140px]">
+              <div className="w-full">
                 <select
                   value={sortOption}
                   onChange={e => {
@@ -1998,7 +1999,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                     setSortField('');
                     setPage(1);
                   }}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                   aria-label="Sort opportunities"
                   title="Sort opportunities"
                 >
@@ -2009,21 +2010,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                   <option value="title_asc">Title (A–Z)</option>
                 </select>
               </div>
-
-              {/* Reset Trigger */}
-              {(query || status !== 'ALL' || category || location || sortOption !== 'newest' || kpiFilter !== 'all') && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={reset}
-                  className="h-9 px-3 rounded-xl border-rose-200 bg-rose-50/70 text-xs font-extrabold text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
-                  aria-label="Reset all filters"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                  <span>Reset</span>
-                </Button>
-              )}
-            </div>
+            </>
           }
           endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />}
         />

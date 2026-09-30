@@ -35,7 +35,7 @@ import { cn } from '../../../lib/utils';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
 const pageSize = 10;
-const selectClass = 'h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10';
+const selectClass = 'h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/10 shadow-2xs transition-colors';
 type BidSortKey = 'id' | 'title' | 'buyer' | 'category' | 'status' | 'value' | 'startDate' | 'endDate';
 
 let globalBidsCache: ProcurementBid[] | null = null;
@@ -542,7 +542,7 @@ export default function BidsListingPage() {
                   sortDirection={sortDirection}
                   onSort={(field) => toggleSort(field as BidSortKey)}
                   paginationLabel="bids"
-                  minWidth="min-w-[1040px]"
+                  minWidth="min-w-[1060px] w-full"
                 />
               )
             ) : (

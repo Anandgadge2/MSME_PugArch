@@ -83,14 +83,14 @@ function DateFilterPopover({
                 type="button"
                 ref={buttonRef}
                 variant="outline"
-                className={cn("h-10 shrink-0 whitespace-nowrap rounded-xl text-xs font-bold transition-colors w-full sm:w-auto px-3 shadow-xs outline-none", 
+                className={cn("h-9 shrink-0 whitespace-nowrap rounded-xl text-xs font-semibold transition-colors w-full px-2.5 shadow-2xs outline-none", 
                     activeCount > 0 
                         ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10" 
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10"
                 )}
                 onClick={() => isOpen ? closePopover() : openPopover()}
             >
-                <Calendar className="mr-2 h-4 w-4" /> Date Filters
+                <Calendar className="mr-1.5 h-3.5 w-3.5" /> Date Filters
                 {activeCount > 0 && <span className="ml-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#12335f] text-[9px] font-black text-white">{activeCount}</span>}
             </Button>
             
@@ -442,8 +442,8 @@ export default function GrnListPage() {
                     filters={
                         <>
                             {/* Status */}
-                            <div className="w-full sm:w-[130px]">
-                                <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                            <div className="w-full">
+                                <select value={filter} onChange={e => { setFilter(e.target.value as any); setPage(1); }} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer transition-colors truncate">
                                     <option value="ALL">Status: All</option>
                                     <option value="DRAFT">Draft</option>
                                     <option value="SUBMITTED">Submitted</option>
@@ -454,24 +454,24 @@ export default function GrnListPage() {
                             </div>
 
                             {/* PO */}
-                            <div className="w-full sm:w-[135px]">
-                                <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                            <div className="w-full">
+                                <select value={filterPo} onChange={e => { setFilterPo(e.target.value); setPage(1); }} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer transition-colors truncate">
                                     <option value="ALL">PO: All</option>
                                     {uniquePos.map(po => <option key={po} value={po}>{po.length > 20 ? po.substring(0, 20) + '...' : po}</option>)}
                                 </select>
                             </div>
 
                             {/* Seller */}
-                            <div className="w-full sm:w-[135px]">
-                                <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors truncate">
+                            <div className="w-full">
+                                <select value={filterSeller} onChange={e => { setFilterSeller(e.target.value); setPage(1); }} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer transition-colors truncate">
                                     <option value="ALL">Seller: All</option>
                                     {uniqueSellers.map(s => <option key={s} value={s}>{s.length > 20 ? s.substring(0, 20) + '...' : s}</option>)}
                                 </select>
                             </div>
 
                             {/* Items */}
-                            <div className="w-full sm:w-[110px]">
-                                <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-xs cursor-pointer transition-colors">
+                            <div className="w-full">
+                                <select value={filterItems} onChange={e => { setFilterItems(e.target.value); setPage(1); }} className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer transition-colors truncate">
                                     <option value="ALL">Items: All</option>
                                     <option value="1">1 line</option>
                                     <option value="2">2 lines</option>
@@ -480,7 +480,7 @@ export default function GrnListPage() {
                             </div>
 
                             {/* Date Filter Component */}
-                            <div className="w-full sm:w-[130px]">
+                            <div className="w-full">
                                 <DateFilterPopover 
                                     receivedFrom={filterReceivedFrom} setReceivedFrom={(v) => { setFilterReceivedFrom(v); setPage(1); }}
                                     receivedTo={filterReceivedTo} setReceivedTo={(v) => { setFilterReceivedTo(v); setPage(1); }}
@@ -632,7 +632,8 @@ export default function GrnListPage() {
                     sortDirection={sortDirection}
                     onSort={(field) => toggleSort(field as any)}
                     showSrNo
-                    srNoWidth="w-[5%]"
+                    srNoWidth="w-[50px]"
+                    minWidth="min-w-[1040px] w-full"
                     caption="Goods Receipt Notes List"
                 />
             )}

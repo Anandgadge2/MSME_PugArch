@@ -554,11 +554,11 @@ const Vendors = () => {
           }
           filters={
             <>
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full">
                 <select
                   value={selectedCategory}
                   onChange={e => setSelectedCategory(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   {categories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
@@ -566,14 +566,14 @@ const Vendors = () => {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full">
                 <select
                   value={selectedStateFilter}
                   onChange={e => {
                     setSelectedStateFilter(e.target.value);
                     setSelectedDistrictFilter('All districts');
                   }}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   {statesList.map(st => (
                     <option key={st} value={st}>{st}</option>
@@ -582,11 +582,11 @@ const Vendors = () => {
               </div>
 
               {selectedStateFilter !== 'All states' && (
-                <div className="w-full sm:w-auto sm:min-w-[130px]">
+                <div className="w-full">
                   <select
                     value={selectedDistrictFilter}
                     onChange={e => setSelectedDistrictFilter(e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                    className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                   >
                     <option value="All districts">All Districts</option>
                     {districtOptions.map(district => (
@@ -596,11 +596,11 @@ const Vendors = () => {
                 </div>
               )}
 
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
+              <div className="w-full">
                 <select
                   value={selectedSize}
                   onChange={e => setSelectedSize(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   {msmeCategories.map(category => (
                     <option key={category} value={category}>{category}</option>
@@ -611,12 +611,12 @@ const Vendors = () => {
               <button
                 type="button"
                 onClick={() => setVerifiedOnly(!verifiedOnly)}
-                className="flex items-center gap-2 h-10 px-3.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 shadow-xs cursor-pointer transition-colors"
+                className="flex items-center gap-2 h-9 px-3 bg-white border border-slate-200 rounded-xl hover:border-slate-300 shadow-2xs cursor-pointer transition-colors"
               >
-                <div className={cn("h-4 w-4 rounded-md border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
-                  {verifiedOnly && <CheckCircle2 className="h-3 w-3 text-white" />}
+                <div className={cn("h-3.5 w-3.5 rounded-md border flex items-center justify-center transition-all", verifiedOnly ? "bg-[#12335f] border-[#12335f]" : "border-slate-300")}>
+                  {verifiedOnly && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
                 </div>
-                <span className="text-xs font-bold text-slate-700 uppercase">Verified Only</span>
+                <span className="text-xs font-semibold text-slate-700">Verified Only</span>
               </button>
 
               {(searchTerm || selectedCategory !== 'All categories' || selectedSize !== 'All MSME categories' || selectedStateFilter !== 'All states' || verifiedOnly) && (
@@ -750,7 +750,7 @@ const Vendors = () => {
               showSrNo={true}
               srNoHeader="Sr. No."
               srNoWidth="w-16"
-              minWidth="min-w-[900px]"
+              minWidth="min-w-[1040px] w-full"
             />
           )}
           {viewMode === 'grid' && filteredVendors.length > 0 && (

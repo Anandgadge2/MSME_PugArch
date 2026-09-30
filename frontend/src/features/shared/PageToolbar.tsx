@@ -73,7 +73,7 @@ export interface PageToolbarProps {
 }
 
 const inputBase =
-    'h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer';
+    'h-9 min-w-0 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer';
 
 const renderFilter = (f: ToolbarFilter, idx: number) => {
     if (f.kind === 'select') {
@@ -218,7 +218,7 @@ export function PageToolbar({
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-3 [&>div]:!w-full [&>div]:!max-w-none [&>div>select]:!w-full [&>select]:!w-full [&>label]:!w-full [&>div>div]:!w-full">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-2.5 [&_select]:!text-xs [&_select]:!font-semibold [&_select]:!text-slate-700 [&_select]:!h-9 [&_select]:!px-2.5 [&_select]:!py-1.5 [&_select]:!rounded-xl [&_select]:!border [&_select]:!border-slate-200 [&_select]:!bg-white [&_select]:!shadow-2xs [&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-wider [&_label]:!text-slate-500 [&_input]:!text-xs [&_input]:!h-9 [&>div]:!w-full [&>div]:!max-w-none [&>div>select]:!w-full [&>select]:!w-full [&>label]:!w-full [&>div>div]:!w-full">
                         {filters.map((f, idx) => renderFilter(f, idx))}
                     </div>
                 </div>

@@ -1382,7 +1382,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5">
               {/* Sourcing Type */}
               <div>
                 <label htmlFor="filter-sourcing-type" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
@@ -1392,7 +1392,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-sourcing-type"
                   value={typeFilter}
                   onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Types</option>
                   <option value="RFQ">RFQ (Quotations)</option>
@@ -1413,7 +1413,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-submission-status"
                   value={statusFilter}
                   onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Statuses</option>
                   <option value="SUBMITTED">Submitted</option>
@@ -1433,7 +1433,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-bid-stage"
                   value={stageFilter}
                   onChange={e => { setStageFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Bid Stages</option>
                   <option value="OPEN">Open / Live</option>
@@ -1454,7 +1454,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-buyer"
                   value={buyerFilter}
                   onChange={e => { setBuyerFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Buyers</option>
                   {buyerOptions.map(buyer => (
@@ -1472,7 +1472,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-closing-date"
                   value={dateFilter}
                   onChange={e => { setDateFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Deadlines</option>
                   <option value="7">≤ 7 Days</option>
@@ -1491,7 +1491,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                   id="filter-budget"
                   value={valueFilter}
                   onChange={e => { setValueFilter(e.target.value); setPage(1); }}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Budgets</option>
                   <option value="5l">&lt; ₹5 Lakhs</option>

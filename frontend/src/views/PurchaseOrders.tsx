@@ -1456,7 +1456,7 @@ export default function PurchaseOrders() {
     {
       key: 'poNumber',
       header: <SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[9%]',
+      width: 'w-[15%]',
       cell: (order) => (
         <span className="font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
           <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
@@ -1466,7 +1466,7 @@ export default function PurchaseOrders() {
     {
       key: 'title',
       header: <SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[24%]',
+      width: 'w-[23%]',
       cell: (order) => (
         <div>
           <p className="font-bold text-slate-900">{order.title}</p>
@@ -1489,7 +1489,7 @@ export default function PurchaseOrders() {
     {
       key: 'party',
       header: <SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[14%]',
+      width: 'w-[13%]',
       cell: (order) => (
         <span className="text-slate-600">{order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`}</span>
       ),
@@ -1525,7 +1525,7 @@ export default function PurchaseOrders() {
     {
       key: 'status',
       header: <SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[12%]',
+      width: 'w-[11%]',
       cell: (order) => <StatusPill status={order.status} />,
     },
     {
@@ -1610,7 +1610,8 @@ export default function PurchaseOrders() {
         <ResponsiveFilterBar
           activeFilterCount={activeFiltersCount}
           searchWrapperClassName="min-w-[140px] max-w-[200px] xl:max-w-[240px] flex-1 shrink"
-          filtersClassName="flex items-center gap-1.5 sm:gap-2 flex-nowrap shrink-0"
+          onReset={handleClearFilters}
+          resetLabel="Clear Filters"
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
@@ -1625,11 +1626,11 @@ export default function PurchaseOrders() {
           filters={
             <>
               {/* Status */}
-              <div className="w-full sm:w-[110px]">
+              <div className="w-full">
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="All Statuses">Status: All</option>
                   {uniqueStatuses.map(s => (
@@ -1639,11 +1640,11 @@ export default function PurchaseOrders() {
               </div>
               
               {/* Party */}
-              <div className="w-full sm:w-[110px]">
+              <div className="w-full">
                 <select
                   value={partyFilter}
                   onChange={e => setPartyFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="All Parties">Party: All</option>
                   {uniqueParties.map(p => (
@@ -1653,11 +1654,11 @@ export default function PurchaseOrders() {
               </div>
 
               {/* Value */}
-              <div className="w-full sm:w-[105px]">
+              <div className="w-full">
                 <select
                   value={valueFilter}
                   onChange={e => setValueFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="All Values">Value: All</option>
                   <option value="Below ₹10,000">Below ₹10k</option>
@@ -1668,11 +1669,11 @@ export default function PurchaseOrders() {
               </div>
 
               {/* Expected */}
-              <div className="w-full sm:w-[110px]">
+              <div className="w-full">
                 <select
                   value={expectedDateFilter}
                   onChange={e => setExpectedDateFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="All Dates">Expected: All</option>
                   <option value="Upcoming">Upcoming</option>
@@ -1682,8 +1683,8 @@ export default function PurchaseOrders() {
               </div>
               
               {expectedDateFilter === 'Custom Date Range' && (
-                <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto">
-                  <div className="w-full sm:w-[125px]">
+                <div className="col-span-2 flex items-center gap-1.5 w-full">
+                  <div className="flex-1">
                     <DateTimePicker
                       mode="date"
                       size="sm"
@@ -1693,7 +1694,7 @@ export default function PurchaseOrders() {
                     />
                   </div>
                   <span className="text-slate-400 font-bold shrink-0">-</span>
-                  <div className="w-full sm:w-[125px]">
+                  <div className="flex-1">
                     <DateTimePicker
                       mode="date"
                       size="sm"
@@ -1707,9 +1708,8 @@ export default function PurchaseOrders() {
               )}
 
               {/* Updated Date */}
-              <div className="flex items-center flex-nowrap whitespace-nowrap gap-1 w-full sm:w-auto shrink-0">
-                <span className="text-[10px] font-black uppercase text-slate-400 px-0.5 shrink-0 hidden xl:inline-block">Updated</span>
-                <div className="w-full sm:w-[120px]">
+              <div className="col-span-2 flex items-center gap-1.5 w-full">
+                <div className="flex-1">
                   <DateTimePicker
                     mode="date"
                     size="sm"
@@ -1719,7 +1719,7 @@ export default function PurchaseOrders() {
                   />
                 </div>
                 <span className="text-slate-300 font-black shrink-0">-</span>
-                <div className="w-full sm:w-[120px]">
+                <div className="flex-1">
                   <DateTimePicker
                     mode="date"
                     size="sm"
@@ -1730,11 +1730,6 @@ export default function PurchaseOrders() {
                   />
                 </div>
               </div>
-              {activeFiltersCount > 0 && (
-                <Button variant="ghost" onClick={handleClearFilters} className="h-9 px-2.5 text-[11px] font-bold uppercase text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg shrink-0">
-                  Clear
-                </Button>
-              )}
             </>
           }
           viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />}
@@ -1812,8 +1807,9 @@ export default function PurchaseOrders() {
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           paginationLabel="orders"
-          srNoWidth="w-[4%]"
-          minWidth="min-w-[1000px]"
+          showSrNo={true}
+          srNoWidth="w-[50px]"
+          minWidth="min-w-[1120px] w-full"
         />
       )}
 
