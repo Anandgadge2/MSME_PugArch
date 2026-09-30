@@ -1511,7 +1511,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return false;
     }).map((p: any) => {
       const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-      const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status)) : isBuyerOwner);
+      const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
+      const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : isBuyerOwner);
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
     results: canSeeParticipants ? (bid.participations || [])
@@ -1528,7 +1529,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       })
       .map((p: any) => {
         const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
-        const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status)) : isBuyerOwner);
+        const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
+        const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : isBuyerOwner);
         return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
       })
       .sort((a: any, b: any) => {
@@ -1546,7 +1548,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
         return new Date(a.submittedAt || a.createdAt || 0).getTime() - new Date(b.submittedAt || b.createdAt || 0).getTime();
       })
       .map((p: any, idx: number) => {
-        const isFinSealed = Boolean(p.financialSealed || (isTwoPacket && !financialOpenStatuses.includes(bid.status) && !isAdmin));
+        const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
+        const isFinSealed = Boolean(p.financialSealed || (isTwoPacket && (!financialOpenStatuses.includes(bid.status) || isDisqualified) && !isAdmin));
         const rawQuotedAmt = p.totalAmount ?? p.quotedAmount ?? null;
         const quotedAmt = isFinSealed ? null : (rawQuotedAmt != null ? Number(rawQuotedAmt) : null);
         const sellerOrg = p.sellerName || p.seller?.organization?.organizationName || p.seller?.name || 'Supplier';
@@ -1677,6 +1680,23 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
   const firstItem = lineItemsArr.length ? lineItemsArr[0] : {};
   const techOffer = descData.technicalOffer || respData.technicalOffer || ackData.technicalOffer || {};
 
+  const sanitizePricesDeep = (data: any): any => {
+    if (!data || typeof data !== 'object') return data;
+    if (Array.isArray(data)) return data.map(sanitizePricesDeep);
+    const clone = { ...data };
+    const priceKeys = ['quotedAmount', 'totalAmount', 'unitPrice', 'lineTotal', 'unitRate', 'totalPrice', 'quotedPrice', 'price', 'gstAmount', 'taxAmount'];
+    for (const key of Object.keys(clone)) {
+      if (priceKeys.includes(key)) {
+        clone[key] = null;
+      } else if (clone[key] && typeof clone[key] === 'object') {
+        clone[key] = sanitizePricesDeep(clone[key]);
+      }
+    }
+    return clone;
+  };
+
+  const rawResp = { ...ackData, ...respData, ...descData };
+
   return {
     id: p.id,
     bidId: p.bidId,
@@ -1727,8 +1747,8 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     serviceSupport: first(descData.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
     deviation: first(descData.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
     rfqNotes: first(descData.rfqNotes, respData.rfqNotes, ackData.rfqNotes, descData.notes, respData.notes, ackData.notes),
-    responseData: { ...ackData, ...respData, ...descData },
-    acknowledgement: p.acknowledgement,
+    responseData: canSeeFin ? rawResp : sanitizePricesDeep(rawResp),
+    acknowledgement: canSeeFin ? p.acknowledgement : sanitizePricesDeep(p.acknowledgement),
     lineItems: lineItemsArr.map((item: any) => {
       const resolvedHsn = first(item.hsnCode, item.hsn_sac_code, item.hsn, item.hsnSac, item.hsn_code);
       return {

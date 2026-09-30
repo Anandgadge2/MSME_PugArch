@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const ROOT_DIR = path.resolve(process.cwd(), '..');
+const ROOT_DIR = fs.existsSync(path.join(process.cwd(), 'frontend')) ? process.cwd() : path.resolve(process.cwd(), '..');
 
 test('1. ProcurementDetailUnifiedView displays Proposals & Evaluation tab with pending count badge for buyer', () => {
   const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
@@ -265,4 +266,45 @@ test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity
   assert.equal(teradata.score, 55, 'Teradata score must be 55');
   assert.equal(teradata.offeredQuantity, 20, 'Teradata authentic quantity 20 must be preserved');
 });
+
+test('8. procurement-bid.service permanently seals financial quote for disqualified sellers and deep-sanitizes responseData', async () => {
+  const bidServicePath = path.join(ROOT_DIR, 'backend', 'src', 'modules', 'procurementBid', 'procurement-bid.service.ts');
+  const bidService = await import(pathToFileURL(bidServicePath).href);
+
+  const sampleBid = {
+    id: 99,
+    biddingType: 'two_packet',
+    status: 'FINANCIAL_EVALUATION',
+  };
+
+  const sampleDisqualifiedPart = {
+    id: 102,
+    bidId: 99,
+    sellerId: 7,
+    technicalStatus: 'DISQUALIFIED',
+    quotedAmount: 2500000,
+    totalAmount: 2500000,
+    lineItems: [{ itemName: 'Servers', unitPrice: 125000, totalAmount: 2500000 }],
+    responseData: {
+      totalPrice: 2500000,
+      quotedAmount: 2500000,
+      technicalOffer: { makeBrand: 'Dell' }
+    }
+  };
+
+  const serialized = bidService.serializeParticipation(sampleDisqualifiedPart, {
+    canSeeFinancial: false,
+    bid: sampleBid,
+    ownView: false
+  });
+
+  assert.equal(serialized.financialSealed, true, 'Financial quote must be sealed for disqualified seller');
+  assert.equal(serialized.quotedAmount, null, 'quotedAmount must be null when financialSealed is true');
+  assert.equal(serialized.totalAmount, null, 'totalAmount must be null when financialSealed is true');
+  assert.equal(serialized.lineItems[0].unitPrice, null, 'unitPrice inside lineItems must be sanitized to null');
+  assert.equal(serialized.responseData.totalPrice, null, 'totalPrice in responseData must be sanitized to null');
+  assert.equal(serialized.responseData.quotedAmount, null, 'quotedAmount in responseData must be sanitized to null');
+  assert.equal(serialized.responseData.technicalOffer.makeBrand, 'Dell', 'Non-financial technical details must remain preserved');
+});
+
 
