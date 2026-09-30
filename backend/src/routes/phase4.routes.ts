@@ -1297,8 +1297,23 @@ const validateProcurementDraftForSubmit = (draft: any) => {
       throw new ApiError(400, 'Financial opening date must be after technical opening date', 'PROCUREMENT_DATE_INVALID');
     }
   }
-  if (methodSlug === 'rfp' && clean(tender.scopeOfWork || basics.justification || draft.description).length < 10) {
-    throw new ApiError(400, 'RFP requires a scope of work or detailed justification', 'PROCUREMENT_SCOPE_REQUIRED');
+  if (methodSlug === 'rfp') {
+    const payloadObj = (draft.payload && typeof draft.payload === 'object') ? draft.payload as Record<string, any> : {};
+    const serviceDetails = (payloadObj.serviceDetails && typeof payloadObj.serviceDetails === 'object') ? payloadObj.serviceDetails : {};
+    const approval = (payloadObj.approval && typeof payloadObj.approval === 'object') ? payloadObj.approval : {};
+    const rfpScope = clean(
+      tender.scopeOfWork ||
+      serviceDetails.scopeOfWork ||
+      (serviceDetails.sowFileName ? `Refer to attached SOW document: ${serviceDetails.sowFileName}` : '') ||
+      (payloadObj.boqFileName ? `Refer to attached BOQ schedule: ${payloadObj.boqFileName}` : '') ||
+      basics.justification ||
+      approval.notes ||
+      payloadObj.limitedTenderJustification ||
+      draft.description
+    );
+    if (rfpScope.length < 10) {
+      throw new ApiError(400, 'RFP requires a scope of work or detailed justification', 'PROCUREMENT_SCOPE_REQUIRED');
+    }
   }
   if (methodSlug === 'reverse-auction') {
     const auctionConfig = normalizeAuctionConfigForDraft(draft);

@@ -767,7 +767,8 @@ const defaultRateContractConfig = (): RateContractConfig => ({
 });
 
 const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
-  const source = draft.basics.whatAreYouBuying === 'BOQ'
+  const isBoq = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const source = isBoq
     ? draft.boqTable.map(row => ({
       name: row.description,
       specification: row.remarks || row.category || '',
@@ -804,7 +805,8 @@ const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
 // Single source of truth for "total procurement quantity" — the value that drives the
 // auto-generated consignee and must be > 0 for the backend submit validator to pass.
 const getTotalProcurementQty = (draft: Draft): number => {
-  const rows = draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable : draft.items;
+  const isBoq = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const rows = isBoq ? draft.boqTable : draft.items;
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 };
 
@@ -1514,8 +1516,21 @@ export default function CreateProcurementPage() {
     // rejects submit with "Total consignee quantity must equal total procurement quantity", so
     // gate it here on the Items step where the user can actually fix it.
     const totalProcurementQty = getTotalProcurementQty(d);
-    if (d.basics.whatAreYouBuying === 'BOQ') {
-      list.push({ label: 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
+
+    // For RFP method, Scope of Work (SOW) dossier or detailed justification is mandatory
+    if (d.type === 'RFP') {
+      const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName || d.boqFileName);
+      const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
+      list.push({
+        label: hasSowDoc ? 'RFP Scope of Work (SOW / BOQ Document Attached)' : 'RFP Scope of Work / SOW Document is required (min 10 chars or upload SOW document)',
+        ok: hasSowDoc || sowLen >= 10,
+        severity: 'error',
+        stepIdx: 3
+      });
+    }
+
+    if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
+      list.push({ label: d.basics.whatAreYouBuying === 'Works' ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
       if (d.boqTable.length > 0) {
         list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 3 });
       }
@@ -1649,7 +1664,12 @@ export default function CreateProcurementPage() {
       if (!d.internal.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.internal.email.trim())) return false;
       if (!d.internal.mobile.trim() || !/^\d{10}$/.test(d.internal.mobile.trim())) return false;
     } else if (stepIdx === 3) {
-      if (d.basics.whatAreYouBuying === 'BOQ') {
+      if (d.type === 'RFP') {
+        const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName || d.boqFileName);
+        const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
+        if (!hasSowDoc && sowLen < 10) return false;
+      }
+      if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
       } else if (d.basics.whatAreYouBuying === 'Service') {
@@ -1830,9 +1850,17 @@ export default function CreateProcurementPage() {
       }
     } else if (stepIdx === 3) {
       // Step 3 Items details
-      if (d.basics.whatAreYouBuying === 'BOQ') {
+      if (d.type === 'RFP') {
+        const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName || d.boqFileName);
+        const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
+        if (!hasSowDoc && sowLen < 10) {
+          toast.error('RFP requires a Scope of Work (min 10 chars) or an uploaded SOW / BOQ document.');
+          return false;
+        }
+      }
+      if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
-          toast.error('At least one Bill of Quantities (BOQ) row must be filled.');
+          toast.error(d.basics.whatAreYouBuying === 'Works' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
           return false;
         }
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) {
@@ -2843,12 +2871,13 @@ function BasicsStepForm({
             value={draft.basics.whatAreYouBuying}
             onChange={e => {
               const val = e.target.value;
+              const isBoqType = val === 'BOQ' || val === 'Works';
               updateDraft(c => ({
                 ...c,
                 basics: { ...c.basics, whatAreYouBuying: val },
-                boqTable: val === 'BOQ' && c.boqTable.length === 0
+                boqTable: isBoqType && c.boqTable.length === 0
                   ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 0, total: 0, remarks: '' }]
-                  : val !== 'BOQ'
+                  : !isBoqType
                     ? []
                     : c.boqTable
               }));
@@ -5349,14 +5378,108 @@ function ItemsDetailsForm({
     }
   ], [handleDuplicateItem, handleRemoveItem]);
 
-  // 1. BOQ Table Mode
-  if (whatBuying === 'BOQ') {
+  // 1. BOQ Table Mode (for BOQ Sourced or Works Contracts)
+  if (whatBuying === 'BOQ' || whatBuying === 'Works') {
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
+        {/* Scope of Work (SOW) Dossier Section for RFP, Works, or BOQ */}
+        <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+                <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                  Scope of Work (SOW) / Project Dossier Document
+                </span>
+                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                  {draft.type === 'RFP' ? 'Mandatory for RFP' : 'Project Dossier'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Upload terms of reference, specifications dossier, or technical drawings (PDF, Word, Excel) to accompany this BOQ schedule.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                type="file"
+                id="boq-sow-document-upload"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+                onChange={handleSOWUpload}
+                className="sr-only"
+                disabled={uploadingSow}
+                aria-label="Upload Scope of Work Document"
+              />
+              <label
+                htmlFor="boq-sow-document-upload"
+                className={cn(
+                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-xs font-bold text-purple-900 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-purple-400",
+                  uploadingSow && "opacity-50 pointer-events-none"
+                )}
+              >
+                {uploadingSow ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-1.5 text-purple-600" aria-hidden="true" />
+                    <span>Uploading SOW...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4 mr-1.5 text-purple-600" aria-hidden="true" />
+                    <span>{draft.serviceDetails.sowFileName ? 'Replace SOW File' : 'Upload SOW Document'}</span>
+                  </>
+                )}
+              </label>
+            </div>
+          </div>
+
+          {draft.serviceDetails.sowFileName && (
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl animate-fadeIn">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
+              <span className="truncate">Attached SOW: <strong>{draft.serviceDetails.sowFileName}</strong></span>
+              <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold shrink-0">Scope Satisfied</span>
+              {draft.serviceDetails.sowFileAssetId && (
+                <button
+                  type="button"
+                  onClick={() => handlePreviewDoc({ fileAssetId: draft.serviceDetails.sowFileAssetId, fileName: draft.serviceDetails.sowFileName }, 'Scope of Work')}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:underline ml-2 shrink-0 cursor-pointer"
+                  title="Preview uploaded SOW file"
+                >
+                  <Eye className="h-3.5 w-3.5" aria-hidden="true" /> Preview
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleRemoveSOW}
+                className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0 cursor-pointer"
+                aria-label="Remove SOW Document"
+              >
+                Remove
+              </button>
+            </div>
+          )}
+
+          <div className="pt-1">
+            <label className="text-[11px] font-bold text-slate-700 block mb-1">
+              Scope of Work Summary / Technical Specifications (Optional if SOW document attached)
+            </label>
+            <textarea
+              value={draft.serviceDetails.scopeOfWork}
+              onChange={e => updateService('scopeOfWork', e.target.value)}
+              rows={2}
+              className={textareaClass}
+              placeholder="Enter summary of work scope, project objectives, and technical expectations..."
+            />
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Structured Bill of Quantities (BOQ)</h3>
-            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">Invite quotes using an itemized spreadsheet schedule</p>
+            <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+              {whatBuying === 'Works' ? 'Works Schedule / Bill of Quantities (BOQ)' : 'Structured Bill of Quantities (BOQ)'}
+            </h3>
+            <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
+              {whatBuying === 'Works' ? 'Itemized schedule of construction, fabrication, or execution trades' : 'Invite quotes using an itemized spreadsheet schedule'}
+            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
             <Button
@@ -5434,7 +5557,7 @@ function ItemsDetailsForm({
   // Service Details Panel (when Service is selected)
   const hasSowDoc = Boolean(draft.serviceDetails.sowFileAssetId || draft.serviceDetails.sowFileName);
 
-  const serviceDetailsPanel = whatBuying === 'Service' ? (
+  const serviceDetailsPanel = (whatBuying === 'Service' || draft.type === 'RFP') ? (
     <div className="space-y-4 rounded-2xl p-3.5 sm:p-5 border border-purple-200/90 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full shadow-3xs">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-purple-100 pb-3 gap-2">
         <div className="flex items-center gap-2.5">
@@ -7826,15 +7949,15 @@ function PreviewPublishForm({
         priority={draft.basics.priority}
         requiredBy={draft.basics.requiredByDate}
         location={draft.basics.deliveryLocation}
-        itemsCount={draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable.length : draft.items.length}
+        itemsCount={(draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works') ? draft.boqTable.length : draft.items.length}
         suppliersCount={draft.vendors.invitedSellers.length}
         docsCount={draft.requiredDocs.length}
       />
 
-      {draft.basics.whatAreYouBuying === 'Service' && draft.serviceDetails.sowFileName && (
+      {draft.serviceDetails.sowFileName && (
         <div className="flex items-center gap-2.5 rounded-xl border border-purple-200 bg-purple-50/70 p-3 text-xs font-semibold text-purple-950">
           <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
-          <span>Attached Master SOW Document: <strong>{draft.serviceDetails.sowFileName}</strong></span>
+          <span>Attached Scope of Work (SOW) Document: <strong>{draft.serviceDetails.sowFileName}</strong></span>
           <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">
             SOW Attached
           </span>
@@ -8060,7 +8183,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const estimatedValue = draft.basics.estimatedValue || 0;
 
   // Handle BOQ item list vs Standard item list
-  const mappedItems = draft.basics.whatAreYouBuying === 'BOQ'
+  const isBoqBased = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const mappedItems = isBoqBased
     ? draft.boqTable.map(item => ({
         itemName: item.description,
         description: item.remarks || item.description || '',
@@ -8145,7 +8269,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     bidStartDate: draft.schedule.submissionStartDate || new Date().toISOString(),
     bidClosingDate: draft.schedule.submissionDate || draft.basics.requiredByDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
     performanceSecurityAmount: draft.terms.securityDeposit || 0,
-    scopeOfWork: draft.serviceDetails.scopeOfWork || (draft.serviceDetails.sowFileName ? `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}` : '') || draft.basics.justification || '',
+    scopeOfWork: draft.serviceDetails.scopeOfWork || (draft.serviceDetails.sowFileName ? `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}` : '') || (draft.boqFileName ? `Refer to attached BOQ schedule: ${draft.boqFileName}` : '') || draft.basics.justification || draft.internal.justification || draft.approval.notes || '',
     deliveryLocation,
     deliveryAddress: deliveryLocation,
   };
@@ -8159,8 +8283,10 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const basics = {
     title,
-    justification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
-    description: `Sourcing Method: ${draft.type}\nValue: INR ${estimatedValue.toLocaleString('en-IN')}\nUrgency: ${draft.basics.priority}`,
+    justification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || draft.approval.notes || '',
+    description: (draft.type === 'RFP' && (draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName))
+      ? (draft.serviceDetails.scopeOfWork || `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}`)
+      : `Sourcing Method: ${draft.type}\nValue: INR ${estimatedValue.toLocaleString('en-IN')}\nUrgency: ${draft.basics.priority}`,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
     estimatedValue,
     discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
@@ -8307,12 +8433,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
-    boqTable: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable : [],
-    boqFileName: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileName : '',
-    boqFileAssetId: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqFileAssetId : null,
+    boqTable: isBoqBased ? draft.boqTable : [],
+    boqFileName: isBoqBased ? draft.boqFileName : '',
+    boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service'
+    serviceDetails: (draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP')
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
@@ -8330,7 +8456,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     },
     limitedTenderJustification: draft.limitedTenderJustification || draft.basics.justification || draft.internal.justification || '',
     rfqType: draft.rfqType,
-    items: draft.basics.whatAreYouBuying === 'BOQ' ? mappedItems : draft.items,
+    items: isBoqBased ? mappedItems : draft.items,
     fullProcurementMethod: draft.type,
     buyingType: draft.basics.whatAreYouBuying,
     recommendation,

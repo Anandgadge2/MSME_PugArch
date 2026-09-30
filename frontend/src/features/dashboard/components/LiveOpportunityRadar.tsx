@@ -187,8 +187,12 @@ export function LiveOpportunityRadar() {
         if (!auction) return;
         const closing = auction.endTime ? new Date(auction.endTime) : null;
         const isExpired = closing ? closing.getTime() <= now.getTime() : false;
+        const auctionStatus = String(auction.statusEnum || auction.status || '').toUpperCase();
+        const isClosed = isExpired || ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'FINALIZED', 'COMPLETED', 'ENDED', 'CONCLUDED'].includes(auctionStatus) || Boolean(auction.actualClosedAt || auction.finalizedAt || auction.winnerSellerId);
+        if (isClosed) return;
+
         const diffDays = closing
-          ? (isExpired ? 0 : Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))))
+          ? Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
           : 5;
         const createdDate = auction.createdAt || auction.startTime || null;
         const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;

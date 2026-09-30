@@ -406,9 +406,391 @@ export const nextClarificationNumber = async (bidNumber: string) => {
   return `${bidNumber}-CLR-${String(count + 1).padStart(3, '0')}`;
 };
 
+export const resolveAuctionAsBidRecord = async (token: string, client: any = db) => {
+  const stripped = token.replace(/^(RA-|PRC-|AUCTION-)/i, '');
+  const rawNum = Number(stripped);
+  const isNum = /^\d+$/.test(stripped) && Number.isFinite(rawNum) && rawNum > 0 && rawNum <= 2147483647;
+  const validId = isNum ? rawNum : 0;
+
+  const auction = await client.auction.findFirst({
+    where: {
+      OR: [
+        { auctionCode: token },
+        { referenceNo: token },
+        { auctionCode: stripped },
+        { referenceNo: stripped },
+        ...(validId > 0 ? [{ id: validId }, { linkedRequirementId: validId }, { linkedBidId: validId }] : [])
+      ]
+    },
+    include: {
+      bids: {
+        where: { isValid: true },
+        orderBy: [{ amount: 'asc' }, { bidAmount: 'asc' }, { submittedAt: 'asc' }]
+      }
+    }
+  });
+
+  if (!auction) return null;
+
+  // Query linked procurement bid if exists
+  let linkedBid: any = null;
+  if (auction.linkedBidId) {
+    linkedBid = await client.procurementBid.findUnique({
+      where: { id: auction.linkedBidId },
+      include: {
+        participations: {
+          where: { isWithdrawn: false },
+          include: {
+            seller: { include: { organization: true, sellerProfile: true } },
+            documents: true
+          }
+        },
+        buyer: { include: { buyerProfile: true, organization: true } },
+        buyerOrganization: true,
+        awards: true,
+        documents: true
+      }
+    }).catch(() => null);
+  }
+
+  // Query linked requirement if exists
+  let linkedReq: any = null;
+  if (auction.linkedRequirementId) {
+    linkedReq = await client.requirement.findUnique({
+      where: { id: auction.linkedRequirementId },
+      include: {
+        items: true,
+        organization: true,
+        buyer: true
+      }
+    }).catch(() => null);
+  }
+
+  // Query buyer organization
+  let buyerOrg: any = linkedBid?.buyerOrganization || null;
+  if (!buyerOrg && auction.buyerOrgId) {
+    buyerOrg = await client.organization.findUnique({
+      where: { id: auction.buyerOrgId }
+    }).catch(() => null);
+  }
+
+  // Query buyer user
+  let buyerUser: any = linkedBid?.buyer || null;
+  if (!buyerUser && auction.createdByUserId) {
+    buyerUser = await client.user.findUnique({
+      where: { id: auction.createdByUserId },
+      include: { buyerProfile: true, organization: true }
+    }).catch(() => null);
+  }
+
+  // Query participants
+  const participants = await client.auctionParticipant.findMany({
+    where: { auctionId: auction.id },
+    include: {
+      qualificationDocuments: true
+    },
+    orderBy: [{ currentRank: 'asc' }, { lastBidAmount: 'asc' }, { id: 'asc' }]
+  }).catch(() => []);
+
+  const orgIds = participants.map((p: any) => p.sellerOrgId).filter(Boolean);
+  const orgs = orgIds.length > 0 ? await client.organization.findMany({
+    where: { id: { in: orgIds } }
+  }).catch(() => []) : [];
+  const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
+
+  const userIds = participants.map((p: any) => p.sellerUserId).filter(Boolean);
+  const users = userIds.length > 0 ? await client.user.findMany({
+    where: { id: { in: userIds } },
+    include: { sellerProfile: true, organization: true }
+  }).catch(() => []) : [];
+  const userMap = new Map<number, any>(users.map((u: any) => [u.id, u]));
+
+  // Standardize participations
+  const mappedParticipations = participants.map((p: any, idx: number) => {
+    const org = orgMap.get(p.sellerOrgId);
+    const u = userMap.get(p.sellerUserId);
+    const linkedPart = (linkedBid?.participations || []).find((lp: any) =>
+      lp.sellerId === p.sellerUserId ||
+      lp.sellerUserId === p.sellerUserId ||
+      lp.sellerOrgId === p.sellerOrgId ||
+      lp.seller?.organizationId === p.sellerOrgId
+    );
+
+    const bidsByP = (auction.bids || []).filter((b: any) =>
+      b.participantId === p.id ||
+      b.sellerOrgId === p.sellerOrgId ||
+      b.sellerId === p.sellerUserId
+    );
+    const lowestBid = bidsByP[0];
+    const bestAmount = Number(
+      p.lastBidAmount ||
+      (lowestBid ? (lowestBid.amount || lowestBid.bidAmount) : null) ||
+      p.initialQuoteTotal ||
+      p.initialQuoteAmount ||
+      auction.currentLowestBid ||
+      linkedPart?.totalPrice ||
+      0
+    );
+
+    const initialQuote = Number(
+      p.initialQuoteTotal ||
+      p.initialQuoteAmount ||
+      linkedPart?.totalPrice ||
+      linkedPart?.quotedAmount ||
+      bestAmount
+    );
+
+    const rankNum = p.currentRank || (idx + 1);
+    const rankStr = `L${rankNum}`;
+    const isWinner = auction.winnerSellerId
+      ? (auction.winnerSellerId === p.sellerUserId || auction.winnerSellerId === p.sellerOrgId)
+      : (rankNum === 1);
+    const isAwardAccepted = auction.status === 'AWARD_ACCEPTED' || (isWinner && p.status === 'ACCEPTED');
+    const isAwardRecommended = auction.status === 'AWARD_RECOMMENDED' || auction.statusEnum === 'AWARD_RECOMMENDED';
+    const finalStatus = isAwardAccepted ? 'AWARDED' : (isWinner && isAwardRecommended ? 'AWARD_RECOMMENDED' : (p.status === 'ACCEPTED' ? 'AWARDED' : 'SUBMITTED'));
+
+    const sellerName = org?.organizationName || u?.name || linkedPart?.sellerName || `Supplier #${p.id}`;
+    const contactPerson = u?.name || linkedPart?.contactPerson || 'Representative';
+    const sellerEmail = u?.email || linkedPart?.sellerEmail || '';
+    const sellerMobile = u?.mobile || linkedPart?.sellerMobile || '';
+
+    const ackData = typeof linkedPart?.acknowledgement === 'string'
+      ? (() => { try { return JSON.parse(linkedPart.acknowledgement); } catch { return {}; } })()
+      : (linkedPart?.acknowledgement || {});
+    const respData = typeof linkedPart?.responseData === 'string'
+      ? (() => { try { return JSON.parse(linkedPart.responseData); } catch { return {}; } })()
+      : (linkedPart?.responseData || {});
+
+    const candidateDocs = [
+      ...(Array.isArray(linkedPart?.documents) ? linkedPart.documents : []),
+      ...(Array.isArray(ackData?.documents) ? ackData.documents : []),
+      ...(Array.isArray(ackData?.attachments) ? ackData.attachments : []),
+      ...(Array.isArray(respData?.documents) ? respData.documents : []),
+      ...(Array.isArray(respData?.attachments) ? respData.attachments : []),
+      ...(Array.isArray(p.qualificationDocuments) ? p.qualificationDocuments.map((d: any, dIdx: number) => ({
+          id: d.id || `doc-${p.id}-${dIdx}`,
+          name: d.documentName || d.documentType || 'Qualification Document',
+          fileName: d.documentName || 'Document',
+          fileUrl: d.documentUrl || d.url,
+          fileAssetId: d.fileAssetId || null,
+          documentCategory: d.documentType || 'TECHNICAL_COMPLIANCE'
+        })) : [])
+    ];
+
+    const rawLineItems = (Array.isArray(linkedPart?.lineItems) && linkedPart.lineItems.length > 0)
+      ? linkedPart.lineItems
+      : (Array.isArray(ackData?.lineItems) && ackData.lineItems.length > 0)
+      ? ackData.lineItems
+      : (Array.isArray(respData?.lineItems) && respData.lineItems.length > 0)
+      ? respData.lineItems
+      : [];
+
+    const resolvedLineItems = rawLineItems.length > 0
+      ? rawLineItems.map((li: any) => ({
+          ...li,
+          unitRate: (bestAmount > 0 && li.quantity > 0) ? Math.round((bestAmount / li.quantity) * 100) / 100 : li.unitRate,
+          unitPrice: (bestAmount > 0 && li.quantity > 0) ? Math.round((bestAmount / li.quantity) * 100) / 100 : li.unitPrice,
+          lineTotal: bestAmount > 0 ? bestAmount : li.lineTotal,
+          totalAmount: bestAmount > 0 ? bestAmount : li.totalAmount
+        }))
+      : [{
+          itemName: auction.title || 'Procurement requirement',
+          description: auction.description || 'Reverse auction item',
+          quantity: 1,
+          unitOfMeasure: 'Nos',
+          unitPrice: bestAmount,
+          unitRate: bestAmount,
+          lineTotal: bestAmount,
+          totalAmount: bestAmount,
+          makeBrand: p.makeBrand || 'Standard',
+          model: p.model || 'Standard'
+        }];
+
+    const resolvedItemDesc = linkedPart?.offeredItemDescription || ackData?.offeredItemDescription || respData?.offeredItemDescription || auction.title || 'Procurement requirement';
+
+    return {
+      id: p.id,
+      participationId: p.id,
+      bidId: auction.id,
+      sellerId: p.sellerUserId || linkedPart?.sellerId || u?.id,
+      sellerUserId: p.sellerUserId || linkedPart?.sellerUserId || u?.id,
+      sellerOrgId: p.sellerOrgId || linkedPart?.sellerOrgId || org?.id,
+      sellerName,
+      contactPerson,
+      sellerEmail,
+      sellerMobile,
+      sellerType: 'Verified Seller',
+      seller: {
+        id: p.sellerUserId || u?.id,
+        name: sellerName,
+        email: sellerEmail,
+        mobile: sellerMobile,
+        role: 'seller',
+        organization: org ? { id: org.id, organizationName: org.organizationName } : null
+      },
+      technicalStatus: p.qualificationStatus === 'APPROVED' ? 'QUALIFIED'
+        : (p.qualificationStatus === 'REJECTED' ? 'DISQUALIFIED' : 'QUALIFIED'),
+      financialStatus: 'OPENED',
+      financialSealed: false,
+      rank: rankNum,
+      finalRank: rankStr,
+      finalStatus,
+      resultStatus: isAwardAccepted ? 'Awarded' : (isWinner && isAwardRecommended ? 'Awarded' : 'Responsive'),
+      totalPrice: bestAmount,
+      quotedAmount: bestAmount,
+      totalAmount: bestAmount,
+      initialQuoteAmount: initialQuote,
+      savingsAmount: initialQuote > bestAmount ? initialQuote - bestAmount : 0,
+      makeBrand: p.makeBrand || linkedPart?.makeBrand || ackData?.makeBrand || 'Standard',
+      model: p.model || linkedPart?.model || ackData?.model || 'Standard',
+      offeredItem: resolvedItemDesc,
+      offeredItemDescription: resolvedItemDesc,
+      lineItems: resolvedLineItems,
+      documents: candidateDocs,
+      acknowledgement: ackData,
+      responseData: respData,
+      submittedAt: p.updatedAt || p.createdAt || auction.startTime,
+      createdAt: p.createdAt || auction.startTime,
+      deliveryTimeline: linkedPart?.deliveryTimeline || ackData?.deliveryTimeline || 'Standard',
+      terms: linkedPart?.terms || ackData?.terms || 'Standard terms',
+      rawParticipation: p
+    };
+  });
+
+  // Winning participant & awards
+  const winningParticipant = mappedParticipations.find((p: any) =>
+    auction.winnerSellerId
+      ? (p.sellerUserId === auction.winnerSellerId || p.sellerOrgId === auction.winnerSellerId)
+      : p.rank === 1
+  ) || mappedParticipations[0];
+
+  const winningAmount = Number(
+    winningParticipant?.totalPrice ||
+    auction.currentLowestAmount ||
+    auction.currentLowestBid ||
+    auction.currentBid ||
+    0
+  );
+
+  const isAccepted = auction.status === 'AWARD_ACCEPTED' || Boolean(winningParticipant?.finalStatus === 'AWARDED');
+  const synthesizedAwards = (winningParticipant && (auction.winnerSellerId || isAccepted || auction.status === 'AWARD_RECOMMENDED' || auction.statusEnum === 'AWARD_RECOMMENDED')) ? [{
+    id: 1,
+    bidId: auction.id,
+    participationId: winningParticipant.id,
+    sellerId: winningParticipant.sellerUserId || auction.winnerSellerId,
+    sellerOrgId: winningParticipant.sellerOrgId,
+    awardAmount: winningAmount,
+    awardedAmount: winningAmount,
+    awardStatus: isAccepted ? 'ACCEPTED' : 'RECOMMENDED',
+    counterOfferStatus: isAccepted ? 'ACCEPTED' : 'NONE',
+    remarks: auction.remarks || 'Reverse Auction Award',
+    createdAt: auction.updatedAt || auction.createdAt
+  }] : [];
+
+  const tenderItems = linkedBid?.items || linkedReq?.items || [{
+    id: 1,
+    itemName: auction.title || 'Procurement requirement',
+    description: auction.description || '',
+    quantity: 1,
+    unitOfMeasure: 'Nos'
+  }];
+
+  const estimatedVal = Number(
+    linkedBid?.estimatedValue ||
+    auction.basePrice ||
+    auction.startPrice ||
+    auction.reservePrice ||
+    auction.currentLowestBid ||
+    0
+  );
+
+  const effectiveStatus = isAccepted ? 'AWARDED'
+    : (auction.status === 'AWARD_RECOMMENDED' || auction.statusEnum === 'AWARD_RECOMMENDED' ? 'AWARD_RECOMMENDED'
+    : (['CLOSED', 'COMPLETED', 'FINALIZED'].includes(auction.status) ? 'L1_GENERATED'
+    : (['LIVE', 'ACTIVE'].includes(auction.status) ? 'OPEN' : (auction.status || 'ACTIVE'))));
+
+  const effectiveStage = isAccepted ? 'AWARDED'
+    : (auction.status === 'AWARD_RECOMMENDED' || auction.statusEnum === 'AWARD_RECOMMENDED' ? 'AWARD_RECOMMENDED'
+    : (['CLOSED', 'COMPLETED', 'FINALIZED'].includes(auction.status) ? 'L1_GENERATED'
+    : (['LIVE', 'ACTIVE'].includes(auction.status) ? 'SELLER_PARTICIPATION' : 'TECHNICAL_EVALUATION_COMPLETED')));
+
+  return {
+    id: auction.auctionCode || `RA-${auction.id}`,
+    bidNumber: auction.auctionCode || `RA-${auction.id}`,
+    referenceNumber: auction.referenceNo || auction.auctionCode || `RA-${auction.id}`,
+    title: auction.title || `Reverse Auction ${auction.auctionCode || auction.id}`,
+    description: auction.description || linkedBid?.description || '',
+    bidType: 'Reverse Auction',
+    procurementType: 'Reverse Auction',
+    procurementMethod: 'REVERSE_AUCTION',
+    sourcingMethod: 'REVERSE_AUCTION',
+    category: auction.category || linkedBid?.category || 'General',
+    status: effectiveStatus,
+    lifecycleStage: effectiveStage,
+    estimatedValue: estimatedVal,
+    startDate: auction.startTime || auction.actualStartedAt || auction.createdAt,
+    endDate: auction.endTime || auction.actualClosedAt || auction.endTime,
+    submissionStartDate: auction.startTime || auction.createdAt,
+    publishedAt: auction.createdAt || auction.startTime,
+    auctionCode: auction.auctionCode,
+    auctionId: auction.id,
+    sourceModel: 'AUCTION',
+    sourceId: auction.id,
+    buyerId: buyerUser?.id || auction.createdByUserId,
+    buyer: buyerUser,
+    buyerOrganization: buyerOrg,
+    buyerOrganizationName: buyerOrg?.organizationName || linkedBid?.buyerOrganizationName || 'Buyer Organization',
+    items: tenderItems,
+    participations: mappedParticipations,
+    results: mappedParticipations,
+    awards: synthesizedAwards,
+    technicalPacket: {
+      ...(linkedBid?.technicalPacket || {}),
+      schedule: {
+        publishDate: auction.createdAt,
+        bidStartDate: auction.startTime,
+        submissionDate: auction.endTime,
+        submissionEndDate: auction.endTime,
+        packetType: 'Single'
+      },
+      basics: {
+        title: auction.title || `Reverse Auction ${auction.auctionCode || auction.id}`,
+        description: auction.description || '',
+        procurementMethod: 'REVERSE_AUCTION',
+        procurementType: 'Reverse Auction',
+        category: auction.category || linkedBid?.category || 'General',
+        estimatedValue: estimatedVal
+      },
+      items: tenderItems,
+      consigneeDetails: linkedBid?.technicalPacket?.consigneeDetails || []
+    },
+    payload: {
+      basics: {
+        title: auction.title || `Reverse Auction ${auction.auctionCode || auction.id}`,
+        description: auction.description || '',
+        procurementMethod: 'REVERSE_AUCTION',
+        procurementType: 'Reverse Auction',
+        category: auction.category || linkedBid?.category || 'General',
+        estimatedValue: estimatedVal
+      }
+    },
+    isReverseAuction: true,
+    rawAuction: auction
+  };
+};
+
 export const resolveBid = async (bidIdOrNumber: string | number, include: any = leanBidInclude) => {
   const token = String(bidIdOrNumber).trim();
   logger.info({ token }, '[RESOLVE_BID] Resolving procurement record for token');
+
+  // 0. If token indicates a reverse auction, resolve directly via reverse auction records
+  if (token.startsWith('RA-') || token.startsWith('AUCTION-')) {
+    const auctionBid = await resolveAuctionAsBidRecord(token);
+    if (auctionBid) {
+      logger.info({ token, auctionId: auctionBid.auctionId }, '[RESOLVE_BID] Resolved reverse auction as procurement bid');
+      return auctionBid;
+    }
+  }
 
   // 1. Direct indexed lookup in procurementBid
   let bid = await db.procurementBid.findUnique({
@@ -791,6 +1173,13 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
     }
     if (!bid.sourceId) {
       bid.sourceId = packetMeta.sourceId || linkedReqId || linkedContractId || linkedQuoteId || bid.id;
+    }
+  }
+
+  if (!bid) {
+    const auctionFallback = await resolveAuctionAsBidRecord(token);
+    if (auctionFallback) {
+      bid = auctionFallback;
     }
   }
 

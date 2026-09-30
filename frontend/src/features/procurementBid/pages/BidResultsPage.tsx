@@ -132,6 +132,20 @@ export default function BidResultsPage() {
     );
   }, [bid]);
 
+  const isReverseAuction = React.useMemo(() => {
+    if (!bid) return String(bidId).toUpperCase().startsWith('RA-') || String(bidId).toUpperCase().startsWith('AUCTION-');
+    const b: any = bid;
+    return (
+      String(b.id || '').toUpperCase().startsWith('RA-') ||
+      String(b.bidNumber || '').toUpperCase().startsWith('RA-') ||
+      String(bidId).toUpperCase().startsWith('RA-') ||
+      b.bidType === 'Reverse Auction' ||
+      b.procurementType === 'Reverse Auction' ||
+      b.procurementMethod === 'REVERSE_AUCTION' ||
+      Boolean(b.isReverseAuction)
+    );
+  }, [bid, bidId]);
+
   const isTechEvalCompleted = React.useMemo(() => {
     if (isCompletingTechEvalSuccess) return true;
     if (!bid) return false;
@@ -475,10 +489,12 @@ export default function BidResultsPage() {
 
     try {
       // Execute primary bid detail fetch and fallback endpoints concurrently in parallel!
-      const [bidRes, fallbackRes1, fallbackRes2] = await Promise.allSettled([
+      const [bidRes, fallbackRes1, fallbackRes2, raResultRes, raDetailRes] = await Promise.allSettled([
         procurementBidApi.getBidResults(bidId),
         getApi(`/api/buyer/requirements/${encodeURIComponent(bidId)}/responses`, true),
         getApi(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, true),
+        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}/result`, true),
+        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}`, true),
       ]);
 
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
@@ -687,6 +703,122 @@ export default function BidResultsPage() {
               };
               break;
             }
+          }
+        }
+      }
+
+      // Reverse Auction Outcome handling: If reverse auction data is available, map or merge it
+      const raResultVal: any = raResultRes.status === 'fulfilled' ? raResultRes.value : null;
+      const raDetailVal: any = raDetailRes.status === 'fulfilled' ? raDetailRes.value : null;
+      const raAuction = raResultVal?.auction || raDetailVal || {};
+      const raRanking = Array.isArray(raResultVal?.ranking) ? raResultVal.ranking : [];
+
+      if (raRanking.length > 0) {
+        if (!data || !Array.isArray(data.results) || data.results.length === 0) {
+          const mappedFromRa = raRanking.map((p: any, idx: number) => {
+            const bestAmt = Number(p.lastBidAmount || p.initialQuoteTotal || 0);
+            return {
+              id: p.id,
+              participationId: p.id,
+              sellerId: p.sellerUserId || p.sellerOrgId,
+              sellerOrgId: p.sellerOrgId,
+              sellerUserId: p.sellerUserId,
+              sellerName: p.sellerOrgName || `Bidder ${p.currentRank || idx + 1}`,
+              contactPerson: p.sellerOrgName || 'Authorized Signatory',
+              sellerEmail: 'Verified on Portal',
+              sellerMobile: 'Listed',
+              submittedAt: p.updatedAt || p.createdAt || raAuction.startTime,
+              sellerType: 'Verified Seller',
+              offeredItem: raAuction.title || 'Procurement requirement',
+              makeBrand: p.makeBrand || 'Standard',
+              model: p.model || 'Standard',
+              technicalStatus: p.qualificationStatus === 'REJECTED' ? 'Disqualified' : 'Qualified',
+              totalPrice: bestAmt,
+              quotedAmount: bestAmt,
+              totalAmount: bestAmt,
+              finalRank: `L${p.currentRank || idx + 1}`,
+              finalStatus: (p.isAwardAccepted || p.status === 'ACCEPTED') ? 'AWARDED' : (p.isWinner ? 'AWARD_RECOMMENDED' : 'SUBMITTED'),
+              resultStatus: (p.isAwardAccepted || p.isAwarded || p.status === 'ACCEPTED') ? 'Awarded' : 'Responsive',
+              lineItems: [{
+                itemName: raAuction.title || 'Procurement requirement',
+                description: raAuction.description || '',
+                quantity: 1,
+                unitOfMeasure: 'Nos',
+                unitPrice: bestAmt,
+                unitRate: bestAmt,
+                lineTotal: bestAmt,
+                totalAmount: bestAmt,
+                makeBrand: p.makeBrand || 'Standard',
+                model: p.model || 'Standard'
+              }],
+              documents: p.qualificationDocuments || [],
+              details: {
+                organizationName: p.sellerOrgName || `Bidder ${p.currentRank || idx + 1}`,
+                contactPerson: 'Representative',
+                email: '',
+                mobile: '',
+                submittedAt: p.updatedAt || p.createdAt,
+                complianceRemarks: 'Compliant',
+                quotedAmount: bestAmt,
+                totalAmount: bestAmt,
+                offeredQuantity: 1,
+                technicalStatus: 'Qualified',
+                lineItems: []
+              }
+            };
+          });
+
+          const estVal = Number(raAuction.basePrice || raAuction.startPrice || raAuction.reservePrice || mappedFromRa[0]?.totalPrice || 0);
+
+          data = {
+            ...(data || {}),
+            id: raAuction.auctionCode || `RA-${raAuction.id}` || bidId,
+            bidNumber: raAuction.auctionCode || `RA-${raAuction.id}` || bidId,
+            title: raAuction.title || `Reverse Auction ${bidId}`,
+            description: raAuction.description || '',
+            bidType: 'Reverse Auction',
+            procurementType: 'Reverse Auction',
+            procurementMethod: 'REVERSE_AUCTION',
+            category: raAuction.category || 'General',
+            status: raAuction.status === 'AWARD_ACCEPTED' ? 'Awarded' : (['CLOSED', 'COMPLETED'].includes(raAuction.status) ? 'L1 Generated' : (raAuction.status || 'Active')),
+            lifecycleStage: raAuction.status === 'AWARD_ACCEPTED' ? 'AWARDED' : 'L1_GENERATED',
+            estimatedValue: estVal,
+            startDate: raAuction.startTime || raAuction.createdAt,
+            endDate: raAuction.endTime || raAuction.actualClosedAt,
+            results: mappedFromRa,
+            participations: mappedFromRa,
+            awards: raResultVal?.winningParticipant ? [{
+              id: 1,
+              participationId: raResultVal.winningParticipant.id,
+              sellerId: raResultVal.winningParticipant.sellerUserId || raAuction.winnerSellerId,
+              awardAmount: Number(raResultVal.winningParticipant.lastBidAmount || 0),
+              awardStatus: raResultVal.isAwardAccepted ? 'ACCEPTED' : 'RECOMMENDED'
+            }] : []
+          };
+        } else if (data && Array.isArray(data.results)) {
+          // Merge pricing and ranks from auction ranking
+          const raRankMap = new Map<number, any>(raRanking.map((r: any) => [
+            Number(r.sellerOrgId || r.sellerUserId || r.id),
+            r
+          ]));
+          data.results = data.results.map((item: any) => {
+            const matchedRa = raRankMap.get(Number(item.sellerOrgId || item.sellerId || item.sellerUserId || item.id)) as any;
+            if (matchedRa) {
+              const raPrice = Number(matchedRa.lastBidAmount || matchedRa.amount || 0);
+              return {
+                ...item,
+                totalPrice: raPrice > 0 ? raPrice : item.totalPrice,
+                quotedAmount: raPrice > 0 ? raPrice : item.quotedAmount,
+                totalAmount: raPrice > 0 ? raPrice : item.totalAmount,
+                finalRank: `L${matchedRa.currentRank || 1}`,
+                resultStatus: (matchedRa.isAwardAccepted || matchedRa.isAwarded) ? 'Awarded' : item.resultStatus,
+                finalStatus: (matchedRa.isAwardAccepted || matchedRa.isAwarded) ? 'AWARDED' : item.finalStatus
+              };
+            }
+            return item;
+          });
+          if (!data.estimatedValue || data.estimatedValue === 0) {
+            data.estimatedValue = Number(raAuction.basePrice || raAuction.startPrice || raAuction.reservePrice || 0);
           }
         }
       }
@@ -1721,6 +1853,56 @@ export default function BidResultsPage() {
             </div>
           </div>
         </div>
+
+        {/* Reverse Auction Outcome Banner */}
+        {isReverseAuction && (
+          <section className="rounded-xl border border-indigo-200/90 bg-gradient-to-r from-indigo-50/90 via-blue-50/50 to-white p-3.5 sm:p-4 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                  <Gavel className="h-4.5 w-4.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1 rounded bg-indigo-100 text-indigo-900 border border-indigo-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                      Reverse Auction Finalized Outcome
+                    </span>
+                    {isBidAlreadyAwarded ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-700" /> Contract Award Concluded
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded bg-blue-100 text-blue-900 border border-blue-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                        L1 Commercial Outcome Ready
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold text-slate-700 leading-relaxed">
+                    Official reverse auction bidding concluded. Leading supplier{' '}
+                    <strong className="text-slate-900 font-bold">{ranking[0]?.sellerName || 'L1 Bidder'}</strong>{' '}
+                    secured L1 ranking at{' '}
+                    <span className="font-mono font-black text-emerald-700">
+                      {ranking[0]?.totalPrice ? money(ranking[0].totalPrice) : '—'}
+                    </span>
+                    {(bid as any)?.rawAuction?.startPrice && ranking[0]?.totalPrice && Number((bid as any).rawAuction.startPrice) > Number(ranking[0].totalPrice) && (
+                      <span className="ml-1.5 text-emerald-700 font-bold">
+                        (Savings: {money(Number((bid as any).rawAuction.startPrice) - Number(ranking[0].totalPrice))})
+                      </span>
+                    )}.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Link
+                  href={`/buyer/procurement/reverse-auction/${encodeURIComponent(bid.id)}/results`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3.5 text-xs font-bold text-white shadow-xs transition"
+                >
+                  <Trophy className="h-3.5 w-3.5" /> Full Auction Console
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* Empty State: Zero quotations submitted */}
         {ranking.length === 0 ? (

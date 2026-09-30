@@ -2250,7 +2250,7 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
 
 
 
-router.get('/reverse-auctions/:id/result', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
+router.get('/reverse-auctions/:id/result', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const id = await resolveAuctionId(req.params.id);
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');

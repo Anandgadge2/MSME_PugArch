@@ -858,7 +858,29 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     const liveAuctionsCount = participantAuctionIds.length > 0 ? await prisma.auction.count({
                         where: {
                             id: { in: participantAuctionIds },
-                            status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] },
+                            status: {
+                                notIn: [
+                                    'CLOSED', 'closed',
+                                    'CANCELLED', 'cancelled',
+                                    'AWARD_RECOMMENDED', 'award_recommended',
+                                    'AWARD_OFFERED', 'award_offered',
+                                    'AWARDED', 'awarded',
+                                    'FINALIZED', 'finalized',
+                                    'COMPLETED', 'completed',
+                                    'ENDED', 'ended',
+                                    'CONCLUDED', 'concluded',
+                                    'DRAFT', 'draft',
+                                    'PAUSED', 'paused'
+                                ]
+                            },
+                            OR: [
+                                { statusEnum: null },
+                                { statusEnum: { notIn: ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARDED', 'FINALIZED', 'DRAFT', 'PAUSED'] } }
+                            ],
+                            actualClosedAt: null,
+                            finalizedAt: null,
+                            winnerSellerId: null,
+                            startTime: { lte: now },
                             endTime: { gt: now }
                         }
                     }).catch(() => 0) : 0;
@@ -938,7 +960,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
             const isShgAccount = req.user!.role === 'shg';
             const userRolePrefix = isShgAccount ? '/shg' : isSeller ? '/seller' : '/buyer';
 
-            const [userOnboardingRecord, sellerProfileRecord, sellerBankAccountsCount, deliveryAddressesCount, pendingActionPO, liveReverseAuction] = await Promise.all([
+            const [userOnboardingRecord, sellerProfileRecord, sellerBankAccountsCount, deliveryAddressesCount, pendingActionPO, candidateReverseAuction] = await Promise.all([
                 prisma.user.findUnique({ where: { id: userIdNum }, select: { onboardingStatus: true } }).catch(() => null),
                 isSeller ? prisma.sellerProfile.findUnique({ where: { userId: userIdNum } }).catch(() => null) : Promise.resolve(null),
                 isSeller ? prisma.sellerBankAccount.count({ where: { sellerProfile: { userId: userIdNum } } }).catch(() => 0) : Promise.resolve(0),
@@ -949,11 +971,81 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     select: { id: true, poNumber: true, title: true, amount: true }
                 }).catch(() => null) : Promise.resolve(null),
                 isSeller && participantAuctionIds.length > 0 ? prisma.auction.findFirst({
-                    where: { id: { in: participantAuctionIds }, status: { notIn: ['CLOSED', 'CANCELLED', 'closed', 'cancelled'] }, endTime: { gt: now } },
+                    where: {
+                        id: { in: participantAuctionIds },
+                        status: {
+                            notIn: [
+                                'CLOSED', 'closed',
+                                'CANCELLED', 'cancelled',
+                                'AWARD_RECOMMENDED', 'award_recommended',
+                                'AWARD_OFFERED', 'award_offered',
+                                'AWARDED', 'awarded',
+                                'FINALIZED', 'finalized',
+                                'COMPLETED', 'completed',
+                                'ENDED', 'ended',
+                                'CONCLUDED', 'concluded',
+                                'DRAFT', 'draft',
+                                'PAUSED', 'paused'
+                            ]
+                        },
+                        OR: [
+                            { statusEnum: null },
+                            { statusEnum: { notIn: ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARDED', 'FINALIZED', 'DRAFT', 'PAUSED'] } }
+                        ],
+                        actualClosedAt: null,
+                        finalizedAt: null,
+                        winnerSellerId: null,
+                        startTime: { lte: now },
+                        endTime: { gt: now }
+                    },
                     orderBy: { endTime: 'asc' },
-                    select: { id: true, title: true, auctionCode: true, endTime: true }
+                    select: {
+                        id: true,
+                        title: true,
+                        auctionCode: true,
+                        startTime: true,
+                        endTime: true,
+                        status: true,
+                        statusEnum: true,
+                        actualClosedAt: true,
+                        finalizedAt: true,
+                        winnerSellerId: true
+                    }
                 }).catch(() => null) : Promise.resolve(null)
             ]);
+
+            const isAuctionFloorLiveNow = (auction: any): boolean => {
+                if (!auction) return false;
+                if (auction.actualClosedAt || auction.finalizedAt || auction.winnerSellerId) return false;
+                const nowMs = Date.now();
+                const startMs = auction.startTime ? new Date(auction.startTime).getTime() : NaN;
+                const endMs = auction.endTime ? new Date(auction.endTime).getTime() : NaN;
+                if (Number.isFinite(endMs) && endMs <= nowMs) return false;
+                if (Number.isFinite(startMs) && startMs > nowMs) return false;
+
+                const s = String(auction.status || '').toUpperCase();
+                const se = String(auction.statusEnum || '').toUpperCase();
+                const terminalStatuses = [
+                    'CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED',
+                    'AWARDED', 'FINALIZED', 'COMPLETED', 'ENDED', 'CONCLUDED',
+                    'DRAFT', 'PAUSED'
+                ];
+                if (terminalStatuses.includes(s) || terminalStatuses.includes(se)) {
+                    return false;
+                }
+
+                if (s === 'LIVE' || s === 'ACTIVE' || s === 'OPEN' || se === 'LIVE') {
+                    return true;
+                }
+
+                if (['SCHEDULED', ''].includes(s) && Number.isFinite(startMs) && startMs <= nowMs && Number.isFinite(endMs) && endMs > nowMs) {
+                    return true;
+                }
+
+                return false;
+            };
+
+            const liveReverseAuction = isAuctionFloorLiveNow(candidateReverseAuction) ? candidateReverseAuction : null;
 
             const userOnboardingStatus = String(userOnboardingRecord?.onboardingStatus || (req.user as any)?.onboardingStatus || 'pending');
             const isUserApproved = userOnboardingStatus === 'approved_for_procurement';
@@ -1088,7 +1180,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         urgency: 'HIGH',
                         title: `Live Reverse Auction Floor Open`,
                         subtitle: `The bidding window for "${liveReverseAuction.title || 'Live Auction'}" is open right now. Submit your lower quotes before time runs out!`,
-                        actionHref: `/seller/procurement/reverse-auction/${liveReverseAuction.id}/live`,
+                        actionHref: `/seller/procurement/reverse-auction/${encodeURIComponent(String(liveReverseAuction.auctionCode || liveReverseAuction.id))}/live`,
                         actionLabel: 'Enter Auction Floor'
                     };
                 } else if (sellerReceivedRfqs > 0) {

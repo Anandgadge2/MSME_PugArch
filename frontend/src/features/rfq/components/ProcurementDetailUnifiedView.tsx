@@ -12753,12 +12753,14 @@ export function ProcurementDetailUnifiedView(
                             </h3>
                             {(() => {
                               const auctionStatusStr = String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase();
+                              const isAuctionClosed = ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'FINALIZED', 'COMPLETED', 'ENDED'].includes(auctionStatusStr) || Boolean((linkedAuction as any)?.actualClosedAt || (linkedAuction as any)?.finalizedAt || (linkedAuction as any)?.winnerSellerId);
                               const isAuctionLiveOrSched = Boolean(
                                 linkedAuction &&
+                                !isAuctionClosed &&
                                 !(linkedAuction as any).auctionPlanned &&
                                 ['LIVE', 'SCHEDULED', 'OPEN', 'ACTIVE'].includes(auctionStatusStr)
                               );
-                              const isAuctionLiveNow = auctionStatusStr === 'LIVE' || auctionStatusStr === 'OPEN';
+                              const isAuctionLiveNow = !isAuctionClosed && (auctionStatusStr === 'LIVE' || auctionStatusStr === 'OPEN');
 
                               if (isAuctionLiveOrSched) {
                                 return (

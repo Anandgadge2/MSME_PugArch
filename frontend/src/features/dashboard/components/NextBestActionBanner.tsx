@@ -38,6 +38,7 @@ interface NextBestActionBannerProps {
 
 export function NextBestActionBanner({ action, className }: NextBestActionBannerProps) {
   if (!action || !action.title) return null;
+  if ((action as any).isClosed || (action as any).status === 'CLOSED') return null;
 
   const title = action.title;
   const description = action.description || action.subtitle || '';

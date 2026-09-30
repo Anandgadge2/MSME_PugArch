@@ -152,9 +152,11 @@ export function BuyerProcurementMonitor() {
       );
 
       const auctionTargetCode = bid.linkedAuctionCode || bid.linkedAuctionId || bid.auctionCode || procDetailId;
-      const isLiveAuction = rawStatus.includes('LIVE') || rawStatus === 'REVERSE_AUCTION_ACTIVE' || String(bid.linkedAuctionStatus || '').toUpperCase() === 'LIVE';
+      const linkedStatus = String(bid.linkedAuctionStatus || '').toUpperCase();
+      const isTerminalAuction = ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'FINALIZED', 'COMPLETED', 'ENDED'].includes(linkedStatus) || rawStatus.includes('CLOSED') || rawStatus.includes('AWARD') || rawStatus.includes('CANCELLED');
+      const isLiveAuction = !isTerminalAuction && (rawStatus.includes('LIVE') || rawStatus === 'REVERSE_AUCTION_ACTIVE' || linkedStatus === 'LIVE');
 
-      if (isReverseAuctionStage) {
+      if (isReverseAuctionStage && !isTerminalAuction) {
         stage = 'published';
         typeLabel = 'Reverse Auction';
         stageLabel = isLiveAuction ? '🔴 Live Reverse Auction' : '⏱️ Scheduled RA';
@@ -235,7 +237,7 @@ export function BuyerProcurementMonitor() {
   }), [procurements]);
 
   const activeReverseAuctions = useMemo(() => {
-    return procurements.filter(p => p.type === 'Reverse Auction' || p.stageLabel.includes('Reverse Auction'));
+    return procurements.filter(p => p.stageLabel.includes('Live Reverse Auction'));
   }, [procurements]);
 
   return (
