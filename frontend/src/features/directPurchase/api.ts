@@ -57,6 +57,7 @@ export interface PlaceDirectOrderPayload {
     deliveryInstructions?: string | null;
     expectedDeliveryDate?: string | null;
     paymentMethod?: string;
+    termsAccepted?: boolean;
 }
 
 export const placeDirectOrder = (payload: PlaceDirectOrderPayload) =>

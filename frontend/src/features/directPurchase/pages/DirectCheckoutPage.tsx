@@ -35,6 +35,26 @@ import { fetchDeliveryAddresses, placeDirectOrder, type DeliveryAddressDto } fro
 import { EmptyState, LoadingState } from '@/features/shared/FeatureStates';
 import { formatCurrency } from '@/features/shared/format';
 import { api } from '@/lib/api';
+import { cn } from '@/lib/utils';
+import { ComplianceConsentCard, type ComplianceDoc } from '@/components/compliance/ComplianceConsentCard';
+import { OrderPlacementPolicyContent, CancellationRefundPolicyContent } from '@/components/compliance/CompliancePoliciesText';
+
+const complianceDocs: ComplianceDoc[] = [
+  {
+    id: 'procurement',
+    name: 'Order_Placement_Procurement_Policy.pdf',
+    pdfFile: 'Order_Placement_Procurement_Policy.pdf',
+    title: 'Procurement Policy',
+    content: <OrderPlacementPolicyContent />,
+  },
+  {
+    id: 'cancellation',
+    name: 'Order_Cancellation_Refund_Policy.pdf',
+    pdfFile: 'Order_Cancellation_Refund_Policy.pdf',
+    title: 'Cancellation & Refund',
+    content: <CancellationRefundPolicyContent />,
+  },
+];
 
 export default function DirectCheckoutPage() {
   const router = useRouter();
@@ -68,6 +88,8 @@ export default function DirectCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'PAY_ON_INVOICE' | 'NET_30' | 'PAY_ON_DELIVERY' | 'BANK_TRANSFER' | 'ONLINE'>('PAY_ON_INVOICE');
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsError, setTermsError] = useState<string | null>(null);
 
   // Auto-fill user profile & saved delivery address
   useEffect(() => {
@@ -195,6 +217,14 @@ export default function DirectCheckoutPage() {
       return;
     }
 
+    if (!termsAccepted) {
+      setTermsError('You must accept the Direct Purchase Terms and Statutory Compliance Agreement to proceed.');
+      toast.error('Please accept the Direct Purchase Terms and Statutory Compliance Agreement.');
+      const el = document.getElementById('direct-purchase-terms-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     setIsPlacingOrder(true);
     try {
       const res = await placeDirectOrder({
@@ -211,7 +241,8 @@ export default function DirectCheckoutPage() {
         gstin: gstin.trim() || undefined,
         deliveryInstructions: deliveryInstructions.trim() || undefined,
         expectedDeliveryDate: expectedDeliveryDate || undefined,
-        paymentMethod
+        paymentMethod,
+        termsAccepted: true
       });
 
       const orderCount = res?.orders?.length || 1;
@@ -536,6 +567,46 @@ export default function DirectCheckoutPage() {
               ))}
             </CardContent>
           </Card>
+
+          {/* Section 5: Statutory Declarations & Terms of Purchase */}
+          <div id="direct-purchase-terms-section" className="space-y-2">
+            <Card className={cn(
+              "border shadow-sm transition-all",
+              termsError ? "border-red-400 ring-2 ring-red-100" : "border-slate-200"
+            )}>
+              <CardHeader className="border-b border-slate-100 bg-slate-50/60 pb-3 pt-4">
+                <CardTitle className="text-sm font-black uppercase tracking-wider text-[#12335f] flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-[#12335f]" /> 5. Statutory Terms &amp; Declarations
+                  </span>
+                  <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                    Mandatory
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                <ComplianceConsentCard
+                  docs={complianceDocs}
+                  title="Direct Purchase &amp; Order Cancellation Policies"
+                  subtitle="Statutory compliance agreement governing Purchase Order issuance, T+1 settlement, and cancellation terms."
+                  accepted={termsAccepted}
+                  onAcceptedChange={val => {
+                    setTermsAccepted(val);
+                    if (val) setTermsError(null);
+                  }}
+                  checkboxLabel="I accept the Direct Purchase Terms, Procurement Policy, and Cancellation &amp; Refund Policy"
+                  checkboxDescription="By authorizing this order, you legally confirm administrative sanction, agree to binding purchase order terms, and accept the cancellation and settlement framework of JSG SMILE."
+                  readerHeightClassName="h-[120px] sm:h-[135px]"
+                  showPolicyLibrary
+                />
+                {termsError && (
+                  <p id="terms-error-text" role="alert" className="text-xs font-bold text-red-600 flex items-center gap-1 mt-1">
+                    {termsError}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Right Column: Order Summary & Place Order (4-5 Cols) */}
@@ -616,6 +687,44 @@ export default function DirectCheckoutPage() {
                 <p className="text-slate-600 leading-snug">
                   Clicking <strong>Place Order</strong> issues Purchase Orders directly to {calculations.sellerCount} seller(s). Sellers will confirm order acceptance before dispatch.
                 </p>
+              </div>
+
+              {/* Terms Checkbox in Summary */}
+              <div className="space-y-1.5 pt-1">
+                <label
+                  htmlFor="summary-terms-checkbox"
+                  className={cn(
+                    "flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-colors",
+                    termsError
+                      ? "border-red-300 bg-red-50/50 text-red-700 font-medium"
+                      : termsAccepted
+                      ? "border-emerald-300 bg-emerald-50/40 text-slate-800"
+                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
+                  )}
+                >
+                  <input
+                    id="summary-terms-checkbox"
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={e => {
+                      setTermsAccepted(e.target.checked);
+                      if (e.target.checked) setTermsError(null);
+                    }}
+                    aria-invalid={Boolean(termsError)}
+                    aria-describedby={termsError ? "terms-error-summary" : undefined}
+                    className="mt-0.5 h-4 w-4 rounded text-[#12335f] focus:ring-[#12335f] cursor-pointer shrink-0"
+                  />
+                  <span className="text-[11px] font-medium leading-snug">
+                    I confirm administrative sanction and agree to the{' '}
+                    <span className="font-bold underline text-slate-900">Direct Purchase &amp; Statutory Cancellation Terms</span>.
+                    <span className="text-red-500 font-bold ml-1">*</span>
+                  </span>
+                </label>
+                {termsError && (
+                  <p id="terms-error-summary" role="alert" className="text-[11px] font-bold text-red-600 px-1">
+                    {termsError}
+                  </p>
+                )}
               </div>
 
               {/* Submit Button */}

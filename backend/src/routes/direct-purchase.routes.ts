@@ -58,7 +58,10 @@ const placeOrderSchema = z.object({
 
     deliveryInstructions: z.string().trim().max(1000).optional().nullable(),
     expectedDeliveryDate: z.string().trim().optional().nullable(),
-    paymentMethod: z.string().trim().optional().default('PAY_ON_INVOICE')
+    paymentMethod: z.string().trim().optional().default('PAY_ON_INVOICE'),
+    termsAccepted: z.boolean().refine(val => val === true, {
+        message: 'You must accept the Direct Purchase Terms and Statutory Compliance Agreement to proceed.'
+    }).optional()
 });
 
 

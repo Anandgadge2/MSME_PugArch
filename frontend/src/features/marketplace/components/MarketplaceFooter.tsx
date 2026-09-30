@@ -21,6 +21,7 @@ import {
     Globe
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
+import { openCookieConsentPreferences } from '@/components/compliance/CookieConsentBanner';
 
 export function MarketplaceFooter() {
     let user: any = null;
@@ -205,6 +206,14 @@ export function MarketplaceFooter() {
                         <Link href="/terms-of-use" className="hover:text-white transition-colors">Terms of Use</Link>
                         <span className="text-slate-600">•</span>
                         <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
+                        <span className="text-slate-600">•</span>
+                        <button
+                            type="button"
+                            onClick={() => openCookieConsentPreferences()}
+                            className="hover:text-white transition-colors underline-offset-2 hover:underline focus:outline-none focus:ring-1 focus:ring-white rounded"
+                        >
+                            Cookie Preferences
+                        </button>
                         <span className="text-slate-600">•</span>
                         <Link href="/disclaimer" className="hover:text-white transition-colors">Disclaimer</Link>
                         <span className="text-slate-600">•</span>

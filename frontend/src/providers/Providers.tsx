@@ -4,6 +4,7 @@ import { AuthProvider } from '@/hooks/useAuth';
 import { Toaster } from 'sonner';
 import React, { useState } from 'react';
 import { getQueryClient } from '@/lib/queryClient';
+import { CookieConsentBanner } from '@/components/compliance/CookieConsentBanner';
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   const [queryClient] = useState(getQueryClient);
@@ -13,6 +14,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
       <AuthProvider>
         {children}
         <Toaster position="top-center" richColors closeButton expand={true} />
+        <CookieConsentBanner />
       </AuthProvider>
     </QueryClientProvider>
   );
