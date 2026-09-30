@@ -515,12 +515,21 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
       orderBy: { id: 'desc' }
     });
 
+    let pb: any = null;
+
     // 2. If not found by reference string, resolve via specific linked entity
     if (!auction && Number.isFinite(numId) && numId > 0) {
       // Check if numeric ID is a ProcurementBid
-      const pb = await db.procurementBid.findUnique({
+      pb = await db.procurementBid.findUnique({
         where: { id: numId },
-        select: { id: true, bidNumber: true }
+        select: {
+          id: true,
+          bidNumber: true,
+          allowReverseAuction: true,
+          estimatedValue: true,
+          technicalPacket: true,
+          procurementMethod: true
+        }
       }).catch(() => null);
 
       if (pb) {
@@ -570,6 +579,38 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
       // Return lightweight metadata so the frontend shows the correct informational UI
       // and can pre-populate the launch modal with buyer-configured defaults.
       if (Number.isFinite(numId) && numId > 0) {
+        // 1. Check procurementBid for planned reverse auction
+        if (pb) {
+          const techPacket = (pb.technicalPacket || {}) as any;
+          const isPlannedOnBid = Boolean(
+            pb.allowReverseAuction ||
+            pb.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+            techPacket.allowReverseAuction ||
+            techPacket.basics?.isReverseAuctionNeeded ||
+            techPacket.rules?.allowReverseAuction
+          );
+
+          if (isPlannedOnBid) {
+            const auctionConfig = techPacket.auctionConfig || techPacket.rules?.auctionConfig || {};
+            const plannedData = {
+              auctionPlanned: true,
+              procurementBidId: pb.id,
+              startPrice: Number(auctionConfig.startingBidPrice || techPacket.rules?.startPrice || pb.estimatedValue || 0),
+              minDecrementAmount: Number(auctionConfig.minimumBidDecrement || techPacket.rules?.minimumDecrement || 0),
+              autoExtensionEnabled: Boolean(auctionConfig.autoExtensionEnabled !== false),
+              extensionTriggerMinutes: auctionConfig.extensionTriggerMinutes || 5,
+              extensionDurationMinutes: auctionConfig.extensionDurationMinutes || 5,
+              maximumExtensions: auctionConfig.maximumExtensions || 3,
+              rankVisibility: auctionConfig.rankVisibility || 'SHOW_RANK_ONLY',
+              durationMinutes: auctionConfig.durationMinutes || 60,
+              triggerConfiguration: auctionConfig.triggerConfiguration || {},
+            };
+            procurementAuctionCache.set(rawId, { data: plannedData, expiresAt: Date.now() + 30_000 });
+            return apiResponse.success(res, plannedData);
+          }
+        }
+
+        // 2. Check requirement for planned reverse auction
         const requirement = await db.requirement.findFirst({
           where: { id: numId },
           select: { id: true, payload: true }
@@ -1092,13 +1133,14 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       });
     }
 
-    // Advance linked procurementBid lifecycle stage & status
+    // Advance linked procurementBid lifecycle stage & status, and ensure allowReverseAuction is permanently flagged
     if (linkedBid) {
       await db.procurementBid.update({
         where: { id: linkedBid.id },
         data: {
           status: 'REVERSE_AUCTION_ACTIVE',
-          lifecycleStage: 'REVERSE_AUCTION_ACTIVE'
+          lifecycleStage: 'REVERSE_AUCTION_ACTIVE',
+          allowReverseAuction: true
         }
       }).catch(() => null);
     }
@@ -1118,8 +1160,10 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
     if (linkedReq?.id) invalidateProcurementAuctionCache(linkedReq.id);
 
     // Write audit event
-    await writeAuctionEvent(req, auction.id, 'started_from_bids', 'Reverse auction initiated from submitted quotations', {
+    await writeAuctionEvent(req, auction.id, 'started_from_bids', 'Reverse auction initiated post-evaluation from submitted quotations', {
       auctionCode: auction.auctionCode,
+      procurementId: rawId,
+      parentRefNumber: parentRef,
       vendorsCount: participantRecords.length,
       openingL1: currentLowestAmount
     });

@@ -1042,13 +1042,17 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         reqObj?.payload?.basics?.isReverseAuctionNeeded ||
         rawBid?.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
         rawBid?.procurementType === 'REVERSE_AUCTION' ||
+        rawBid?.status === 'REVERSE_AUCTION_ACTIVE' ||
+        rawBid?.lifecycleStage === 'REVERSE_AUCTION_ACTIVE' ||
         rawDescUpper.includes('REVERSE AUCTION')
       );
-      const isTwoStage = hasReverseAuction || packetType === 'Two Packet' || !!techOpen || rawDescUpper.includes('TWO-STAGE');
-      const sourcingLabel = isTwoStage && hasReverseAuction
-        ? 'Two-Stage Tender with Reverse Auction'
-        : hasReverseAuction
-          ? 'Reverse Auction Procurement'
+      const isTwoPacket = packetType === 'Two Packet' || !!techOpen || rawDescUpper.includes('TWO-STAGE');
+      const sourcingLabel = hasReverseAuction
+        ? isTwoPacket
+          ? 'Two-Stage Tender with Reverse Auction'
+          : 'Single-Packet Tender with Reverse Auction'
+        : isTwoPacket
+          ? 'Two-Packet Procurement'
           : derivedProcurementLabel;
 
       const discloseEstimatedCost = Boolean(

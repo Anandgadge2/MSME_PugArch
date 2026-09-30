@@ -1957,6 +1957,7 @@ function RequiredDocumentsList({
 
 function AuctionWorkflowStepper({
   isTwoStage,
+  isTwoPacket = true,
   auctionStatus,
   hasJoined,
   evaluationPending,
@@ -1966,6 +1967,7 @@ function AuctionWorkflowStepper({
   rankVisibility,
 }: {
   isTwoStage: boolean;
+  isTwoPacket?: boolean;
   auctionStatus: string;
   hasJoined?: boolean;
   evaluationPending?: boolean;
@@ -1991,15 +1993,18 @@ function AuctionWorkflowStepper({
             <div>
               <div className="flex items-center gap-2">
                 <h4 className="text-xs sm:text-[13px] font-black uppercase tracking-wider text-purple-950">
-                  Two-Stage Tender with Reverse Auction Sourcing
+                  {isTwoPacket
+                    ? "Two-Stage Tender with Reverse Auction Sourcing"
+                    : "Tender with Dynamic Reverse Auction Sourcing"}
                 </h4>
                 <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[9px] font-black text-purple-800 uppercase">
                   Multi-Stage Sourcing
                 </span>
               </div>
               <p className="text-xs font-medium text-purple-800/80 mt-0.5">
-                Suppliers qualify through Stage 1 technical compliance before
-                competing in Stage 2 live reverse decrement bidding.
+                {isTwoPacket
+                  ? "Suppliers qualify through Stage 1 technical compliance before competing in Stage 2 live reverse decrement bidding."
+                  : "Suppliers submit formal quotations establishing opening ceiling before competing in dynamic live price decrement bidding."}
               </p>
             </div>
           </div>
@@ -2045,7 +2050,9 @@ function AuctionWorkflowStepper({
             <div>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider text-purple-700">
-                  Stage 1: Technical &amp; Baseline Qualification
+                  {isTwoPacket
+                    ? "Stage 1: Technical & Baseline Qualification"
+                    : "Stage 1: Quotation Submission & Scrutiny"}
                 </span>
                 {isCancelled ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 px-2 py-0.5 text-[9px] font-black uppercase text-rose-800">
@@ -2054,7 +2061,7 @@ function AuctionWorkflowStepper({
                 ) : isLive || isClosed ? (
                   <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-[9px] font-black uppercase text-emerald-800">
                     <CheckCircle2 className="h-3 w-3 text-emerald-700" />{" "}
-                    Qualified / Completed
+                    {isTwoPacket ? "Qualified / Completed" : "Quotations Completed"}
                   </span>
                 ) : (
                   <span className="inline-flex items-center rounded-md bg-purple-100 px-2 py-0.5 text-[9px] font-black uppercase text-purple-800">
@@ -2063,16 +2070,20 @@ function AuctionWorkflowStepper({
                 )}
               </div>
               <p className="text-xs font-bold text-slate-900 mt-1">
-                Specification Compliance &amp; Base Price Packet
+                {isTwoPacket
+                  ? "Specification Compliance & Base Price Packet"
+                  : "Quotation Scrutiny & Opening Price Ceiling"}
               </p>
               <p className="text-[11px] text-slate-600 leading-snug mt-1">
-                Vendors submit technical packets, mandatory compliance
-                documents, and initial baseline pricing for buyer committee
-                evaluation.
+                {isTwoPacket
+                  ? "Vendors submit technical packets, mandatory compliance documents, and initial baseline pricing for buyer committee evaluation."
+                  : "Vendors submit formal quotations and commercial terms. Responsive quotes establish the opening ceiling (L1) for live dynamic bidding."}
               </p>
             </div>
             <div className="mt-2.5 pt-2 border-t border-purple-100/60 text-[10px] font-semibold text-purple-900/80">
-              Requirement: Only technically approved bidders advance to Stage 2.
+              {isTwoPacket
+                ? "Requirement: Only technically approved bidders advance to Stage 2."
+                : "Requirement: Submitted responsive quotes establish opening L1 benchmark."}
             </div>
           </div>
 
@@ -5690,9 +5701,11 @@ export function ProcurementDetailUnifiedView(
       Boolean(rules?.allowReverseAuction) ||
       Boolean(basics?.isReverseAuctionNeeded) ||
       Boolean(payload?.basics?.isReverseAuctionNeeded) ||
-      ["REVERSE_AUCTION", "BID_WITH_REVERSE_AUCTION"].includes(
+      Boolean(linkedAuction) ||
+      Boolean(props.linkedAuction) ||
+      ["REVERSE_AUCTION", "BID_WITH_REVERSE_AUCTION", "REVERSE_AUCTION_ACTIVE"].includes(
         String(
-          props.procurementMethod || props.procurementType || "",
+          props.procurementMethod || props.procurementType || props.status || "",
         ).toUpperCase(),
       )),
   );
@@ -5701,6 +5714,8 @@ export function ProcurementDetailUnifiedView(
     !isRateContractType &&
     (props.linkedAuction?.preBidStage ||
       props.linkedAuction?.linkedBidId ||
+      linkedAuction?.linkedBidId ||
+      linkedAuction?.linkedRequirementId ||
       (props.linkedAuction?.linkedRequirementId &&
         props.procurementMethod === "BID_WITH_REVERSE_AUCTION") ||
       (allowsReverseAuction && !isReverseAuctionType)),
@@ -5708,7 +5723,7 @@ export function ProcurementDetailUnifiedView(
 
   const isDirectReverseAuction = Boolean(
     !isRateContractType &&
-    (isReverseAuctionType || props.linkedAuction) &&
+    (isReverseAuctionType || props.linkedAuction || linkedAuction) &&
     !isTwoStageReverseAuction,
   );
 
@@ -8329,7 +8344,9 @@ export function ProcurementDetailUnifiedView(
           : null);
 
       const sourcingStrategyLabel = isTwoStageReverseAuction
-        ? "Two-Stage Tender with Dynamic Reverse Auction"
+        ? isTwoPacketMode
+          ? "Two-Stage Tender with Dynamic Reverse Auction"
+          : "Single-Packet Tender with Dynamic Reverse Auction"
         : isDirectReverseAuction
           ? "Reverse Auction Sourcing"
           : procurementMethod;
@@ -8362,8 +8379,13 @@ export function ProcurementDetailUnifiedView(
 
       const notesList: string[] = [];
       if (isTwoStageReverseAuction) {
-        notesList.push("SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.");
-        notesList.push("Stage 1 (Technical & Baseline Qualification): Bidders submit technical compliance documents and baseline pricing for evaluation. Only approved vendors advance to Stage 2.");
+        if (isTwoPacketMode) {
+          notesList.push("SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.");
+          notesList.push("Stage 1 (Technical & Baseline Qualification): Bidders submit technical compliance documents and baseline pricing for evaluation. Only approved vendors advance to Stage 2.");
+        } else {
+          notesList.push("SOURCING WORKFLOW: Single-Packet Tender with Dynamic Reverse Auction.");
+          notesList.push("Stage 1 (Quotation Submission & Scrutiny): Bidders submit formal quotations and commercial terms. Responsive quotes establish the opening ceiling (L1) for live dynamic bidding.");
+        }
         notesList.push("Stage 2 (Live Reverse Auction): Technically approved bidders submit real-time decremented bids in the live bidding window.");
       } else if (isDirectReverseAuction) {
         notesList.push("SOURCING WORKFLOW: Direct Dynamic Reverse Auction.");
@@ -10385,7 +10407,9 @@ export function ProcurementDetailUnifiedView(
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
                       <Layers className="h-3 w-3" aria-hidden="true" />
-                      Two-Stage Tender + Reverse Auction
+                      {isTwoPacketMode
+                        ? "Two-Stage Tender + Reverse Auction"
+                        : "Single-Packet Tender + Reverse Auction"}
                     </span>
                   )}
                   {isDirectReverseAuction && (
@@ -10780,6 +10804,7 @@ export function ProcurementDetailUnifiedView(
               linkedAuction) && (
               <AuctionWorkflowStepper
                 isTwoStage={isTwoStageReverseAuction}
+                isTwoPacket={isTwoPacketMode}
                 auctionStatus={String(
                   linkedAuction?.statusEnum ||
                     linkedAuction?.status ||
@@ -12224,8 +12249,10 @@ export function ProcurementDetailUnifiedView(
                           </Button>
                         )}
                       {!isBidAwarded &&
-                        allowsReverseAuction &&
-                        isEvaluationReady &&
+                        (allowsReverseAuction ||
+                          (isTwoPacketMode
+                            ? isEvaluationReady || isTechEvalCompleted
+                            : isBiddingClosed || isEvaluationReady)) &&
                         (!linkedAuction ||
                           (linkedAuction as any).auctionPlanned === true ||
                           ["DRAFT", "CANCELLED"].includes(
@@ -12240,28 +12267,49 @@ export function ProcurementDetailUnifiedView(
                             type="button"
                             size="sm"
                             onClick={() => {
-                              const qualifiedSellers =
-                                submittedParticipations.filter(
-                                  (p: any) =>
-                                    String(
-                                      p.technicalStatus || "",
-                                    ).toUpperCase() === "QUALIFIED",
-                                );
-                              if (
-                                submittedParticipations.length > 0 &&
-                                qualifiedSellers.length === 0
-                              ) {
-                                toast.error(
-                                  "No sellers are technically qualified yet. Please evaluate and qualify at least one seller before launching Stage 2 Reverse Auction.",
-                                );
-                                return;
+                              if (isTwoPacketMode) {
+                                const qualifiedSellers =
+                                  submittedParticipations.filter(
+                                    (p: any) =>
+                                      String(
+                                        p.technicalStatus || "",
+                                      ).toUpperCase() === "QUALIFIED",
+                                  );
+                                if (
+                                  submittedParticipations.length > 0 &&
+                                  qualifiedSellers.length === 0
+                                ) {
+                                  toast.error(
+                                    "No sellers are technically qualified yet. Please evaluate and qualify at least one seller before launching Stage 2 Reverse Auction.",
+                                  );
+                                  return;
+                                }
+                              } else {
+                                const responsiveSellers =
+                                  submittedParticipations.filter(
+                                    (p: any) =>
+                                      !p.isDisqualified &&
+                                      String(
+                                        p.technicalStatus || "",
+                                      ).toUpperCase() !== "DISQUALIFIED",
+                                  );
+                                if (responsiveSellers.length === 0) {
+                                  toast.error(
+                                    "No valid seller quotations available to start reverse auction.",
+                                  );
+                                  return;
+                                }
                               }
                               setIsStartAuctionModalOpen(true);
                             }}
                             className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3 cursor-pointer"
                           >
                             <Gavel className="h-3 w-3" />
-                            <span>Launch Stage 2 Reverse Auction</span>
+                            <span>
+                              {isTwoPacketMode
+                                ? "Launch Stage 2 Reverse Auction"
+                                : "Launch Dynamic Reverse Auction"}
+                            </span>
                           </Button>
                         )}
                     </div>
@@ -12666,6 +12714,7 @@ export function ProcurementDetailUnifiedView(
                   onClose={() => setIsStartAuctionModalOpen(false)}
                   procurementId={targetId}
                   procurementTitle={resolvedSubject}
+                  isTwoPacket={isTwoPacketMode}
                   initialLowestQuote={
                     submittedParticipations.length
                       ? Math.min(
@@ -12719,9 +12768,11 @@ export function ProcurementDetailUnifiedView(
                   )}
                   onAuctionStarted={() => {
                     linkedAuctionQuery.refetch();
+                    queryClient.invalidateQueries({ queryKey: ["linked-reverse-auction"] });
                     queryClient.invalidateQueries({ queryKey: ["procurement-bid-detail"] });
                     queryClient.invalidateQueries({ queryKey: ["rfq-detail-v2"] });
                     queryClient.invalidateQueries({ queryKey: ["procurement-bid-participations"] });
+                    queryClient.invalidateQueries({ queryKey: ["buyer-unified-participations"] });
                     toast.success("Reverse auction initiated. Bidders will participate through this procurement.");
                   }}
                   auctionDefaults={

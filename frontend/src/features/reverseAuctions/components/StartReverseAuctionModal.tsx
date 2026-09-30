@@ -49,6 +49,7 @@ export interface StartReverseAuctionModalProps {
   initialLowestQuote?: number;
   submittedVendors: SubmittedVendorItem[];
   onAuctionStarted: (auction: any) => void;
+  isTwoPacket?: boolean;
   auctionDefaults?: {
     minDecrementAmount?: number;
     autoExtensionEnabled?: boolean;
@@ -67,14 +68,26 @@ export default function StartReverseAuctionModal({
   initialLowestQuote = 0,
   submittedVendors = [],
   onAuctionStarted,
+  isTwoPacket = true,
   auctionDefaults,
 }: StartReverseAuctionModalProps) {
-  // Vendor selection states - all initially selected unless explicitly marked disqualified
+  // Vendor selection states - prioritize technically qualified vendors if present, otherwise select all non-disqualified
   const [selectedVendorKeys, setSelectedVendorKeys] = useState<Set<number>>(() => {
     const keys = new Set<number>();
+    const hasExplicitQualified = submittedVendors.some(
+      v => String(v.technicalStatus || '').toUpperCase() === 'QUALIFIED'
+    );
+
     submittedVendors.forEach((v, idx) => {
-      if (v.technicalStatus !== 'DISQUALIFIED') {
-        keys.add(idx);
+      const status = String(v.technicalStatus || '').toUpperCase();
+      if (hasExplicitQualified) {
+        if (status === 'QUALIFIED') {
+          keys.add(idx);
+        }
+      } else {
+        if (status !== 'DISQUALIFIED') {
+          keys.add(idx);
+        }
       }
     });
     return keys.size > 0 ? keys : new Set(submittedVendors.map((_, idx) => idx));
@@ -162,7 +175,9 @@ export default function StartReverseAuctionModal({
 
       const payload = {
         procurementId,
-        title: `Reverse Auction — ${procurementTitle}`,
+        title: isTwoPacket
+          ? `Stage 2 Reverse Auction — ${procurementTitle}`
+          : `Reverse Auction — ${procurementTitle}`,
         startPrice: computedLowestQuote,
         minDecrementAmount: minDecrement,
         autoExtensionWindowMinutes: autoExtensionEnabled ? extensionWindow : 3,
@@ -209,12 +224,14 @@ export default function StartReverseAuctionModal({
             <div>
               <div className="flex items-center gap-2">
                 <span className="rounded-md bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-700">
-                  e-Reverse Auction
+                  {isTwoPacket ? 'Stage 2 e-Reverse Auction' : 'e-Reverse Auction'}
                 </span>
-                <span className="text-xs font-semibold text-slate-500">Evaluation & Live Kickoff</span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {isTwoPacket ? 'Evaluation & Live Kickoff' : 'Post-Submission Dynamic Bidding'}
+                </span>
               </div>
               <h2 id="reverse-auction-modal-title" className="text-lg font-black text-slate-900 tracking-tight mt-0.5">
-                Configure Reverse Auction Stage
+                {isTwoPacket ? 'Configure Stage 2 Reverse Auction' : 'Configure Dynamic Reverse Auction'}
               </h2>
             </div>
           </div>
@@ -270,7 +287,9 @@ export default function StartReverseAuctionModal({
                     <Filter className="h-3.5 w-3.5 text-indigo-600" /> 1. Supplier Scrutiny & Reverse Auction Admission
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-                    Select only the technically compliant suppliers you approve to enter the dynamic live bidding room.
+                    {isTwoPacket
+                      ? "Select only the technically compliant suppliers you approve to enter the dynamic live bidding room."
+                      : "Select the submitted responsive suppliers to participate in dynamic live price decrement bidding."}
                   </p>
                 </div>
                 <button
