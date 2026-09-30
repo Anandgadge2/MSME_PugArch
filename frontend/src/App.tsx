@@ -128,7 +128,6 @@ const SellerEventDetailPage = lazy(() => import('./features/sellerOpportunities/
 const TenderDetailPage = lazy(() => import('./features/tenders/pages/TenderDetailPage'));
 const RfqDetailPage = lazy(() => import('./features/rfq/pages/RfqDetailPage'));
 const RfpDetailPage = lazy(() => import('./features/rfq/pages/RfpDetailPage'));
-const RateContractDetailPage = lazy(() => import('./features/rfq/pages/RateContractDetailPage'));
 const OpenTenderDetailPage = lazy(() => import('./features/rfq/pages/OpenTenderDetailPage'));
 const LimitedTenderDetailPage = lazy(() => import('./features/rfq/pages/LimitedTenderDetailPage'));
 const SubmitQuotationPage = lazy(() => import('./features/rfq/pages/SubmitQuotationPage'));
@@ -728,6 +727,12 @@ export default function App({
         return <RouteFallback />;
       }
     }
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    const legacyRedirect = resolveLegacyUrl(pathname, searchParams);
+    if (legacyRedirect) {
+      return <Redirect to={legacyRedirect.to} />;
+    }
+
     const isAuthedUser = Boolean(user && (hasCookie || token || (typeof window !== 'undefined' && localStorage.getItem('token'))));
     if (pathname === '/') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <MarketplaceHome />;
     if (pathname === '/login') return isAuthedUser ? <Redirect to={authenticatedHome} /> : <Login />;
@@ -834,7 +839,7 @@ export default function App({
           case 'rfp':              return <RfpDetailPage />;
           case 'open-tender':      return <OpenTenderDetailPage />;
           case 'limited-tender':   return <LimitedTenderDetailPage />;
-          case 'rate-contract':    return <RateContractDetailPage />;
+          case 'rate-contract':    return <Redirect to={`/bids/${id}`} />;
           case 'reverse-auction': {
             if (id) return <ReverseAuctionDetailPage id={id} />;
             break;
@@ -856,7 +861,12 @@ export default function App({
     // ── Legacy procurement routes → redirect to canonical URLs ──
     if (pathname === '/seller/rfq' || pathname === '/shg/rfq') return <RfqDetailPage />;
     if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
-    if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') return <RateContractDetailPage />;
+    if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');
+      if (reqId) return <Redirect to={`/bids/${reqId}`} />;
+      return <Redirect to="/seller/procurement/opportunities?type=rate-contract" />;
+    }
     {
       const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
       if (reverseAuctionDetailMatch) {
@@ -969,10 +979,20 @@ export default function App({
     {
       const procRespondMatch = pathname.match(/^\/(seller|shg)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract)\/([^/]+)\/respond$/);
       if (procRespondMatch && roleOk(user.role, ['seller', 'shg'])) {
+        const [, role, typeSlug, rawId] = procRespondMatch;
+        if (typeSlug.toLowerCase() === 'rate-contract') {
+          return <Redirect to={`/bids/${rawId}/participate`} />;
+        }
         return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
       }
     }
-    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rfq/submit-quotation') || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname.startsWith('/shg/rfq/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
+    if ((pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');
+      if (reqId) return <Redirect to={`/bids/${reqId}/participate`} />;
+      return <Redirect to="/seller/procurement/opportunities?type=rate-contract" />;
+    }
     if ((pathname === '/seller/marketplace' || pathname === '/shg/marketplace') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="marketplace.view"><MarketplaceProductList /></PermissionRouteGuard>;
     if ((pathname === '/seller/catalogue' || pathname === '/shg/catalogue') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.product.view"><CataloguePage mode="seller" /></PermissionRouteGuard>;
     if ((pathname === '/seller/products/new' || pathname === '/shg/products/new') && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="catalogue.product.create"><CatalogueFormPage /></PermissionRouteGuard>;

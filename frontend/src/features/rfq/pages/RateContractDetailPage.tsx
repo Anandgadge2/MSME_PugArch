@@ -762,7 +762,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
       return;
     }
     const targetId = rcData.id || requirementId || requestId;
-    router.push(`/seller/procurement/rate-contract/${targetId}/respond`);
+    router.push(`/bids/${targetId}/participate`);
   };
 
   const handleViewDoc = (doc: typeof uploadedDocuments[0]) => {

@@ -5754,17 +5754,16 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
   void auditWrite(req, 'workflow.requirement.submitted', 'requirement', submitted.id);
 
   try {
-    const [procurementBid, auction, rateContract] = await Promise.all([
+    const [procurementBid, auction] = await Promise.all([
       createProcurementBidForSubmittedRequirement(req, submitted, parsed),
-      createAuctionForSubmittedProcurement(req, submitted, parsed),
-      createRateContractForSubmittedProcurement(req, submitted, parsed)
+      createAuctionForSubmittedProcurement(req, submitted, parsed)
     ]);
     await auditWrite(req, 'procurement.submitted', 'requirement', submitted.id, { methodSlug: methodSlugForDraft(parsed) });
     ok(res, {
       procurement: serializeProcurementDraft({ ...submitted, items: (submitted as any).items || [] }),
       procurementBid,
       auction,
-      rateContract,
+      rateContract: null,
       referenceNumber: formatRequirementNumber(submitted.id, submitted.requirementNumber, submitted.procurementMethod || submitted.canonicalMethod)
     });
   } catch (error) {

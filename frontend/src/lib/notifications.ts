@@ -315,7 +315,7 @@ export const routeForNotification = (
   ) {
     if (bidId) {
       if (userRole === 'seller' || userRole === 'shg') {
-        return `/seller/procurement/rate-contract/${encodeURIComponent(bidId)}`;
+        return `/bids/${encodeURIComponent(bidId)}`;
       }
       if (userRole === 'buyer') {
         return `/buyer/rate-contracts?search=${encodeURIComponent(bidId)}`;

@@ -2659,7 +2659,7 @@ export default function SubmitQuotationPage() {
     } else if (isRfp) {
       navigateTo(`${rolePrefix}/procurement/rfp/${encodeURIComponent(String(targetId))}`);
     } else if (isRateContract) {
-      navigateTo(`${rolePrefix}/procurement/rate-contract/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}`);
     } else {
       navigateTo(`${rolePrefix}/procurement/rfq/${encodeURIComponent(String(targetId))}`);
     }

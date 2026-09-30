@@ -40,7 +40,6 @@ import { marketplaceApi } from '../../marketplace/api';
 import { procurementBidApi } from '../../procurementBid/api';
 import { fetchQuoteRequests } from '../../rfq/api';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
-import { fetchRateContracts } from '../../rateContract/api';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode } from '../../shared/hooks';
@@ -823,7 +822,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (opportunityType === 'Rate Contract') {
           href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
           detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
+          actionLabel = bid.participated ? 'Track Status' : 'Submit Rate';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
           detailsHref = `/tenders?tender=${bid.sourceId}`;
@@ -1200,73 +1199,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       applyChunk(next);
     }).catch(() => {});
 
-    const p5 = fetchRateContracts({ pageSize: 50 }).then(res => {
-      if (!alive) return;
-      const next: SellerOpportunity[] = [];
-      const rateContracts = (res as any)?.rateContracts || (res as any)?.items || res || [];
-      (Array.isArray(rateContracts) ? rateContracts : []).forEach((rc: any) => {
-        if (!rc) return;
-        const meta = rc.metadata || {};
-        const hasReqId = Boolean(meta.requirementId);
-        const rawRef = rc.contractNumber || meta.requirementNumber || `RC-${rc.id}`;
-        const refNo = formatRefId('RC', rc.id, rawRef);
-
-        const reqTitle = meta.requirementTitle || meta.basics?.title || meta.contractTitle || meta.title || rc.title;
-        const buyerName = rc.buyerOrganizationName || rc.buyerOrgName || rc.buyerOrganization?.organizationName || rc.buyerName || rc.buyerUser?.name || meta.buyerOrganizationName || meta.buyerOrganization?.organizationName || meta.buyerName || meta.orgName || 'Verified Buyer';
-        const catName = meta.contractCategory || meta.category || 'Facility Management & Canteen Services';
-        const rawVal = toNumber(meta.estimatedValue || meta.budgetMax || (toNumber(rc.value) > 50000000 ? 1000000 : rc.value));
-
-        const rawRcLoc = rc.deliveryLocation || rc.location || [rc.district, rc.state].filter(Boolean).join(', ') || meta.deliveryLocation || [meta.district, meta.state].filter(Boolean).join(', ') || [meta.city, meta.state].filter(Boolean).join(', ');
-        const isRcLocSla = typeof rawRcLoc === 'string' && (rawRcLoc.toLowerCase().includes('sla') || rawRcLoc.toLowerCase().includes('agreed') || rawRcLoc.toLowerCase().includes('call-off'));
-        const resolvedRcLoc = !isRcLocSla && rawRcLoc ? rawRcLoc : ([rc.district || meta.district, rc.state || meta.state].filter(Boolean).join(', ') || 'Location not specified');
-
-        const opportunity: SellerOpportunity = {
-          id: `rc-${rc.id}`,
-          type: 'Rate Contract',
-          title: reqTitle && reqTitle.length > 5 ? reqTitle : (rc.title || 'Rate Contract Opportunity'),
-          buyer: buyerName,
-          category: catName,
-          location: resolvedRcLoc,
-          closingDate: rc.endDate || meta.periodEndDate,
-          estimatedValue: rawVal,
-          discloseEstimatedCost: Boolean(rc.discloseEstimatedCost ?? meta.discloseEstimatedCost ?? meta.basics?.discloseEstimatedCost ?? false),
-          eligibility: 'Open Rate Contract',
-          status: rc.status || meta.activeState || 'ACTIVE',
-          actionLabel: 'Submit Quote',
-          href: hasReqId
-            ? sellerRoutes.respond('RATE_CONTRACT', meta.requirementId)
-            : sellerRoutes.respond('RATE_CONTRACT', rc.id),
-          detailsHref: hasReqId
-            ? sellerRoutes.detail('RATE_CONTRACT', meta.requirementId)
-            : sellerRoutes.detail('RATE_CONTRACT', rc.id),
-          sourceRef: refNo,
-          publishedAt: rc.createdAt || rc.publishedAt || rc.startDate,
-          createdAt: rc.createdAt || rc.startDate,
-          quantity: meta.minimumOrderQuantity ? `${meta.minimumOrderQuantity} min qty` : undefined,
-          description: meta.contractDescription || rc.title,
-          documents: meta.contractDocument ? [meta.contractDocument.fileName] : [],
-          responseCount: Number(rc.participantsCount || rc.responsesCount || 0),
-          buyerType: meta.buyerType || meta.buyerOrganizationType || undefined,
-          deliveryLocation: !isRcLocSla && rawRcLoc ? rawRcLoc : undefined,
-          procurementType: 'RATE_CONTRACT',
-          documentsCount: meta.contractDocument ? 1 : 0,
-          terms: meta.penaltyClause ? [meta.penaltyClause] : [],
-          nextAction: 'Open details, review rate terms, then submit quotation.',
-          isInvitation: false,
-          detailRows: [
-            { label: 'Contract No.', value: refNo },
-            { label: 'Sourcing Method', value: 'Rate Contract' },
-            { label: 'Validity Period', value: meta.rateValidityPeriod || '1 Year' },
-            { label: 'Min Order Qty', value: meta.minimumOrderQuantity ? String(meta.minimumOrderQuantity) : 'Not specified' },
-          ],
-          events: opportunityEvents(rc.status || 'ACTIVE', rc.startDate || rc.createdAt),
-        };
-        next.push(opportunity);
-      });
-      applyChunk(next);
-    }).catch(() => {});
-
-    return Promise.allSettled([p1, p2, p3, p4, p5]).finally(() => {
+    return Promise.allSettled([p1, p2, p3, p4]).finally(() => {
       if (alive) setLoading(false);
     });
   }, []);
