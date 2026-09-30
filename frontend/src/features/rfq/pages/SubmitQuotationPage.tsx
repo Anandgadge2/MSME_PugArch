@@ -863,6 +863,9 @@ export default function SubmitQuotationPage() {
   const [savingDraft, setSavingDraft] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [callOffTurnaroundDays, setCallOffTurnaroundDays] = useState('15');
+  const [rateFirmnessAgreed, setRateFirmnessAgreed] = useState(true);
+  const [fallClauseAgreed, setFallClauseAgreed] = useState(true);
 
   type TabKey = 'quotation-details' | 'message-documents' | 'item-wise-pricing' | 'requested-documents' | 'submit-action';
   const [activeTab, setActiveTab] = useState<TabKey>('quotation-details');
@@ -1296,6 +1299,20 @@ export default function SubmitQuotationPage() {
     : isRfp ? 'RFP'
     : 'RFQ';
 
+  const rateContractConfig = React.useMemo(() => {
+    return (
+      rfqData?.rateContractConfig ||
+      rfqData?.payload?.rateContractConfig ||
+      rfqData?.payload?.technicalPacket?.rateContractConfig ||
+      (rfqData as any)?.metadata?.rateContractConfig ||
+      queryData?.requirement?.payload?.rateContractConfig ||
+      queryData?.requirement?.rateContractConfig ||
+      (queryData as any)?.rateContractConfig ||
+      {}
+    );
+  }, [rfqData, queryData]);
+  const buyerSlaDays = Number(rateContractConfig?.deliverySlaDays || 15);
+
   // Restore quotation details from ownResponse on load (whether DRAFT or SUBMITTED)
   const restoredResponseIdRef = useRef<any>(null);
   React.useEffect(() => {
@@ -1314,6 +1331,16 @@ export default function SubmitQuotationPage() {
     const targetModel = ownResponse.model || ownResponse.responseData?.model || ownResponse.acknowledgement?.model || '';
     const targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
     const targetCompliance = ownResponse.complianceStatement || ownResponse.responseData?.complianceStatement || ownResponse.acknowledgement?.complianceStatement || 'FULL_COMPLIANCE';
+
+    if (ownResponse.responseData?.callOffTurnaroundDays) {
+      setCallOffTurnaroundDays(String(ownResponse.responseData.callOffTurnaroundDays));
+    }
+    if (ownResponse.responseData?.rateFirmnessAgreed !== undefined) {
+      setRateFirmnessAgreed(Boolean(ownResponse.responseData.rateFirmnessAgreed));
+    }
+    if (ownResponse.responseData?.fallClauseAgreed !== undefined) {
+      setFallClauseAgreed(Boolean(ownResponse.responseData.fallClauseAgreed));
+    }
 
     setOfferedPrice(targetPrice != null ? String(targetPrice) : '');
     setOfferedQuantity(targetQty != null ? String(targetQty) : '');
@@ -2041,11 +2068,20 @@ export default function SubmitQuotationPage() {
 
   React.useEffect(() => {
     if (isSubmittedQuote || lineTotals.priced === 0) return;
-    if (!offeredPrice || Number(offeredPrice) === 0) {
+    if (isRateContract) {
+      setOfferedPrice(String(lineTotals.total));
+      setOfferedQuantity(String(lineTotals.qty));
+    } else if (!offeredPrice || Number(offeredPrice) === 0) {
       setOfferedPrice(String(lineTotals.total));
       setOfferedQuantity(String(lineTotals.qty));
     }
-  }, [isSubmittedQuote, lineTotals.priced, lineTotals.total, lineTotals.qty, offeredPrice]);
+  }, [isSubmittedQuote, isRateContract, lineTotals.priced, lineTotals.total, lineTotals.qty, offeredPrice]);
+
+  React.useEffect(() => {
+    if (isRateContract && (!deliveryTimeline || deliveryTimeline === '')) {
+      setDeliveryTimeline(`${callOffTurnaroundDays || buyerSlaDays} days from Call-Off PO issue`);
+    }
+  }, [isRateContract, deliveryTimeline, callOffTurnaroundDays, buyerSlaDays]);
 
   // Assemble the structured submission payload persisted as RequirementResponse.responseData.
   // Function declaration (hoisted) so saveDraft, defined earlier in the component, can call it.
@@ -2102,6 +2138,13 @@ export default function SubmitQuotationPage() {
       model: (offeredModel.trim() || primaryLine?.model || undefined),
       technicalSpecifications: (technicalSpecifications.trim() || primaryLine?.specifications || undefined),
       complianceStatement: (complianceStatement || (primaryLine?.complianceStatus === 'DEVIATION' ? 'WITH_DEVIATION' : primaryLine?.complianceStatus === 'ALTERNATIVE' ? 'ALTERNATIVE_OFFERED' : 'FULL_COMPLIANCE')),
+      ...(isRateContract ? {
+        isRateContract: true,
+        callOffTurnaroundDays: Number(callOffTurnaroundDays) || buyerSlaDays,
+        rateFirmnessAgreed,
+        fallClauseAgreed,
+        evaluatedPackageTotal: lineTotals.total,
+      } : {}),
     };
   }
 
@@ -2357,11 +2400,34 @@ export default function SubmitQuotationPage() {
     if (missingDocs.length > 0) {
       errs.requestedDocs = `Please upload the required compliance document(s): ${missingDocs.map(d => d.name).join(', ')}`;
     }
+    if (isRateContract) {
+      if (lineQuotes.length > 0) {
+        const unpriced = lineQuotes.filter(l => !l.unitPrice || isNaN(Number(l.unitPrice)) || Number(l.unitPrice) <= 0);
+        if (unpriced.length > 0) {
+          errs.lineQuotes = `All ${lineQuotes.length} schedule items must be priced. Under Rate Contract rules, item-wise splitting is not permitted; you must quote the complete schedule (${unpriced.length} unpriced).`;
+        }
+      }
+      if (!rateFirmnessAgreed) {
+        errs.rateFirmness = 'You must accept the Rate Firmness Undertaking for Rate Contracts.';
+      }
+      if (!fallClauseAgreed) {
+        errs.fallClause = 'You must accept the Fall Clause Declaration for Rate Contracts.';
+      }
+    }
+
     if (!declared) errs.declared = 'You must declare the information is accurate';
     setErrors(errs);
 
     if (Object.keys(errs).length > 0) {
-      if (hasLineItems && (errs.offeredPrice || errs.offeredQuantity)) {
+      if (errs.lineQuotes) {
+        setActiveTab('item-wise-pricing');
+        scrollToSection('item-wise-pricing');
+        toast.error(errs.lineQuotes);
+      } else if (errs.rateFirmness || errs.fallClause) {
+        setActiveTab('quotation-details');
+        scrollToSection('quotation-details');
+        toast.error(errs.rateFirmness || errs.fallClause);
+      } else if (hasLineItems && (errs.offeredPrice || errs.offeredQuantity)) {
         setActiveTab('item-wise-pricing');
         scrollToSection('item-wise-pricing');
         toast.error('Please specify valid pricing and quantities in Item-Wise Quotation before submitting.');
@@ -2796,17 +2862,17 @@ export default function SubmitQuotationPage() {
           {(hasLineItems ? [
             {
               id: 'item-wise-pricing' as const,
-              label: 'Item-Wise Quotation',
+              label: isRateContract ? 'Schedule of Unit Rates' : 'Item-Wise Quotation',
               icon: Package,
               iconColor: 'text-amber-500',
               count: lineQuotes.length > 0 ? lineQuotes.length : undefined,
             },
             {
               id: 'quotation-details' as const,
-              label: isRfp ? 'Commercial & Delivery Details' : 'Quotation Details',
+              label: isRateContract ? 'Rate Agreement & Terms' : isRfp ? 'Commercial & Delivery Details' : 'Quotation Details',
               icon: IndianRupee,
               iconColor: 'text-emerald-500',
-              hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline),
+              hasError: !!(errors.offeredPrice || errors.offeredQuantity || errors.deliveryTimeline || errors.rateFirmness || errors.fallClause),
             },
             {
               id: 'message-documents' as const,

@@ -4356,6 +4356,9 @@ export interface ProcurementDetailUnifiedViewProps {
 
   // Rate Contract Extensions
   contractId?: number;
+  rateContractConfig?: any;
+  procurementData?: any;
+  terms?: any;
   utilization?: any;
   purchaseOrders?: any[];
 }
@@ -12727,40 +12730,26 @@ export function ProcurementDetailUnifiedView(
                       />
                     );
                   })()}
+            </div>
+          )}
+
           {/* Rate Contract: Issue Call-Off Order Modal (Buyer Side) */}
           {isRateContractType && isBuyerSide && (
             <IssueCallOffModal
               isOpen={isIssueCallOffModalOpen}
               onClose={() => setIsIssueCallOffModalOpen(false)}
-              rateContractId={String(props.contractId || (props.procurementData as any)?.rateContractConfig?.id || props.id || "")}
-              rateContractConfig={
+              contractId={Number(props.contractId || (props.procurementData as any)?.rateContractConfig?.id || props.id || 0)}
+              contractNumber={String(props.displayId || props.requirementNumber || props.id || "")}
+              contractTitle={String(props.subject || props.title || "")}
+              sellerId={Number((props as any).sellerId || (effectiveMyParticipation as any)?.sellerId || 0)}
+              metadata={
                 props.rateContractConfig ||
                 (props.procurementData as any)?.rateContractConfig ||
                 (props.procurementData as any)?.metadata?.rateContractConfig ||
                 {}
               }
-              lineItems={
-                (props.utilization?.items && props.utilization.items.length > 0)
-                  ? props.utilization.items.map((it: any, idx: number) => ({
-                      id: it.itemId || it.id || `item-${idx}`,
-                      itemName: it.itemName || `Item #${idx + 1}`,
-                      unitOfMeasure: it.unitOfMeasure || "NOS.",
-                      unitRate: Number(it.contractedRate || it.unitPrice || 0),
-                      contractedQuantity: Number(it.contractedQuantity || 0),
-                      drawnQuantity: Number(it.drawnQuantity || 0),
-                      remainingQuantity: Number(it.remainingQuantity ?? (Number(it.contractedQuantity || 0) - Number(it.drawnQuantity || 0))),
-                    }))
-                  : (lineItems || []).map((it: any, idx: number) => ({
-                      id: it.id || `item-${idx}`,
-                      itemName: it.itemName || it.name || `Item #${idx + 1}`,
-                      unitOfMeasure: it.unitOfMeasure || it.unit || "NOS.",
-                      unitRate: Number(it.targetUnitPrice || it.unitPrice || 0),
-                      contractedQuantity: Number(it.quantity || it.targetQty || 0),
-                      drawnQuantity: 0,
-                      remainingQuantity: Number(it.quantity || it.targetQty || 0),
-                    }))
-              }
-              onOrderCreated={() => {
+              utilization={props.utilization}
+              onSuccess={() => {
                 if (typeof window !== "undefined") {
                   window.location.reload();
                 }
