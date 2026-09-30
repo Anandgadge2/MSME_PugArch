@@ -360,7 +360,7 @@ export default function BidsListingPage() {
     (participation !== 'All' ? 1 : 0);
 
   const filterPanel = (
-    <aside className="space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 lg:bg-white lg:p-4 lg:sticky lg:top-28">
+    <aside className="space-y-3 sm:space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 lg:bg-white lg:p-4 lg:sticky lg:top-28">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
@@ -370,23 +370,25 @@ export default function BidsListingPage() {
           <button onClick={resetFilters} className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer">Reset Filter Options</button>
         )}
       </div>
-      {[
-        ['Bid status', status, setStatus, ['All', 'Open', 'Closing Soon', 'Under Evaluation', 'Awarded', 'Closed']],
-        ['Bid type', bidType, setBidType, ['All', 'Product', 'Service', 'Works', 'Rate Contract']],
-        ['Category', category, setCategory, ['All', 'Safety Equipment', 'Repair and Maintenance', 'IT Hardware and Software', 'Furniture']],
-        ['Location', location, setLocation, ['All', 'Jharsuguda', 'Raigarh', 'Bhubaneswar', 'Sambalpur']],
-        ['Organization', buyerType, setBuyerType, ['All', 'Private Enterprise', 'Government / Department', 'Public Sector Undertaking (PSU)', 'Large Industry', 'MSME Buyer']],
-        ['Bid value', bidValue, setBidValue, ['All', 'Below 10L', '10L to 25L', 'Above 25L', 'Confidential']],
-        ['Closing date', closingDate, setClosingDate, ['All', 'Next 7 days']],
-        ['Participation', participation, setParticipation, ['All', 'Participated', 'Not participated']],
-      ].map(([label, value, setter, options]) => (
-        <label key={label as string} className="block">
-          <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label as string}</span>
-          <select value={value as string} onChange={event => { (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value); setPage(1); }} className={selectClass}>
-            {(options as string[]).map(option => <option key={option}>{option}</option>)}
-          </select>
-        </label>
-      ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2.5 sm:gap-3">
+        {[
+          ['Bid status', status, setStatus, ['All', 'Open', 'Closing Soon', 'Under Evaluation', 'Awarded', 'Closed']],
+          ['Bid type', bidType, setBidType, ['All', 'Product', 'Service', 'Works', 'Rate Contract']],
+          ['Category', category, setCategory, ['All', 'Safety Equipment', 'Repair and Maintenance', 'IT Hardware and Software', 'Furniture']],
+          ['Location', location, setLocation, ['All', 'Jharsuguda', 'Raigarh', 'Bhubaneswar', 'Sambalpur']],
+          ['Organization', buyerType, setBuyerType, ['All', 'Private Enterprise', 'Government / Department', 'Public Sector Undertaking (PSU)', 'Large Industry', 'MSME Buyer']],
+          ['Bid value', bidValue, setBidValue, ['All', 'Below 10L', '10L to 25L', 'Above 25L', 'Confidential']],
+          ['Closing date', closingDate, setClosingDate, ['All', 'Next 7 days']],
+          ['Participation', participation, setParticipation, ['All', 'Participated', 'Not participated']],
+        ].map(([label, value, setter, options]) => (
+          <label key={label as string} className="block">
+            <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">{label as string}</span>
+            <select value={value as string} onChange={event => { (setter as React.Dispatch<React.SetStateAction<string>>)(event.target.value); setPage(1); }} className={selectClass}>
+              {(options as string[]).map(option => <option key={option}>{option}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
     </aside>
   );
 

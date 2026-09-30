@@ -851,6 +851,21 @@ export default function ProcurementDraftsPage() {
         <ResponsiveFilterBar
           activeFilterCount={(methodFilter ? 1 : 0) + (sourceFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0) + (dateFilter ? 1 : 0) + (valueFilter ? 1 : 0) + (activeKpi ? 1 : 0)}
           singleRowDesktop={false}
+          onReset={
+            (searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi)
+              ? () => {
+                  setSearchQuery('');
+                  setMethodFilter('');
+                  setSourceFilter('');
+                  setCategoryFilter('');
+                  setStatusFilter('');
+                  setDateFilter('');
+                  setValueFilter('');
+                  setActiveKpi(null);
+                }
+              : undefined
+          }
+          resetLabel="Reset All"
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -865,7 +880,7 @@ export default function ProcurementDraftsPage() {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-sm"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-sm cursor-pointer"
                   aria-label="Clear search"
                 >
                   ✕
@@ -874,12 +889,12 @@ export default function ProcurementDraftsPage() {
             </div>
           }
           filters={
-            <div className="flex flex-wrap items-center gap-2 w-full">
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+            <>
+              <div className="w-full">
                 <select
                   value={methodFilter}
                   onChange={e => setMethodFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Types</option>
                   <option value="direct-purchase">Cart Checkout</option>
@@ -892,11 +907,11 @@ export default function ProcurementDraftsPage() {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
+              <div className="w-full">
                 <select
                   value={categoryFilter}
                   onChange={e => setCategoryFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Categories</option>
                   {availableCategories.map(c => (
@@ -905,11 +920,11 @@ export default function ProcurementDraftsPage() {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[120px]">
+              <div className="w-full">
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Statuses</option>
                   <option value="draft">Draft</option>
@@ -917,11 +932,11 @@ export default function ProcurementDraftsPage() {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[120px]">
+              <div className="w-full">
                 <select
                   value={sourceFilter}
                   onChange={e => setSourceFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Sources</option>
                   <option value="local">Local Drafts</option>
@@ -929,11 +944,11 @@ export default function ProcurementDraftsPage() {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[120px]">
+              <div className="w-full">
                 <select
                   value={valueFilter}
                   onChange={e => setValueFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Values</option>
                   <option value="under-1l">Under ₹1 Lakh</option>
@@ -943,11 +958,11 @@ export default function ProcurementDraftsPage() {
                 </select>
               </div>
 
-              <div className="w-full sm:w-auto sm:min-w-[120px]">
+              <div className="w-full">
                 <select
                   value={dateFilter}
                   onChange={e => setDateFilter(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors cursor-pointer"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Time</option>
                   <option value="today">Today</option>
@@ -955,27 +970,7 @@ export default function ProcurementDraftsPage() {
                   <option value="30days">Last 30 Days</option>
                 </select>
               </div>
-
-              {(searchQuery || methodFilter || sourceFilter || categoryFilter || statusFilter || dateFilter || valueFilter || activeKpi) && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setMethodFilter('');
-                    setSourceFilter('');
-                    setCategoryFilter('');
-                    setStatusFilter('');
-                    setDateFilter('');
-                    setValueFilter('');
-                    setActiveKpi(null);
-                  }}
-                  className="h-9 rounded-lg border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 min-w-[70px] cursor-pointer"
-                >
-                  Reset
-                </Button>
-              )}
-            </div>
+            </>
           }
           endContent={
             <ViewModeToggle value={viewMode} onChange={setViewMode} size="sm" />

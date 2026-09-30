@@ -1228,7 +1228,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     setType(queryType);
   }
 
-  const locationOptions = useMemo(() => Array.from(new Set(items.map(item => item.location).filter((value): value is string => Boolean(value)))).sort(), [items]);
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(item => {
+      const cleaned = formatCleanLocation(item.location || item.deliveryLocation);
+      if (cleaned && cleaned !== 'Location not specified') {
+        set.add(cleaned);
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
   const categoryOptions = useMemo(() => Array.from(new Set(items.map(item => item.category).filter((value): value is string => Boolean(value)))).sort(), [items]);
 
   const baseFiltered = useMemo(() => {
@@ -1281,7 +1290,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         }
       }
 
-      if (location && item.location !== location) return false;
+      if (location) {
+        const itemCleanLoc = formatCleanLocation(item.location || item.deliveryLocation);
+        const matchesClean = itemCleanLoc.toLowerCase() === location.toLowerCase();
+        const matchesRaw = String(item.location || '').toLowerCase().includes(location.toLowerCase());
+        if (!matchesClean && !matchesRaw) return false;
+      }
       if (category && item.category !== category) return false;
 
       if (valueRange) {

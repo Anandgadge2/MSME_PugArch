@@ -37,11 +37,23 @@ export function ResponsiveFilterBar({
   onReset,
   resetLabel = "Reset Filter Options",
   defaultOpen = false,
-  gridColsClassName = "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+  gridColsClassName = "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6",
 }: ResponsiveFilterBarProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const showFiltersBtn = hasFilters !== false && Boolean(filters);
   const primaryViewToggle = viewToggle;
+
+  // Automatically flatten / unwrap single outer container div (like <div className="flex flex-wrap...">)
+  // so each child filter control is placed into its own grid cell instead of squished into col 1
+  const normalizedFilters = React.useMemo(() => {
+    if (React.isValidElement(filters) && typeof filters.type === 'string' && filters.type === 'div') {
+      const p = filters.props as { className?: string; children?: ReactNode };
+      if (p.className?.includes('flex') || p.className?.includes('flex-wrap')) {
+        return p.children;
+      }
+    }
+    return filters;
+  }, [filters]);
 
   return (
     <div className={cn("flex flex-col gap-3 w-full min-w-0", className)}>
@@ -123,15 +135,17 @@ export function ResponsiveFilterBar({
           <div className={cn(
             "grid gap-2 sm:gap-2.5",
             gridColsClassName,
+            // If any nested wrapper div is still rendered, treat it as display: contents
+            "[&>div.flex]:!contents [&>div.flex-wrap]:!contents",
             // Sleek typography & compact sizing for all controls rendered inside
-            "[&_select]:!text-xs [&_select]:!font-semibold [&_select]:!text-slate-700 [&_select]:!h-9 [&_select]:!px-2.5 [&_select]:!py-1.5 [&_select]:!rounded-xl [&_select]:!border [&_select]:!border-slate-200 [&_select]:!bg-white [&_select]:!shadow-2xs",
+            "[&_select]:!text-xs [&_select]:!font-semibold [&_select]:!text-slate-700 [&_select]:!h-9 [&_select]:!px-2.5 [&_select]:!py-1.5 [&_select]:!rounded-xl [&_select]:!border [&_select]:!border-slate-200 [&_select]:!bg-white [&_select]:!shadow-2xs [&_select]:!w-full [&_select]:!min-w-0",
             "[&_label]:!text-[10px] [&_label]:!font-bold [&_label]:!uppercase [&_label]:!tracking-wider [&_label]:!text-slate-500 [&_label]:!mb-1 [&_label]:!block",
-            "[&_input]:!text-xs [&_input]:!h-9 [&_input]:!rounded-xl",
+            "[&_input]:!text-xs [&_input]:!h-9 [&_input]:!rounded-xl [&_input]:!w-full [&_input]:!min-w-0",
             "[&_button]:!text-xs",
-            "[&>div]:!w-full [&>div]:!max-w-none [&>div>select]:!w-full [&>select]:!w-full [&>label]:!w-full [&>div>div]:!w-full",
+            "[&>div]:!w-full [&>div]:!max-w-none [&>div]:!min-w-0 [&>div>select]:!w-full [&>select]:!w-full [&>label]:!w-full [&>div>div]:!w-full",
             filtersClassName
           )}>
-            {filters}
+            {normalizedFilters}
           </div>
         </div>
       )}
