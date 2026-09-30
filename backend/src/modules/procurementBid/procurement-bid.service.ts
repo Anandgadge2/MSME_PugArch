@@ -38,7 +38,7 @@ const bidTransitions: Record<string, string[]> = {
   CLOSED: ['OPEN', 'OPEN_FOR_BIDDING', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   EXPIRED: ['OPEN', 'OPEN_FOR_BIDDING', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION', 'CANCELLED'],
   TECHNICAL_EVALUATION: ['TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION', 'CANCELLED'],
-  TECHNICAL_EVALUATION_COMPLETED: ['FINANCIAL_EVALUATION', 'UNDER_EVALUATION', 'CANCELLED'],
+  TECHNICAL_EVALUATION_COMPLETED: ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'UNDER_EVALUATION', 'CANCELLED'],
   FINANCIAL_EVALUATION: ['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'UNDER_EVALUATION', 'CANCELLED'],
   L1_GENERATED: ['AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'CANCELLED'],
   AWARD_RECOMMENDED: ['AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARDED', 'CANCELLED'],
@@ -1232,6 +1232,12 @@ export const refreshBidStatus = async (bid: any) => {
       include: bidInclude
     });
   }
+
+  // Option B: Auto-transition for bids under evaluation when opening date or evaluation completion arrives
+  if (['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'UNDER_EVALUATION'].includes(current)) {
+    await autoCheckAndPerformTransitions(bid.id);
+  }
+
   return bid;
 };
 
@@ -3556,7 +3562,137 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
   for (const row of updatedRows) {
     await procurementAudit(req, row.status === 'QUALIFIED' ? 'SELLER_QUALIFIED' : 'SELLER_DISQUALIFIED', 'ProcurementBidParticipation', row.participationId, row);
   }
+
+  // Option B: Auto-transition technical evaluation & open financial ranking once all sellers are evaluated
+  await autoCheckAndPerformTransitions(bid.id, req);
+
   return updatedRows;
+};
+
+export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: number, req?: any) => {
+  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
+
+  const ranked = await db.$transaction(async (tx: any) => {
+    const qualified = await tx.procurementBidParticipation.findMany({
+      where: { bidId: bid.id, technicalStatus: 'QUALIFIED', submissionStatus: 'SUBMITTED', totalAmount: { not: null } },
+      orderBy: { totalAmount: 'asc' }
+    });
+    if (!qualified.length) return [];
+    for (const [index, row] of qualified.entries()) {
+      const rank = index + 1;
+      const finalStatus = rankToFinalStatus(rank);
+      await tx.procurementBidParticipation.update({
+        where: { id: row.id },
+        data: { financialStatus: 'EVALUATED', finalStatus, rank }
+      });
+      await tx.procurementBidEvaluation.create({
+        data: {
+          bidId: bid.id,
+          participationId: row.id,
+          sellerId: row.sellerId,
+          evaluatorId: evaluatorId || bid.buyerId || 1,
+          evaluationType: 'FINANCIAL',
+          status: 'OPENED',
+          remarks: `Auto-ranked ${finalStatus}`,
+          score: null
+        }
+      });
+    }
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED', financialOpeningDate: now() }
+    });
+    if (sourceReqId > 0) {
+      await tx.buyerRequirement.updateMany({
+        where: { id: sourceReqId },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+      await tx.requirement.updateMany({
+        where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+        data: { status: 'L1_GENERATED' }
+      }).catch(() => null);
+    }
+    await tx.procurementBidParticipation.updateMany({
+      where: { bidId: bid.id, technicalStatus: { not: 'QUALIFIED' } },
+      data: { financialStatus: 'LOCKED' }
+    });
+    return qualified.map((row: any, index: number) => ({ ...row, rank: index + 1, finalStatus: rankToFinalStatus(index + 1) }));
+  });
+
+  if (req && ranked.length > 0) {
+    await procurementAudit(req, 'FINANCIAL_EVALUATION_OPENED', 'ProcurementBid', bid.id, { qualifiedCount: ranked.length }).catch(() => null);
+    await procurementAudit(req, 'L1_GENERATED', 'ProcurementBid', bid.id, ranked.map((r: any) => ({ id: r.id, rank: r.rank, totalAmount: r.totalAmount }))).catch(() => null);
+  }
+  return ranked;
+};
+
+export const autoCheckAndPerformTransitions = async (bidId: number | string, req?: any) => {
+  try {
+    const bid = await db.procurementBid.findFirst({
+      where: { OR: [{ id: Number(bidId) || -1 }, { bidNumber: String(bidId) }] }
+    });
+    if (!bid) return null;
+
+    const currentStatus = String(bid.status || '').toUpperCase();
+    if (['L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'COMPLETED', 'CLOSED'].includes(currentStatus)) {
+      return bid;
+    }
+
+    let qualified = await db.procurementBidParticipation.count({ where: { bidId: bid.id, technicalStatus: 'QUALIFIED' } });
+    let pending = await db.procurementBidParticipation.count({
+      where: {
+        bidId: bid.id,
+        submissionStatus: 'SUBMITTED',
+        technicalStatus: { in: ['PENDING', 'UNDER_REVIEW', 'CLARIFICATION_REQUIRED'] }
+      }
+    });
+
+    const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
+    if (!qualified && sourceReqId > 0) {
+      qualified = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['SHORTLISTED', 'ACCEPTED', 'QUALIFIED'] } } });
+      pending = await db.requirementResponse.count({ where: { requirementId: sourceReqId, status: { in: ['PENDING', 'UNDER_REVIEW', 'SUBMITTED'] } } });
+    }
+
+    // Auto-transition to TECHNICAL_EVALUATION_COMPLETED once all sellers are evaluated
+    if (pending === 0 && qualified > 0) {
+      if (currentStatus !== 'TECHNICAL_EVALUATION_COMPLETED' && currentStatus !== 'FINANCIAL_EVALUATION') {
+        await db.procurementBid.update({
+          where: { id: bid.id },
+          data: { status: 'TECHNICAL_EVALUATION_COMPLETED', lifecycleStage: 'TECHNICAL_EVALUATION_COMPLETED' }
+        });
+        if (sourceReqId > 0) {
+          await db.buyerRequirement.updateMany({
+            where: { id: sourceReqId },
+            data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+          }).catch(() => null);
+          await db.requirement.updateMany({
+            where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
+            data: { status: 'TECHNICAL_EVALUATION_COMPLETED' }
+          }).catch(() => null);
+        }
+        if (req) {
+          await procurementAudit(req, 'TECHNICAL_EVALUATION_COMPLETED', 'ProcurementBid', bid.id, { auto: true }).catch(() => null);
+        }
+      }
+
+      // Check if financial opening date/time has arrived
+      const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
+      const finOpenCandidate = firstPresent(
+        bid.financialOpeningDate,
+        sched?.financialOpeningDate,
+        (bid.technicalPacket as any)?.financialOpeningDate,
+        (bid.technicalPacket as any)?.financialEvaluationDate
+      );
+      const isFinOpeningTimeReached = !finOpenCandidate || isNaN(new Date(finOpenCandidate).getTime()) || new Date(finOpenCandidate).getTime() <= Date.now();
+
+      if (isFinOpeningTimeReached) {
+        logger.info({ bidId: bid.id, bidNumber: bid.bidNumber }, '[AUTO_TRANSITION] Auto-opening financial evaluation and generating L1');
+        await performFinancialRankingAndOpening(bid, req?.user?.id || bid.buyerId || 1, req);
+      }
+    }
+  } catch (err: any) {
+    logger.warn({ bidId, error: err?.message }, '[AUTO_TRANSITION] Error in auto-transition checks');
+  }
 };
 
 export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: string) => {
@@ -3600,6 +3736,20 @@ export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: strin
   }
 
   await procurementAudit(req, 'TECHNICAL_EVALUATION_COMPLETED', 'ProcurementBid', bid.id, updated);
+
+  // Also auto-open financial evaluation if opening time has arrived
+  const sched = (updated.technicalPacket && typeof updated.technicalPacket === 'object') ? (updated.technicalPacket as any).schedule : null;
+  const finOpenCandidate = firstPresent(
+    updated.financialOpeningDate,
+    sched?.financialOpeningDate,
+    (updated.technicalPacket as any)?.financialOpeningDate,
+    (updated.technicalPacket as any)?.financialEvaluationDate
+  );
+  const isFinOpeningTimeReached = !finOpenCandidate || isNaN(new Date(finOpenCandidate).getTime()) || new Date(finOpenCandidate).getTime() <= Date.now();
+  if (isFinOpeningTimeReached) {
+    await performFinancialRankingAndOpening(updated, req.user!.id, req);
+  }
+
   return updated;
 };
 
@@ -3636,56 +3786,8 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
     }
   }
 
-  const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
-
-  const ranked = await db.$transaction(async (tx: any) => {
-    const qualified = await tx.procurementBidParticipation.findMany({
-      where: { bidId: bid.id, technicalStatus: 'QUALIFIED', submissionStatus: 'SUBMITTED', totalAmount: { not: null } },
-      orderBy: { totalAmount: 'asc' }
-    });
-    if (!qualified.length) throw new ApiError(400, 'No technically qualified financial quotes are available to open.', 'FINANCIAL_NOT_OPENED');
-    for (const [index, row] of qualified.entries()) {
-      const rank = index + 1;
-      const finalStatus = rankToFinalStatus(rank);
-      await tx.procurementBidParticipation.update({
-        where: { id: row.id },
-        data: { financialStatus: 'EVALUATED', finalStatus, rank }
-      });
-      await tx.procurementBidEvaluation.create({
-        data: {
-          bidId: bid.id,
-          participationId: row.id,
-          sellerId: row.sellerId,
-          evaluatorId: req.user!.id,
-          evaluationType: 'FINANCIAL',
-          status: 'OPENED',
-          remarks: `Auto-ranked ${finalStatus}`,
-          score: null
-        }
-      });
-    }
-    await tx.procurementBid.update({
-      where: { id: bid.id },
-      data: { status: 'L1_GENERATED', lifecycleStage: 'L1_GENERATED', financialOpeningDate: now() }
-    });
-    if (sourceReqId > 0) {
-      await tx.buyerRequirement.updateMany({
-        where: { id: sourceReqId },
-        data: { status: 'L1_GENERATED' }
-      }).catch(() => null);
-      await tx.requirement.updateMany({
-        where: { OR: [{ id: sourceReqId }, { requirementNumber: bid.bidNumber }] },
-        data: { status: 'L1_GENERATED' }
-      }).catch(() => null);
-    }
-    await tx.procurementBidParticipation.updateMany({
-      where: { bidId: bid.id, technicalStatus: { not: 'QUALIFIED' } },
-      data: { financialStatus: 'LOCKED' }
-    });
-    return qualified.map((row: any, index: number) => ({ ...row, rank: index + 1, finalStatus: rankToFinalStatus(index + 1) }));
-  });
-  await procurementAudit(req, 'FINANCIAL_EVALUATION_OPENED', 'ProcurementBid', bid.id, { qualifiedCount: ranked.length });
-  await procurementAudit(req, 'L1_GENERATED', 'ProcurementBid', bid.id, ranked.map((r: any) => ({ id: r.id, rank: r.rank, totalAmount: r.totalAmount })));
+  const ranked = await performFinancialRankingAndOpening(bid, req.user!.id, req);
+  if (!ranked.length) throw new ApiError(400, 'No technically qualified financial quotes are available to open.', 'FINANCIAL_NOT_OPENED');
   return ranked;
 };
 

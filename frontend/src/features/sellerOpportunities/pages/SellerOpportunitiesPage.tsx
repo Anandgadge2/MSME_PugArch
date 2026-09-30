@@ -265,39 +265,31 @@ const isDisqualifiedOrNotSelected = (item: SellerOpportunity) => {
  * TypeBadge component for rendering base procurement badges with dynamic + RA sub-badges
  */
 export function TypeBadge({ type, className }: { type: OpportunityType; className?: string }) {
-  const rawType = String(type || '');
-  const isPlusRa = rawType.includes('+ RA') || rawType.includes('+RA');
-  const baseType = rawType.replace(/\s*\+\s*RA$/i, '').trim();
+  const rawType = String(type || '').trim();
+  const isPlusRa = /(\s*\+\s*RA)/i.test(rawType);
+  const baseType = rawType.replace(/(\s*\+\s*RA)+$/gi, '').trim() || 'Procurement';
 
   const getBaseColorClass = (t: string) => {
-    switch (t) {
-      case 'RFQ':
-        return 'border-orange-200 bg-orange-50 text-orange-700';
-      case 'RFP':
-        return 'border-purple-200 bg-purple-50 text-purple-700';
-      case 'Open Tender':
-        return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-      case 'Limited Tender':
-        return 'border-blue-200 bg-blue-50 text-blue-700';
-      case 'Rate Contract':
-        return 'border-amber-200 bg-amber-50 text-amber-700';
-      case 'Reverse Auction':
-        return 'border-red-200 bg-red-50 text-red-700';
-      default:
-        return 'border-slate-200 bg-slate-50 text-slate-700';
-    }
+    const norm = t.toLowerCase();
+    if (norm === 'rfq') return 'border-orange-200 bg-orange-50 text-orange-700';
+    if (norm === 'rfp') return 'border-purple-200 bg-purple-50 text-purple-700';
+    if (norm.includes('open tender') || norm === 'tender') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    if (norm.includes('limited tender')) return 'border-blue-200 bg-blue-50 text-blue-700';
+    if (norm.includes('rate contract')) return 'border-amber-200 bg-amber-50 text-amber-700';
+    if (norm.includes('reverse auction') || norm === 'auction') return 'border-red-200 bg-red-50 text-red-700';
+    return 'border-slate-200 bg-slate-50 text-slate-700';
   };
 
   return (
-    <div className={cn("inline-flex items-center gap-1 shrink-0", className)}>
+    <div className={cn("inline-flex flex-wrap items-center gap-1", className)}>
       <span className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap",
+        "inline-flex items-center rounded-md px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider border whitespace-nowrap",
         getBaseColorClass(baseType)
       )}>
         {baseType}
       </span>
       {isPlusRa && (
-        <span className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider text-rose-700 shrink-0 shadow-2xs">
+        <span className="inline-flex items-center gap-0.5 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-700 shrink-0 shadow-2xs whitespace-nowrap">
           <Gavel className="h-2.5 w-2.5 text-rose-600" aria-hidden="true" />
           + RA
         </span>
@@ -593,11 +585,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       };
 
       const getBaseType = (typeStr: string): string => {
-        return (typeStr || '').replace(/\s*\+\s*RA$/i, '').trim();
+        return (typeStr || '').replace(/(\s*\+\s*RA)+$/gi, '').trim();
       };
 
       opportunities.forEach(opportunity => {
-        const oppIsAuction = opportunity.type === 'Reverse Auction' || opportunity.type.endsWith('+ RA');
+        const oppIsAuction = opportunity.type === 'Reverse Auction' || /(\s*\+\s*RA)/i.test(opportunity.type);
         const coreTitle = cleanCoreTitle(opportunity.title);
         const refKeys = extractRefKeys(opportunity);
 
@@ -626,15 +618,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           deduped.push(opportunity);
         } else {
           const existing = deduped[existingIndex];
-          const existingIsAuction = existing.type === 'Reverse Auction' || existing.type.endsWith('+ RA');
+          const existingIsAuction = existing.type === 'Reverse Auction' || /(\s*\+\s*RA)/i.test(existing.type);
 
           let mergedType = existing.type;
+          const baseOpp = getBaseType(opportunity.type);
+          const baseExisting = getBaseType(existing.type);
+
           if (existing.type === 'Reverse Auction' && opportunity.type !== 'Reverse Auction') {
-            mergedType = `${opportunity.type} + RA` as OpportunityType;
+            mergedType = `${baseOpp} + RA` as OpportunityType;
           } else if (existing.type !== 'Reverse Auction' && opportunity.type === 'Reverse Auction') {
-            mergedType = `${existing.type} + RA` as OpportunityType;
-          } else if (existing.type.endsWith('+ RA') || opportunity.type.endsWith('+ RA')) {
-            const base = existing.type !== 'Reverse Auction' ? getBaseType(existing.type) : getBaseType(opportunity.type);
+            mergedType = `${baseExisting} + RA` as OpportunityType;
+          } else if (existing.type.includes('+ RA') || opportunity.type.includes('+ RA')) {
+            const base = existing.type !== 'Reverse Auction' ? baseExisting : baseOpp;
             mergedType = `${base} + RA` as OpportunityType;
           }
 
@@ -1477,16 +1472,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-[10%]',
+      width: 'w-[12%]',
       cell: (item) => (
-        <div className="flex flex-col gap-1 items-start">
+        <div className="flex flex-col gap-1 items-start min-w-0">
           <TypeBadge type={item.type} />
           {isParticipatedOpportunity(item) ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[8.5px] font-black uppercase text-emerald-800 shrink-0 whitespace-nowrap">
               <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600" /> Submitted
             </span>
           ) : (isClosedStatus(item.status) || !isOpenOpportunity(item, nowMs)) ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-slate-500 shrink-0">
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[8.5px] font-bold uppercase text-slate-500 shrink-0 whitespace-nowrap">
               <Lock className="h-2.5 w-2.5 text-slate-400" /> Closed
             </span>
           ) : null}
@@ -1498,7 +1493,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-[22%]',
+      width: 'w-[23%]',
       cell: (item) => (
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1530,7 +1525,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Buyer & Location',
       sortable: true,
       sortKey: 'buyer',
-      width: 'w-[16%]',
+      width: 'w-[15%]',
       cell: (item) => {
         const cleanLoc = formatLocation(item.location || item.deliveryLocation);
         return (
@@ -1554,7 +1549,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Published Date',
       sortable: true,
       sortKey: 'publishedAt',
-      width: 'w-[11%]',
+      width: 'w-[10.5%]',
       cell: (item) => {
         const raw = item.publishedAt || item.createdAt;
         if (!raw) return <span className="text-xs font-semibold text-slate-400">—</span>;
@@ -1578,7 +1573,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Closing Date',
       sortable: true,
       sortKey: 'closingDate',
-      width: 'w-[12%]',
+      width: 'w-[11.5%]',
       cell: (item) => {
         const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
         if (isLiveAuction) {
@@ -1628,7 +1623,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Est. Value',
       sortable: true,
       sortKey: 'estimatedValue',
-      width: 'w-[11.5%]',
+      width: 'w-[11%]',
       cell: (item) => {
         const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction';
         if (!isDisclosed) {
@@ -1659,7 +1654,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       key: 'actions',
       header: 'Action',
       align: 'right',
-      width: 'w-[14%]',
+      width: 'w-[13%]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item) => {
@@ -1781,8 +1776,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       }
       counts.all++;
 
-      const isPlusRa = item.type.endsWith('+ RA');
-      const baseType = item.type.replace(/\s*\+\s*RA$/i, '').trim();
+      const isPlusRa = /(\s*\+\s*RA)/i.test(item.type);
+      const baseType = item.type.replace(/(\s*\+\s*RA)+$/gi, '').trim();
 
       if (counts[baseType] !== undefined) {
         counts[baseType]++;

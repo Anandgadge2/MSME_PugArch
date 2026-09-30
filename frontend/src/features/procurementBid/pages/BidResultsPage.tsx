@@ -203,6 +203,29 @@ export default function BidResultsPage() {
     return rawStatus === 'TECHNICAL_EVALUATION_COMPLETED' || rawStage === 'TECHNICAL_EVALUATION_COMPLETED';
   }, [bid, isCompletingTechEvalSuccess, isFinancialEvalOpened]);
 
+  const finOpeningRaw =
+    (bid as any)?.financialOpeningDate ||
+    (bid as any)?.schedule?.financialOpeningDate ||
+    (bid as any)?.technicalPacket?.schedule?.financialOpeningDate ||
+    (bid as any)?.technicalPacket?.financialOpeningDate ||
+    (bid as any)?.payload?.dates?.financialOpeningDate ||
+    (bid as any)?.payload?.schedule?.financialOpeningDate;
+
+  const isFinancialOpeningPending = React.useMemo(() => {
+    if (!isTwoPacketMode) return false;
+    const rawStatus = String(bid?.status || '').toUpperCase();
+    if (['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED'].includes(rawStatus)) {
+      return false;
+    }
+    if (finOpeningRaw) {
+      const d = new Date(finOpeningRaw);
+      if (!isNaN(d.getTime())) {
+        return d.getTime() > Date.now();
+      }
+    }
+    return false;
+  }, [isTwoPacketMode, bid?.status, finOpeningRaw]);
+
   const activeAward = React.useMemo(() => {
     if (Array.isArray(bid?.awards) && bid.awards.length > 0) return bid.awards[0];
     return null;
@@ -361,6 +384,27 @@ export default function BidResultsPage() {
       setIsOpeningFinancialEval(false);
     }
   };
+
+  // Option B: Auto-open financial ranking when Stage 1 is complete and financial opening time has passed
+  React.useEffect(() => {
+    if (
+      isFinancialEvalReady &&
+      !isFinancialEvalOpened &&
+      !isOpeningFinancialEval &&
+      !isFinancialOpeningPending &&
+      techEvaluationStats.pending === 0 &&
+      techEvaluationStats.qualified > 0
+    ) {
+      handleOpenFinancialEvaluation();
+    }
+  }, [
+    isFinancialEvalReady,
+    isFinancialEvalOpened,
+    isOpeningFinancialEval,
+    isFinancialOpeningPending,
+    techEvaluationStats.pending,
+    techEvaluationStats.qualified,
+  ]);
 
   const [awardModal, setAwardModal] = useState<{
     show: boolean;
@@ -1528,29 +1572,6 @@ export default function BidResultsPage() {
     );
   }
 
-  const finOpeningRaw =
-    (bid as any).financialOpeningDate ||
-    (bid as any).schedule?.financialOpeningDate ||
-    (bid as any).technicalPacket?.schedule?.financialOpeningDate ||
-    (bid as any).technicalPacket?.financialOpeningDate ||
-    (bid as any).payload?.dates?.financialOpeningDate ||
-    (bid as any).payload?.schedule?.financialOpeningDate;
-
-  const isFinancialOpeningPending = (() => {
-    if (!isTwoPacketMode) return false;
-    const rawStatus = String(bid?.status || '').toUpperCase();
-    if (['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED'].includes(rawStatus)) {
-      return false;
-    }
-    if (finOpeningRaw) {
-      const d = new Date(finOpeningRaw);
-      if (!isNaN(d.getTime())) {
-        return d.getTime() > Date.now();
-      }
-    }
-    return false;
-  })();
-
   if (isFinancialOpeningPending) {
     const formattedFinDate = finOpeningRaw
       ? formatDateTime(finOpeningRaw)
@@ -2075,62 +2096,25 @@ export default function BidResultsPage() {
                   <span className="font-semibold text-slate-600 text-[11px] hidden lg:inline">
                     {techEvaluationStats.pending > 0
                       ? `${techEvaluationStats.pending} vendor(s) need review`
-                      : isFinancialEvalReady
-                        ? `Stage 1 complete • Ready for Stage 2`
-                        : isFinancialEvalOpened
-                          ? `Financial ranking active`
-                          : `${techEvaluationStats.qualified} eligible for Stage 2`}
+                      : (isFinancialEvalOpened || ranking.length > 0)
+                        ? `Financial ranking active`
+                        : `${techEvaluationStats.qualified} eligible for Stage 2`}
                   </span>
 
-                  {!isTechEvalCompleted && techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0 && (
-                    <button
-                      type="button"
-                      disabled={isCompletingTechEval}
-                      onClick={handleCompleteTechnicalEvaluation}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      <span>{isCompletingTechEval ? 'Finalizing...' : 'Complete Technical Evaluation'}</span>
-                    </button>
+                  {isOpeningFinancialEval && (
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-blue-100 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-800 animate-pulse">
+                      <Clock className="h-3.5 w-3.5 text-blue-600" />
+                      Opening Commercial Ranking...
+                    </span>
                   )}
 
-                  {isFinancialEvalReady && (
-                    <button
-                      type="button"
-                      disabled={isOpeningFinancialEval}
-                      onClick={handleOpenFinancialEvaluation}
-                      className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50"
-                    >
-                      <Trophy className="h-3.5 w-3.5" />
-                      <span>{isOpeningFinancialEval ? 'Opening Ranking...' : 'Open Financial Ranking (Stage 2)'}</span>
-                    </button>
-                  )}
-
-                  {isFinancialEvalOpened && (
+                  {(isFinancialEvalOpened || (ranking.length > 0 && techEvaluationStats.qualified > 0)) && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 text-[11px] font-black text-emerald-800">
                       <CheckCircle2 className="h-3 w-3 text-emerald-600" />
                       Stage 2 Financial Ranking Active
                     </span>
                   )}
                 </div>
-              </div>
-            ) : isFinancialEvalReady ? (
-              <div className="rounded-lg border border-blue-200/90 bg-blue-50/60 px-3.5 py-2 shadow-2xs flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-blue-700 shrink-0" />
-                  <span className="text-xs font-bold text-slate-800">
-                    Technical evaluation complete ({techEvaluationStats.qualified} qualified). Ready to finalize commercial ranking.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  disabled={isOpeningFinancialEval}
-                  onClick={handleOpenFinancialEvaluation}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 px-2.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  <Trophy className="h-3.5 w-3.5" />
-                  <span>{isOpeningFinancialEval ? 'Finalizing...' : 'Finalize Financial Ranking'}</span>
-                </button>
               </div>
             ) : null}
 

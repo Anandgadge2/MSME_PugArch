@@ -11035,42 +11035,6 @@ export function ProcurementDetailUnifiedView(
                               <span>Start Technical Scrutiny</span>
                               <ArrowRight className="h-3.5 w-3.5" />
                             </Button>
-                          ) : !isTechEvalCompleted && techEvaluationStats.qualified > 0 ? (
-                            <div className="flex flex-wrap sm:flex-col sm:items-end items-center gap-1.5">
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={isCompletingTechEval || !isTechnicalOpeningReady}
-                                onClick={handleCompleteTechnicalEvaluation}
-                                className="h-8 px-3 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer"
-                              >
-                                <ShieldCheck className="h-3.5 w-3.5" />
-                                <span>
-                                  {isCompletingTechEval
-                                    ? "Finalizing..."
-                                    : "Complete Technical Evaluation"}
-                                </span>
-                                <ArrowRight className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  if (isTwoPacketMode && !isFinancialOpeningReady) {
-                                    toast.warning(
-                                      `Financial packets remain sealed until scheduled financial opening on ${financialDateFormatted || "the scheduled date"}.`,
-                                    );
-                                    return;
-                                  }
-                                  router.push(`/bids/${targetId}/results`);
-                                }}
-                                className="h-7 px-2.5 gap-1 text-[11px] font-semibold text-indigo-700 border-indigo-200 bg-white hover:bg-indigo-50 cursor-pointer"
-                              >
-                                <Trophy className="h-3 w-3 text-indigo-600" />
-                                <span>Proceed to Stage 2</span>
-                              </Button>
-                            </div>
                           ) : techEvaluationStats.qualified > 0 ? (
                             <div className="flex flex-wrap sm:flex-col sm:items-end items-center gap-1.5">
                               <Button
@@ -12412,28 +12376,7 @@ export function ProcurementDetailUnifiedView(
                           </span>
 
                           <div className="flex items-center gap-2">
-                            {isTwoPacketMode &&
-                              !isBidAwarded &&
-                              !isTechEvalCompleted &&
-                              techEvaluationStats.pending === 0 &&
-                              techEvaluationStats.qualified > 0 && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={isCompletingTechEval || !isTechnicalOpeningReady}
-                                  onClick={handleCompleteTechnicalEvaluation}
-                                  className="h-7.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
-                                >
-                                  <ShieldCheck className="h-3.5 w-3.5" />
-                                  <span>
-                                    {isCompletingTechEval
-                                      ? "Finalizing..."
-                                      : "Complete Technical Evaluation"}
-                                  </span>
-                                </Button>
-                              )}
-
-                            {(isTechEvalCompleted || isBidAwarded) && (
+                            {(isTechEvalCompleted || isBidAwarded || (techEvaluationStats.pending === 0 && techEvaluationStats.qualified > 0)) && (
                               <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
                                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                                 <span>
