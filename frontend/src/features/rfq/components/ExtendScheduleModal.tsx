@@ -9,6 +9,8 @@ import {
   X,
   Loader2,
   ShieldAlert,
+  Layers,
+  Info,
 } from "lucide-react";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { Button } from "../../../components/ui/button";
@@ -23,6 +25,9 @@ export interface ExtendScheduleModalProps {
   bidId: string | number;
   bidTitle?: string;
   bidNumber?: string;
+  packetType?: string;
+  procurementType?: string;
+  isTwoPacket?: boolean;
   currentSchedule: {
     closingDate?: string | Date | null;
     technicalOpeningDate?: string | Date | null;
@@ -62,11 +67,39 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
   bidId,
   bidTitle,
   bidNumber,
+  packetType,
+  procurementType,
+  isTwoPacket,
   currentSchedule,
   onSuccess,
 }) => {
   const modalTitleId = useId();
   const modalDescId = useId();
+
+  // Resolve whether this procurement is Two Packet (Technical + Financial) or Single Envelope
+  const isTwoPacketMode = useMemo(() => {
+    if (typeof isTwoPacket === "boolean") return isTwoPacket;
+    if (packetType) {
+      const ptUpper = String(packetType).toUpperCase();
+      if (ptUpper.includes("TWO") || ptUpper === "2") return true;
+      if (ptUpper.includes("SINGLE") || ptUpper === "1") return false;
+    }
+    if (procurementType) {
+      const procUpper = String(procurementType).toUpperCase();
+      if (procUpper.includes("TWO_PACKET") || procUpper.includes("TWO PACKET")) return true;
+      if (
+        procUpper === "RFQ" ||
+        procUpper.includes("DIRECT_PURCHASE") ||
+        procUpper.includes("RATE_CONTRACT") ||
+        procUpper.includes("REVERSE_AUCTION")
+      ) {
+        // These methods default to single envelope unless financial opening is present
+        if (!currentSchedule.financialOpeningDate) return false;
+      }
+    }
+    // If there is an existing financial opening date from DB/schedule, it is two packet
+    return Boolean(currentSchedule.financialOpeningDate);
+  }, [isTwoPacket, packetType, procurementType, currentSchedule.financialOpeningDate]);
 
   // Baseline dates
   const initialClosing = useMemo(
@@ -78,8 +111,8 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     [currentSchedule.technicalOpeningDate],
   );
   const initialFin = useMemo(
-    () => toInputDateTime(currentSchedule.financialOpeningDate),
-    [currentSchedule.financialOpeningDate],
+    () => (isTwoPacketMode ? toInputDateTime(currentSchedule.financialOpeningDate) : ""),
+    [currentSchedule.financialOpeningDate, isTwoPacketMode],
   );
   const initialReqBy = useMemo(
     () => toInputDateTime(currentSchedule.requiredByDate),
@@ -124,9 +157,16 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
           setTechnicalOpeningDate(toInputDateTime(new Date(futureDate.getTime() + 30 * 60000)));
         }
 
-        if (initialFin) {
-          const oldFinMs = new Date(initialFin).getTime();
-          setFinancialOpeningDate(toInputDateTime(new Date(oldFinMs + deltaMs)));
+        if (isTwoPacketMode) {
+          if (initialFin) {
+            const oldFinMs = new Date(initialFin).getTime();
+            setFinancialOpeningDate(toInputDateTime(new Date(oldFinMs + deltaMs)));
+          } else {
+            const baseTechOrClosing = initialTech
+              ? new Date(initialTech).getTime() + deltaMs
+              : futureDate.getTime() + 30 * 60000;
+            setFinancialOpeningDate(toInputDateTime(new Date(baseTechOrClosing + 7 * 86400000)));
+          }
         } else {
           setFinancialOpeningDate("");
         }
@@ -150,7 +190,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       } else {
         setClosingDate(initialClosing);
         setTechnicalOpeningDate(initialTech);
-        setFinancialOpeningDate(initialFin);
+        setFinancialOpeningDate(isTwoPacketMode ? initialFin : "");
         setRequiredByDate(initialReqBy);
         setBidValidityDate(initialValidity);
       }
@@ -158,7 +198,16 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       setFormError(null);
       setAutoCascade(true);
     }
-  }, [isOpen, initialClosing, initialTech, initialFin, initialReqBy, initialValidity, isPastDeadline]);
+  }, [
+    isOpen,
+    initialClosing,
+    initialTech,
+    initialFin,
+    initialReqBy,
+    initialValidity,
+    isPastDeadline,
+    isTwoPacketMode,
+  ]);
 
   // Handle closing date change with smart auto-cascade
   const handleClosingDateChange = (newClosingStr: string) => {
@@ -174,7 +223,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     const deltaMs = newClosingTime - baseClosingTime;
     if (deltaMs <= 0) return;
 
-    // Cascade Technical Opening Date
+    // Cascade Opening Date (Technical opening for two packet, or Bid opening for single packet)
     if (initialTech) {
       const baseTechTime = new Date(initialTech).getTime();
       if (!isNaN(baseTechTime)) {
@@ -184,12 +233,16 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       setTechnicalOpeningDate(toInputDateTime(new Date(newClosingTime + 30 * 60000)));
     }
 
-    // Cascade Financial Opening Date
-    if (initialFin) {
-      const baseFinTime = new Date(initialFin).getTime();
-      if (!isNaN(baseFinTime)) {
-        setFinancialOpeningDate(toInputDateTime(new Date(baseFinTime + deltaMs)));
+    // Cascade Financial Opening Date ONLY for Two Packet flow
+    if (isTwoPacketMode) {
+      if (initialFin) {
+        const baseFinTime = new Date(initialFin).getTime();
+        if (!isNaN(baseFinTime)) {
+          setFinancialOpeningDate(toInputDateTime(new Date(baseFinTime + deltaMs)));
+        }
       }
+    } else {
+      setFinancialOpeningDate("");
     }
 
     // Cascade Required-By Date
@@ -236,13 +289,15 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     }
 
     if (technicalOpeningDate) {
-      const techTime = new Date(technicalOpeningDate).getTime();
-      if (!isNaN(techTime) && techTime < newClosingTime) {
-        return "Technical opening date cannot be earlier than the submission closing date.";
+      const openTime = new Date(technicalOpeningDate).getTime();
+      if (!isNaN(openTime) && openTime < newClosingTime) {
+        return isTwoPacketMode
+          ? "Technical opening date cannot be earlier than the submission closing date."
+          : "Bid opening date cannot be earlier than the submission closing date.";
       }
     }
 
-    if (financialOpeningDate) {
+    if (isTwoPacketMode && financialOpeningDate) {
       const finTime = new Date(financialOpeningDate).getTime();
       const techTime = technicalOpeningDate ? new Date(technicalOpeningDate).getTime() : NaN;
       const minFin = !isNaN(techTime) ? techTime : newClosingTime;
@@ -289,9 +344,10 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
         technicalOpeningDate: technicalOpeningDate
           ? new Date(technicalOpeningDate).toISOString()
           : null,
-        financialOpeningDate: financialOpeningDate
-          ? new Date(financialOpeningDate).toISOString()
-          : null,
+        financialOpeningDate:
+          isTwoPacketMode && financialOpeningDate
+            ? new Date(financialOpeningDate).toISOString()
+            : null,
         requiredByDate: requiredByDate
           ? new Date(requiredByDate).toISOString()
           : null,
@@ -302,7 +358,9 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
       };
 
       const updated = await procurementBidApi.extendBidSchedule(bidId, payload);
-      toast.success("Schedule extended successfully! Corrigendum notice issued. Tender is now OPEN for submissions.");
+      toast.success(
+        "Schedule extended successfully! Corrigendum notice issued. Tender is now OPEN for submissions.",
+      );
       if (onSuccess) {
         onSuccess(updated);
       }
@@ -340,13 +398,30 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 <CalendarDays className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <h2
-                  id={modalTitleId}
-                  className="text-base sm:text-lg font-black tracking-tight text-slate-900"
-                >
-                  Extend Tender Schedule &amp; Milestones
-                </h2>
-                <p id={modalDescId} className="text-xs text-slate-500 mt-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id={modalTitleId}
+                    className="text-base sm:text-lg font-black tracking-tight text-slate-900"
+                  >
+                    Extend Tender Schedule &amp; Milestones
+                  </h2>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                      isTwoPacketMode
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
+                    }`}
+                  >
+                    <Layers className="h-3 w-3" aria-hidden="true" />
+                    {isTwoPacketMode ? "Two Packet Envelope" : "Single Packet Envelope"}
+                  </span>
+                  {procurementType && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                      {procurementType}
+                    </span>
+                  )}
+                </div>
+                <p id={modalDescId} className="text-xs text-slate-500 mt-1">
                   Manual corrigendum extension for buyers. Submitted supplier bids remain valid.
                   {bidNumber && (
                     <span className="font-mono font-bold text-slate-700 ml-1">
@@ -367,8 +442,36 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
             </button>
           </div>
 
+          {/* Envelope Configuration Notice */}
+          <div
+            className={`mt-3.5 rounded-xl border p-3 text-xs flex items-start gap-2.5 ${
+              isTwoPacketMode
+                ? "bg-purple-50/70 border-purple-200 text-purple-950"
+                : "bg-blue-50/70 border-blue-200 text-blue-950"
+            }`}
+          >
+            <Info
+              className={`h-4 w-4 shrink-0 mt-0.5 ${
+                isTwoPacketMode ? "text-purple-600" : "text-blue-600"
+              }`}
+              aria-hidden="true"
+            />
+            <div className="flex-1">
+              <span className="font-bold block mb-0.5">
+                {isTwoPacketMode
+                  ? "Two Packet Envelope (Technical + Financial Separated)"
+                  : "Single Packet Envelope (Commercial / Combined Opening)"}
+              </span>
+              <p className="text-[11px] leading-relaxed opacity-90">
+                {isTwoPacketMode
+                  ? "Technical proposals (Cover 1) are unlocked first at the Technical Opening Date. Price bids (Cover 2) are unlocked at Financial Opening only for qualified vendors."
+                  : "Under Single Envelope procurement, technical compliance and commercial quotes are submitted together and opened at the Bid Opening Date & Time. There is no separate technical/financial opening split."}
+              </p>
+            </div>
+          </div>
+
           {/* Current Baseline Summary */}
-          <div className="mt-4 rounded-xl bg-slate-50 p-3.5 border border-slate-150 text-xs">
+          <div className="mt-3 rounded-xl bg-slate-50 p-3.5 border border-slate-200 text-xs">
             <p className="font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
               <Clock className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
               Current Active Milestones
@@ -387,14 +490,14 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
               {currentSchedule.technicalOpeningDate && (
                 <div>
                   <span className="text-[10.5px] uppercase font-bold text-slate-400 block">
-                    Technical Opening:
+                    {isTwoPacketMode ? "Technical Opening:" : "Bid Opening:"}
                   </span>
                   <span className="font-semibold text-slate-900">
                     {formatDateTime(currentSchedule.technicalOpeningDate)}
                   </span>
                 </div>
               )}
-              {currentSchedule.financialOpeningDate && (
+              {isTwoPacketMode && currentSchedule.financialOpeningDate && (
                 <div>
                   <span className="text-[10.5px] uppercase font-bold text-slate-400 block">
                     Financial Opening:
@@ -472,7 +575,9 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                 Auto-cascade downstream milestones
               </label>
               <span className="text-[11px] font-medium text-indigo-700 hidden sm:inline">
-                Shifts technical, financial, and delivery dates forward by the same duration
+                {isTwoPacketMode
+                  ? "Shifts technical, financial, delivery, and validity dates forward by the same duration"
+                  : "Shifts bid opening, delivery, and validity dates forward by the same duration"}
               </span>
             </div>
 
@@ -492,32 +597,50 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
             </div>
 
             {/* Downstream Dates Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+            <div
+              className={`grid grid-cols-1 ${
+                isTwoPacketMode ? "sm:grid-cols-2" : "sm:grid-cols-3"
+              } gap-3.5 pt-1`}
+            >
               <div>
                 <DateTimePicker
                   id="extend-tech-date-input"
-                  label="Technical Opening Date & Time"
+                  label={
+                    isTwoPacketMode
+                      ? "Technical Opening Date & Time"
+                      : "Bid Opening Date & Time"
+                  }
                   labelClassName="text-xs font-bold text-slate-800 mb-1"
                   value={technicalOpeningDate}
                   onChange={setTechnicalOpeningDate}
-                  placeholder="Select technical opening date & time"
+                  placeholder={
+                    isTwoPacketMode
+                      ? "Select technical opening date & time"
+                      : "Select bid opening date & time"
+                  }
                   min={closingDate || new Date().toISOString()}
-                  hint="Must be on or after the new closing date."
+                  hint={
+                    isTwoPacketMode
+                      ? "Technical envelope unlocking date. Must be on or after closing."
+                      : "Single envelope opening date & time. Must be on or after closing."
+                  }
                 />
               </div>
 
-              <div>
-                <DateTimePicker
-                  id="extend-fin-date-input"
-                  label="Financial Opening Date & Time"
-                  labelClassName="text-xs font-bold text-slate-800 mb-1"
-                  value={financialOpeningDate}
-                  onChange={setFinancialOpeningDate}
-                  placeholder="Select financial opening date & time"
-                  min={technicalOpeningDate || closingDate || new Date().toISOString()}
-                  hint="Must be on or after technical opening."
-                />
-              </div>
+              {isTwoPacketMode && (
+                <div>
+                  <DateTimePicker
+                    id="extend-fin-date-input"
+                    label="Financial Opening Date & Time"
+                    labelClassName="text-xs font-bold text-slate-800 mb-1"
+                    value={financialOpeningDate}
+                    onChange={setFinancialOpeningDate}
+                    placeholder="Select financial opening date & time"
+                    min={technicalOpeningDate || closingDate || new Date().toISOString()}
+                    hint="Financial envelope unlocking date. Must be on or after technical opening."
+                  />
+                </div>
+              )}
 
               <div>
                 <DateTimePicker
@@ -528,7 +651,7 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
                   onChange={setRequiredByDate}
                   placeholder="Select required delivery date & time"
                   min={closingDate || new Date().toISOString()}
-                  hint="Contractual goods/services delivery deadline (date & time)."
+                  hint="Contractual goods/services delivery deadline."
                 />
               </div>
 

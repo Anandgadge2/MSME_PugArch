@@ -9435,10 +9435,15 @@ export function ProcurementDetailUnifiedView(
               bidId={props.id}
               bidTitle={resolvedSubject}
               bidNumber={props.displayId || String(props.id)}
+              packetType={rawPacketType}
+              procurementType={procurementMethod || props.procurementMethod || props.procurementType}
+              isTwoPacket={isTwoPacket}
               currentSchedule={{
                 closingDate: closingDateValue || props.deadlineDate || props.closingDate,
                 technicalOpeningDate: technicalDateValue || props.technicalDate || props.technicalOpeningDate,
-                financialOpeningDate: financialDateValue || props.financialDate || props.financialOpeningDate,
+                financialOpeningDate: isTwoPacket
+                  ? financialDateValue || props.financialDate || props.financialOpeningDate
+                  : null,
                 requiredByDate: requiredByDateValue || props.requiredByDate || props.requiredBy,
                 bidValidityDate: bidValidityDateComputed || bidValidityDateValue || props.bidValidityDate,
                 validityDays: rawValidityDays || props.validityDays,

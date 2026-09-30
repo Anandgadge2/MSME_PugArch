@@ -2130,9 +2130,17 @@ export const extendBidSchedule = async (
     }
   }
 
-  // Validate financial opening date if provided
+  const isTwoPacketBid =
+    bid.packetType === 'TWO_PACKET' ||
+    String((bid.technicalPacket as any)?.schedule?.packetType || '').toUpperCase().includes('TWO') ||
+    String((bid.technicalPacket as any)?.packetType || '').toUpperCase().includes('TWO') ||
+    String(bid.procurementType || '').toUpperCase().includes('TWO_PACKET');
+
+  // Validate financial opening date if provided (only applicable for two packet tenders)
   let newFinDate: Date | null = null;
-  if (body.financialOpeningDate) {
+  if (!isTwoPacketBid || body.financialOpeningDate === null) {
+    newFinDate = null;
+  } else if (body.financialOpeningDate) {
     newFinDate = new Date(body.financialOpeningDate);
     if (isNaN(newFinDate.getTime())) {
       throw new ApiError(400, 'Invalid financial opening date provided.', 'INVALID_FIN_DATE');
@@ -2146,6 +2154,8 @@ export const extendBidSchedule = async (
     const minFin = newTechDate || newClosingDate;
     if (oldFin.getTime() < minFin.getTime()) {
       newFinDate = minFin;
+    } else {
+      newFinDate = oldFin;
     }
   }
 
@@ -2196,7 +2206,7 @@ export const extendBidSchedule = async (
       submissionEndDate: newClosingDate.toISOString(),
       bidClosingDate: newClosingDate.toISOString(),
       ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
-      ...(newFinDate ? { financialOpeningDate: newFinDate.toISOString() } : {}),
+      financialOpeningDate: newFinDate ? newFinDate.toISOString() : null,
       ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
     },
     basics: {
@@ -2213,7 +2223,7 @@ export const extendBidSchedule = async (
       endDate: newClosingDate,
       ...(shouldReactivate ? { status: 'OPEN', lifecycleStage: 'SELLER_PARTICIPATION' } : {}),
       ...(newTechDate ? { technicalOpeningDate: newTechDate } : {}),
-      ...(newFinDate ? { financialOpeningDate: newFinDate } : {}),
+      financialOpeningDate: newFinDate,
       ...(newValidityDate ? { bidValidityDate: newValidityDate } : {}),
       technicalPacket: updatedTechnicalPacket
     }
