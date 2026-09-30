@@ -13984,10 +13984,8 @@ export function SellerQuotationReviewModal({
     [isFinancialSealed, previewLoadingId, participation],
   );
 
-  if (!isOpen || !participation) return null;
-
   const details = useMemo(
-    () => extractQuotationDetails(participation),
+    () => (participation ? extractQuotationDetails(participation) : ({} as any)),
     [participation],
   );
 
@@ -14021,6 +14019,7 @@ export function SellerQuotationReviewModal({
   } = details;
 
   const calculatedTotal = useMemo(() => {
+    if (!lineItems || !Array.isArray(lineItems)) return 0;
     return lineItems.reduce((acc: number, it: any) => {
       const uPrice = Number(
         it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
@@ -14043,6 +14042,8 @@ export function SellerQuotationReviewModal({
       return acc + (isNaN(lineTot) ? 0 : lineTot);
     }, 0);
   }, [lineItems, gstPercentage]);
+
+  if (!isOpen || !participation) return null;
 
   const quotedAmount = rawQuotedAmount > 0 ? rawQuotedAmount : calculatedTotal;
   const effectiveTotalAmount = quotedAmount;
@@ -14832,8 +14833,6 @@ export function QuotationComparisonModal({
     });
   }, [displayParticipations]);
 
-  if (!isOpen || !participations || participations.length === 0) return null;
-
   const lowestPrice = Number(
     sorted[0]?.totalAmount ||
       sorted[0]?.quotedAmount ||
@@ -14842,6 +14841,7 @@ export function QuotationComparisonModal({
   );
 
   const enrichedSorted = useMemo(() => {
+    if (!sorted || sorted.length === 0) return [];
     return sorted.map((p, idx) => {
       const details = extractQuotationDetails(p);
       const isL1 = idx === 0 && lowestPrice > 0;
@@ -14862,6 +14862,8 @@ export function QuotationComparisonModal({
       };
     });
   }, [sorted, lowestPrice]);
+
+  if (!isOpen || !participations || participations.length === 0) return null;
 
   const secondLowest = enrichedSorted[1]?.amount || 0;
   const l1Spread = secondLowest > lowestPrice ? secondLowest - lowestPrice : 0;

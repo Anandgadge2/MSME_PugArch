@@ -131,22 +131,6 @@ export function CreateInvoiceModal({
   const grossInvoiceTotal = useMemo(() => numAmount + gstAmount + otherTaxAmount, [numAmount, gstAmount, otherTaxAmount]);
   const netReceivable = useMemo(() => grossInvoiceTotal - tdsAmount, [grossInvoiceTotal, tdsAmount]);
 
-  if (!open) return null;
-
-  const hasSelectedDocument = sourceType === 'po' ? Boolean(selectedPurchaseOrderId) : Boolean(selectedQuotationId);
-
-  const selectedTitle = sourceType === 'po'
-    ? selectedPurchaseOrder?.poNumber || 'Selected Purchase Order'
-    : `Quote #Q-${selectedQuotation?.id}` || 'Selected Quotation';
-
-  const selectedSubtitle = sourceType === 'po'
-    ? selectedPurchaseOrder?.title || 'Purchase Order Items'
-    : selectedQuotation?.requirement?.title || 'B2B Quotation';
-
-  const selectedTotalValue = sourceType === 'po'
-    ? (selectedPurchaseOrder?.totalValue || selectedPurchaseOrder?.amount || 0)
-    : ((Number(selectedQuotation?.offeredPrice || 0) * Number(selectedQuotation?.offeredQuantity || 1)) || Number(selectedQuotation?.offeredPrice || 0));
-
   const selectedBaseValue = useMemo(() => {
     const gst = parseFloat(invoiceGstRate) || 18;
     if (sourceType === 'po') {
@@ -165,6 +149,22 @@ export function CreateInvoiceModal({
       return qBase > 0 ? qBase : (qTotal > 0 ? Math.round((qTotal / (1 + gst / 100)) * 100) / 100 : 0);
     }
   }, [sourceType, selectedPurchaseOrder, selectedQuotation, invoiceGstRate]);
+
+  const hasSelectedDocument = sourceType === 'po' ? Boolean(selectedPurchaseOrderId) : Boolean(selectedQuotationId);
+
+  const selectedTitle = sourceType === 'po'
+    ? selectedPurchaseOrder?.poNumber || 'Selected Purchase Order'
+    : `Quote #Q-${selectedQuotation?.id}` || 'Selected Quotation';
+
+  const selectedSubtitle = sourceType === 'po'
+    ? selectedPurchaseOrder?.title || 'Purchase Order Items'
+    : selectedQuotation?.requirement?.title || 'B2B Quotation';
+
+  const selectedTotalValue = sourceType === 'po'
+    ? (selectedPurchaseOrder?.totalValue || selectedPurchaseOrder?.amount || 0)
+    : ((Number(selectedQuotation?.offeredPrice || 0) * Number(selectedQuotation?.offeredQuantity || 1)) || Number(selectedQuotation?.offeredPrice || 0));
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">

@@ -148,16 +148,18 @@ export const buildPaymentTimeline = (
   }
 
   // 8. Financial Ledger Entries
-  payment?.ledgerEntries?.forEach((entry: any) => {
-    if (entry?.createdAt) {
-      events.push({
-        title: `${String(entry.entryType || 'ledger').replace(/_/g, ' ')} Entry Recorded`,
-        timestamp: entry.createdAt,
-        detail: `${formatCurrency(entry.amount)} | ${entry.debitAccount || 'Debit'} → ${entry.creditAccount || 'Credit'}`,
-        type: 'ledger'
-      });
-    }
-  });
+  if (Array.isArray(payment?.ledgerEntries)) {
+    payment.ledgerEntries.forEach((entry: any) => {
+      if (entry?.createdAt) {
+        events.push({
+          title: `${String(entry.entryType || 'ledger').replace(/_/g, ' ')} Entry Recorded`,
+          timestamp: entry.createdAt,
+          detail: `${formatCurrency(entry.amount)} | ${entry.debitAccount || 'Debit'} → ${entry.creditAccount || 'Credit'}`,
+          type: 'ledger'
+        });
+      }
+    });
+  }
 
   // 9. Verified / Settled
   const isVerified = ['VERIFIED', 'SUCCESS', 'ESCROW_RELEASED', 'OFFLINE_PROOF_VERIFIED', 'SETTLED'].includes(
@@ -211,7 +213,7 @@ export const buildPaymentTimeline = (
     index === self.findIndex(t => t.title === evt.title && t.timestamp === evt.timestamp)
   );
 
-  return uniqueEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  return uniqueEvents.sort((a, b) => new Date(a.timestamp || 0).getTime() - new Date(b.timestamp || 0).getTime());
 };
 
 export function PaymentReceiptViewModal({
@@ -529,7 +531,9 @@ export function PaymentReceiptViewModal({
     return linkedPo?.buyer?.organization?.organizationName || linkedPo?.buyer?.name || activePayment?.payer?.name || linkedInvoice?.buyer?.name || buyerName || null;
   }, [linkedPo, activePayment, linkedInvoice, buyerName]);
 
-  if (!isOpen) return null;
+  const timelineEvents = useMemo(() => {
+    return buildPaymentTimeline(activePayment, resolvedProof, linkedPo, linkedInvoice);
+  }, [activePayment, resolvedProof, linkedPo, linkedInvoice]);
 
   const handleCopy = (text: string, type: 'utr' | 'ref') => {
     if (!text) return;
@@ -871,10 +875,6 @@ export function PaymentReceiptViewModal({
     printHtmlContent(html);
   };
 
-  const timelineEvents = useMemo(() => {
-    return buildPaymentTimeline(activePayment, resolvedProof, linkedPo, linkedInvoice);
-  }, [activePayment, resolvedProof, linkedPo, linkedInvoice]);
-
   const hasAttachedFile = Boolean(
     resolvedProof?.receiptFileUrl ||
     resolvedProof?.receiptFileId ||
@@ -883,6 +883,8 @@ export function PaymentReceiptViewModal({
     activePayment?.metadata?.receiptFileUrl ||
     activePayment?.metadata?.receiptFileId
   );
+
+  if (!isOpen) return null;
 
   return (
     <div
