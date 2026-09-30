@@ -277,6 +277,7 @@ const normalizeOwnResponse = (raw: any) => {
 };
 
 const findSellerParticipation = (bidData: any, user: any) => {
+  if (!user || (!user.id && !user.organizationId)) return null;
   const participations = [
     ...toArray(bidData?.participations),
     ...toArray(bidData?.quoteResponses)
@@ -284,8 +285,9 @@ const findSellerParticipation = (bidData: any, user: any) => {
   const found = participations.find((p: any) => {
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
-    return String(sellerId || '') === String(user?.id || '') ||
-      (user?.organizationId && String(orgId || '') === String(user.organizationId));
+    const matchUser = Boolean(user?.id && sellerId && String(sellerId) === String(user.id));
+    const matchOrg = Boolean(user?.organizationId && orgId && String(orgId) === String(user.organizationId));
+    return matchUser || matchOrg;
   });
   if (found) {
     return { ...found, _isFromUserParticipation: true };
@@ -1398,7 +1400,7 @@ export default function SubmitQuotationPage() {
   const resolvedId = isMarketplaceQuoteFlow ? (conversationId || rfqData?.conversationId) : (rfqData?.id || requirementId);
 
   // Submission and read-only states
-  const isSubmittedQuote = submitted || isFinalSubmittedResponse(ownResponse);
+  const isSubmittedQuote = submitted || (isFinalSubmittedResponse(ownResponse) && isBelongingToUser(ownResponse, user));
   const isClosed = ['AWARDED', 'CLOSED', 'CANCELLED', 'EXPIRED'].includes(rfqData?.status);
   const isDeadlinePassed = !isMarketplaceQuoteFlow && !!rfqData?.deadlineDate && (() => {
     try {

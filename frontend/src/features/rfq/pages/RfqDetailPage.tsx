@@ -237,7 +237,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
 
   /* ── Queries ── */
   const { data: bidData, isLoading: bidLoading } = useQuery({
-    queryKey: ['rfq-detail-bid', requestId],
+    queryKey: ['rfq-detail-bid', requestId, user?.id],
     queryFn:  () => procurementBidApi.detail(requestId),
     enabled:  Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
     initialData: Boolean(requestId) && isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber) ? initialData : undefined,
@@ -245,7 +245,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   });
 
   const { data: reqData, isLoading: reqLoading } = useQuery({
-    queryKey: ['rfq-detail-req', requirementId],
+    queryKey: ['rfq-detail-req', requirementId, user?.id],
     queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
     enabled:  Boolean(requirementId),
     initialData: Boolean(requirementId) && isMatchingInitial && (initialData?.sourceModel === 'REQUIREMENT' || initialData?.requirementNumber?.startsWith('REQ-')) ? (initialData.requirement || initialData) : undefined,
@@ -264,7 +264,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   const targetReqId = requirementId || (reqData as any)?.requirement?.id || activeBidId || requestId || linkedRequirementId;
 
   const { data: ownResponseQueryData } = useQuery({
-    queryKey: ['rfq-own-response', targetReqId, requestId],
+    queryKey: ['rfq-own-response', targetReqId, requestId, user?.id],
     queryFn:  async () => {
       try { return await getApi<any>(`/api/marketplace/requirements/${targetReqId}`); }
       catch { return null; }
@@ -292,10 +292,10 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
           const sId = p.sellerId || p.seller?.id || p.sellerUserId;
           const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
           return (
-            (sId && String(sId) === String(user?.id)) ||
-            (user?.organizationId && sOrg && String(sOrg) === String(user.organizationId))
+            Boolean(user?.id && sId && String(sId) === String(user.id)) ||
+            Boolean(user?.organizationId && sOrg && String(sOrg) === String(user.organizationId))
           );
-        }) || rawBid?.myParticipation || null;
+        }) || null;
       })()
     : null;
 
@@ -334,8 +334,17 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         return null;
       }
     }
+    if (user?.role === 'seller') {
+      const candidateUserId = candidate.sellerUserId || candidate.sellerId || candidate.userId || candidate.seller?.id || candidate.user?.id;
+      const candidateOrgId = candidate.sellerOrganizationId || candidate.organizationId || candidate.seller?.organizationId || candidate.sellerOrgId;
+      const matchUser = Boolean(user?.id && candidateUserId && String(candidateUserId) === String(user.id));
+      const matchOrg = Boolean(user?.organizationId && candidateOrgId && String(candidateOrgId) === String(user.organizationId));
+      if (!matchUser && !matchOrg) {
+        return null;
+      }
+    }
     return candidate;
-  }, [reqData, ownResponseQueryData, rawBid?.id, activeBidId, reqObj?.id, requirementId]);
+  }, [reqData, ownResponseQueryData, rawBid?.id, activeBidId, reqObj?.id, requirementId, user]);
 
   const ownResponse =
     (ownParticipation ? {
@@ -791,11 +800,11 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
   }
   const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
   const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
-  const submitted  = Boolean(
+  const isOwnSubmitted = Boolean(
     (ownResponse && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase())) ||
-    rawBid?.hasSubmittedProposal ||
     (ownParticipation && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase()))
   );
+  const submitted  = isBuyerOrAdmin ? Boolean(rawBid?.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted;
   const statusUpper = String(status || 'OPEN').toUpperCase();
   const isBidAwarded = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||
     (rawBid?.awards && Array.isArray(rawBid.awards) && rawBid.awards.length > 0);

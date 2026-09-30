@@ -1440,7 +1440,7 @@ router.post('/seller/procurement-bids/:bidId/convert-to-invoice', authenticate, 
 router.get('/seller/procurement-bids/:bidId/status', authenticate, requireAccountType('seller'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const bid = await service.resolveBid(req.params.bidId, { participations: { where: { OR: [{ sellerId: req.user!.id }, ...(req.user!.organizationId ? [{ seller: { organizationId: req.user!.organizationId } }] : [])] }, include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true } } });
   await enrichBidsWithResponses([bid], req.user!.id);
-  const participation = bid.participations?.find((p: any) => p.sellerId === req.user!.id || (req.user!.organizationId && p.seller?.organizationId === req.user!.organizationId)) || bid.participations?.[0];
+  const participation = bid.participations?.find((p: any) => p.sellerId === req.user!.id || (req.user!.organizationId && p.seller?.organizationId === req.user!.organizationId)) || null;
   const isRestrictedBid = service.isRestrictedBidMethod(bid);
   if (isRestrictedBid) {
     if (!participation && !service.isActorInvitedToBid(req.user as any, bid)) {

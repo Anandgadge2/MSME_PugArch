@@ -58,7 +58,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
-    queryKey: ['rfp-bid-detail', requestId || activeId],
+    queryKey: ['rfp-bid-detail', requestId || activeId, currentUser?.id],
     queryFn: () => procurementBidApi.detail((requestId || activeId)!),
     enabled: !!(requestId || activeId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
@@ -68,7 +68,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
-    queryKey: ['rfp-req-detail', targetReqId],
+    queryKey: ['rfp-req-detail', targetReqId, currentUser?.id],
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
@@ -220,19 +220,21 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
   ];
 
+  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
+
   const ownParticipation =
     participationsList.find(
       (p: any) =>
-        Number(p?.supplierId || p?.sellerId || p?.vendorId || p?.sellerUserId || p?.seller?.id) === Number(currentUser?.id) ||
+        (currentUser?.id && Number(p?.supplierId || p?.sellerId || p?.vendorId || p?.sellerUserId || p?.seller?.id) === Number(currentUser.id)) ||
         (currentUser?.organizationId &&
           Number(p?.sellerOrgId || p?.organizationId || p?.sellerOrganizationId || p?.seller?.organizationId) === Number(currentUser.organizationId)),
-    ) || bid?.myParticipation || null;
+    ) || null;
   const ownResponse = ownParticipation?.response || ownParticipation?.quotation || ownParticipation?.proposal || ownParticipation;
   const isOwnSubmitted = Boolean(
     (ownParticipation && String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED') ||
     (ownResponse && String(ownResponse.submissionStatus || ownResponse.status || '').toUpperCase() === 'SUBMITTED')
   );
-  const hasSubmittedProposal = Boolean(bid.hasSubmittedProposal || isOwnSubmitted);
+  const hasSubmittedProposal = Boolean(isBuyerOrAdmin ? (bid.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted);
 
   const handleSubmitProposal = () => {
     if (!currentUser) {
@@ -253,7 +255,6 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
     router.push(`/seller/procurement/rfp/${targetBidId}/respond`);
   };
 
-  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin';
   const rawStatus = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const statusUpper = rawStatus;
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);

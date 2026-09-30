@@ -51,7 +51,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
-    queryKey: ['limited-tender-bid-detail', requestId || activeLimitedId],
+    queryKey: ['limited-tender-bid-detail', requestId || activeLimitedId, currentUser?.id],
     queryFn: () => procurementBidApi.detail((requestId || activeLimitedId)!),
     enabled: !!(requestId || activeLimitedId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
@@ -62,7 +62,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
-    queryKey: ['limited-tender-req-detail', targetReqId],
+    queryKey: ['limited-tender-req-detail', targetReqId, currentUser?.id],
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
@@ -156,6 +156,8 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
   ];
 
+  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
+
   const ownParticipation =
     participationsList.find((p: any) =>
       currentUser && (
@@ -173,7 +175,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
           Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
         ))
       )
-    ) || bid?.myParticipation || null;
+    ) || null;
 
   const isOwnSubmitted = Boolean(
     ownParticipation &&
@@ -181,8 +183,7 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
   );
 
   const hasSubmittedProposal = Boolean(
-    bid.hasSubmittedProposal ||
-    isOwnSubmitted
+    isBuyerOrAdmin ? (bid.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted
   );
 
   const invitedSellersList =
@@ -201,8 +202,6 @@ export default function LimitedTenderDetailPage({ initialData }: { initialData?:
     invitationsList.length,
     0
   );
-
-  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
   const resolvedBuyer = bid.buyer || reqObj.buyer || null;

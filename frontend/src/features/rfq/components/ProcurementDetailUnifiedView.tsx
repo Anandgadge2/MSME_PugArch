@@ -4573,30 +4573,32 @@ export function ProcurementDetailUnifiedView(
           ? fallbackBidData.participations
           : [];
 
-  const currentUserId = String(currentUser?.id || "");
+  const currentUserId = currentUser?.id ? String(currentUser.id) : "";
   const currentOrgId = String(
     currentUser?.organizationId ||
+      currentUser?.organization?.id ||
       currentUser?.sellerProfile?.id ||
       currentUser?.sellerProfile?.organizationId ||
       "",
   );
 
   const myParticipation = React.useMemo(() => {
-    if (isBuyerSide || !currentUser) return null;
+    if (isBuyerSide || !currentUser || (!currentUserId && !currentOrgId)) return null;
     return rawParticipations.find(
-      (p: any) =>
-        String(
-          p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id,
-        ) === currentUserId ||
-        String(
-          p.sellerOrganizationId ||
-            p.sellerOrganization?.id ||
-            p.seller?.organizationId,
-        ) === currentOrgId ||
-        (currentUser.sellerProfile?.id &&
-          String(p.sellerProfileId || p.sellerId) === String(currentUser.sellerProfile.id)) ||
-        (currentUser.sellerProfile?.organizationId &&
-          String(p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === String(currentUser.sellerProfile.organizationId)),
+      (p: any) => {
+        const pUserId = p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id;
+        const pOrgId = p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId || p.sellerOrgId;
+        const pProfileId = p.sellerProfileId || p.sellerId;
+        const userProfileId = currentUser.sellerProfile?.id;
+        const userProfileOrgId = currentUser.sellerProfile?.organizationId;
+
+        return (
+          (currentUserId && pUserId && String(pUserId) === currentUserId) ||
+          (currentOrgId && pOrgId && String(pOrgId) === currentOrgId) ||
+          (userProfileId && pProfileId && String(pProfileId) === String(userProfileId)) ||
+          (userProfileOrgId && pOrgId && String(pOrgId) === String(userProfileOrgId))
+        );
+      },
     );
   }, [
     rawParticipations,
@@ -4607,7 +4609,7 @@ export function ProcurementDetailUnifiedView(
   ]);
 
   const verifiedOwnResponse = React.useMemo(() => {
-    if (!props.ownResponse) return null;
+    if (!props.ownResponse || isBuyerSide || !currentUser) return null;
     const currentBidId = props.rawBid?.id || (props as any)?.bidId;
     const currentReqId = (props as any)?.requirementId || (props as any)?.sourceRequirementId;
     if (props.ownResponse.bidId && currentBidId && Number(props.ownResponse.bidId) !== Number(currentBidId)) {
@@ -4618,13 +4620,35 @@ export function ProcurementDetailUnifiedView(
         return null;
       }
     }
+
+    // Strict ownership verification: must belong to the active seller
+    const respUserId = props.ownResponse.sellerUserId || props.ownResponse.sellerId || props.ownResponse.userId || props.ownResponse.seller?.id;
+    const respOrgId = props.ownResponse.sellerOrganizationId || props.ownResponse.organizationId || props.ownResponse.seller?.organizationId;
+    const matchesUser = Boolean(currentUserId && respUserId && String(respUserId) === currentUserId);
+    const matchesOrg = Boolean(currentOrgId && respOrgId && String(respOrgId) === currentOrgId);
+    if (!matchesUser && !matchesOrg && props.ownResponse._isFromUserParticipation !== true) {
+      return null;
+    }
+
     return props.ownResponse;
-  }, [props.ownResponse, props.rawBid?.id, (props as any)?.bidId, (props as any)?.requirementId, (props as any)?.sourceRequirementId]);
+  }, [props.ownResponse, props.rawBid?.id, (props as any)?.bidId, (props as any)?.requirementId, (props as any)?.sourceRequirementId, isBuyerSide, currentUser, currentUserId, currentOrgId]);
+
+  const verifiedOwnParticipation = React.useMemo(() => {
+    if (!props.ownParticipation || isBuyerSide || !currentUser) return null;
+    const pUserId = props.ownParticipation.sellerId || props.ownParticipation.sellerUserId || props.ownParticipation.seller?.id;
+    const pOrgId = props.ownParticipation.organizationId || props.ownParticipation.sellerOrganizationId || props.ownParticipation.seller?.organizationId;
+    const matchesUser = Boolean(currentUserId && pUserId && String(pUserId) === currentUserId);
+    const matchesOrg = Boolean(currentOrgId && pOrgId && String(pOrgId) === currentOrgId);
+    if (!matchesUser && !matchesOrg && props.ownParticipation._isFromUserParticipation !== true) {
+      return null;
+    }
+    return props.ownParticipation;
+  }, [props.ownParticipation, isBuyerSide, currentUser, currentUserId, currentOrgId]);
 
   const effectiveMyParticipation =
-    props.ownParticipation || verifiedOwnResponse || myParticipation;
+    verifiedOwnParticipation || verifiedOwnResponse || myParticipation;
   const isSellerParticipated = Boolean(
-    props.hasSubmittedProposal || effectiveMyParticipation,
+    effectiveMyParticipation || (isBuyerSide ? props.hasSubmittedProposal : false)
   );
 
   const rawAwards: any[] = Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0
@@ -7414,30 +7438,11 @@ export function ProcurementDetailUnifiedView(
                   p.sellerOrgId,
               ) === currentOrgId),
         ) ||
-        (submittedParticipations.length === 1 && !isBuyerOrAdmin
-          ? submittedParticipations[0]
-          : null) ||
-        {
-          id: `my-quote-${targetId}`,
-          sellerOrgName:
-            currentUser?.organization?.organizationName ||
-            currentUser?.organization?.name ||
-            currentUser?.companyName ||
-            currentUser?.name ||
-            "My Quoting Organization",
-          sellerName: currentUser?.name || "Authorized Representative",
-          sellerEmail: currentUser?.email || "N/A",
-          sellerPhone: currentUser?.mobile || currentUser?.phone || "N/A",
-          submissionStatus: "SUBMITTED",
-          status: "SUBMITTED",
-          quotedAmount: Number(props.rawBid?.quotedAmount || props.rawBid?.totalAmount || 0),
-          totalAmount: Number(props.rawBid?.totalAmount || props.rawBid?.quotedAmount || 0),
-          lineItems: props.rawBid?.lineItems || props.items || [],
-          documents: props.rawBid?.documents || [],
-          submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
-          deliveryTimeline: props.rawBid?.deliveryTimeline || "—",
-          paymentTerms: props.rawBid?.paymentTerms || "—",
-        };
+        null;
+    }
+    if (!targetPart) {
+      toast.error("Submitted quotation details not found.");
+      return;
     }
     setSelectedQuotationForReview(targetPart);
   }, [
@@ -7446,12 +7451,6 @@ export function ProcurementDetailUnifiedView(
     allParticipationsList,
     currentUserId,
     currentOrgId,
-    currentUser,
-    isBuyerOrAdmin,
-    targetId,
-    props.rawBid,
-    props.items,
-    props.documents,
   ]);
 
   const handleConfirmAwardSubmit = async () => {
@@ -8532,30 +8531,7 @@ export function ProcurementDetailUnifiedView(
                   p.sellerOrgId,
               ) === currentOrgId),
         ) ||
-        (submittedParticipations.length === 1 && !isBuyerOrAdmin
-          ? submittedParticipations[0]
-          : null) ||
-        {
-          id: `my-quote-${targetId}`,
-          sellerOrgName:
-            currentUser?.organization?.organizationName ||
-            currentUser?.organization?.name ||
-            currentUser?.companyName ||
-            currentUser?.name ||
-            "My Quoting Organization",
-          sellerName: currentUser?.name || "Authorized Representative",
-          sellerEmail: currentUser?.email || "N/A",
-          sellerPhone: currentUser?.mobile || currentUser?.phone || "N/A",
-          submissionStatus: "SUBMITTED",
-          status: "SUBMITTED",
-          quotedAmount: Number(props.rawBid?.quotedAmount || props.rawBid?.totalAmount || 0),
-          totalAmount: Number(props.rawBid?.totalAmount || props.rawBid?.quotedAmount || 0),
-          lineItems: props.rawBid?.lineItems || props.items || [],
-          documents: props.rawBid?.documents || [],
-          submittedAt: props.rawBid?.submittedAt || new Date().toISOString(),
-          deliveryTimeline: props.rawBid?.deliveryTimeline || "—",
-          paymentTerms: props.rawBid?.paymentTerms || "—",
-        };
+        null;
     }
 
     if (!targetPart) {
@@ -10433,7 +10409,7 @@ export function ProcurementDetailUnifiedView(
                       }
                     />
                   )}
-                  {!isBuyerSide && currentUser?.role === "seller" ? (
+                  {!isBuyerSide ? (
                     isSellerParticipated ? (
                       isAwardedToMe ? (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-800 shadow-2xs">

@@ -51,7 +51,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
-    queryKey: ['open-tender-bid-detail', requestId || activeOpenId],
+    queryKey: ['open-tender-bid-detail', requestId || activeOpenId, currentUser?.id],
     queryFn: () => procurementBidApi.detail((requestId || activeOpenId)!),
     enabled: !!(requestId || activeOpenId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
@@ -62,7 +62,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
-    queryKey: ['open-tender-req-detail', targetReqId],
+    queryKey: ['open-tender-req-detail', targetReqId, currentUser?.id],
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
@@ -82,7 +82,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   });
 
   const { data: tenderData } = useQuery({
-    queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId],
+    queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId, currentUser?.id],
     queryFn: async () => {
       const candidates = [targetReqId, activeOpenId, requestId].filter(Boolean);
       for (const cand of candidates) {
@@ -174,6 +174,8 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
   ];
 
+  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
+
   const ownParticipation =
     participationsList.find((p: any) =>
       currentUser && (
@@ -191,7 +193,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
           Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
         ))
       )
-    ) || bid?.myParticipation || null;
+    ) || null;
 
   const isOwnSubmitted = Boolean(
     ownParticipation &&
@@ -199,11 +201,8 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   );
 
   const hasSubmittedProposal = Boolean(
-    bid.hasSubmittedProposal ||
-    isOwnSubmitted
+    isBuyerOrAdmin ? (bid.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted
   );
-
-  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
   const resolvedTender = tenderData || {};

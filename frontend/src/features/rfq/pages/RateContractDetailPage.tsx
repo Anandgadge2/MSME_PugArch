@@ -140,7 +140,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
-    queryKey: ['procurement-bid-rc-detail', requestId],
+    queryKey: ['procurement-bid-rc-detail', requestId, user?.id],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
@@ -150,7 +150,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   // Fetch BuyerRequirement data when navigated via requirementId
   const { data: reqData, isLoading: reqLoading, error: reqError } = useQuery({
-    queryKey: ['marketplace-requirement-rc-detail', requirementId],
+    queryKey: ['marketplace-requirement-rc-detail', requirementId, user?.id],
     queryFn: async () => {
       const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
       const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
@@ -164,7 +164,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
 
   const bidSourceId = bidData?.sourceId || null;
   const { data: bidReqData } = useQuery({
-    queryKey: ['marketplace-requirement-rc-ownresponse', bidSourceId],
+    queryKey: ['marketplace-requirement-rc-ownresponse', bidSourceId, user?.id],
     queryFn: async () => {
       const data = await getApi<any>(`/api/marketplace/requirements/${bidSourceId}`);
       const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
@@ -177,7 +177,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   // Fetch Contract table data when navigated via contract id (e.g. from /seller/opportunities or /procurement/rate-contracts)
   const contractId = !isNaN(Number(rawIdParam)) ? Number(rawIdParam) : (rawIdParam.startsWith('rc-') ? Number(rawIdParam.replace('rc-', '')) : null);
   const { data: contractData, isLoading: contractLoading, error: contractError } = useQuery({
-    queryKey: ['rate-contract-detail', contractId],
+    queryKey: ['rate-contract-detail', contractId, user?.id],
     queryFn: () => fetchRateContractDetail(contractId!),
     enabled: !!contractId,
     staleTime: 60_000,
@@ -201,14 +201,24 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         ...(bidData?.myParticipation ? [bidData.myParticipation] : []),
         ...(Array.isArray(bidData?.participations) ? bidData.participations : [])
       ].find((p: any) =>
-        Number(p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id) === Number(user?.id) ||
+        (user?.id && Number(p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id) === Number(user.id)) ||
         (user?.organizationId && (
           Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id) === Number(user.organizationId)
         ))
-      ) || bidData?.myParticipation || null
+      ) || null
     : null;
 
-  const ownResponse = reqData?.ownResponse || bidReqData?.ownResponse || (ownParticipation ? {
+  const rawReqOwnResp = reqData?.ownResponse || bidReqData?.ownResponse;
+  const verifiedRawReqOwnResp = React.useMemo(() => {
+    if (!rawReqOwnResp || user?.role !== 'seller') return null;
+    const sId = rawReqOwnResp.sellerId || rawReqOwnResp.sellerUserId || rawReqOwnResp.userId || rawReqOwnResp.seller?.id;
+    const sOrg = rawReqOwnResp.organizationId || rawReqOwnResp.sellerOrganizationId || rawReqOwnResp.seller?.organizationId;
+    const matchUser = Boolean(user?.id && sId && String(sId) === String(user.id));
+    const matchOrg = Boolean(user?.organizationId && sOrg && String(sOrg) === String(user.organizationId));
+    return (matchUser || matchOrg) ? rawReqOwnResp : null;
+  }, [rawReqOwnResp, user]);
+
+  const ownResponse = (ownParticipation ? {
     ...ownParticipation,
     status: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
     submissionStatus: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
@@ -221,7 +231,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     terms: ownParticipation.terms || ownParticipation.responseData?.terms,
     message: ownParticipation.message || ownParticipation.responseData?.message,
     responseData: ownParticipation.responseData,
-  } : null);
+  } : null) || verifiedRawReqOwnResp;
 
   // ── Normalize rcData from either contractData, reqData, or verified bidData ──
   const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
