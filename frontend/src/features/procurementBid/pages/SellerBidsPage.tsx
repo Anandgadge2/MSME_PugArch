@@ -39,7 +39,6 @@ import { sellerRoutes } from '@/lib/routes';
 import { useAuth } from '../../../hooks/useAuth';
 import { procurementBidApi } from '../api';
 import { formatDate } from '../../shared/format';
-import { TaxInvoiceRegistryModal } from '../../invoices/components/TaxInvoiceRegistryModal';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
@@ -237,15 +236,6 @@ const isAwarded = (p: any) =>
     String(a?.awardStatus || '').toUpperCase() === 'ADMIN_APPROVED' || !!a?.awardedAt
   ));
 
-const isAwardedAndPoAccepted = (p: any) =>
-  isAwarded(p) && (
-    Boolean(p?.hasAcceptedPO) ||
-    Boolean(p?.canConvertToInvoice) ||
-    ['ACCEPTED', 'accepted'].includes(String(p?.poStatus || '')) ||
-    finalStatusOf(p) === 'ORDERED' ||
-    (Array.isArray(p?.awards) && p.awards.some((a: any) => String(a?.awardStatus || '').toUpperCase() === 'ACCEPTED'))
-  );
-
 // Draft = still being prepared by the seller and not yet awarded/withdrawn/rejected.
 const isDraft = (p: any) => {
   if (isAwarded(p)) return false;
@@ -276,9 +266,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
   const [loading, setLoading] = useState<boolean>(() => !cachedSellerParticipations);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingInvoiceBidId, setLoadingInvoiceBidId] = useState<string | number | null>(null);
-  const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
   // Filters
   const [kpiFilter, setKpiFilter] = useState<string>('all');
@@ -856,58 +843,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
     router.push(`/seller/procurement/${slug}/${encodeURIComponent(String(targetId))}`);
   };
 
-  const handleOpenTaxInvoice = async (e: React.MouseEvent, item: any) => {
-    e.stopPropagation();
-    const bidId = item.bid?.id || item.bidId;
-    if (!bidId) return;
-
-    setLoadingInvoiceBidId(item.id);
-    try {
-      // 1. Check if invoiceId is already known or cached on this item
-      let invoiceId = item.invoiceId || (item.invoice && item.invoice.id);
-
-      if (!invoiceId) {
-        // Query status first to see if invoice already exists (DO NOT regenerate)
-        const res = await (api.get as any)(`/api/seller/procurement-bids/${bidId}/invoice`);
-        const statusData = (res as any)?.data || res;
-
-        if (statusData?.exists && statusData?.invoiceId) {
-          invoiceId = statusData.invoiceId;
-        } else if (statusData?.canConvertToInvoice) {
-          // 2. Only convert to invoice if it does not already exist
-          const convertRes = await (api.post as any)(`/api/seller/procurement-bids/${bidId}/convert-to-invoice`, {});
-          const convertData = (convertRes as any)?.data || convertRes;
-          invoiceId = convertData?.id;
-          if (invoiceId) {
-            toast.success('Tax invoice generated successfully!');
-          }
-        } else {
-          toast.error('Tax invoice is not available for this bid yet. Please verify Purchase Order acceptance.');
-          return;
-        }
-      }
-
-      if (!invoiceId) {
-        toast.error('Unable to retrieve tax invoice for this bid.');
-        return;
-      }
-
-      // Cache invoiceId onto this participation item in state so subsequent clicks are instantaneous
-      setParticipations(prev =>
-        prev.map(p => (p.id === item.id || (p.bid?.id && p.bid.id === bidId)) ? { ...p, invoiceId } : p)
-      );
-
-      // Open the Tax Invoice Registry modal directly without routing
-      setSelectedInvoiceModalId(Number(invoiceId));
-      setIsInvoiceModalOpen(true);
-    } catch (err: any) {
-      console.error('[Open Tax Invoice Error]', err);
-      toast.error(err?.message || 'Failed to open tax invoice registry.');
-    } finally {
-      setLoadingInvoiceBidId(null);
-    }
-  };
-
   const currentSortKey = useMemo(() => {
     if (sortBy.startsWith('value')) return 'value';
     if (sortBy.startsWith('title')) return 'title';
@@ -1049,12 +984,11 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      width: 'w-56',
+      width: 'w-40',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item: any) => {
         const pType = getParticipationType(item);
-        const isAwardedPo = isAwardedAndPoAccepted(item);
         const isAuction =
           pType === 'Reverse Auction' ||
           String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
@@ -1065,21 +999,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
 
         return (
           <div className="flex justify-end items-center gap-1.5">
-            {isAwardedPo && (
-              <Button 
-                onClick={(e) => handleOpenTaxInvoice(e, item)}
-                disabled={loadingInvoiceBidId === item.id}
-                className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all focus-visible:ring-2 focus-visible:ring-emerald-500 cursor-pointer"
-                title="View Official Tax Invoice Registry"
-              >
-                {loadingInvoiceBidId === item.id ? (
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <FileText className="h-3.5 w-3.5" />
-                )}
-                <span>Invoice</span>
-              </Button>
-            )}
             {isAuction ? (
               <Button
                 onClick={(e) => {
@@ -1102,16 +1021,11 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             ) : (
               <Button 
                 onClick={() => handleAction(item)} 
-                variant={isAwardedPo ? "outline" : "primary"}
-                className={cn(
-                  "h-8 px-2.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer",
-                  isAwardedPo
-                    ? "border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-                    : "bg-[#12335f] hover:bg-[#0d2647] text-white"
-                )}
+                variant="primary"
+                className="h-8 px-3 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer bg-[#12335f] hover:bg-[#0d2647] text-white"
                 title="View Submitted Quotation"
               >
-                <Eye className={cn("h-3.5 w-3.5", isAwardedPo ? "text-slate-500" : "text-white")} />
+                <Eye className="h-3.5 w-3.5 text-white" />
                 <span>View Quote</span>
               </Button>
             )}
@@ -1119,7 +1033,7 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
         );
       }
     }
-  ], [loadingInvoiceBidId, router]);
+  ], [router]);
 
   if (loading) {
     return <SellerBidsSkeleton />;
@@ -1751,21 +1665,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                         )}
 
                         <div className="flex items-center gap-2">
-                          {isAwardedAndPoAccepted(item) && (
-                            <Button 
-                              onClick={(e) => handleOpenTaxInvoice(e, item)} 
-                              disabled={loadingInvoiceBidId === item.id}
-                              className="h-8 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
-                              title="View Official Tax Invoice Registry"
-                            >
-                              {loadingInvoiceBidId === item.id ? (
-                                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <FileText className="h-3.5 w-3.5" />
-                              )}
-                              Invoice
-                            </Button>
-                          )}
                           {isDraft(item) ? (
                             <Button
                               onClick={() => handleAction(item)}
@@ -1801,16 +1700,11 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                               })()}
                               <Button 
                                 onClick={() => handleAction(item)} 
-                                variant={isAwardedAndPoAccepted(item) ? "outline" : "primary"}
-                                className={cn(
-                                  "h-8 px-3 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer",
-                                  isAwardedAndPoAccepted(item)
-                                    ? "border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-                                    : "bg-[#12335f] hover:bg-[#0d2647] text-white"
-                                )}
+                                variant="primary"
+                                className="h-8 px-3 text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer bg-[#12335f] hover:bg-[#0d2647] text-white"
                                 title="View Submitted Quotation"
                               >
-                                <Eye className={cn("h-3.5 w-3.5", isAwardedAndPoAccepted(item) ? "text-slate-500" : "text-white")} />
+                                <Eye className="h-3.5 w-3.5 text-white" />
                                 <span>View Quote</span>
                               </Button>
                               <Button 
@@ -1860,18 +1754,6 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
             />
           )}
         </div>
-      )}
-
-      {/* Tax Invoice Registry Dialog Modal */}
-      {isInvoiceModalOpen && selectedInvoiceModalId && (
-        <TaxInvoiceRegistryModal
-          isOpen={isInvoiceModalOpen}
-          onClose={() => {
-            setIsInvoiceModalOpen(false);
-            setSelectedInvoiceModalId(null);
-          }}
-          invoiceId={selectedInvoiceModalId}
-        />
       )}
     </div>
   );

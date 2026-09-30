@@ -8,7 +8,7 @@ import {
     Search, MapPin, Package,
     Wrench, Clock, Flame, CheckCircle,
     BadgeCheck, Eye, X, Grid2X2, List,
-    ChevronRight
+    ChevronRight, Filter, SlidersHorizontal, ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -183,6 +183,7 @@ export function BuyerRequirementsList({
     const [pageSize, setPageSize] = useState(limit || 10);
     const [viewMode, setViewMode] = useResponsiveViewMode('marketplace:requirements:view-mode');
     const [selected, setSelected] = useState<BuyerRequirement | null>(null);
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
     const isSeller = user?.role === 'seller' || user?.role === 'admin' || user?.role === 'master_admin';
     const actionLabel = user ? (isSeller ? 'Submit Quote' : 'View Details') : 'Login to Submit';
@@ -580,117 +581,114 @@ export function BuyerRequirementsList({
                             </p>
                         </div>
 
-                        {/* Row 2: Search + Sort + Location + Status + View Toggle — all inline */}
-                        <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+                        {/* Row 2: Search + Sort + Filters toggle + View Toggle */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 px-4 pb-3">
                             {/* Search */}
                             <form
                                 onSubmit={e => { e.preventDefault(); }}
-                                className="flex flex-1 items-center h-9 rounded-lg border border-slate-200 bg-slate-50/80 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] overflow-hidden min-w-[180px]"
+                                className="flex flex-1 items-center h-10 rounded-xl border border-slate-200 bg-slate-50/80 focus-within:ring-2 focus-within:ring-[#0b2447]/20 focus-within:border-[#0b2447] focus-within:bg-white overflow-hidden min-w-[200px] transition-all"
                             >
-                                <Search className="h-3.5 w-3.5 text-slate-400 ml-2.5 shrink-0" aria-hidden="true" />
+                                <Search className="h-4 w-4 text-slate-400 ml-3 shrink-0" aria-hidden="true" />
                                 <label htmlFor="req-search" className="sr-only">Search requirements</label>
                                 <input
                                     id="req-search"
                                     value={query}
                                     onChange={e => setQuery(e.target.value)}
                                     placeholder="Search by title, buyer, location…"
-                                    className="flex-1 h-full bg-transparent text-xs pl-2 pr-1 outline-none min-w-0"
+                                    className="flex-1 h-full bg-transparent text-xs pl-2.5 pr-2 outline-none min-w-0 font-medium"
                                 />
                                 {query && (
-                                    <button type="button" onClick={() => setQuery('')} className="px-1.5 hover:bg-slate-100 rounded-md" aria-label="Clear search">
-                                        <X className="h-3 w-3 text-slate-400" />
+                                    <button type="button" onClick={() => setQuery('')} className="p-1 mr-2 text-slate-400 hover:text-slate-600 rounded-md hover:bg-slate-100 cursor-pointer" aria-label="Clear search">
+                                        <X className="h-3.5 w-3.5" />
                                     </button>
                                 )}
                             </form>
 
-                            {/* Sort */}
-                            <label htmlFor="req-sort" className="sr-only">Sort requirements</label>
-                            <select
-                                id="req-sort"
-                                value={sort}
-                                onChange={e => handleSortChange(e.target.value)}
-                                className="h-9 px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 text-slate-700 cursor-pointer min-w-0 w-auto"
+                            {/* Actions & Filters Toggle Toolbar */}
+                            <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap justify-between sm:justify-end w-full sm:w-auto">
+                                {/* Sort */}
+                                <div className="min-w-[130px]">
+                                    <label htmlFor="req-sort" className="sr-only">Sort requirements</label>
+                                    <select
+                                        id="req-sort"
+                                        value={sort}
+                                        onChange={e => handleSortChange(e.target.value)}
+                                        className="h-10 w-full px-3 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer transition-colors"
+                                    >
+                                        {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+
+                                {showFilters && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFiltersOpen(prev => !prev)}
+                                        aria-expanded={filtersOpen}
+                                        aria-controls="buyer-req-filters-panel"
+                                        aria-label="Toggle filter options"
+                                        className={cn(
+                                            "inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 sm:px-3.5 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0",
+                                            filtersOpen || activeFilters > 0
+                                                ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10"
+                                                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                                        )}
+                                    >
+                                        <Filter className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                                        <span>Filters</span>
+                                        {activeFilters > 0 && (
+                                            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#12335f] text-white text-[10px] font-black">
+                                                {activeFilters}
+                                            </span>
+                                        )}
+                                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 text-slate-500", filtersOpen && "rotate-180")} aria-hidden="true" />
+                                    </button>
+                                )}
+
+                                {/* View Mode Toggle */}
+                                <div role="group" className="inline-flex rounded-xl border border-slate-200 bg-slate-50/80 p-0.5 shrink-0" aria-label="Display mode">
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('grid')}
+                                        className={cn(
+                                            "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all cursor-pointer",
+                                            viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
+                                        )}
+                                        title="Grid view"
+                                        aria-label="Grid view"
+                                    >
+                                        <Grid2X2 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setViewMode('list')}
+                                        className={cn(
+                                            "inline-flex h-8 w-8 items-center justify-center rounded-lg transition-all cursor-pointer",
+                                            viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
+                                        )}
+                                        title="List view"
+                                        aria-label="List view"
+                                    >
+                                        <List className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Collapsible Secondary Filter Tray */}
+                        {showFilters && filtersOpen && (
+                            <div
+                                id="buyer-req-filters-panel"
+                                role="region"
+                                aria-label="Filter Options"
+                                className="mx-4 mb-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 transition-all duration-200 space-y-3 animate-in fade-in slide-in-from-top-1"
                             >
-                                {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                            </select>
-
-                            {showFilters && (
-                                <>
-                                    {/* Location Dropdown */}
-                                    <div className="relative min-w-0">
-                                        <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" aria-hidden="true" />
-                                        <label htmlFor="req-location" className="sr-only">Filter by location</label>
-                                        <select
-                                            id="req-location"
-                                            value={location}
-                                            onChange={e => setLocation(e.target.value)}
-                                            className={cn(
-                                                "h-9 pl-7 pr-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
-                                                location ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
-                                            )}
-                                        >
-                                            <option value="">All Locations</option>
-                                            {discoveredLocations.map(loc => (
-                                                <option key={loc} value={loc}>{loc}</option>
-                                            ))}
-                                        </select>
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <SlidersHorizontal className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                                        <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                                            Filter By Specific Criteria
+                                        </span>
                                     </div>
-
-                                    {/* Procurement Method Filter */}
-                                    <label htmlFor="req-method" className="sr-only">Filter by procurement method</label>
-                                    <select
-                                        id="req-method"
-                                        value={methodFilter}
-                                        onChange={e => setMethodFilter(e.target.value)}
-                                        className={cn(
-                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
-                                            methodFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
-                                        )}
-                                    >
-                                        <option value="">All Methods</option>
-                                        <option value="RFQ">RFQ</option>
-                                        <option value="OPEN_TENDER">Open Tender</option>
-                                        <option value="LIMITED_TENDER">Limited Tender</option>
-                                        <option value="RATE_CONTRACT">Rate Contract</option>
-                                    </select>
-
-                                    {/* Status Filter */}
-                                    <label htmlFor="req-status" className="sr-only">Filter by status</label>
-                                    <select
-                                        id="req-status"
-                                        value={statusFilter}
-                                        onChange={e => setStatusFilter(e.target.value)}
-                                        className={cn(
-                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
-                                            statusFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
-                                        )}
-                                    >
-                                        <option value="">All Status</option>
-                                        <option value="OPEN">Open</option>
-                                        <option value="CLOSING_SOON">Closing Soon</option>
-                                        <option value="UNDER_EVALUATION">Under Evaluation</option>
-                                        <option value="AWARDED">Awarded</option>
-                                        <option value="CLOSED">Closed</option>
-                                    </select>
-
-                                    {/* Timeline / Urgency Filter */}
-                                    <label htmlFor="req-timeline" className="sr-only">Filter by timeline</label>
-                                    <select
-                                        id="req-timeline"
-                                        value={timelineFilter}
-                                        onChange={e => setTimelineFilter(e.target.value)}
-                                        className={cn(
-                                            "h-9 px-2.5 rounded-lg border bg-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0b2447]/20 cursor-pointer min-w-0 w-auto",
-                                            timelineFilter ? "border-blue-400 text-blue-700 font-bold" : "border-slate-200 text-slate-700"
-                                        )}
-                                    >
-                                        <option value="">All Timelines</option>
-                                        <option value="7d">Closing Soon (≤ 7D)</option>
-                                        <option value="3d">Urgent (≤ 3D)</option>
-                                        <option value="urgent">Marked Urgent</option>
-                                    </select>
-
-                                    {/* Clear filters */}
                                     {activeFilters > 0 && (
                                         <button
                                             type="button"
@@ -699,43 +697,93 @@ export function BuyerRequirementsList({
                                                 setStatusFilter('');
                                                 setMethodFilter('');
                                                 setTimelineFilter('');
+                                                setPage(1);
                                             }}
-                                            className="h-9 px-2.5 rounded-lg border border-red-200 bg-red-50 text-[10px] font-black text-red-600 hover:bg-red-100 transition-colors uppercase tracking-wider whitespace-nowrap cursor-pointer"
+                                            className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
                                         >
-                                            Clear ({activeFilters})
+                                            Reset Filter Options
                                         </button>
                                     )}
-                                </>
-                            )}
+                                </div>
 
-                            {/* View Mode Toggle */}
-                            <div role="group" className="inline-flex rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 ml-auto shrink-0" aria-label="Display mode">
-                                <button
-                                    type="button"
-                                    onClick={() => setViewMode('grid')}
-                                    className={cn(
-                                        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
-                                        viewMode === 'grid' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
-                                    )}
-                                    title="Grid view"
-                                    aria-label="Grid view"
-                                >
-                                    <Grid2X2 className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setViewMode('list')}
-                                    className={cn(
-                                        "inline-flex h-7 w-7 items-center justify-center rounded-md transition-all",
-                                        viewMode === 'list' ? 'bg-[#0b2447] text-white shadow-sm' : 'text-slate-500 hover:bg-white'
-                                    )}
-                                    title="List view"
-                                    aria-label="List view"
-                                >
-                                    <List className="h-3.5 w-3.5" />
-                                </button>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
+                                    {/* Location */}
+                                    <div>
+                                        <label htmlFor="req-location" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                                            Location / District
+                                        </label>
+                                        <select
+                                            id="req-location"
+                                            value={location}
+                                            onChange={e => { setLocation(e.target.value); setPage(1); }}
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                        >
+                                            <option value="">All Locations</option>
+                                            {discoveredLocations.map(loc => (
+                                                <option key={loc} value={loc}>{loc}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Procurement Method */}
+                                    <div>
+                                        <label htmlFor="req-method" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                                            Procurement Method
+                                        </label>
+                                        <select
+                                            id="req-method"
+                                            value={methodFilter}
+                                            onChange={e => { setMethodFilter(e.target.value); setPage(1); }}
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                        >
+                                            <option value="">All Methods</option>
+                                            <option value="RFQ">RFQ</option>
+                                            <option value="OPEN_TENDER">Open Tender</option>
+                                            <option value="LIMITED_TENDER">Limited Tender</option>
+                                            <option value="RATE_CONTRACT">Rate Contract</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Status */}
+                                    <div>
+                                        <label htmlFor="req-status" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                                            Requirement Status
+                                        </label>
+                                        <select
+                                            id="req-status"
+                                            value={statusFilter}
+                                            onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                        >
+                                            <option value="">All Statuses</option>
+                                            <option value="OPEN">Open</option>
+                                            <option value="CLOSING_SOON">Closing Soon</option>
+                                            <option value="UNDER_EVALUATION">Under Evaluation</option>
+                                            <option value="AWARDED">Awarded</option>
+                                            <option value="CLOSED">Closed</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Timeline / Urgency */}
+                                    <div>
+                                        <label htmlFor="req-timeline" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                                            Closing Timeline
+                                        </label>
+                                        <select
+                                            id="req-timeline"
+                                            value={timelineFilter}
+                                            onChange={e => { setTimelineFilter(e.target.value); setPage(1); }}
+                                            className="h-9 w-full px-2.5 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                                        >
+                                            <option value="">All Timelines</option>
+                                            <option value="7d">Closing Soon (≤ 7D)</option>
+                                            <option value="3d">Urgent (≤ 3D)</option>
+                                            <option value="urgent">Marked Urgent</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Row 3: Category tabs — integrated underline-style */}
                         {showTabs && buyerOrganizationId === 'all' && (

@@ -2053,7 +2053,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                               keyExtractor={(office: any, idx) => office.id || idx}
                               showSrNo={true}
                               srNoHeader="Sr. No."
-                              minWidth="sm:min-w-[600px] w-full"
+                              minWidth="min-w-[650px] w-full"
                               sortKey={officeSortKey}
                               sortDirection="asc"
                               onSort={(field) => setOfficeSortKey(field as any)}
@@ -2282,7 +2282,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             keyExtractor={(bank: any, idx) => bank.id || idx}
                             showSrNo={true}
                             srNoHeader="Sr. No."
-                            minWidth="sm:min-w-[640px] w-full"
+                            minWidth="min-w-[650px] w-full"
                             sortKey={bankSortKey}
                             sortDirection="asc"
                             onSort={(field) => setBankSortKey(field as any)}

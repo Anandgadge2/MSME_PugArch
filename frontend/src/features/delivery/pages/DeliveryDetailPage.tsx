@@ -610,7 +610,7 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
                 title="View Tax Invoice"
               >
                 <Receipt className="h-2.5 w-2.5 text-emerald-600" />
-                <span>Invoice</span>
+                <span>View Invoice</span>
               </button>
               <button
                 type="button"

@@ -1477,7 +1477,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-[10.5%]',
+      width: 'w-[10%]',
       cell: (item) => (
         <div className="flex flex-col gap-1 items-start">
           <TypeBadge type={item.type} />
@@ -1498,7 +1498,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-[24%]',
+      width: 'w-[22%]',
       cell: (item) => (
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1628,7 +1628,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Est. Value',
       sortable: true,
       sortKey: 'estimatedValue',
-      width: 'w-[11%]',
+      width: 'w-[11.5%]',
       cell: (item) => {
         const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction';
         if (!isDisclosed) {
@@ -1659,7 +1659,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       key: 'actions',
       header: 'Action',
       align: 'right',
-      width: 'w-[12%]',
+      width: 'w-[14%]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (item) => {
@@ -2297,7 +2297,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               sortDirection={sortDirection}
               onSort={(field) => handleSort(field as any)}
               paginationLabel="opportunities"
-              minWidth="w-full"
+              minWidth="min-w-[1120px] w-full"
             />
           )}
         </div>

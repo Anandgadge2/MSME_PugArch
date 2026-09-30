@@ -116,6 +116,22 @@ export function DataTable<T>({
     [columns]
   );
 
+  // Guarantee that every table has a safe minimum width so columns never squish or overlap horizontally on mobile.
+  const resolvedMinWidth = useMemo(() => {
+    const trimmed = (minWidth || '').trim();
+    if (!trimmed || trimmed === 'w-full') {
+      return 'w-full min-w-[950px]';
+    }
+    const hasBaseMinWidth = /(?:^|\s)min-w-\[?[a-zA-Z0-9]+\]?/.test(trimmed);
+    if (!hasBaseMinWidth) {
+      return cn('w-full min-w-[950px]', trimmed);
+    }
+    if (!trimmed.includes('w-full')) {
+      return cn('w-full', trimmed);
+    }
+    return trimmed;
+  }, [minWidth]);
+
   // Group action columns vs standard content columns for card view
   const { contentColumns, actionColumns } = useMemo(() => {
     const content: ColumnDef<T>[] = [];
@@ -298,10 +314,24 @@ export function DataTable<T>({
         </div>
       )}
 
+      {/* Mobile Horizontal Scroll Indicator Prompt */}
+      {mobileLayout === 'scroll' && (
+        <div className="sm:hidden flex items-center justify-between px-3.5 py-1.5 bg-slate-50/95 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500 select-none">
+          <span className="truncate max-w-[55%]">{caption || (resolvedTotal ? `${resolvedTotal} ${paginationLabel}` : paginationLabel)}</span>
+          <span className="flex items-center gap-1 text-[#12335f] shrink-0 font-extrabold">
+            <span>Scroll table</span>
+            <span aria-hidden="true" className="text-xs">↔</span>
+          </span>
+        </div>
+      )}
+
       {/* 2. Desktop Table View (>= sm screens or when mobileLayout === 'scroll') */}
       <div
+        tabIndex={0}
+        role="region"
+        aria-label={caption || `${paginationLabel} table, horizontally scrollable`}
         className={cn(
-          "w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x",
+          "w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x focus:outline-none focus:ring-1 focus:ring-[#12335f]/20",
           mobileLayout === 'cards' ? "hidden sm:block" : "block",
           scrollWrapperClassName
         )}
@@ -309,7 +339,7 @@ export function DataTable<T>({
         <table
           className={cn(
             "w-full border-collapse text-left text-xs table-fixed",
-            minWidth,
+            resolvedMinWidth,
             tableClassName
           )}
         >
@@ -359,7 +389,7 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     className={cn(
-                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500",
+                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap",
                       col.width,
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',

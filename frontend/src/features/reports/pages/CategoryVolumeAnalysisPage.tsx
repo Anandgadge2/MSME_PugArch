@@ -346,12 +346,17 @@ export default function CategoryVolumeAnalysisPage() {
                 <span>Detailed table ({filteredAndSortedCategories.length} categories)</span>
                 <span className="text-[#12335f] font-bold">↔ Swipe to view all</span>
               </div>
-              <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full min-w-[580px] text-left text-xs" role="table">
+              <div
+                tabIndex={0}
+                role="region"
+                aria-label="Category volume analysis table, horizontally scrollable"
+                className="w-full max-w-full overflow-x-auto scrollbar-thin overscroll-x-contain touch-pan-x focus:outline-none focus:ring-1 focus:ring-[#12335f]/20"
+              >
+                <table className="w-full min-w-[760px] text-left text-xs" role="table">
                   <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-600">
                     <tr>
-                      <th scope="col" className="py-3.5 pl-4 pr-2 text-center w-12">#</th>
-                      <th scope="col" className="py-3.5 px-3">
+                      <th scope="col" className="py-3.5 pl-4 pr-2 text-center w-12 whitespace-nowrap">#</th>
+                      <th scope="col" className="py-3.5 px-3 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleSort('category')}
@@ -365,7 +370,7 @@ export default function CategoryVolumeAnalysisPage() {
                           )}
                         </button>
                       </th>
-                      <th scope="col" className="py-3.5 px-3 text-right">
+                      <th scope="col" className="py-3.5 px-3 text-right whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleSort('transactionCount')}
@@ -379,7 +384,7 @@ export default function CategoryVolumeAnalysisPage() {
                           )}
                         </button>
                       </th>
-                      <th scope="col" className="py-3.5 px-3 text-right">
+                      <th scope="col" className="py-3.5 px-3 text-right whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleSort('totalAmount')}
@@ -393,8 +398,8 @@ export default function CategoryVolumeAnalysisPage() {
                           )}
                         </button>
                       </th>
-                      <th scope="col" className="py-3.5 px-3 text-right w-36">% of Transactions</th>
-                      <th scope="col" className="py-3.5 pr-4 pl-3 text-right w-36">% of Value</th>
+                      <th scope="col" className="py-3.5 px-3 text-right w-36 whitespace-nowrap">% of Transactions</th>
+                      <th scope="col" className="py-3.5 pr-4 pl-3 text-right w-36 whitespace-nowrap">% of Value</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-800">

@@ -18,6 +18,8 @@ import {
   Info,
   Search,
   Lock,
+  Filter,
+  ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { BidCard, EmptyState, PageShell, ProcurementEmptyState, ProcurementErrorState, ProcurementHero, ProcurementLoadingState, StatusBadge } from '../components';
@@ -348,11 +350,25 @@ export default function BidsListingPage() {
     setPage(1);
   };
 
+  const activeFilterCount = (status !== 'All' ? 1 : 0) +
+    (bidType !== 'All' ? 1 : 0) +
+    (category !== 'All' ? 1 : 0) +
+    (location !== 'All' ? 1 : 0) +
+    (buyerType !== 'All' ? 1 : 0) +
+    (bidValue !== 'All' ? 1 : 0) +
+    (closingDate !== 'All' ? 1 : 0) +
+    (participation !== 'All' ? 1 : 0);
+
   const filterPanel = (
-    <aside className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 lg:sticky lg:top-28">
+    <aside className="space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 sm:p-4 lg:bg-white lg:p-4 lg:sticky lg:top-28">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-black text-[#0b2447]">Filters</p>
-        <button onClick={resetFilters} className="text-[11px] font-black text-[#c86413]">Clear</button>
+        <div className="flex items-center gap-2">
+          <SlidersHorizontal className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+          <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">Filter By Specific Criteria</span>
+        </div>
+        {activeFilterCount > 0 && (
+          <button onClick={resetFilters} className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer">Reset Filter Options</button>
+        )}
       </div>
       {[
         ['Bid status', status, setStatus, ['All', 'Open', 'Closing Soon', 'Under Evaluation', 'Awarded', 'Closed']],
@@ -446,19 +462,39 @@ export default function BidsListingPage() {
                 <button
                   type="button"
                   onClick={() => setMobileFilters(v => !v)}
+                  aria-expanded={mobileFilters}
+                  aria-controls="bids-mobile-filters-panel"
+                  aria-label="Toggle filter options"
                   className={cn(
-                    "inline-flex h-10 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border px-2.5 sm:px-3.5 text-[10px] font-black uppercase tracking-wider transition-all lg:hidden",
-                    mobileFilters ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 shadow-xs active:scale-[0.98]"
+                    "inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 sm:px-3.5 text-xs font-bold transition-all shadow-2xs cursor-pointer shrink-0 lg:hidden",
+                    mobileFilters || activeFilterCount > 0
+                      ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f] hover:bg-[#12335f]/10"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                   )}
                 >
-                  <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
+                  <Filter className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
                   <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#12335f] text-white text-[10px] font-black">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 text-slate-500", mobileFilters && "rotate-180")} aria-hidden="true" />
                 </button>
                 <div className="shrink-0 flex items-center">
                   <ViewModeToggle value={viewMode} onChange={setViewMode} />
                 </div>
               </div>
-              {mobileFilters && <div className="mt-3 lg:hidden pt-3 border-t border-slate-100">{filterPanel}</div>}
+              {mobileFilters && (
+                <div
+                  id="bids-mobile-filters-panel"
+                  role="region"
+                  aria-label="Filter Options"
+                  className="mt-3 lg:hidden pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-200"
+                >
+                  {filterPanel}
+                </div>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">

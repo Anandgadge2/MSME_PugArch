@@ -803,16 +803,21 @@ export default function RatingsPage({ endpoint, mode = 'supplier' }: Props) {
       ) : (
         /* ── Table View ── */
         <div className="flex flex-col space-y-3">
-          <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white shadow-2xs">
-            <table className="w-full text-left text-xs text-slate-700">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Ratings table, horizontally scrollable"
+            className="w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x rounded-2xl border border-slate-200/90 bg-white shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#12335f]/20"
+          >
+            <table className="w-full min-w-[860px] text-left text-xs text-slate-700">
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-500">
                 <tr>
-                  <th scope="col" className="px-3.5 py-3">Date</th>
-                  <th scope="col" className="px-3.5 py-3">{mode === 'supplier' ? 'Evaluated By' : 'Supplier'}</th>
-                  <th scope="col" className="px-3.5 py-3">Order Ref</th>
-                  <th scope="col" className="px-3.5 py-3">Rating</th>
-                  <th scope="col" className="px-3.5 py-3">Evaluations</th>
-                  <th scope="col" className="px-3.5 py-3">Written Review</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">Date</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">{mode === 'supplier' ? 'Evaluated By' : 'Supplier'}</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">Order Ref</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">Rating</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">Evaluations</th>
+                  <th scope="col" className="px-3.5 py-3 whitespace-nowrap">Written Review</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">

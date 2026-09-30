@@ -11,6 +11,7 @@ import { formatDate, formatDateTime } from '../../shared/format';
 import { useFeatureQuery, useResponsiveViewMode } from '../../shared/hooks';
 import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
+import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { toast } from 'sonner';
 import { api } from '../../../lib/api';
@@ -123,7 +124,6 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
   const [editingUser, setEditingUser] = useState<RecordMap | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSizeState] = useState(20);
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [viewMode, setViewMode] = useResponsiveViewMode();
 
   const [sortKey, setSortKey] = useState<string>('date');
@@ -482,63 +482,72 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
       </div>
 
 
-      <Card className="border-slate-200/80 shadow-sm bg-white">
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row gap-2.5 items-center w-full">
-            <div className="relative flex-1 w-full">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder={`Search ${cfg.title.toLowerCase()}...`} className="h-10 w-full rounded-lg border border-slate-200 pl-10 pr-3 text-xs font-semibold outline-none focus:ring-2 focus:ring-[#12335f]/20 bg-slate-50/50 hover:bg-slate-50 focus:bg-white transition-all text-slate-900" />
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
+        <ResponsiveFilterBar
+          activeFilterCount={(role ? 1 : 0) + (status ? 1 : 0)}
+          onReset={role || status ? () => { setRole(''); setStatus(''); setPage(1); } : undefined}
+          searchInput={
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={searchInput}
+                onChange={event => setSearchInput(event.target.value)}
+                placeholder={`Search ${cfg.title.toLowerCase()}...`}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner text-slate-900 transition-all"
+                aria-label={`Search ${cfg.title.toLowerCase()}`}
+              />
             </div>
+          }
+          filters={
+            <>
+              {/* Role filter */}
+              <div>
+                <label htmlFor="admin-filter-role" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  User Role
+                </label>
+                <select
+                  id="admin-filter-role"
+                  value={role}
+                  onChange={event => setRole(event.target.value)}
+                  disabled={kind !== 'users'}
+                  aria-label="Filter records by role"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer disabled:bg-slate-50 disabled:text-slate-300 truncate"
+                >
+                  <option value="">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="buyer">Buyer</option>
+                  <option value="seller">Seller</option>
+                  <option value="shg">SHG</option>
+                </select>
+              </div>
 
-            <div className={cn(
-              "flex-col sm:flex-row gap-2 w-full lg:w-auto shrink-0",
-              showMobileFilters ? "flex" : "hidden lg:flex"
-            )}>
-              <select
-                value={role}
-                onChange={event => setRole(event.target.value)}
-                disabled={kind !== 'users'}
-                aria-label="Filter records by role"
-                className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold disabled:bg-slate-50 disabled:text-slate-300 w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
-              >
-                <option value="">All roles</option>
-                <option value="admin">Admin</option>
-                <option value="buyer">Buyer</option>
-                <option value="seller">Seller</option>
-                <option value="shg">SHG</option>
-              </select>
-              <select
-                value={status}
-                onChange={event => setStatus(event.target.value)}
-                aria-label="Filter records by status"
-                className="h-10 rounded-lg border border-slate-200 px-3 text-xs font-bold w-full lg:w-[160px] bg-white text-slate-900 outline-none focus:ring-2 focus:ring-[#12335f]/20 transition-all"
-              >
-                <option value="">All statuses</option>
-                <option value="completed">Registration completed</option>
-                <option value="incomplete">Registration incomplete</option>
-                <option value="approved_for_procurement">Approved onboarding</option>
-                <option value="PENDING">Pending account</option>
-                <option value="ACTIVE">Active account</option>
-                <option value="OPEN">Open</option>
-                <option value="CLOSED">Closed</option>
-              </select>
-            </div>
-
-            <div className="flex items-center gap-2 w-full lg:w-auto">
-              <ViewModeToggle value={viewMode} onChange={setViewMode} />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className="lg:hidden h-10 flex-1 gap-2 rounded-lg text-xs font-black uppercase tracking-wider border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0"
-              >
-                <Filter className="h-4 w-4 text-slate-500" />
-                <span>Filters {showMobileFilters ? '(Hide)' : '(Show)'}</span>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              {/* Status filter */}
+              <div>
+                <label htmlFor="admin-filter-status" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+                  Account Status
+                </label>
+                <select
+                  id="admin-filter-status"
+                  value={status}
+                  onChange={event => setStatus(event.target.value)}
+                  aria-label="Filter records by status"
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="completed">Registration Completed</option>
+                  <option value="incomplete">Registration Incomplete</option>
+                  <option value="approved_for_procurement">Approved Onboarding</option>
+                  <option value="PENDING">Pending Account</option>
+                  <option value="ACTIVE">Active Account</option>
+                  <option value="OPEN">Open</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </div>
+            </>
+          }
+          viewToggle={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
+        />
+      </div>
 
 
       {records.length === 0 ? (

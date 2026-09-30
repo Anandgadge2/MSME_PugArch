@@ -85,7 +85,7 @@ function ProcurementsTableSkeleton() {
       showSrNo={true}
       srNoHeader="#"
       srNoWidth="w-[3.5%]"
-      minWidth="w-full"
+      minWidth="min-w-[1040px] w-full"
       keyExtractor={(_, idx) => idx}
     />
   );
@@ -1134,7 +1134,7 @@ export default function MyProcurementsPage() {
               showSrNo={true}
               srNoHeader="#"
               srNoWidth="w-[3.5%]"
-              minWidth="w-full"
+              minWidth="min-w-[1040px] w-full"
               sortKey={sortKey}
               sortDirection={sortDir}
               onSort={(field) => handleSort(field as SortKey)}
