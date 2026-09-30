@@ -509,11 +509,19 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const minimumOrderQty = rateContractConfig.minimumOrderQuantity || 0;
   const maxOrderQty = rateContractConfig.maximumOrderQuantityPerCallOff || 0;
   const deliverySla = rateContractConfig.deliverySla || terms.deliveryTerms || rcData.deliveryTerms || null;
-  const deliverySlaDays = Number(rateContractConfig.deliverySlaDays || 15);
+  const deliverySlaDays = (rateContractConfig.deliverySlaDays != null && rateContractConfig.deliverySlaDays !== '')
+    ? Number(rateContractConfig.deliverySlaDays)
+    : null;
   const penaltyClause = rateContractConfig.penaltyClause || terms.penaltyClause || null;
-  const penaltyRatePerWeek = Number(rateContractConfig.penaltyRatePerWeek ?? 0.5);
-  const penaltyGraceDays = Number(rateContractConfig.penaltyGraceDays ?? 0);
-  const maxPenaltyCapPercentage = Number(rateContractConfig.maxPenaltyCapPercentage ?? 10);
+  const penaltyRatePerWeek = (rateContractConfig.penaltyRatePerWeek != null && rateContractConfig.penaltyRatePerWeek !== '')
+    ? Number(rateContractConfig.penaltyRatePerWeek)
+    : null;
+  const penaltyGraceDays = (rateContractConfig.penaltyGraceDays != null && rateContractConfig.penaltyGraceDays !== '')
+    ? Number(rateContractConfig.penaltyGraceDays)
+    : null;
+  const maxPenaltyCapPercentage = (rateContractConfig.maxPenaltyCapPercentage != null && rateContractConfig.maxPenaltyCapPercentage !== '')
+    ? Number(rateContractConfig.maxPenaltyCapPercentage)
+    : null;
 
   payload.rateContractConfig = {
     ...rateContractConfig,
@@ -886,6 +894,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
         clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
         contractId={contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined))}
+        rateContractConfig={payload.rateContractConfig || rateContractConfig}
+        terms={terms}
+        contractDocument={contractDoc}
         utilization={contractData?.utilization || rcData?.utilization || null}
         purchaseOrders={contractData?.purchaseOrders || rcData?.purchaseOrders || []}
       />

@@ -231,11 +231,11 @@ type RateContractConfig = {
   maximumOrderQuantityPerCallOff: number;
   minimumOrderQuantity: number;
   deliverySla: string;
-  deliverySlaDays: number;
+  deliverySlaDays?: number | null;
   penaltyClause: string;
-  penaltyRatePerWeek: number;
-  penaltyGraceDays: number;
-  maxPenaltyCapPercentage: number;
+  penaltyRatePerWeek?: number | null;
+  penaltyGraceDays?: number | null;
+  maxPenaltyCapPercentage?: number | null;
   securityDepositRequired: boolean;
   securityDepositAmount: number;
   approvalWorkflow: string;
@@ -741,7 +741,7 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   contractCategory: '',
   periodStartDate: today,
   periodEndDate: nextFortnight,
-  rateValidityPeriod: 'Contract period',
+  rateValidityPeriod: '',
   supplierSelectionStrategy: 'SINGLE_SUPPLIER',
   selectedSuppliers: [],
   itemRateSchedule: [],
@@ -749,12 +749,12 @@ const defaultRateContractConfig = (): RateContractConfig => ({
   callOffOrderAllowed: true,
   maximumOrderQuantityPerCallOff: 0,
   minimumOrderQuantity: 0,
-  deliverySla: 'Delivery within agreed SLA from call-off order date',
-  deliverySlaDays: 15,
-  penaltyClause: '0.5% per week of delay up to a maximum of 10%',
-  penaltyRatePerWeek: 0.5,
-  penaltyGraceDays: 0,
-  maxPenaltyCapPercentage: 10,
+  deliverySla: '',
+  deliverySlaDays: null,
+  penaltyClause: '',
+  penaltyRatePerWeek: null,
+  penaltyGraceDays: null,
+  maxPenaltyCapPercentage: null,
   securityDepositRequired: false,
   securityDepositAmount: 0,
   approvalWorkflow: 'Finance + Procurement',
@@ -1709,15 +1709,9 @@ export default function CreateProcurementPage() {
         const contract = d.rateContractConfig;
         const start = new Date(contract.periodStartDate).getTime();
         const end = new Date(contract.periodEndDate).getTime();
-        if (!contract.contractTitle.trim()) return false;
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (!contract.rateValidityPeriod.trim()) return false;
-        if (contract.itemRateSchedule.length === 0) return false;
-        if (contract.itemRateSchedule.some(item => !item.itemName.trim() || !item.uom.trim() || item.estimatedAnnualQuantity <= 0 || item.baseRate <= 0)) return false;
-        if (contract.itemRateSchedule.some(item => item.slabPricingEnabled && item.slabPricing.some(slab => slab.minQuantity <= 0 || (slab.maxQuantity !== null && slab.maxQuantity < slab.minQuantity) || slab.rate <= 0))) return false;
         if (contract.callOffOrderAllowed && contract.maximumOrderQuantityPerCallOff > 0 && contract.maximumOrderQuantityPerCallOff < contract.minimumOrderQuantity) return false;
-        if (!contract.deliverySla.trim() || contract.deliverySlaDays <= 0) return false;
-        if (!contract.penaltyClause.trim() || contract.penaltyRatePerWeek < 0 || contract.maxPenaltyCapPercentage <= 0) return false;
       }
     } else if (stepIdx === 6) {
       if (!d.terms.paymentTerms) return false;
@@ -6699,6 +6693,26 @@ function ScheduleStepForm({
                         placeholder="0 = No ceiling"
                       />
                     </Field>
+                    <Field label="Call-off Delivery Turnaround (Days)">
+                      <input
+                        id="rc-delivery-sla-days"
+                        type="number"
+                        min={1}
+                        value={draft.rateContractConfig.deliverySlaDays || ''}
+                        onChange={e => updateRateContract('deliverySlaDays', e.target.value ? Number(e.target.value) : null)}
+                        className={inputClass}
+                        placeholder="e.g. 15 (Days from PO issuance)"
+                      />
+                    </Field>
+                    <Field label="Call-off Delivery SLA & Instructions">
+                      <input
+                        id="rc-delivery-sla"
+                        value={draft.rateContractConfig.deliverySla || ''}
+                        onChange={e => updateRateContract('deliverySla', e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. Delivery at consignee site within agreed SLA"
+                      />
+                    </Field>
                   </div>
                   <div className="flex items-start gap-2 rounded-lg bg-blue-50/70 p-2.5 text-[11px] text-blue-900 border border-blue-100/80">
                     <span className="font-bold text-blue-800 shrink-0">Release Rule:</span>
@@ -8202,9 +8216,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractTitle: draft.rateContractConfig.contractTitle || title,
     contractDescription: draft.rateContractConfig.contractDescription || draft.basics.justification || basics.description,
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
-    deliverySla: draft.rateContractConfig.deliverySla || draft.terms.deliveryTerms || 'As per contract terms',
-    deliverySlaDays: draft.rateContractConfig.deliverySlaDays || 15,
-    penaltyClause: draft.rateContractConfig.penaltyClause || draft.terms.penaltyClause || '0.5% per week of delay up to a maximum of 10%',
+    deliverySla: draft.rateContractConfig.deliverySla || draft.terms.deliveryTerms || '',
+    deliverySlaDays: draft.rateContractConfig.deliverySlaDays ? Number(draft.rateContractConfig.deliverySlaDays) : null,
+    penaltyClause: draft.rateContractConfig.penaltyClause || draft.terms.penaltyClause || '',
+    penaltyRatePerWeek: draft.rateContractConfig.penaltyRatePerWeek != null ? Number(draft.rateContractConfig.penaltyRatePerWeek) : null,
+    penaltyGraceDays: draft.rateContractConfig.penaltyGraceDays != null ? Number(draft.rateContractConfig.penaltyGraceDays) : null,
+    maxPenaltyCapPercentage: draft.rateContractConfig.maxPenaltyCapPercentage != null ? Number(draft.rateContractConfig.maxPenaltyCapPercentage) : null,
     contractDocument: draft.rateContractConfig.contractDocument?.fileName ? {
       fileAssetId: draft.rateContractConfig.contractDocument.fileAssetId || null,
       fileName: cleanDocName(draft.rateContractConfig.contractDocument.fileName, ''),

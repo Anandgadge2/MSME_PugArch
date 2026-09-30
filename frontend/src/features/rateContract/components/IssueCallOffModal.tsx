@@ -49,7 +49,7 @@ export function IssueCallOffModal({
   const scheduleItems: any[] = Array.isArray(meta.itemRateSchedule) ? meta.itemRateSchedule : [];
   const minOrderQty = Number(meta.minimumOrderQuantity || 0);
   const maxOrderQty = Number(meta.maximumOrderQuantityPerCallOff || 0);
-  const slaDays = Number(meta.deliverySlaDays || 15);
+  const slaDays = meta.deliverySlaDays != null && Number(meta.deliverySlaDays) > 0 ? Number(meta.deliverySlaDays) : null;
 
   const [deliveryAddress, setDeliveryAddress] = useState(defaultDeliveryAddress);
   const [expectedDelivery, setExpectedDelivery] = useState('');
@@ -58,12 +58,14 @@ export function IssueCallOffModal({
   const [itemQuantities, setItemQuantities] = useState<Record<string, number>>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  // Pre-calculate default expected delivery date (Today + SLA Days)
+  // Pre-calculate default expected delivery date (Today + SLA Days if configured)
   useEffect(() => {
     if (isOpen) {
-      const d = new Date();
-      d.setDate(d.getDate() + slaDays);
-      setExpectedDelivery(d.toISOString().slice(0, 10));
+      if (slaDays !== null) {
+        const d = new Date();
+        d.setDate(d.getDate() + slaDays);
+        setExpectedDelivery(d.toISOString().slice(0, 10));
+      }
       if (!deliveryAddress && defaultDeliveryAddress) {
         setDeliveryAddress(defaultDeliveryAddress);
       }
@@ -421,7 +423,7 @@ export function IssueCallOffModal({
 
               <div className="space-y-1.5">
                 <label htmlFor="calloff-expected-date" className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Target Delivery Date <span className="text-slate-400 font-normal">({slaDays}-day SLA)</span>
+                  Target Delivery Date {slaDays !== null ? <span className="text-slate-400 font-normal">({slaDays}-day SLA)</span> : null}
                 </label>
                 <div className="relative">
                   <input

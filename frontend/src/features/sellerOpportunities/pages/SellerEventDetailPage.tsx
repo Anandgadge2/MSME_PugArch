@@ -237,6 +237,22 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
       onViewQuotationClick={isSubmitted ? () => router.push(`/bids/${bid.id}/participate`) : undefined}
       rawBid={bid}
+      rateContractConfig={
+        (bid as any).rateContractConfig ||
+        (bid.technicalPacket as any)?.rateContractConfig ||
+        (bid.technicalPacket as any)?.rateContract ||
+        (bid as any)?.metadata?.rateContractConfig ||
+        (bid as any)?.payload?.rateContractConfig
+      }
+      terms={(bid.technicalPacket as any)?.terms || (bid as any).terms}
+      contractDocument={
+        (bid as any).contractDocument ||
+        (bid.technicalPacket as any)?.rateContractConfig?.contractDocument ||
+        (bid.technicalPacket as any)?.contractDocument ||
+        (bid as any)?.metadata?.contractDocument
+      }
+      utilization={(bid as any).utilization || (bid as any).contractData?.utilization}
+      purchaseOrders={(bid as any).purchaseOrders || (bid as any).contractData?.purchaseOrders}
     />
   );
 }

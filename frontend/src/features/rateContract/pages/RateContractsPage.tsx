@@ -571,9 +571,9 @@ export default function RateContractsPage() {
               const meta = (poContract.metadata || {}) as RateContractMetadata;
               const minQty = Number(meta.minimumOrderQuantity || 0);
               const maxQty = Number(meta.maximumOrderQuantityPerCallOff || 0);
-              const slaDays = Number(meta.deliverySlaDays || 15);
-              const rateWk = Number(meta.penaltyRatePerWeek ?? 0.5);
-              const maxCap = Number(meta.maxPenaltyCapPercentage ?? 10);
+              const slaDays = meta.deliverySlaDays != null && Number(meta.deliverySlaDays) > 0 ? Number(meta.deliverySlaDays) : null;
+              const rateWk = meta.penaltyRatePerWeek != null ? Number(meta.penaltyRatePerWeek) : null;
+              const maxCap = meta.maxPenaltyCapPercentage != null ? Number(meta.maxPenaltyCapPercentage) : null;
 
               return (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-[11px]">
@@ -587,11 +587,15 @@ export default function RateContractsPage() {
                   </div>
                   <div>
                     <span className="block text-[9px] font-black uppercase text-slate-400">Delivery SLA</span>
-                    <span className="font-bold text-blue-700">{slaDays} Calendar Days</span>
+                    <span className="font-bold text-blue-700">{slaDays !== null ? `${slaDays} Calendar Days` : (meta.deliverySla || 'As per Call-Off PO')}</span>
                   </div>
                   <div>
                     <span className="block text-[9px] font-black uppercase text-slate-400">Penalty Clause</span>
-                    <span className="font-bold text-slate-800">{rateWk}%/wk (Max {maxCap}%)</span>
+                    <span className="font-bold text-slate-800">
+                      {rateWk !== null && maxCap !== null
+                        ? `${rateWk}%/wk (Max ${maxCap}%)`
+                        : meta.penaltyClause || 'Standard GCC'}
+                    </span>
                   </div>
                 </div>
               );

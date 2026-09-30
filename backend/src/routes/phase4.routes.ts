@@ -1487,12 +1487,12 @@ const rateContractConfigSchema = z.object({
   callOffOrderAllowed: z.coerce.boolean(),
   maximumOrderQuantityPerCallOff: z.coerce.number().positive().optional().nullable(),
   minimumOrderQuantity: z.coerce.number().nonnegative().default(0),
-  deliverySla: z.string().trim().min(2).max(500),
-  deliverySlaDays: z.coerce.number().int().positive().default(15),
-  penaltyClause: z.string().trim().min(2).max(1000),
-  penaltyRatePerWeek: z.coerce.number().min(0).max(100).default(0.5),
-  penaltyGraceDays: z.coerce.number().int().nonnegative().default(0),
-  maxPenaltyCapPercentage: z.coerce.number().min(0).max(100).default(10),
+  deliverySla: z.string().trim().max(500).optional().nullable(),
+  deliverySlaDays: z.coerce.number().int().positive().optional().nullable(),
+  penaltyClause: z.string().trim().max(1000).optional().nullable(),
+  penaltyRatePerWeek: z.coerce.number().min(0).max(100).optional().nullable(),
+  penaltyGraceDays: z.coerce.number().int().nonnegative().optional().nullable(),
+  maxPenaltyCapPercentage: z.coerce.number().min(0).max(100).optional().nullable(),
   securityDepositRequired: z.coerce.boolean().default(false),
   securityDepositAmount: z.coerce.number().nonnegative().default(0),
   approvalWorkflow: z.string().trim().max(200).optional().default('Finance + Procurement'),
@@ -1526,9 +1526,10 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
       ? payload.vendors.invitedSellers.map((supplierId: unknown) => ({ supplierId }))
       : [];
 
-  const deliverySla = raw.deliverySla || payload.terms?.deliveryTerms || 'As per contract terms';
-  const deliverySlaDays = raw.deliverySlaDays !== undefined ? Number(raw.deliverySlaDays) : parseDeliverySlaDays(deliverySla, 15);
-  const penaltyTerms = parsePenaltyTerms(raw);
+  const deliverySla = raw.deliverySla || payload.terms?.deliveryTerms || '';
+  const deliverySlaDays = raw.deliverySlaDays !== undefined && raw.deliverySlaDays !== null && raw.deliverySlaDays !== ''
+    ? Number(raw.deliverySlaDays)
+    : null;
 
   return {
     rateContractNumber: raw.rateContractNumber,
@@ -1547,10 +1548,16 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     minimumOrderQuantity: raw.minimumOrderQuantity ?? 0,
     deliverySla,
     deliverySlaDays,
-    penaltyClause: raw.penaltyClause || payload.terms?.penaltyClause || 'As per contract terms',
-    penaltyRatePerWeek: raw.penaltyRatePerWeek !== undefined ? Number(raw.penaltyRatePerWeek) : penaltyTerms.ratePerWeek,
-    penaltyGraceDays: raw.penaltyGraceDays !== undefined ? Number(raw.penaltyGraceDays) : penaltyTerms.gracePeriodDays,
-    maxPenaltyCapPercentage: raw.maxPenaltyCapPercentage !== undefined ? Number(raw.maxPenaltyCapPercentage) : penaltyTerms.maxCapPercent,
+    penaltyClause: raw.penaltyClause || payload.terms?.penaltyClause || '',
+    penaltyRatePerWeek: raw.penaltyRatePerWeek !== undefined && raw.penaltyRatePerWeek !== null && raw.penaltyRatePerWeek !== ''
+      ? Number(raw.penaltyRatePerWeek)
+      : null,
+    penaltyGraceDays: raw.penaltyGraceDays !== undefined && raw.penaltyGraceDays !== null && raw.penaltyGraceDays !== ''
+      ? Number(raw.penaltyGraceDays)
+      : null,
+    maxPenaltyCapPercentage: raw.maxPenaltyCapPercentage !== undefined && raw.maxPenaltyCapPercentage !== null && raw.maxPenaltyCapPercentage !== ''
+      ? Number(raw.maxPenaltyCapPercentage)
+      : null,
     securityDepositRequired: Boolean(raw.securityDepositRequired ?? false),
     securityDepositAmount: Number(raw.securityDepositAmount ?? payload.terms?.securityDeposit ?? 0),
     approvalWorkflow: raw.approvalWorkflow || payload.approval?.workflow || 'Finance + Procurement',

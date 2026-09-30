@@ -2285,16 +2285,36 @@ function RateContractParametersCard({
 
   const periodStart = rc.periodStartDate || rc.startDate || t.periodStartDate || null;
   const periodEnd = rc.periodEndDate || rc.endDate || t.periodEndDate || null;
-  const validityPeriod = rc.rateValidityPeriod || t.rateValidityPeriod || "Fixed for 1 Year";
+  const validityPeriod = rc.rateValidityPeriod || t.rateValidityPeriod || null;
   const minOrderQty = Number(rc.minimumOrderQuantity || t.minimumOrderQuantity || 0);
   const maxOrderQty = Number(rc.maximumOrderQuantityPerCallOff || t.maximumOrderQuantityPerCallOff || 0);
   const callOffAllowed = rc.callOffOrderAllowed !== false && t.callOffOrderAllowed !== false;
-  const deliverySla = rc.deliverySla || t.deliveryTerms || "As per call-off order";
-  const deliverySlaDays = Number(rc.deliverySlaDays || t.deliverySlaDays || 15);
-  const penaltyClause = rc.penaltyClause || t.penaltyClause || "0.5% per week of delay up to a maximum of 10%";
-  const penaltyRate = Number(rc.penaltyRatePerWeek ?? t.penaltyRatePerWeek ?? 0.5);
-  const graceDays = Number(rc.penaltyGraceDays ?? t.penaltyGraceDays ?? 0);
-  const maxCap = Number(rc.maxPenaltyCapPercentage ?? t.maxPenaltyCapPercentage ?? 10);
+
+  const deliverySla = rc.deliverySla || t.deliveryTerms || rc.deliveryTerms || null;
+  const deliverySlaDays = (rc.deliverySlaDays != null && rc.deliverySlaDays !== '' && Number(rc.deliverySlaDays) > 0)
+    ? Number(rc.deliverySlaDays)
+    : (t.deliverySlaDays != null && t.deliverySlaDays !== '' && Number(t.deliverySlaDays) > 0)
+      ? Number(t.deliverySlaDays)
+      : null;
+
+  const penaltyClause = rc.penaltyClause || t.penaltyClause || null;
+  const penaltyRate = (rc.penaltyRatePerWeek != null && rc.penaltyRatePerWeek !== '')
+    ? Number(rc.penaltyRatePerWeek)
+    : (t.penaltyRatePerWeek != null && t.penaltyRatePerWeek !== '')
+      ? Number(t.penaltyRatePerWeek)
+      : null;
+  const graceDays = (rc.penaltyGraceDays != null && rc.penaltyGraceDays !== '')
+    ? Number(rc.penaltyGraceDays)
+    : (t.penaltyGraceDays != null && t.penaltyGraceDays !== '')
+      ? Number(t.penaltyGraceDays)
+      : null;
+  const maxCap = (rc.maxPenaltyCapPercentage != null && rc.maxPenaltyCapPercentage !== '')
+    ? Number(rc.maxPenaltyCapPercentage)
+    : (t.maxPenaltyCapPercentage != null && t.maxPenaltyCapPercentage !== '')
+      ? Number(t.maxPenaltyCapPercentage)
+      : null;
+
+  const hasSpecificPenaltyMetrics = penaltyRate !== null || graceDays !== null || maxCap !== null;
   const contractDoc = contractDocument || rc.contractDocument || null;
 
   return (
@@ -2336,11 +2356,19 @@ function RateContractParametersCard({
               Contract Validity Period
             </dt>
             <dd className="text-xs font-black text-slate-900 leading-snug">
-              {validityPeriod}
+              {validityPeriod || (periodStart && periodEnd ? `${formatDate(periodStart)} – ${formatDate(periodEnd)}` : "—")}
             </dd>
-            <p className="text-[10px] font-medium text-slate-500">
-              {periodStart ? formatDate(periodStart) : "Start Date"} &rarr; {periodEnd ? formatDate(periodEnd) : "Expiry Date"}
-            </p>
+            {(periodStart || periodEnd) ? (
+              <p className="text-[10px] font-medium text-slate-500">
+                {periodStart && periodEnd
+                  ? `${formatDate(periodStart)} → ${formatDate(periodEnd)}`
+                  : periodStart
+                    ? `From ${formatDate(periodStart)}`
+                    : `Until ${formatDate(periodEnd)}`}
+              </p>
+            ) : (
+              <p className="text-[10px] font-medium text-slate-400">Validity schedule as specified in agreement</p>
+            )}
           </div>
 
           {/* 2. Call-Off Release Controls */}
@@ -2353,9 +2381,15 @@ function RateContractParametersCard({
               {callOffAllowed ? "Periodic Staggered Orders Allowed" : "Single Full Release Only"}
             </dd>
             <div className="flex items-center gap-2 text-[10.5px] font-mono font-bold text-slate-600">
-              <span>Min PO: {minOrderQty > 0 ? `${minOrderQty.toLocaleString("en-IN")} units` : "None"}</span>
-              <span>•</span>
-              <span>Max PO: {maxOrderQty > 0 ? `${maxOrderQty.toLocaleString("en-IN")} units` : "No Cap"}</span>
+              {minOrderQty > 0 || maxOrderQty > 0 ? (
+                <>
+                  <span>Min PO: {minOrderQty > 0 ? `${minOrderQty.toLocaleString("en-IN")} units` : "None"}</span>
+                  <span>•</span>
+                  <span>Max PO: {maxOrderQty > 0 ? `${maxOrderQty.toLocaleString("en-IN")} units` : "No Cap"}</span>
+                </>
+              ) : (
+                <span className="text-slate-500 font-normal">Quantities released per call-off PO</span>
+              )}
             </div>
           </div>
 
@@ -2366,10 +2400,14 @@ function RateContractParametersCard({
               Call-Off Delivery Turnaround
             </dt>
             <dd className="text-xs font-black text-slate-900 leading-snug">
-              {deliverySlaDays} Days per Call-Off PO
+              {deliverySlaDays !== null
+                ? `${deliverySlaDays} Days per Call-Off PO`
+                : deliverySla
+                  ? "As per Delivery Terms"
+                  : "As agreed in Call-Off PO"}
             </dd>
             <p className="text-[10.5px] text-slate-600 leading-tight">
-              {deliverySla || `Orders must be delivered within ${deliverySlaDays} days from PO issuance`}
+              {deliverySla || (deliverySlaDays !== null ? `Orders must be delivered within ${deliverySlaDays} days from PO issuance` : "Turnaround defined in individual call-off orders")}
             </p>
           </div>
 
@@ -2380,13 +2418,21 @@ function RateContractParametersCard({
               Delay Penalty / Liquidated Damages (LD)
             </dt>
             <dd className="text-xs font-bold text-slate-900 leading-snug">
-              {penaltyClause}
+              {penaltyClause || "Subject to standard General Conditions of Contract (GCC)"}
             </dd>
-            <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-600 pt-0.5">
-              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Rate: {penaltyRate}% / week</span>
-              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Grace: {graceDays} days</span>
-              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Max LD Cap: {maxCap}%</span>
-            </div>
+            {hasSpecificPenaltyMetrics && (
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-600 pt-0.5">
+                {penaltyRate !== null && (
+                  <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Rate: {penaltyRate}% / week</span>
+                )}
+                {graceDays !== null && (
+                  <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Grace: {graceDays} days</span>
+                )}
+                {maxCap !== null && (
+                  <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Max LD Cap: {maxCap}%</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 5. Master Contract Draft Document */}
@@ -4357,6 +4403,7 @@ export interface ProcurementDetailUnifiedViewProps {
   // Rate Contract Extensions
   contractId?: number;
   rateContractConfig?: any;
+  contractDocument?: any;
   procurementData?: any;
   terms?: any;
   utilization?: any;
@@ -11033,13 +11080,33 @@ export function ProcurementDetailUnifiedView(
                 <RateContractParametersCard
                   rateContractConfig={
                     props.rateContractConfig ||
+                    (props.payload as any)?.rateContractConfig ||
+                    (props.payload as any)?.rateContract ||
                     (props.procurementData as any)?.rateContractConfig ||
-                    (props.procurementData as any)?.metadata?.rateContractConfig
+                    (props.procurementData as any)?.rateContract ||
+                    (props.procurementData as any)?.technicalPacket?.rateContractConfig ||
+                    (props.procurementData as any)?.metadata?.rateContractConfig ||
+                    (props.rawBid as any)?.rateContractConfig ||
+                    (props.rawBid as any)?.technicalPacket?.rateContractConfig ||
+                    (props.rawBid as any)?.technicalPacket?.rateContract ||
+                    (props.rawBid as any)?.metadata?.rateContractConfig
                   }
-                  terms={props.terms}
+                  terms={
+                    props.terms ||
+                    (props.payload as any)?.terms ||
+                    (props.procurementData as any)?.terms ||
+                    (props.procurementData as any)?.technicalPacket?.terms ||
+                    (props.rawBid as any)?.technicalPacket?.terms ||
+                    (props.rawBid as any)?.terms
+                  }
                   contractDocument={
+                    props.contractDocument ||
+                    (props.rateContractConfig as any)?.contractDocument ||
+                    (props.payload as any)?.rateContractConfig?.contractDocument ||
+                    (props.payload as any)?.contractDocument ||
                     (props.procurementData as any)?.metadata?.contractDocument ||
-                    (props.procurementData as any)?.contractDocument
+                    (props.procurementData as any)?.contractDocument ||
+                    (props.rawBid as any)?.contractDocument
                   }
                   isBuyer={isBuyerSide}
                 />
