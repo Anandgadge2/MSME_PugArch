@@ -12,6 +12,7 @@ import {
   upsertProcurementModeSettings,
 } from './procurement-mode.service.js';
 import { confirmMethodSchema, evaluateCartSchema, updateSettingsSchema } from './procurement-mode.validation.js';
+import prisma from '../../lib/prisma.js';
 
 const router = Router();
 router.use('/procurement-mode', authenticate);
@@ -87,19 +88,37 @@ router.get(
 router.put(
   '/procurement-mode/settings',
   asyncRoute(async (req, res) => {
-    if (!['admin', 'master_admin'].includes(req.user!.role)) {
+    const userRole = req.user!.role;
+    const isGlobalAdmin = ['admin', 'master_admin'].includes(userRole);
+    let targetOrgId: number | null = null;
+
+    if (isGlobalAdmin) {
+      targetOrgId = typeof req.body.organizationId === 'number' ? req.body.organizationId : null;
+    } else if (userRole === 'buyer') {
+      if (!req.user?.organizationId) {
+        throw new ApiError(403, 'Organisation required to update procurement settings.', 'FORBIDDEN');
+      }
+      const membership = await prisma.orgMembership.findUnique({
+        where: { userId_organizationId: { userId: req.user.id, organizationId: req.user.organizationId } },
+      });
+      const isOrgAdmin = !membership || membership.orgRole === 'ORG_ADMIN';
+      if (!isOrgAdmin) {
+        throw new ApiError(403, 'Org Admin access required to update procurement settings.', 'FORBIDDEN');
+      }
+      targetOrgId = req.user.organizationId;
+    } else {
       throw new ApiError(403, 'Admin access required to update procurement settings.', 'FORBIDDEN');
     }
+
     const body = updateSettingsSchema.parse(req.body);
-    const orgId = typeof req.body.organizationId === 'number' ? req.body.organizationId : null;
-    const updated = await upsertProcurementModeSettings(orgId, body);
+    const updated = await upsertProcurementModeSettings(targetOrgId, body);
     await auditLog({
       actorUserId: req.user!.id,
       actorRole: req.user!.role,
       action: 'procurement.settings.updated',
       entityType: 'procurement_mode_setting',
       entityId: updated.id,
-      metadata: body as Record<string, unknown>,
+      metadata: { targetOrgId, ...body } as Record<string, unknown>,
     });
     return res.json({ success: true, data: toSettingsDto(updated) });
   })

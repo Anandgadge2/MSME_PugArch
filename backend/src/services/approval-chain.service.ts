@@ -55,6 +55,14 @@ const ENTITY_ROUTE: Record<ApprovalEntityType, string> = {
  * High-value items always need all 3; low-value can skip Finance.
  */
 const stagesForEntity = async (entityType: ApprovalEntityType, totalValue: number, organizationId?: number): Promise<ApprovalStage[]> => {
+    if (organizationId != null) {
+        const memberCount = await prisma.orgMembership.count({
+            where: { organizationId, isActive: true }
+        });
+        if (memberCount <= 1) {
+            return ['PROCUREMENT_HEAD'];
+        }
+    }
     const threshold = organizationId != null
         ? await getFinanceSkipThreshold(organizationId)
         : 50_000;
@@ -80,6 +88,15 @@ export const createApprovalChain = async (params: {
         orderBy: { sequence: 'asc' }
     });
     if (existing.length > 0) return existing;
+
+    if (params.organizationId != null) {
+        const procSetting = await prisma.procurementModeSetting.findFirst({
+            where: { organizationId: params.organizationId }
+        });
+        if (procSetting && !procSetting.internalApprovalRequired) {
+            return [];
+        }
+    }
 
     const stages = await stagesForEntity(params.entityType, params.totalValue, params.organizationId);
     const created = await prisma.$transaction(

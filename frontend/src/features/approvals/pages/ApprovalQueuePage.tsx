@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Building, CalendarClock, CheckCircle2, ChevronDown, Clock, FileText, History, Inbox, MapPin, MessageCircle, Package, Phone, Mail, RefreshCw, Shield, ShieldCheck, ShoppingCart, Truck, UserCheck, X, XCircle } from 'lucide-react';
+import { Building, CalendarClock, CheckCircle2, ChevronDown, Clock, FileText, History, Inbox, Info, MapPin, MessageCircle, Package, Phone, Mail, RefreshCw, Shield, ShieldCheck, ShoppingCart, Truck, UserCheck, X, XCircle } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
@@ -54,7 +54,7 @@ const DECISION_TONE: Record<ApprovalDecision, string> = {
 
 export default function ApprovalQueuePage() {
     const { user } = useAuth();
-    const { orgRole, orgStatus, isApproved, loading: orgLoading } = useOrgRole();
+    const { orgRole, orgStatus, isApproved, loading: orgLoading, hasApprovalWorkflow } = useOrgRole();
     const { hasPermission } = usePermissions();
     const isOwnerBuyerOrAdmin = Boolean(user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin');
     const effectiveOrgRole = orgRole || (isOwnerBuyerOrAdmin && user?.organizationId ? 'ORG_ADMIN' : null);
@@ -201,6 +201,27 @@ export default function ApprovalQueuePage() {
                     </Button>
                 </div>
             </div>
+
+            {!hasApprovalWorkflow && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/80 p-4 text-sky-900 shadow-xs" role="region" aria-label="Approval Workflow Status">
+                    <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-white p-2 text-sky-700 shadow-xs mt-0.5">
+                            <Info className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-wider text-sky-900">Direct 1-Click Ordering Active</p>
+                            <p className="text-xs font-medium text-sky-800 mt-0.5">
+                                Multi-stage internal approvals are currently disabled for your organization. Purchases and cart checkouts proceed directly without needing stage clearance.
+                            </p>
+                        </div>
+                    </div>
+                    <Link href="/buyer/profile?section=procurement_settings" className="shrink-0">
+                        <Button variant="outline" className="h-8 rounded-lg text-[11px] font-bold border-sky-300 bg-white hover:bg-sky-100 text-sky-900 shadow-xs">
+                            Manage Workflow Settings
+                        </Button>
+                    </Link>
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 <KpiCard 

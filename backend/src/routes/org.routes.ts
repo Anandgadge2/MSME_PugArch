@@ -265,12 +265,25 @@ router.get('/org/status', authenticate, asyncRoute(async (req, res) => {
         hasFinanceOfficer = financeCount > 0;
     }
 
+    let internalApprovalRequired = false;
+    if (user?.organizationId) {
+        const procSetting = await prisma.procurementModeSetting.findFirst({
+            where: { organizationId: user.organizationId }
+        });
+        if (procSetting) {
+            internalApprovalRequired = procSetting.internalApprovalRequired;
+        } else {
+            internalApprovalRequired = memberCount > 1;
+        }
+    }
+
     ok(res, {
         organization: user?.organization || null,
         membership: membership || null,
         isApproved: user?.organization?.verificationStatus === 'VERIFIED',
         memberCount,
-        hasFinanceOfficer
+        hasFinanceOfficer,
+        internalApprovalRequired
     });
 }));
 

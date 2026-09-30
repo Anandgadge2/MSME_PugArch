@@ -19,6 +19,7 @@ export interface OrgStatus {
     isApproved: boolean;
     memberCount?: number;
     hasFinanceOfficer?: boolean;
+    internalApprovalRequired?: boolean;
 }
 
 interface PermissionPayload {
@@ -43,6 +44,8 @@ interface UseOrgRoleReturn {
     reload: () => void;
     memberCount: number;
     hasFinanceOfficer: boolean;
+    internalApprovalRequired: boolean;
+    hasApprovalWorkflow: boolean;
 }
 
 export const DEFAULT_BUYER_PERMISSIONS: string[] = [
@@ -297,6 +300,10 @@ export function useOrgRole(): UseOrgRoleReturn {
             void permissionState.reload();
         },
         memberCount: typeof orgStatus?.memberCount === 'number' ? orgStatus.memberCount : 1,
-        hasFinanceOfficer: Boolean(orgStatus?.hasFinanceOfficer)
+        hasFinanceOfficer: Boolean(orgStatus?.hasFinanceOfficer),
+        internalApprovalRequired: typeof orgStatus?.internalApprovalRequired === 'boolean'
+            ? orgStatus.internalApprovalRequired
+            : (typeof orgStatus?.memberCount === 'number' ? orgStatus.memberCount > 1 : false),
+        hasApprovalWorkflow: (typeof orgStatus?.internalApprovalRequired === 'boolean' ? orgStatus.internalApprovalRequired : (typeof orgStatus?.memberCount === 'number' ? orgStatus.memberCount > 1 : false)) && ((typeof orgStatus?.memberCount === 'number' ? orgStatus.memberCount : 1) > 1)
     };
 }

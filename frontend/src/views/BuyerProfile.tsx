@@ -54,6 +54,7 @@ import { ConsentManagementCard } from '../components/compliance/ConsentManagemen
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 import { EditOrganizationNameModal } from '../components/organization/EditOrganizationNameModal';
 import { RequestGstUpdateModal } from '../features/shared/RequestGstUpdateModal';
+import { useOrgRole } from '../hooks/useOrgRole';
 
 interface SidebarNavItem {
   id: string;
@@ -65,6 +66,7 @@ interface SidebarNavItem {
 const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'showcase_profile', label: 'Org Profile', icon: Building2 },
   { id: 'address', label: 'Org Address', icon: MapPin },
+  { id: 'procurement_settings', label: 'Procurement Settings', icon: Settings },
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
   { id: 'password', label: 'Change Password', icon: Lock },
@@ -121,6 +123,71 @@ export default function BuyerProfile() {
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
   const [isStampModalOpen, setIsStampModalOpen] = useState(false);
   const [isBrandingLoading, setIsBrandingLoading] = useState(false);
+
+  // Procurement & Approval Workflow Settings states
+  const { memberCount = 1, reload: reloadOrgRole } = useOrgRole();
+  const [procurementSettings, setProcurementSettings] = useState<any>(null);
+  const [procurementLoading, setProcurementLoading] = useState(false);
+  const [procurementSaving, setProcurementSaving] = useState(false);
+
+  useEffect(() => {
+    if (activeSection !== 'procurement_settings') return;
+    const fetchSettings = async () => {
+      setProcurementLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await api.fetch('/api/procurement-mode/settings', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) {
+            setProcurementSettings(json.data);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load procurement settings', err);
+      } finally {
+        setProcurementLoading(false);
+      }
+    };
+    fetchSettings();
+  }, [activeSection]);
+
+  const handleToggleInternalApproval = async (enabled: boolean) => {
+    setProcurementSaving(true);
+    const toastId = toast.loading('Updating procurement approval settings...');
+    try {
+      const token = localStorage.getItem('token');
+      const res = await api.fetch('/api/procurement-mode/settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ internalApprovalRequired: enabled })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setProcurementSettings(json.data);
+        reloadOrgRole();
+        toast.success(
+          enabled
+            ? 'Multi-stage approvals enabled. Approvals queue is now visible in the sidebar.'
+            : 'Direct 1-click ordering enabled. Approvals queue hidden from sidebar.',
+          { id: toastId }
+        );
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(err.message || 'Failed to update procurement settings', { id: toastId });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Network error updating procurement settings', { id: toastId });
+    } finally {
+      setProcurementSaving(false);
+    }
+  };
   const [isStampLoading, setIsStampLoading] = useState(false);
   const [isSignatureLoading, setIsSignatureLoading] = useState(false);
 
@@ -2881,6 +2948,125 @@ export default function BuyerProfile() {
                     </>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeSection === 'procurement_settings' && (
+              <div className="space-y-6 animate-in fade-in duration-500">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Procurement & Workflow Settings</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                      Configure approval hierarchies and ordering controls for your organization.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {procurementSettings?.internalApprovalRequired ? (
+                      <Badge className="bg-blue-50 text-blue-700 border-blue-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Multi-Stage Approvals Active
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase">
+                        Direct 1-Click Ordering Active
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {procurementLoading ? (
+                  <div className="py-12 flex flex-col items-center justify-center space-y-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-[#12335f]" aria-hidden="true" />
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Loading settings...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Organization Members Context Banner */}
+                    <div className="p-5 rounded-2xl border border-slate-200/80 bg-slate-50/70 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[#12335f] shrink-0 shadow-xs">
+                          <Users className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-wider text-slate-900">
+                            Organization Team Size: {memberCount} {memberCount === 1 ? 'User' : 'Users'}
+                          </p>
+                          <p className="text-xs font-medium text-slate-600 mt-0.5">
+                            {memberCount <= 1
+                              ? 'Your organization is registered with a single user (sole buyer). Disabling internal multi-stage approvals is recommended to checkout directly with 1 click without waiting on approval queues.'
+                              : 'Your organization has multiple team members. Multi-stage approvals allow segregation of duties across Department Heads, Finance Officers, and Admins.'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Setting Switch Card */}
+                    <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1 max-w-xl">
+                          <label htmlFor="toggle-internal-approvals" className="text-sm font-black text-slate-900 uppercase tracking-tight block cursor-pointer">
+                            Require Internal Multi-Stage Approvals
+                          </label>
+                          <p id="internal-approvals-desc" className="text-xs font-medium text-slate-600 leading-relaxed">
+                            When enabled, purchases and cart orders route through 3-tier clearance stages (Department Head → Finance Dept → Procurement Head) and the Approvals queue is displayed in the sidebar. When disabled, orders bypass internal queues and proceed directly to Purchase Orders.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs font-bold uppercase text-slate-500">
+                            {procurementSettings?.internalApprovalRequired ? 'Enabled' : 'Disabled'}
+                          </span>
+                          <button
+                            id="toggle-internal-approvals"
+                            type="button"
+                            role="switch"
+                            aria-checked={Boolean(procurementSettings?.internalApprovalRequired)}
+                            aria-describedby="internal-approvals-desc"
+                            disabled={procurementSaving}
+                            onClick={() => handleToggleInternalApproval(!procurementSettings?.internalApprovalRequired)}
+                            className={cn(
+                              "relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:ring-offset-2 disabled:opacity-50",
+                              procurementSettings?.internalApprovalRequired ? "bg-[#12335f]" : "bg-slate-300"
+                            )}
+                          >
+                            <span className="sr-only">Toggle internal multi-stage approvals</span>
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                "pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out",
+                                procurementSettings?.internalApprovalRequired ? "translate-x-7" : "translate-x-0"
+                              )}
+                            />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* How It Works Explainer */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="p-5 rounded-2xl border border-emerald-100 bg-emerald-50/50 space-y-2">
+                        <div className="flex items-center gap-2 text-emerald-800">
+                          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <h4 className="text-xs font-black uppercase tracking-wider">When Approvals are Disabled (Solo Mode)</h4>
+                        </div>
+                        <ul className="text-xs font-medium text-emerald-900 space-y-1.5 list-disc list-inside">
+                          <li>The &quot;Approvals&quot; and &quot;Cart Approvals&quot; tabs are hidden from your sidebar.</li>
+                          <li>Orders checkout and generate Purchase Orders directly in 1 click.</li>
+                          <li>Audit logs remain intact for official record keeping.</li>
+                        </ul>
+                      </div>
+                      <div className="p-5 rounded-2xl border border-blue-100 bg-blue-50/50 space-y-2">
+                        <div className="flex items-center gap-2 text-blue-800">
+                          <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <h4 className="text-xs font-black uppercase tracking-wider">When Approvals are Enabled (Team Mode)</h4>
+                        </div>
+                        <ul className="text-xs font-medium text-blue-900 space-y-1.5 list-disc list-inside">
+                          <li>The &quot;Approvals&quot; queue appears in your sidebar navigation.</li>
+                          <li>Orders require stage clearance by authorized team roles.</li>
+                          <li>Suitable when you add Procurement, Finance, or Department staff.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

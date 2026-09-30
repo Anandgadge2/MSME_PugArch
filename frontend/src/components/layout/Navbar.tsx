@@ -376,7 +376,7 @@ export { getResolvedOrgName };
 
 export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse, onHoverChange }: SidebarProps) {
   const { user, token, loading, logout } = useAuth();
-  const { orgStatus } = useOrgRole();
+  const { orgStatus, hasApprovalWorkflow } = useOrgRole();
   const orgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
   const isShgAccount = isShgUser(user);
   const { hasPermission: checkUserPermission } = usePermissions();
@@ -639,10 +639,16 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     }
     if (item.permission) {
       if (user.role === 'master_admin') return true;
-      return checkUserPermission(item.permission);
+      if (!checkUserPermission(item.permission)) return false;
+    }
+    // Clean up sidebar: hide multi-stage approvals if buyer organization does not use approval workflows
+    if (user.role === 'buyer' && !hasApprovalWorkflow) {
+      if (item.path === '/approvals' || item.path === '/cart/approvals') {
+        return false;
+      }
     }
     return true;
-  }, [user, isShgAccount, checkUserPermission]);
+  }, [user, isShgAccount, checkUserPermission, hasApprovalWorkflow]);
 
   const filteredNav = useMemo(() => {
     const mapItemForShg = (item: SidebarItem): SidebarItem => {
