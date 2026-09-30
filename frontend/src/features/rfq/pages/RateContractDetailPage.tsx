@@ -885,6 +885,9 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Rate Contract' : 'Cancel Rate Contract'}
         clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
         clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
+        contractId={contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined))}
+        utilization={contractData?.utilization || rcData?.utilization || null}
+        purchaseOrders={contractData?.purchaseOrders || rcData?.purchaseOrders || []}
       />
       {canCancel && (
         <CancelProcurementModal

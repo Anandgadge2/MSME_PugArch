@@ -971,9 +971,10 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       }
     }
 
+    const parentRef = linkedBid?.bidNumber || linkedReq?.requirementNumber || (Number.isFinite(numId) ? `RC-${numId}` : String(rawId));
+    const parentBaseTitle = linkedBid?.title || linkedReq?.title || 'Procurement';
     const procurementTitle = payload.title
-      || (linkedBid?.title ? `Reverse Auction - ${linkedBid.title}` : null)
-      || (linkedReq?.title ? `Reverse Auction - ${linkedReq.title}` : 'Reverse Auction Sourcing');
+      || `${parentBaseTitle} (${parentRef}) — Reverse Auction`;
 
     // Calculate baseline quote
     const validQuotes = payload.selectedSellers
@@ -992,11 +993,11 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
     const auction = await db.auction.create({
       data: {
         auctionCode: nextAuctionCode(),
-        referenceNo: linkedBid ? `PBID-${linkedBid.id}` : linkedReq ? `REQ-${linkedReq.id}` : `PROC-${rawId}`,
+        referenceNo: parentRef,
         linkedBidId: linkedBid?.id || (Number.isFinite(numId) ? numId : null),
         linkedRequirementId: linkedReq?.id || null,
         title: procurementTitle,
-        description: linkedBid?.description || linkedReq?.description || 'Dynamic Reverse Auction event initiated from evaluated quotations.',
+        description: linkedBid?.description || linkedReq?.description || `Dynamic Reverse Auction event initiated for ${parentRef}.`,
         procurementMethod: 'REVERSE_AUCTION',
         category: linkedBid?.category || linkedReq?.category || 'General Procurement',
         startPrice,
@@ -1023,7 +1024,10 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
         auctionConfig: {
           startedFromBids: true,
           initialLowestQuote: lowestQuote,
-          enrolledCount: payload.selectedSellers.length
+          enrolledCount: payload.selectedSellers.length,
+          parentRefNumber: parentRef,
+          parentProcurementId: rawId,
+          parentTitle: parentBaseTitle
         }
       }
     });
@@ -1098,6 +1102,20 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
         }
       }).catch(() => null);
     }
+    if (linkedReq) {
+      await db.buyerRequirement.update({
+        where: { id: linkedReq.id },
+        data: {
+          status: 'REVERSE_AUCTION_ACTIVE'
+        }
+      }).catch(() => null);
+    }
+
+    // Invalidate caches so seller and buyer views update immediately
+    invalidateProcurementAuctionCache(rawId);
+    if (parentRef) invalidateProcurementAuctionCache(parentRef);
+    if (linkedBid?.id) invalidateProcurementAuctionCache(linkedBid.id);
+    if (linkedReq?.id) invalidateProcurementAuctionCache(linkedReq.id);
 
     // Write audit event
     await writeAuctionEvent(req, auction.id, 'started_from_bids', 'Reverse auction initiated from submitted quotations', {

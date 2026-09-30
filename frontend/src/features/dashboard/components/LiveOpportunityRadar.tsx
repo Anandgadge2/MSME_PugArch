@@ -181,7 +181,7 @@ export function LiveOpportunityRadar() {
       });
     }
 
-    // Direct Auctions
+    // Direct Auctions & Consolidation with parent bids
     if (Array.isArray(data?.auctions)) {
       data.auctions.forEach((auction: any) => {
         if (!auction) return;
@@ -193,25 +193,60 @@ export function LiveOpportunityRadar() {
         const createdDate = auction.createdAt || auction.startTime || null;
         const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
-        list.push({
-          id: `ra-${auction.id}`,
-          refId: auction.auctionCode || `RA-${auction.id}`,
-          title: auction.title || auction.itemName || 'Live Reverse Auction Opportunity',
-          type: 'Reverse Auction',
-          buyerName: auction.buyerOrganizationName || auction.buyerOrgName || auction.buyerOrganization?.organizationName || auction.buyerName || auction.buyerUser?.name || 'Verified Buyer',
-          department: auction.departmentName || 'Procurement Division',
-          location: auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'National',
-          estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || 0),
-          closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
-          createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
-          daysLeft: diffDays,
-          category: auction.category || 'Dynamic Auction',
-          actionHref: `${rolePrefix}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`,
-          actionLabel: isExpired ? 'View Results' : 'Join Auction',
-          urgent: !isExpired && diffDays <= 3,
-          isNew: isRecentlyCreated,
-          isExpired
+        const auctionCode = auction.auctionCode || `RA-${auction.id}`;
+        const refNo = auction.referenceNo || auction.auctionConfig?.parentRefNumber;
+        const linkedBidId = auction.linkedBidId ? String(auction.linkedBidId) : null;
+
+        // Check if a parent bid item already exists in the list
+        const existingBidIndex = list.findIndex(item => {
+          if (linkedBidId && (item.id === linkedBidId || item.id === `bid-${linkedBidId}`)) return true;
+          if (refNo && (item.refId === refNo || item.refId.includes(refNo))) return true;
+          if (item.refId === auctionCode) return true;
+          return false;
         });
+
+        const liveActionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/live`;
+        const liveActionLabel = isExpired ? 'View Results' : 'Join Live Auction';
+
+        if (existingBidIndex !== -1) {
+          // Upgrade existing bid card into Live Reverse Auction card
+          const existing = list[existingBidIndex];
+          list[existingBidIndex] = {
+            ...existing,
+            type: 'Reverse Auction',
+            refId: `${existing.refId} • ${auctionCode}`,
+            title: existing.title.toLowerCase().includes('reverse auction')
+              ? existing.title
+              : `${existing.title} (Live Auction Stage)`,
+            estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || existing.estimatedValue || 0),
+            closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : existing.closingDate,
+            actionHref: liveActionHref,
+            actionLabel: liveActionLabel,
+            urgent: !isExpired && diffDays <= 3,
+            isExpired,
+            category: auction.category || existing.category,
+          };
+        } else {
+          list.push({
+            id: `ra-${auction.id}`,
+            refId: refNo ? `${refNo} • ${auctionCode}` : auctionCode,
+            title: auction.title || auction.itemName || 'Live Reverse Auction Opportunity',
+            type: 'Reverse Auction',
+            buyerName: auction.buyerOrganizationName || auction.buyerOrgName || auction.buyerOrganization?.organizationName || auction.buyerName || auction.buyerUser?.name || 'Verified Buyer',
+            department: auction.departmentName || 'Procurement Division',
+            location: auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'National',
+            estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || 0),
+            closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
+            createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
+            daysLeft: diffDays,
+            category: auction.category || 'Dynamic Auction',
+            actionHref: liveActionHref,
+            actionLabel: liveActionLabel,
+            urgent: !isExpired && diffDays <= 3,
+            isNew: isRecentlyCreated,
+            isExpired
+          });
+        }
       });
     }
 

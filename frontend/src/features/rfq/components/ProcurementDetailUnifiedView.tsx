@@ -53,7 +53,11 @@ import {
   Target,
   CreditCard,
   Receipt,
+  Zap,
+  SlidersHorizontal,
+  Repeat,
 } from "lucide-react";
+import { IssueCallOffModal } from "../../rateContract/components/IssueCallOffModal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
@@ -1013,6 +1017,7 @@ interface BuyerSideContextValue {
   isOpenTender: boolean;
   isLimitedTender: boolean;
   shouldShowEstimatedCost?: boolean;
+  isRateContractType?: boolean;
 }
 
 const BuyerSideContext = React.createContext<BuyerSideContextValue>({
@@ -1020,6 +1025,7 @@ const BuyerSideContext = React.createContext<BuyerSideContextValue>({
   isOpenTender: false,
   isLimitedTender: false,
   shouldShowEstimatedCost: false,
+  isRateContractType: false,
 });
 
 function PropertyItem({
@@ -2264,6 +2270,373 @@ function AuctionWorkflowStepper({
   );
 }
 
+function RateContractParametersCard({
+  rateContractConfig,
+  terms,
+  contractDocument,
+}: {
+  rateContractConfig: any;
+  terms?: any;
+  contractDocument?: any;
+  isBuyer?: boolean;
+}) {
+  const rc = rateContractConfig || {};
+  const t = terms || {};
+
+  const periodStart = rc.periodStartDate || rc.startDate || t.periodStartDate || null;
+  const periodEnd = rc.periodEndDate || rc.endDate || t.periodEndDate || null;
+  const validityPeriod = rc.rateValidityPeriod || t.rateValidityPeriod || "Fixed for 1 Year";
+  const minOrderQty = Number(rc.minimumOrderQuantity || t.minimumOrderQuantity || 0);
+  const maxOrderQty = Number(rc.maximumOrderQuantityPerCallOff || t.maximumOrderQuantityPerCallOff || 0);
+  const callOffAllowed = rc.callOffOrderAllowed !== false && t.callOffOrderAllowed !== false;
+  const deliverySla = rc.deliverySla || t.deliveryTerms || "As per call-off order";
+  const deliverySlaDays = Number(rc.deliverySlaDays || t.deliverySlaDays || 15);
+  const penaltyClause = rc.penaltyClause || t.penaltyClause || "0.5% per week of delay up to a maximum of 10%";
+  const penaltyRate = Number(rc.penaltyRatePerWeek ?? t.penaltyRatePerWeek ?? 0.5);
+  const graceDays = Number(rc.penaltyGraceDays ?? t.penaltyGraceDays ?? 0);
+  const maxCap = Number(rc.maxPenaltyCapPercentage ?? t.maxPenaltyCapPercentage ?? 10);
+  const contractDoc = contractDocument || rc.contractDocument || null;
+
+  return (
+    <section className="rounded-2xl border border-slate-200/90 bg-white shadow-xs overflow-hidden">
+      {/* Header Banner */}
+      <div className="bg-gradient-to-r from-[#0b2447] via-[#123668] to-[#1e488f] px-4 py-3 sm:px-5 sm:py-3.5 text-white flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white border border-white/20">
+            <Repeat className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                Rate Contract Master Agreement Parameters
+              </h3>
+              <span className="rounded-full bg-blue-400/20 border border-blue-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase text-blue-200">
+                Outline Standing Agreement
+              </span>
+            </div>
+            <p className="text-[11px] text-white/80 font-medium">
+              Unit prices are locked firm for the agreement duration. Supply is executed through periodic call-off purchase orders.
+            </p>
+          </div>
+        </div>
+        {rc.rateContractNumber && (
+          <span className="font-mono text-xs font-bold bg-white/15 px-2.5 py-1 rounded-lg border border-white/20 text-white">
+            {rc.rateContractNumber}
+          </span>
+        )}
+      </div>
+
+      <div className="p-4 sm:p-5 space-y-4">
+        {/* Core Parameters Grid */}
+        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+          {/* 1. Agreement Duration */}
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 space-y-1">
+            <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <Calendar className="h-3 w-3 text-slate-400" />
+              Contract Validity Period
+            </dt>
+            <dd className="text-xs font-black text-slate-900 leading-snug">
+              {validityPeriod}
+            </dd>
+            <p className="text-[10px] font-medium text-slate-500">
+              {periodStart ? formatDate(periodStart) : "Start Date"} &rarr; {periodEnd ? formatDate(periodEnd) : "Expiry Date"}
+            </p>
+          </div>
+
+          {/* 2. Call-Off Release Controls */}
+          <div className="rounded-xl border border-blue-100 bg-blue-50/40 p-3 space-y-1">
+            <dt className="text-[10px] font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
+              <Truck className="h-3 w-3 text-blue-600" />
+              Call-Off Order Rules
+            </dt>
+            <dd className="text-xs font-black text-slate-900 leading-snug">
+              {callOffAllowed ? "Periodic Staggered Orders Allowed" : "Single Full Release Only"}
+            </dd>
+            <div className="flex items-center gap-2 text-[10.5px] font-mono font-bold text-slate-600">
+              <span>Min PO: {minOrderQty > 0 ? `${minOrderQty.toLocaleString("en-IN")} units` : "None"}</span>
+              <span>•</span>
+              <span>Max PO: {maxOrderQty > 0 ? `${maxOrderQty.toLocaleString("en-IN")} units` : "No Cap"}</span>
+            </div>
+          </div>
+
+          {/* 3. Delivery SLA per Call-Off */}
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-1">
+            <dt className="text-[10px] font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+              <Clock className="h-3 w-3 text-emerald-600" />
+              Call-Off Delivery Turnaround
+            </dt>
+            <dd className="text-xs font-black text-slate-900 leading-snug">
+              {deliverySlaDays} Days per Call-Off PO
+            </dd>
+            <p className="text-[10.5px] text-slate-600 leading-tight">
+              {deliverySla || `Orders must be delivered within ${deliverySlaDays} days from PO issuance`}
+            </p>
+          </div>
+
+          {/* 4. Liquidated Damages / Delay Penalty */}
+          <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-1 sm:col-span-2">
+            <dt className="text-[10px] font-black uppercase tracking-wider text-amber-800 flex items-center gap-1.5">
+              <Scale className="h-3 w-3 text-amber-600" />
+              Delay Penalty / Liquidated Damages (LD)
+            </dt>
+            <dd className="text-xs font-bold text-slate-900 leading-snug">
+              {penaltyClause}
+            </dd>
+            <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-slate-600 pt-0.5">
+              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Rate: {penaltyRate}% / week</span>
+              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Grace: {graceDays} days</span>
+              <span className="bg-white/80 px-2 py-0.5 rounded border border-amber-200">Max LD Cap: {maxCap}%</span>
+            </div>
+          </div>
+
+          {/* 5. Master Contract Draft Document */}
+          {contractDoc?.fileName && (
+            <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-1 flex flex-col justify-between">
+              <div>
+                <dt className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                  <FileText className="h-3 w-3 text-slate-400" />
+                  Master Agreement Draft
+                </dt>
+                <dd className="text-xs font-bold text-slate-900 truncate mt-1" title={contractDoc.fileName}>
+                  {contractDoc.fileName}
+                </dd>
+              </div>
+              <div className="pt-2 flex items-center gap-2">
+                {contractDoc.fileAssetId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(`/api/files/${contractDoc.fileAssetId}/view`, "_blank")}
+                    className="h-7 text-[11px] gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200 font-bold"
+                  >
+                    <Eye className="h-3 w-3" /> View Draft Document
+                  </Button>
+                ) : contractDoc.url ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(contractDoc.url, "_blank")}
+                    className="h-7 text-[11px] gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200 font-bold"
+                  >
+                    <Eye className="h-3 w-3" /> View Draft Document
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RateContractUtilizationLedger({
+  utilization,
+  purchaseOrders,
+  isBuyer,
+  onIssueCallOff,
+}: {
+  contractId?: number;
+  utilization?: any;
+  purchaseOrders?: any[];
+  isBuyer?: boolean;
+  onIssueCallOff?: () => void;
+}) {
+  const util = utilization || {};
+  const items: any[] = Array.isArray(util.items) ? util.items : [];
+  const pos: any[] = Array.isArray(purchaseOrders) ? purchaseOrders : [];
+
+  const totalContractVal = Number(util.totalContractValue || 0);
+  const totalOrderedVal = Number(util.totalOrderedValue || 0);
+  const totalRemainingVal = Number(util.totalRemainingValue || (totalContractVal > totalOrderedVal ? totalContractVal - totalOrderedVal : 0));
+  const percentUsed = Number(util.valueUtilizationPercent || (totalContractVal > 0 ? Math.min(100, Math.round((totalOrderedVal / totalContractVal) * 100)) : 0));
+
+  return (
+    <section className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-xs space-y-4">
+      {/* Header & Progress Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs sm:text-[13px] font-black uppercase tracking-wide text-slate-900 flex items-center gap-1.5">
+              <Layers className="h-4 w-4 text-[#12335f]" />
+              Rate Contract Consumption &amp; Offtake Ledger
+            </h3>
+            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wider">
+              Live Drawdown
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Real-time balance of contracted line items drawn through periodic Call-Off Purchase Orders.
+          </p>
+        </div>
+
+        {isBuyer && onIssueCallOff && (
+          <Button
+            type="button"
+            onClick={onIssueCallOff}
+            className="h-8 px-3 gap-1.5 bg-[#12335f] hover:bg-[#0b2445] text-white text-xs font-bold shadow-2xs rounded-lg cursor-pointer"
+          >
+            <Truck className="h-3.5 w-3.5" />
+            <span>+ Issue Call-Off Order</span>
+          </Button>
+        )}
+      </div>
+
+      {/* Consumption Bar */}
+      {totalContractVal > 0 && (
+        <div className="space-y-1.5 bg-slate-50/80 p-3.5 rounded-xl border border-slate-200/80">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700">Contract Value Consumed:</span>
+            <span className="font-mono font-black text-slate-900">
+              ₹{totalOrderedVal.toLocaleString("en-IN")} / ₹{totalContractVal.toLocaleString("en-IN")}{" "}
+              <span className="text-indigo-600">({percentUsed}%)</span>
+            </span>
+          </div>
+          <div className="h-2.5 w-full rounded-full bg-slate-200 overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                percentUsed >= 90 ? "bg-rose-500" : percentUsed >= 70 ? "bg-amber-500" : "bg-emerald-600"
+              )}
+              style={{ width: `${Math.min(100, Math.max(0, percentUsed))}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <span>Remaining Contract Value: ₹{totalRemainingVal.toLocaleString("en-IN")}</span>
+            <span>{pos.length} Call-Off Release Order{pos.length === 1 ? "" : "s"} Issued</span>
+          </div>
+        </div>
+      )}
+
+      {/* Item-by-item Drawdown Ledger Table */}
+      {items.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+            Schedule Line-Item Drawdown Balances
+          </h4>
+          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-[10.5px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-3">Item Name</th>
+                    <th className="py-2.5 px-3 text-right">Contracted Annual Qty</th>
+                    <th className="py-2.5 px-3 text-right">Drawn to Date</th>
+                    <th className="py-2.5 px-3 text-right">Remaining Balance</th>
+                    <th className="py-2.5 px-3 text-right">Locked Unit Rate</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {items.map((it, idx) => {
+                    const contracted = Number(it.contractedQuantity || 0);
+                    const drawn = Number(it.drawnQuantity || 0);
+                    const remaining = Number(it.remainingQuantity ?? (contracted - drawn));
+                    const rate = Number(it.contractedRate || 0);
+                    const uom = it.unitOfMeasure || "Nos";
+                    const isExhausted = remaining <= 0;
+
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-bold text-slate-900">{it.itemName}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-slate-700">
+                          {contracted.toLocaleString("en-IN")} {uom}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-indigo-700">
+                          {drawn.toLocaleString("en-IN")} {uom}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
+                          <span className={cn(isExhausted ? "text-rose-600" : "text-emerald-700")}>
+                            {remaining.toLocaleString("en-IN")} {uom}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800">
+                          ₹{rate.toLocaleString("en-IN")}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={cn(
+                              "inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase",
+                              isExhausted
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            )}
+                          >
+                            {isExhausted ? "Exhausted" : "Active Balance"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Historical Call-Off POs Table */}
+      {pos.length > 0 && (
+        <div className="space-y-2 pt-2 border-t border-slate-100">
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+            <Truck className="h-3.5 w-3.5 text-slate-500" />
+            Issued Call-Off Purchase Orders ({pos.length})
+          </h4>
+          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-[10.5px] font-bold uppercase tracking-wider text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-3">PO Number</th>
+                    <th className="py-2.5 px-3">Issued Date</th>
+                    <th className="py-2.5 px-3">Target Delivery</th>
+                    <th className="py-2.5 px-3 text-right">Items / Qty</th>
+                    <th className="py-2.5 px-3 text-right">PO Total</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {pos.map((po, idx) => {
+                    const poItems: any[] = Array.isArray(po.items) ? po.items : [];
+                    const poTotalQty = poItems.reduce((s, it) => s + Number(it.quantity || 0), 0);
+                    const poAmount = Number(po.totalValue || po.amount || 0);
+                    const statusStr = String(po.poStatus || po.status || "ISSUED").toUpperCase();
+
+                    return (
+                      <tr key={po.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">
+                          #{po.poNumber || po.id}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">{formatDate(po.createdAt)}</td>
+                        <td className="py-2.5 px-3 text-slate-700 font-semibold">
+                          {po.expectedDelivery ? formatDate(po.expectedDelivery) : "As per SLA"}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                          {poTotalQty > 0 ? `${poTotalQty.toLocaleString("en-IN")} units` : `${poItems.length} items`}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                          ₹{poAmount.toLocaleString("en-IN")}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                            {statusStr}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ScopeSummaryCard({
   scopeText,
   procurementTypeLabel = "PROCUREMENT",
@@ -2915,8 +3288,8 @@ function LineItemsTable({
       },
       {
         key: "qty",
-        header: "Qty & UOM",
-        width: "w-24",
+        header: ctx.isRateContractType ? "Est. Annual Qty & UOM" : "Qty & UOM",
+        width: ctx.isRateContractType ? "w-28" : "w-24",
         align: "center",
         cell: (item) => {
           const sp =
@@ -2958,16 +3331,23 @@ function LineItemsTable({
                 ? "1"
                 : "-";
           return (
-            <div className="flex items-center justify-center gap-1 min-w-0 max-w-full">
-              <span className="font-bold text-slate-900 tabular-nums shrink-0">
-                {qtyDisplay}
-              </span>{" "}
-              <span
-                className="text-[9.5px] font-bold text-slate-500 uppercase truncate max-w-[65px] shrink"
-                title={unit ? String(unit) : undefined}
-              >
-                {cleanUom}
-              </span>
+            <div className="flex flex-col items-center justify-center min-w-0 max-w-full">
+              <div className="flex items-center justify-center gap-1">
+                <span className="font-bold text-slate-900 tabular-nums shrink-0">
+                  {qtyDisplay}
+                </span>{" "}
+                <span
+                  className="text-[9.5px] font-bold text-slate-500 uppercase truncate max-w-[65px] shrink"
+                  title={unit ? String(unit) : undefined}
+                >
+                  {cleanUom}
+                </span>
+              </div>
+              {ctx.isRateContractType && (
+                <span className="text-[8.5px] font-black uppercase text-indigo-600 tracking-tight">
+                  Annual Offtake
+                </span>
+              )}
             </div>
           );
         },
@@ -3973,6 +4353,11 @@ export interface ProcurementDetailUnifiedViewProps {
   rawBid?: any;
   quantity?: number | string;
   unit?: string;
+
+  // Rate Contract Extensions
+  contractId?: number;
+  utilization?: any;
+  purchaseOrders?: any[];
 }
 
 export function ProcurementDetailUnifiedView(
@@ -3982,6 +4367,7 @@ export function ProcurementDetailUnifiedView(
   const pathname = usePathname() || "";
   const { user } = useAuth();
   const currentUser: any = user;
+  const [isIssueCallOffModalOpen, setIsIssueCallOffModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<
     | "overview"
     | "scope_docs"
@@ -8071,6 +8457,7 @@ export function ProcurementDetailUnifiedView(
         isOpenTender: isBuyerOpenTender,
         isLimitedTender: isBuyerLimitedTender,
         shouldShowEstimatedCost,
+        isRateContractType,
       }}
     >
       <div className="min-h-screen bg-slate-50">
@@ -8289,6 +8676,47 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller Auction Actions / Status Notices */}
           {!isBuyerSide && props.sellerAuctionActions}
+
+          {/* Live/Scheduled Reverse Auction Hero Banner for Buyers */}
+          {isBuyerSide &&
+            linkedAuction &&
+            !(linkedAuction as any).auctionPlanned &&
+            ["LIVE", "SCHEDULED", "OPEN", "ACTIVE", "PAUSED"].includes(
+              String(
+                linkedAuction.statusEnum || linkedAuction.status || "",
+              ).toUpperCase(),
+            ) && (
+              <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                    <Gavel className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-blue-100/90 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 border border-blue-200">
+                        {String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase() === 'LIVE' ? '🔴 Live Reverse Auction Running' : '⏱️ Reverse Auction Scheduled'}
+                      </span>
+                      <span className="text-xs font-semibold text-slate-500">
+                        RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-800 mt-1">
+                      Reverse auction is currently active for this requisition. Click below to monitor dynamic supplier counter-bids and manage auction parameters in the Live Console.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <Button
+                    type="button"
+                    onClick={() => router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(linkedAuction.auctionCode || linkedAuction.id))}/live`)}
+                    className="h-9 px-4 bg-[#12335f] hover:bg-[#0b2445] text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5" />
+                    <span>Open Live Bid Console →</span>
+                  </Button>
+                </div>
+              </div>
+            )}
 
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* ENTERPRISE BID LIFECYCLE HERO ACTION BANNER                     */}
@@ -10028,6 +10456,17 @@ export function ProcurementDetailUnifiedView(
                       <ArrowRight className="h-3 w-3" />
                     </Button>
                   )}
+                {isBuyerOrAdmin && isRateContractType && isBidAwarded && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsIssueCallOffModalOpen(true)}
+                    className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <Truck className="h-3.5 w-3.5" />
+                    <span>+ Issue Call-Off Order</span>
+                  </Button>
+                )}
               </div>
             </div>
           </header>
@@ -10586,6 +11025,36 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
                 )}
+              {/* Rate Contract Master Agreement Parameters Card */}
+              {isRateContractType && (
+                <RateContractParametersCard
+                  rateContractConfig={
+                    props.rateContractConfig ||
+                    (props.procurementData as any)?.rateContractConfig ||
+                    (props.procurementData as any)?.metadata?.rateContractConfig
+                  }
+                  terms={props.terms}
+                  contractDocument={
+                    (props.procurementData as any)?.metadata?.contractDocument ||
+                    (props.procurementData as any)?.contractDocument
+                  }
+                  isBuyer={isBuyerSide}
+                />
+              )}
+
+              {/* Rate Contract Consumption & Offtake Ledger */}
+              {isRateContractType &&
+                (props.utilization ||
+                  (props.purchaseOrders && props.purchaseOrders.length > 0) ||
+                  isBidAwarded) && (
+                  <RateContractUtilizationLedger
+                    utilization={props.utilization}
+                    purchaseOrders={props.purchaseOrders}
+                    isBuyer={isBuyerSide}
+                    onIssueCallOff={() => setIsIssueCallOffModalOpen(true)}
+                  />
+                )}
+
               <div className="grid gap-3.5 sm:gap-4 lg:grid-cols-2">
                 <DataCard
                   title={
@@ -11960,26 +12429,52 @@ export function ProcurementDetailUnifiedView(
                                 ? "My Submitted Quotation"
                                 : "My Submitted Proposal"}
                             </h3>
-                            <span
-                              className={cn(
-                                "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
-                                isAwardedToMe
-                                  ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                                  : activeAward && !effectiveActiveOrder
-                                    ? "bg-sky-50 text-sky-900 border-sky-300"
-                                    : isBiddingClosed || isDeadlinePassed
-                                      ? "bg-sky-50 text-sky-900 border-sky-300"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-300",
-                              )}
-                            >
-                              {isAwardedToMe
-                                ? "Contract Awarded"
-                                : activeAward && !effectiveActiveOrder
-                                  ? "Standby Vendor • Reserve List"
-                                  : isBiddingClosed || isDeadlinePassed
-                                    ? "Submitted • Under Evaluation"
-                                    : "Submitted"}
-                            </span>
+                            {(() => {
+                              const auctionStatusStr = String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase();
+                              const isAuctionLiveOrSched = Boolean(
+                                linkedAuction &&
+                                !(linkedAuction as any).auctionPlanned &&
+                                ['LIVE', 'SCHEDULED', 'OPEN', 'ACTIVE'].includes(auctionStatusStr)
+                              );
+                              const isAuctionLiveNow = auctionStatusStr === 'LIVE' || auctionStatusStr === 'OPEN';
+
+                              if (isAuctionLiveOrSched) {
+                                return (
+                                  <span className={cn(
+                                    "rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border flex items-center gap-1",
+                                    isAuctionLiveNow
+                                      ? "bg-red-50 text-red-700 border-red-300 animate-pulse"
+                                      : "bg-amber-50 text-amber-800 border-amber-300"
+                                  )}>
+                                    <Zap className="h-3 w-3 fill-current" />
+                                    {isAuctionLiveNow ? "Live Reverse Auction Floor Open" : "Reverse Auction Scheduled"}
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span
+                                  className={cn(
+                                    "rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border",
+                                    isAwardedToMe
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                      : activeAward && !effectiveActiveOrder
+                                        ? "bg-sky-50 text-sky-900 border-sky-300"
+                                        : isBiddingClosed || isDeadlinePassed
+                                          ? "bg-sky-50 text-sky-900 border-sky-300"
+                                          : "bg-emerald-50 text-emerald-800 border-emerald-300",
+                                  )}
+                                >
+                                  {isAwardedToMe
+                                    ? "Contract Awarded"
+                                    : activeAward && !effectiveActiveOrder
+                                      ? "Standby Vendor • Reserve List"
+                                      : isBiddingClosed || isDeadlinePassed
+                                        ? "Submitted • Under Evaluation"
+                                        : "Submitted"}
+                                </span>
+                              );
+                            })()}
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {effectiveMyParticipation?.submittedAt ||
@@ -12015,6 +12510,38 @@ export function ProcurementDetailUnifiedView(
                           </Button>
                         </div>
                       </div>
+
+                      {/* Live Auction Floor Enrolled Callout for Seller */}
+                      {linkedAuction && !(linkedAuction as any).auctionPlanned && ['LIVE', 'SCHEDULED', 'OPEN', 'ACTIVE'].includes(String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase()) && (
+                        <div className="rounded-xl border border-red-200 bg-gradient-to-r from-red-50/90 via-amber-50/50 to-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs">
+                              <Gavel className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-red-700">
+                                  {String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase() === 'LIVE' ? 'Floor is Live & Ticking' : 'Auction Scheduled'}
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500">
+                                  Auction ID: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                                </span>
+                              </div>
+                              <p className="text-xs font-medium text-slate-800 mt-0.5">
+                                Your quotation has been established as your opening baseline. Enter the live console to monitor competitors' ranks and submit counter-bids.
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={() => router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(linkedAuction.auctionCode || linkedAuction.id))}/live`)}
+                            className="shrink-0 h-9 px-4 bg-red-600 hover:bg-red-700 text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                          >
+                            <Zap className="h-3.5 w-3.5 fill-current" />
+                            <span>Enter Live Bidding Floor →</span>
+                          </Button>
+                        </div>
+                      )}
 
                       {/* Quoted Overview Metrics */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-3.5 rounded-xl border border-slate-100">
@@ -12200,7 +12727,45 @@ export function ProcurementDetailUnifiedView(
                       />
                     );
                   })()}
-            </div>
+          {/* Rate Contract: Issue Call-Off Order Modal (Buyer Side) */}
+          {isRateContractType && isBuyerSide && (
+            <IssueCallOffModal
+              isOpen={isIssueCallOffModalOpen}
+              onClose={() => setIsIssueCallOffModalOpen(false)}
+              rateContractId={String(props.contractId || (props.procurementData as any)?.rateContractConfig?.id || props.id || "")}
+              rateContractConfig={
+                props.rateContractConfig ||
+                (props.procurementData as any)?.rateContractConfig ||
+                (props.procurementData as any)?.metadata?.rateContractConfig ||
+                {}
+              }
+              lineItems={
+                (props.utilization?.items && props.utilization.items.length > 0)
+                  ? props.utilization.items.map((it: any, idx: number) => ({
+                      id: it.itemId || it.id || `item-${idx}`,
+                      itemName: it.itemName || `Item #${idx + 1}`,
+                      unitOfMeasure: it.unitOfMeasure || "NOS.",
+                      unitRate: Number(it.contractedRate || it.unitPrice || 0),
+                      contractedQuantity: Number(it.contractedQuantity || 0),
+                      drawnQuantity: Number(it.drawnQuantity || 0),
+                      remainingQuantity: Number(it.remainingQuantity ?? (Number(it.contractedQuantity || 0) - Number(it.drawnQuantity || 0))),
+                    }))
+                  : (lineItems || []).map((it: any, idx: number) => ({
+                      id: it.id || `item-${idx}`,
+                      itemName: it.itemName || it.name || `Item #${idx + 1}`,
+                      unitOfMeasure: it.unitOfMeasure || it.unit || "NOS.",
+                      unitRate: Number(it.targetUnitPrice || it.unitPrice || 0),
+                      contractedQuantity: Number(it.quantity || it.targetQty || 0),
+                      drawnQuantity: 0,
+                      remainingQuantity: Number(it.quantity || it.targetQty || 0),
+                    }))
+              }
+              onOrderCreated={() => {
+                if (typeof window !== "undefined") {
+                  window.location.reload();
+                }
+              }}
+            />
           )}
         </div>
       </div>

@@ -12634,6 +12634,8 @@ export type NormalizedProcurement = {
   type: string;
   typeLabel: string;
   linkedAuctionId?: number | null;
+  linkedAuctionCode?: string | null;
+  linkedAuctionStatus?: string | null;
   title: string;
   referenceNumber: string;
   status: string;
@@ -12814,6 +12816,13 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
 
   const auctionsByRequirementId = linkedAuctions.reduce((acc: Record<number, any>, auc: any) => {
     acc[auc.linkedRequirementId] = auc;
+    return acc;
+  }, {});
+
+  const auctionsByBidId = auctions.reduce((acc: Record<number, any>, auc: any) => {
+    if (auc.linkedBidId) {
+      acc[auc.linkedBidId] = auc;
+    }
     return acc;
   }, {});
 
@@ -13092,7 +13101,22 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       }).length,
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
-      actionUrl: `/bids/${b.id}`,
+      linkedAuctionId: auctionsByBidId[b.id]?.id || null,
+      linkedAuctionCode: auctionsByBidId[b.id]?.auctionCode || null,
+      linkedAuctionStatus: auctionsByBidId[b.id]?.statusEnum || auctionsByBidId[b.id]?.status || null,
+      actionUrl: (() => {
+        const la = auctionsByBidId[b.id];
+        if (la) {
+          const s = String(la.statusEnum || la.status || '').toUpperCase();
+          if (['PUBLISHED', 'OPEN', 'ACTIVE', 'SOURCING', 'LIVE'].includes(s)) {
+            return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(la.auctionCode || la.id))}/live`;
+          }
+          if (['CLOSED', 'COMPLETED', 'AWARDED', 'FINALIZED'].includes(s)) {
+            return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(la.auctionCode || la.id))}/results`;
+          }
+        }
+        return `/bids/${b.id}`;
+      })(),
       evaluationMethod: 'L1 Basis',
       documents,
       items,
@@ -13722,6 +13746,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   // 7) Reverse Auctions
   for (const a of auctions) {
     if (a.linkedRequirementId) continue;
+    if (a.linkedBidId && procurementBids.some((pb: any) => pb.id === a.linkedBidId)) continue;
     const s = String(a.statusEnum || a.status || 'scheduled').toUpperCase();
     const statusGroup = statusGroupFor(s);
 

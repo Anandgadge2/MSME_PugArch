@@ -576,7 +576,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           });
         }
 
-        const searchStr = `${opp.id || ''} ${opp.href || ''} ${opp.detailsHref || ''} ${JSON.stringify(opp.detailRows || [])}`;
+        const searchStr = `${opp.id || ''} ${opp.title || ''} ${opp.sourceRef || ''} ${opp.href || ''} ${opp.detailsHref || ''} ${JSON.stringify(opp.detailRows || [])}`;
         const reqIdMatches = searchStr.match(/requirementId=(\d+)/gi) || [];
         const bidIdMatches = searchStr.match(/linkedBidId=(\d+)/gi) || searchStr.match(/bid-(\d+)/gi) || searchStr.match(/PBID-\d+/gi) || [];
         const reqNoMatches = searchStr.match(/REQ-[\w-]+/gi) || [];
@@ -584,8 +584,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const rfpNoMatches = searchStr.match(/RFP-[\w-]+/gi) || [];
         const rcNoMatches = searchStr.match(/RC-[\w-]+/gi) || [];
         const raNoMatches = searchStr.match(/RA-[\w-]+/gi) || [];
+        const bidNoMatches = searchStr.match(/BID-[\w-]+/gi) || [];
+        const tndNoMatches = searchStr.match(/TND-[\w-]+/gi) || [];
 
-        for (const m of [...reqIdMatches, ...bidIdMatches, ...reqNoMatches, ...rfqNoMatches, ...rfpNoMatches, ...rcNoMatches, ...raNoMatches]) {
+        for (const m of [...reqIdMatches, ...bidIdMatches, ...reqNoMatches, ...rfqNoMatches, ...rfpNoMatches, ...rcNoMatches, ...raNoMatches, ...bidNoMatches, ...tndNoMatches]) {
           keys.push(m.toUpperCase().trim());
         }
         return Array.from(new Set(keys));
@@ -603,19 +605,19 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const existingIndex = deduped.findIndex(item => {
           const itemRefKeys = extractRefKeys(item);
 
-          // If both have explicit sourceRefs and they differ, they are strictly different procurements
-          if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() !== opportunity.sourceRef.trim().toUpperCase()) {
-            return false;
-          }
+          // 1. Shared reference keys across records (e.g., parent RC or bid number shared with reverse auction)
+          const sharedRef = refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
+          if (sharedRef) return true;
 
-          // Exact sourceRef match (e.g. same RFQ or Tender)
+          // 2. Exact sourceRef match (e.g. same RFQ or Tender)
           if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() === opportunity.sourceRef.trim().toUpperCase()) {
             return true;
           }
 
-          // Shared reference keys (e.g., tender ID or bid number linked across records)
-          const sharedRef = refKeys.length > 0 && refKeys.some(r => itemRefKeys.includes(r));
-          if (sharedRef) return true;
+          // 3. If both have explicit sourceRefs and they differ (and share no reference keys), they are strictly different
+          if (item.sourceRef && opportunity.sourceRef && item.sourceRef.trim().toUpperCase() !== opportunity.sourceRef.trim().toUpperCase()) {
+            return false;
+          }
 
           // Never merge two separate procurements by title alone — separate procurements can share a title
           return false;
@@ -711,14 +713,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref;
 
           if (auctionOpp) {
-            const isAuctionActive = String(auctionOpp.status).toUpperCase() === 'OPEN' || String(auctionOpp.status).toUpperCase() === 'SCHEDULED' || String(auctionOpp.status).toUpperCase() === 'LIVE';
+            const auctionStatusUpper = String(auctionOpp.status).toUpperCase();
+            const isAuctionActive = auctionStatusUpper === 'OPEN' || auctionStatusUpper === 'SCHEDULED' || auctionStatusUpper === 'LIVE';
             if (isAuctionActive) {
-              bestActionLabel = 'Join Live Auction';
+              bestActionLabel = 'Enter Live Auction Floor →';
               bestHref = auctionOpp.href;
             }
           }
 
-          const bestSourceRef = parentOpp?.sourceRef || existing.sourceRef;
+          const parentRef = parentOpp?.sourceRef || existing.sourceRef;
+          const auctionRef = auctionOpp ? (auctionOpp.sourceRef.includes('•') ? auctionOpp.sourceRef.split('•')[1].trim() : auctionOpp.sourceRef) : '';
+          const bestSourceRef = parentRef && auctionRef && !parentRef.includes(auctionRef)
+            ? `${parentRef} • ${auctionRef}`
+            : (parentRef || existing.sourceRef);
+
+          const mergedStatus = auctionOpp && ['LIVE', 'SCHEDULED', 'OPEN'].includes(String(auctionOpp.status).toUpperCase())
+            ? (String(auctionOpp.status).toUpperCase() === 'LIVE' ? 'e-RA Live' : 'e-RA Scheduled')
+            : (parentOpp?.status || existing.status);
 
           deduped[existingIndex] = {
             ...existing,
@@ -736,6 +747,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             href: bestHref,
             detailsHref: bestDetailsHref,
             sourceRef: bestSourceRef,
+            status: mergedStatus,
             events: (existing.events && existing.events.length > 0) ? existing.events : opportunity.events,
           };
         }
@@ -1138,9 +1150,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       (Array.isArray(auctions) ? auctions : []).forEach((auction: any) => {
         if (!auction) return;
         const documents = asTextList(auction.documents);
-        const refNumber = auction.referenceNo || (auction.linkedBidId ? `PBID-${auction.linkedBidId}` : null);
-        const resolvedTitle = auction.title || (refNumber ? `${refNumber} — Live Reverse Auction` : (auction.itemName || 'Reverse Auction Opportunity'));
+        const refNumber = auction.referenceNo || auction.auctionConfig?.parentRefNumber || (auction.linkedBidId ? `PBID-${auction.linkedBidId}` : null);
+        const rawTitle = auction.title || auction.itemName || '';
+        const resolvedTitle = rawTitle && rawTitle.length > 5
+          ? rawTitle
+          : (refNumber ? `${refNumber} — Live Reverse Auction` : 'Reverse Auction Opportunity');
         const sourceRef = refNumber ? `${refNumber} • ${auction.auctionCode || `RA-${auction.id}`}` : (auction.auctionCode || `RA-${auction.id}`);
+        const auctionStatus = String(auction.statusEnum || auction.status || 'Scheduled').toUpperCase();
+        const isLive = auctionStatus === 'LIVE' || auctionStatus === 'OPEN';
         const opportunity: SellerOpportunity = {
           id: `ra-${auction.id}`,
           type: 'Reverse Auction',
@@ -1152,8 +1169,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
           discloseEstimatedCost: Boolean(auction.discloseEstimatedCost ?? true),
           eligibility: 'Check invitation',
-          status: auction.statusEnum || auction.status || 'Scheduled',
-          actionLabel: 'Join Auction',
+          status: isLive ? 'e-RA Live' : (auction.statusEnum || auction.status || 'Scheduled'),
+          actionLabel: isLive ? 'Enter Live Auction Floor →' : 'View Auction Details',
           href: sellerRoutes.auctionLive(auction.id),
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef,

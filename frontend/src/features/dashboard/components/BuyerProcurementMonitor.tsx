@@ -142,7 +142,26 @@ export function BuyerProcurementMonitor() {
       let actionLabel = 'View Details';
 
       const rawStatus = String(bid.status || bid.stage || bid.statusGroup || '').toUpperCase();
-      if (rawStatus.includes('EVAL') || rawStatus.includes('TECHNICAL')) {
+      const isReverseAuctionStage = Boolean(
+        rawStatus.includes('AUCTION') ||
+        rawStatus === 'REVERSE_AUCTION_ACTIVE' ||
+        bid.type === 'reverse_auction' ||
+        typeLabel === 'Reverse Auction' ||
+        bid.linkedAuctionId ||
+        bid.linkedAuctionCode
+      );
+
+      const auctionTargetCode = bid.linkedAuctionCode || bid.linkedAuctionId || bid.auctionCode || procDetailId;
+      const isLiveAuction = rawStatus.includes('LIVE') || rawStatus === 'REVERSE_AUCTION_ACTIVE' || String(bid.linkedAuctionStatus || '').toUpperCase() === 'LIVE';
+
+      if (isReverseAuctionStage) {
+        stage = 'published';
+        typeLabel = 'Reverse Auction';
+        stageLabel = isLiveAuction ? '🔴 Live Reverse Auction' : '⏱️ Scheduled RA';
+        actionLabel = isLiveAuction ? 'Monitor Live Floor' : 'Open Live Console';
+        urgentAction = true;
+        actionHref = `/buyer/procurement/reverse-auction/${encodeURIComponent(String(auctionTargetCode))}/live`;
+      } else if (rawStatus.includes('EVAL') || rawStatus.includes('TECHNICAL')) {
         stage = 'tech_eval';
         stageLabel = 'Technical Evaluation';
         actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'Review Bids';
@@ -215,6 +234,10 @@ export function BuyerProcurementMonitor() {
     awarded: procurements.filter(p => p.stage === 'awarded' || p.stage === 'closed').length
   }), [procurements]);
 
+  const activeReverseAuctions = useMemo(() => {
+    return procurements.filter(p => p.type === 'Reverse Auction' || p.stageLabel.includes('Reverse Auction'));
+  }, [procurements]);
+
   return (
     <div className="rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70 overflow-hidden flex flex-col transition-all">
       {/* ── Card Header ── */}
@@ -255,6 +278,35 @@ export function BuyerProcurementMonitor() {
           </Link>
         </div>
       </div>
+
+      {/* ── Realtime Live Reverse Auction Monitor Strip ── */}
+      {activeReverseAuctions.length > 0 && (
+        <div className="bg-gradient-to-r from-[#12335f] via-indigo-950 to-slate-900 px-4 py-2.5 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-blue-800/60 shadow-inner">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-600/20 text-red-400 border border-red-500/30">
+              <Gavel className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-red-300">
+                  Live Reverse Auction Active ({activeReverseAuctions.length})
+                </span>
+              </div>
+              <p className="text-xs font-bold text-white mt-0.5 line-clamp-1">
+                {activeReverseAuctions[0].title} <span className="text-slate-300 font-normal">({activeReverseAuctions[0].bidNumber})</span>
+              </p>
+            </div>
+          </div>
+          <Link
+            href={activeReverseAuctions[0].actionHref}
+            className="inline-flex items-center justify-center gap-1.5 h-7 px-3 rounded bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] shadow-sm transition-colors shrink-0"
+          >
+            <SlidersHorizontal className="h-3 w-3" />
+            <span>Open Live Monitoring Console →</span>
+          </Link>
+        </div>
+      )}
 
       {/* ── Filter Tabs ── */}
       <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-slate-100 bg-white overflow-x-auto no-scrollbar">
@@ -344,19 +396,22 @@ export function BuyerProcurementMonitor() {
                     </span>
 
                     {/* Stage Badge */}
-                    {isEvaluation && (
+                    {item.type === 'Reverse Auction' || item.stageLabel.includes('Reverse Auction') ? (
+                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 flex items-center gap-1 animate-pulse">
+                        <Gavel className="h-2.5 w-2.5 text-red-600" />
+                        {item.stageLabel}
+                      </span>
+                    ) : isEvaluation ? (
                       <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
                         <Clock className="h-2.5 w-2.5" />
                         {item.stageLabel}
                       </span>
-                    )}
-                    {isAwarded && (
+                    ) : isAwarded ? (
                       <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                         <CheckCircle2 className="h-2.5 w-2.5" />
                         {item.stageLabel}
                       </span>
-                    )}
-                    {!isEvaluation && !isAwarded && (
+                    ) : (
                       <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
                         <Users className="h-2.5 w-2.5" />
                         {item.stageLabel}
@@ -401,12 +456,17 @@ export function BuyerProcurementMonitor() {
 
                   <Link href={item.actionHref}>
                     <Button 
-                      className={`h-7 px-3 text-[10px] font-bold uppercase tracking-wide rounded transition flex items-center gap-1 shadow-xs ${
-                        item.urgentAction
+                      className={`h-7 px-3 text-[10px] font-bold uppercase tracking-wide rounded transition flex items-center gap-1 shadow-xs cursor-pointer ${
+                        item.type === 'Reverse Auction' || item.stageLabel.includes('Reverse Auction')
+                          ? 'bg-red-600 hover:bg-red-700 text-white shadow-sm font-black'
+                          : item.urgentAction
                           ? 'bg-[#12335f] hover:bg-[#0b2445] text-white'
                           : 'bg-slate-100 hover:bg-slate-200 text-[#12335f]'
                       }`}
                     >
+                      {item.type === 'Reverse Auction' || item.stageLabel.includes('Reverse Auction') ? (
+                        <SlidersHorizontal className="h-3 w-3" />
+                      ) : null}
                       {item.actionLabel}
                       <ArrowRight className="h-3 w-3" />
                     </Button>
