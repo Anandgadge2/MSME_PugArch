@@ -223,10 +223,10 @@ type RateContractConfig = {
   periodStartDate: string;
   periodEndDate: string;
   rateValidityPeriod: string;
-  supplierSelectionStrategy: 'SINGLE_SUPPLIER' | 'MULTI_SUPPLIER' | 'PANEL_RATE_CONTRACT' | 'ITEM_WISE_L1';
+  supplierSelectionStrategy: 'SINGLE_SUPPLIER';
   selectedSuppliers: Array<{ supplierId: number; supplierUserId?: number | null; supplierName?: string | null }>;
   itemRateSchedule: RateContractItem[];
-  priceVariationClause: 'FIXED_PRICE' | 'INDEX_BASED_VARIATION' | 'MUTUALLY_AGREED_REVISION';
+  priceVariationClause: 'FIXED_PRICE';
   callOffOrderAllowed: boolean;
   maximumOrderQuantityPerCallOff: number;
   minimumOrderQuantity: number;
@@ -4446,8 +4446,12 @@ function ItemDrawerOrModal({
                 </Field>
 
                 <Field label="Est. Unit Rate (₹)">
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">₹</span>
+                  <div className="relative flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-xs sm:text-sm font-bold text-slate-400 select-none">
+                        ₹
+                      </span>
+                    </div>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -4476,7 +4480,7 @@ function ItemDrawerOrModal({
                           }
                         }
                       }}
-                      className={cn(inputClass, "pl-6 font-bold")}
+                      className={cn(inputClass, "pl-8 sm:pl-8 font-bold")}
                       placeholder="0"
                     />
                   </div>
@@ -6642,8 +6646,6 @@ function ScheduleStepForm({
                   className={inputClass}
                 >
                   <option value="SINGLE_SUPPLIER">Single Supplier (L1 Award)</option>
-                  <option value="MULTI_SUPPLIER">Multiple Suppliers (Parallel Contracts)</option>
-                  <option value="PANEL_RATE_CONTRACT">Panel Rate Contract (Pre-qualified Empaneled)</option>
                 </select>
               </Field>
             </div>
