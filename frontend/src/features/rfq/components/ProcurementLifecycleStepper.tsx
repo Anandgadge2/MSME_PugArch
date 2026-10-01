@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Scale,
@@ -14,7 +14,9 @@ import {
   Eye,
   FileSpreadsheet,
   Clock,
-  Ban
+  Ban,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { isAdvancePaymentTerms, isDeliveryDeliveredOrApproved } from '../../shared/procurementLifecycleUtils';
@@ -44,6 +46,8 @@ export interface ProcurementLifecycleStepperProps {
   invoices?: any[];
   isBuyer?: boolean;
   isStandby?: boolean;
+  isDeadlinePassed?: boolean;
+  isBiddingOpen?: boolean;
 
   // Real participation / bid states for strictly conditional action rendering
   isSellerParticipated?: boolean;
@@ -409,6 +413,8 @@ export function ProcurementLifecycleStepper({
   invoices,
   isBuyer = true,
   isStandby = false,
+  isDeadlinePassed = false,
+  isBiddingOpen,
   isSellerParticipated = false,
   myParticipation,
   canSubmitBid = false,
@@ -433,6 +439,7 @@ export function ProcurementLifecycleStepper({
   deliveryId
 }: ProcurementLifecycleStepperProps) {
   const router = useRouter();
+  const [showAllStagesMobile, setShowAllStagesMobile] = useState(false);
 
   const currentStageId = useMemo(
     () =>
@@ -477,7 +484,30 @@ export function ProcurementLifecycleStepper({
     return statusUpper === 'COMPLETED' || poStatusUpper === 'COMPLETED' || hasSettledInvoice;
   }, [status, effectiveActiveOrder, hasSettledInvoice]);
 
-  const currentStageConfig = LIFECYCLE_STAGES.find(s => s.id === currentStageId) || LIFECYCLE_STAGES[0];
+  const isStage1Open = currentStageId === 1 && !isDeadlinePassed && isBiddingOpen !== false;
+  const stage1Name = isStage1Open ? 'Bidding & Quotes' : 'Evaluation';
+  const stage1ShortName = isStage1Open ? 'Bidding' : 'Evaluation';
+  const stage1Description = isStage1Open ? 'Vendor Proposal Submission' : 'Technical & Commercial Scrutiny';
+  const stage1BuyerHint = isStage1Open
+    ? 'Accepting vendor proposals — bids remain sealed until deadline'
+    : 'Evaluate bids and determine ranking';
+
+  const stagesList = useMemo(() => {
+    return LIFECYCLE_STAGES.map((s) => {
+      if (s.id === 1) {
+        return {
+          ...s,
+          name: stage1Name,
+          shortName: stage1ShortName,
+          description: stage1Description,
+          buyerHint: stage1BuyerHint,
+        };
+      }
+      return s;
+    });
+  }, [stage1Name, stage1ShortName, stage1Description, stage1BuyerHint]);
+
+  const currentStageConfig = stagesList.find(s => s.id === currentStageId) || stagesList[0];
   const stageHint = isCancelled
     ? 'This procurement event has been officially cancelled.'
     : isContractSettled
@@ -976,7 +1006,7 @@ export function ProcurementLifecycleStepper({
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-50 via-blue-50 to-indigo-50 px-2.5 py-0.5 text-[10.5px] font-black text-indigo-900 border border-indigo-200/80 shadow-2xs">
               <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-ping shrink-0" aria-hidden="true" />
-              Active: {currentStageConfig.name}
+              Active: {currentStageId === 1 && isStage1Open ? 'Bidding Window' : currentStageConfig.name}
             </span>
           )}
         </div>
@@ -1003,7 +1033,7 @@ export function ProcurementLifecycleStepper({
         role="list"
         className="grid grid-cols-2 lg:grid-cols-5 gap-2 mt-2 relative z-10"
       >
-        {LIFECYCLE_STAGES.map((stage) => {
+        {stagesList.map((stage) => {
           const isCompleted = !isCancelled && (currentStageId > stage.id || (stage.id === 5 && isContractSettled));
           const isActive = !isCancelled && currentStageId === stage.id && !isContractSettled;
           const isUpcoming = isCancelled || currentStageId < stage.id;
@@ -1030,6 +1060,8 @@ export function ProcurementLifecycleStepper({
               }}
               className={cn(
                 'group relative flex flex-col justify-between rounded-xl p-2 sm:p-2.5 border transition-all duration-300 outline-none select-none min-h-[52px] sm:min-h-[54px] overflow-hidden',
+                !showAllStagesMobile && !isActive ? 'hidden sm:flex' : 'flex',
+                !showAllStagesMobile && isActive && 'col-span-2 sm:col-span-1',
                 stage.id === 5 && 'col-span-2 lg:col-span-1',
                 (stageAction.hasAction || Boolean(stageAction.onClick)) ? 'cursor-pointer' : 'cursor-default',
                 'focus-visible:ring-2 focus-visible:ring-offset-1',
@@ -1154,6 +1186,50 @@ export function ProcurementLifecycleStepper({
           );
         })}
       </ol>
+
+      {/* Mobile-Only Milestone Summary & Toggle */}
+      <div className="sm:hidden mt-2 pt-1.5 border-t border-slate-100 space-y-1.5 relative z-10">
+        <div className="flex items-center justify-between gap-1 px-1.5 py-1.5 rounded-lg bg-slate-50/90 border border-slate-200/60 shadow-2xs">
+          {stagesList.map((s) => {
+            const isSCompleted = !isCancelled && (currentStageId > s.id || (s.id === 5 && isContractSettled));
+            const isSActive = !isCancelled && currentStageId === s.id && !isContractSettled;
+            return (
+              <div key={s.id} className="flex-1 flex flex-col items-center gap-0.5">
+                <div
+                  className={cn(
+                    'h-1 w-full rounded-full transition-all',
+                    isSCompleted
+                      ? 'bg-emerald-500'
+                      : isSActive
+                      ? 'bg-indigo-600 animate-pulse'
+                      : 'bg-slate-200'
+                  )}
+                />
+                <span
+                  className={cn(
+                    'text-[8px] uppercase truncate max-w-[50px] font-bold',
+                    isSCompleted
+                      ? 'text-emerald-700 font-extrabold'
+                      : isSActive
+                      ? 'text-indigo-950 font-black'
+                      : 'text-slate-400 font-medium'
+                  )}
+                >
+                  0{s.id} {s.shortName}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAllStagesMobile(!showAllStagesMobile)}
+          className="w-full flex items-center justify-center gap-1.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors cursor-pointer"
+        >
+          <span>{showAllStagesMobile ? 'Collapse stages' : 'View all 5 lifecycle stages'}</span>
+          {showAllStagesMobile ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        </button>
+      </div>
     </nav>
   );
 }

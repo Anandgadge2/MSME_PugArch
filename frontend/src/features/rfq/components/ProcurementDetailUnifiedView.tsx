@@ -696,6 +696,8 @@ function DeadlineCountdown({
   startLabel = "Starts in: ",
   onExpire,
   onStartReached,
+  className,
+  showIcon = true,
 }: {
   targetDate: Date | string;
   startDate?: Date | string | null;
@@ -703,6 +705,8 @@ function DeadlineCountdown({
   startLabel?: string;
   onExpire?: () => void;
   onStartReached?: () => void;
+  className?: string;
+  showIcon?: boolean;
 }) {
   const startObj = useMemo(() => parseDateValue(startDate, true), [startDate]);
   const endObj = useMemo(() => parseDateValue(targetDate, false), [targetDate]);
@@ -805,14 +809,19 @@ function DeadlineCountdown({
   if (timerState.isBeforeStart) {
     return (
       <span
-        className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 shadow-2xs"
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-800 shadow-2xs",
+          className,
+        )}
         role="timer"
         aria-live="polite"
       >
-        <Clock
-          className="h-3 w-3 text-sky-600 animate-pulse"
-          aria-hidden="true"
-        />
+        {showIcon && (
+          <Clock
+            className="h-3 w-3 text-sky-600 animate-pulse"
+            aria-hidden="true"
+          />
+        )}
         <span className="font-mono">
           <span className="text-sky-900/80 font-bold">{startLabel}</span>
           {timerState.days > 0 ? `${timerState.days}d ` : ""}
@@ -830,14 +839,19 @@ function DeadlineCountdown({
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs"
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs",
+        className,
+      )}
       role="timer"
       aria-live="polite"
     >
-      <Clock
-        className="h-3 w-3 text-amber-600 animate-pulse"
-        aria-hidden="true"
-      />
+      {showIcon && (
+        <Clock
+          className="h-3 w-3 text-amber-600 animate-pulse"
+          aria-hidden="true"
+        />
+      )}
       <span className="font-mono">
         <span className="text-amber-900/80 font-bold">{label}</span>
         {timerState.days > 0 ? `${timerState.days}d ` : ""}
@@ -7753,20 +7767,26 @@ export function ProcurementDetailUnifiedView(
   }, [statusUpper, isDeadlinePassed, isBiddingClosed, isBeforeSubmissionStart, statusLabel]);
 
   const isTechnicalOpeningReady = useMemo(() => {
-    if (!isTwoPacket) return true;
-    if (isTechEvalCompleted || isPostBiddingStage) return true;
+    if (isTechEvalCompleted) return true;
     if (!technicalDateValue) return true;
     const parsed = parseDateValue(technicalDateValue, false);
     return parsed ? parsed.getTime() <= nowMs : true;
-  }, [isTwoPacket, isTechEvalCompleted, isPostBiddingStage, technicalDateValue, nowMs]);
+  }, [isTechEvalCompleted, technicalDateValue, nowMs]);
 
   const isFinancialOpeningReady = useMemo(() => {
     if (!isTwoPacket) return true;
     if (["AWARDED", "PO_GENERATED", "COMPLETED"].includes(statusUpper)) return true;
+    // Stage 1 Technical Evaluation must be complete before Financial Opening can be ready
+    if (
+      !isTechEvalCompleted &&
+      !["FINANCIAL_EVALUATION", "L1_GENERATED", "AWARD_RECOMMENDED"].includes(statusUpper)
+    ) {
+      return false;
+    }
     if (!financialDateValue) return true;
     const parsed = parseDateValue(financialDateValue, false);
     return parsed ? parsed.getTime() <= nowMs : true;
-  }, [isTwoPacket, statusUpper, financialDateValue, nowMs]);
+  }, [isTwoPacket, statusUpper, isTechEvalCompleted, financialDateValue, nowMs]);
 
   const isEvaluationReady = Boolean(
     isTechnicalOpeningReady &&
@@ -7799,6 +7819,145 @@ export function ProcurementDetailUnifiedView(
       )
     );
   }, [statusUpper, lifecycleStageUpper, props, submittedParticipations]);
+
+  const canLaunchReverseAuction = useMemo(() => {
+    if (isBidAwarded) return false;
+    if (submittedParticipations.length === 0) return false;
+    if (
+      linkedAuction &&
+      (linkedAuction as any).auctionPlanned !== true &&
+      !["DRAFT", "CANCELLED"].includes(
+        String(linkedAuction.statusEnum || linkedAuction.status || "").toUpperCase()
+      )
+    ) {
+      return false;
+    }
+    if (isTwoPacketMode) {
+      // 1. Stage 1 Technical Evaluation must be complete
+      const isStage1Done =
+        isTechEvalCompleted ||
+        ["TECHNICAL_EVALUATION_COMPLETED", "FINANCIAL_EVALUATION", "L1_GENERATED", "AWARD_RECOMMENDED"].includes(statusUpper) ||
+        (techEvaluationStats.total > 0 && techEvaluationStats.pending === 0);
+      if (!isStage1Done) return false;
+      // 2. Minimum 2 qualified sellers required for competitive reverse auction
+      if (techEvaluationStats.qualified < 2) return false;
+      // 3. Financial opening date must have arrived
+      if (!isFinancialOpeningReady) return false;
+      return true;
+    } else {
+      if (!isEvaluationReady && !isBiddingClosed) return false;
+      const responsiveSellers = submittedParticipations.filter(
+        (p: any) =>
+          !p.isDisqualified &&
+          String(p.technicalStatus || "").toUpperCase() !== "DISQUALIFIED"
+      );
+      return responsiveSellers.length >= 2;
+    }
+  }, [
+    isBidAwarded,
+    submittedParticipations,
+    linkedAuction,
+    isTwoPacketMode,
+    isTechEvalCompleted,
+    statusUpper,
+    techEvaluationStats,
+    isFinancialOpeningReady,
+    isEvaluationReady,
+    isBiddingClosed,
+  ]);
+
+  const reverseAuctionDisabledReason = useMemo(() => {
+    if (isBidAwarded) return "Procurement has already been awarded";
+    if (submittedParticipations.length === 0) return "No seller proposals submitted";
+    if (
+      linkedAuction &&
+      (linkedAuction as any).auctionPlanned !== true &&
+      !["DRAFT", "CANCELLED"].includes(
+        String(linkedAuction.statusEnum || linkedAuction.status || "").toUpperCase()
+      )
+    ) {
+      return "An active reverse auction is already linked to this procurement";
+    }
+    if (isTwoPacketMode) {
+      if (!isTechnicalOpeningReady) {
+        return technicalDateFormatted
+          ? `Technical opening scheduled for ${technicalDateFormatted}`
+          : "Technical evaluation has not opened yet";
+      }
+      const isStage1Done =
+        isTechEvalCompleted ||
+        ["TECHNICAL_EVALUATION_COMPLETED", "FINANCIAL_EVALUATION", "L1_GENERATED", "AWARD_RECOMMENDED"].includes(statusUpper) ||
+        (techEvaluationStats.total > 0 && techEvaluationStats.pending === 0);
+      if (!isStage1Done) {
+        return `Evaluate remaining ${techEvaluationStats.pending} pending seller(s) in Stage 1 before launching Reverse Auction`;
+      }
+      if (techEvaluationStats.qualified < 2) {
+        return `Reverse Auction requires at least 2 technically qualified sellers (currently ${techEvaluationStats.qualified} qualified)`;
+      }
+      if (!isFinancialOpeningReady) {
+        return financialDateFormatted
+          ? `Stage 2 Reverse Auction unlocks after financial opening on ${financialDateFormatted}`
+          : "Stage 2 Reverse Auction unlocks after financial opening";
+      }
+      return "";
+    } else {
+      if (!isEvaluationReady && !isBiddingClosed) {
+        return "Reverse Auction unlocks after bidding window closes";
+      }
+      const responsiveSellers = submittedParticipations.filter(
+        (p: any) =>
+          !p.isDisqualified &&
+          String(p.technicalStatus || "").toUpperCase() !== "DISQUALIFIED"
+      );
+      if (responsiveSellers.length < 2) {
+        return "At least 2 valid responsive sellers required to start Reverse Auction";
+      }
+      return "";
+    }
+  }, [
+    isBidAwarded,
+    submittedParticipations.length,
+    linkedAuction,
+    isTwoPacketMode,
+    isTechnicalOpeningReady,
+    technicalDateFormatted,
+    isTechEvalCompleted,
+    statusUpper,
+    techEvaluationStats,
+    isFinancialOpeningReady,
+    financialDateFormatted,
+    isEvaluationReady,
+    isBiddingClosed,
+  ]);
+
+  const canCompareQuotations = useMemo(() => {
+    if (submittedParticipations.length < 2) return false;
+    if (!isEvaluationReady) return false;
+    if (isTwoPacketMode && !isFinancialOpeningReady) return false;
+    return true;
+  }, [submittedParticipations.length, isEvaluationReady, isTwoPacketMode, isFinancialOpeningReady]);
+
+  const compareQuotationsDisabledReason = useMemo(() => {
+    if (submittedParticipations.length < 2) return "At least 2 quotations required to compare";
+    if (!isEvaluationReady) return "Quotation comparison unlocks after technical opening";
+    if (isTwoPacketMode && !isFinancialOpeningReady) {
+      if (!isTechEvalCompleted && techEvaluationStats.pending > 0) {
+        return "Complete Stage 1 Technical Evaluation before comparing financial quotations";
+      }
+      return financialDateFormatted
+        ? `Financial quotations remain sealed until ${financialDateFormatted}`
+        : "Financial quotations remain sealed until financial opening";
+    }
+    return "";
+  }, [
+    submittedParticipations.length,
+    isEvaluationReady,
+    isTwoPacketMode,
+    isFinancialOpeningReady,
+    isTechEvalCompleted,
+    techEvaluationStats.pending,
+    financialDateFormatted,
+  ]);
 
   const awardedParticipation = useMemo(() => {
     return submittedParticipations.find(
@@ -8082,6 +8241,15 @@ export function ProcurementDetailUnifiedView(
             );
           }
 
+          if (!isTechnicalOpeningReady) {
+            return (
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-amber-700 shadow-2xs whitespace-nowrap">
+                <Lock className="h-3 w-3 text-amber-600 shrink-0" />
+                Awaiting Technical Opening
+              </span>
+            );
+          }
+
           if (activeAward || isEvaluationReady) {
             return (
               <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-sky-700 shadow-2xs whitespace-nowrap">
@@ -8149,7 +8317,11 @@ export function ProcurementDetailUnifiedView(
                         : isDisq
                           ? "View disqualification record"
                           : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
-                      : "Evaluation unlocks after bidding window closes"
+                      : !isTechnicalOpeningReady
+                        ? technicalDateFormatted
+                          ? `Technical evaluation unlocks after scheduled opening on ${technicalDateFormatted}`
+                          : "Technical evaluation unlocks after scheduled technical opening"
+                        : "Evaluation unlocks after bidding window closes"
                   }
                 >
                   {isEvaluationReady ? (
@@ -8192,7 +8364,11 @@ export function ProcurementDetailUnifiedView(
                 title={
                   isEvaluationReady
                     ? "Review full quotation details, line item rates and compliance"
-                    : "Quotation remains sealed until bidding closes"
+                    : !isTechnicalOpeningReady
+                      ? technicalDateFormatted
+                        ? `Proposals remain sealed until scheduled technical opening on ${technicalDateFormatted}`
+                        : "Proposals remain sealed until scheduled technical opening"
+                      : "Quotation remains sealed until bidding closes"
                 }
               >
                 <Eye className="h-3.5 w-3.5 shrink-0" />
@@ -8207,6 +8383,8 @@ export function ProcurementDetailUnifiedView(
     ],
     [
       isEvaluationReady,
+      isTechnicalOpeningReady,
+      technicalDateFormatted,
       isBuyerOrAdmin,
       isTwoPacketMode,
       isTechEvalCompleted,
@@ -8374,9 +8552,11 @@ export function ProcurementDetailUnifiedView(
       value: closingDateFormatted || "N/A",
       icon: Clock,
       tone: "rose" as Tone,
-      subtext: allowsReverseAuction
-        ? "Stage 1 initial quotation cutoff"
-        : "Bidding window closing",
+      subtext: technicalDateFormatted
+        ? `Opening: ${technicalDateFormatted}`
+        : allowsReverseAuction
+          ? "Stage 1 initial quotation cutoff"
+          : "Bidding window closing",
     },
     shouldShowEstimatedCost
       ? {
@@ -8981,6 +9161,8 @@ export function ProcurementDetailUnifiedView(
               !isAwardedToMe &&
               Boolean(activeAward && !effectiveActiveOrder)
             }
+            isDeadlinePassed={isBiddingClosed || isDeadlinePassed}
+            isBiddingOpen={!isBiddingClosed && !isDeadlinePassed && !isBeforeSubmissionStart}
             isSellerParticipated={isSellerParticipated}
             myParticipation={effectiveMyParticipation}
             canSubmitBid={
@@ -10653,20 +10835,20 @@ export function ProcurementDetailUnifiedView(
                   {displayIdStr &&
                     displayIdStr !== "N/A" &&
                     displayIdStr !== "—" && (
-                      <>
-                        <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
-                          <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
-                            {props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
-                              ? (displayIdStr.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
-                              : isRateContractType
-                              ? 'Tender Notice:'
-                              : 'Ref:'}
-                          </span>
-                          <span>{displayIdStr}</span>
+                      <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
+                        <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
+                          {props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
+                            ? (displayIdStr.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
+                            : isRateContractType
+                            ? 'Tender Notice:'
+                            : 'Ref:'}
                         </span>
-                        <span>•</span>
-                      </>
+                        <span>{displayIdStr}</span>
+                      </span>
                     )}
+                  {displayIdStr && displayIdStr !== "N/A" && displayIdStr !== "—" && (
+                    <span aria-hidden="true">•</span>
+                  )}
                   <span>
                     {formatPrimitiveValue(
                       procurementMethod,
@@ -10675,28 +10857,26 @@ export function ProcurementDetailUnifiedView(
                   </span>
                   {category !== "N/A" && (
                     <>
-                      <span>•</span>
+                      <span aria-hidden="true">•</span>
                       <span>{formatPrimitiveValue(category, "category")}</span>
                     </>
                   )}
-                  {buyerOrgName && buyerOrgName !== "N/A" && (
-                    <>
-                      <span>•</span>
-                      <span className="inline-flex items-center gap-1 text-slate-600">
-                        <Building2
-                          className="h-3.5 w-3.5 text-slate-400"
-                          aria-hidden="true"
-                        />
-                        <span>
-                          Published by{" "}
-                          <strong className="font-semibold text-slate-800">
-                            {formatPrimitiveValue(buyerOrgName, "organization")}
-                          </strong>
-                        </span>
-                      </span>
-                    </>
-                  )}
                 </div>
+
+                {buyerOrgName && buyerOrgName !== "N/A" && (
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600 mt-1">
+                    <Building2
+                      className="h-3.5 w-3.5 text-slate-400 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      Published by{" "}
+                      <strong className="font-semibold text-slate-800">
+                        {formatPrimitiveValue(buyerOrgName, "organization")}
+                      </strong>
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2 lg:self-center">
@@ -10893,17 +11073,26 @@ export function ProcurementDetailUnifiedView(
                     </Button>
                   )}
                 {isBuyerOrAdmin && !isEvaluationReady && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled
-                    aria-disabled="true"
-                    title={`Quotations remain strictly sealed until the bidding window closes on ${displaySealedClosingDate}.`}
-                    className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  <div
+                    role="status"
+                    title={`Quotations remain strictly sealed until ${displaySealedClosingDate}. Bid opening and proposal evaluation will automatically unlock then.`}
+                    className="h-8 px-3 rounded-lg border border-amber-200 bg-amber-50/85 text-amber-900 text-xs font-bold flex items-center gap-1.5 shadow-2xs select-none"
                   >
-                    <Lock className="h-3.5 w-3.5 text-slate-400" />
-                    <span>Evaluation Opens at Closing</span>
-                  </Button>
+                    <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0" aria-hidden="true" />
+                    <span className="font-extrabold text-[11px] text-amber-950">
+                      Evaluation Opens at Closing
+                    </span>
+                    {(technicalDateValue || closingDateValue || props.deadlineDate) && (
+                      <span className="inline-flex items-center gap-1 pl-1.5 border-l border-amber-300/80 font-mono text-[10.5px] text-amber-800 font-extrabold">
+                        <DeadlineCountdown
+                          targetDate={technicalDateValue || closingDateValue || props.deadlineDate || ""}
+                          label="• "
+                          className="border-none bg-transparent p-0 text-amber-900 shadow-none font-bold text-[10.5px]"
+                          showIcon={false}
+                        />
+                      </span>
+                    )}
+                  </div>
                 )}
                 {props.onSubmitClick &&
                   (isBuyerOrAdmin
@@ -12362,39 +12551,50 @@ export function ProcurementDetailUnifiedView(
 
                     {/* Action Buttons: Compare Quotes & Reverse Auction */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {submittedParticipations.length >= 2 &&
-                        isEvaluationReady && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              const allIds = submittedParticipations.map(
-                                (p: any) =>
-                                  String(p.id || p.sellerId || p.sellerUserId),
-                              );
-                              if (submittedParticipations.length === 2) {
-                                setSelectedCompareIds(allIds);
-                                setIsComparisonModalOpen(true);
-                              } else {
-                                setSelectedCompareIds(allIds);
-                                setIsCompareChooserOpen(true);
-                              }
-                            }}
-                            className="h-7.5 gap-1.5 text-xs font-bold border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 shadow-2xs rounded-lg px-3 cursor-pointer"
-                          >
+                      {submittedParticipations.length >= 2 && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={!canCompareQuotations}
+                          onClick={() => {
+                            if (!canCompareQuotations) {
+                              toast.warning(compareQuotationsDisabledReason || "Quotations cannot be compared yet.");
+                              return;
+                            }
+                            const allIds = submittedParticipations.map(
+                              (p: any) =>
+                                String(p.id || p.sellerId || p.sellerUserId),
+                            );
+                            if (submittedParticipations.length === 2) {
+                              setSelectedCompareIds(allIds);
+                              setIsComparisonModalOpen(true);
+                            } else {
+                              setSelectedCompareIds(allIds);
+                              setIsCompareChooserOpen(true);
+                            }
+                          }}
+                          className={cn(
+                            "h-7.5 gap-1.5 text-xs font-bold shadow-2xs rounded-lg px-3 transition-colors",
+                            canCompareQuotations
+                              ? "border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                              : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
+                          )}
+                          title={canCompareQuotations ? undefined : compareQuotationsDisabledReason}
+                        >
+                          {canCompareQuotations ? (
                             <Scale className="h-3.5 w-3.5 text-indigo-600" />
-                            <span>
-                              Compare Quotations (
-                              {submittedParticipations.length})
-                            </span>
-                          </Button>
-                        )}
+                          ) : (
+                            <Lock className="h-3.5 w-3.5 text-slate-400" />
+                          )}
+                          <span>
+                            Compare Quotations (
+                            {submittedParticipations.length})
+                          </span>
+                        </Button>
+                      )}
                       {!isBidAwarded &&
-                        (allowsReverseAuction ||
-                          (isTwoPacketMode
-                            ? isEvaluationReady || isTechEvalCompleted
-                            : isBiddingClosed || isEvaluationReady)) &&
+                        (allowsReverseAuction || isTwoPacketMode || isBiddingClosed || isEvaluationReady) &&
                         (!linkedAuction ||
                           (linkedAuction as any).auctionPlanned === true ||
                           ["DRAFT", "CANCELLED"].includes(
@@ -12408,45 +12608,27 @@ export function ProcurementDetailUnifiedView(
                           <Button
                             type="button"
                             size="sm"
+                            disabled={!canLaunchReverseAuction}
                             onClick={() => {
-                              if (isTwoPacketMode) {
-                                const qualifiedSellers =
-                                  submittedParticipations.filter(
-                                    (p: any) =>
-                                      String(
-                                        p.technicalStatus || "",
-                                      ).toUpperCase() === "QUALIFIED",
-                                  );
-                                if (
-                                  submittedParticipations.length > 0 &&
-                                  qualifiedSellers.length === 0
-                                ) {
-                                  toast.error(
-                                    "No sellers are technically qualified yet. Please evaluate and qualify at least one seller before launching Stage 2 Reverse Auction.",
-                                  );
-                                  return;
-                                }
-                              } else {
-                                const responsiveSellers =
-                                  submittedParticipations.filter(
-                                    (p: any) =>
-                                      !p.isDisqualified &&
-                                      String(
-                                        p.technicalStatus || "",
-                                      ).toUpperCase() !== "DISQUALIFIED",
-                                  );
-                                if (responsiveSellers.length === 0) {
-                                  toast.error(
-                                    "No valid seller quotations available to start reverse auction.",
-                                  );
-                                  return;
-                                }
+                              if (!canLaunchReverseAuction) {
+                                toast.warning(reverseAuctionDisabledReason || "Reverse auction cannot be launched yet.");
+                                return;
                               }
                               setIsStartAuctionModalOpen(true);
                             }}
-                            className="h-7.5 gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-2xs rounded-lg px-3 cursor-pointer"
+                            className={cn(
+                              "h-7.5 gap-1.5 text-xs font-bold shadow-2xs rounded-lg px-3 transition-all",
+                              canLaunchReverseAuction
+                                ? "text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 cursor-pointer shadow-xs"
+                                : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75"
+                            )}
+                            title={canLaunchReverseAuction ? undefined : reverseAuctionDisabledReason}
                           >
-                            <Gavel className="h-3 w-3" />
+                            {canLaunchReverseAuction ? (
+                              <Gavel className="h-3 w-3" />
+                            ) : (
+                              <Lock className="h-3 w-3 text-slate-400" />
+                            )}
                             <span>
                               {isTwoPacketMode
                                 ? "Launch Stage 2 Reverse Auction"
@@ -12456,6 +12638,71 @@ export function ProcurementDetailUnifiedView(
                         )}
                     </div>
                   </div>
+
+                  {/* Technical Opening Countdown Banner for Two-Packet and Single-Packet mode */}
+                  {submittedParticipations.length > 0 &&
+                    !isTechnicalOpeningReady && (
+                      <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50/90 via-orange-50/60 to-slate-50 p-3.5 sm:p-4 shadow-2xs space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs">
+                              <Lock className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded">
+                                  {isTwoPacketMode
+                                    ? "Two-Packet Procurement • Stage 1 Pending"
+                                    : "Technical Envelope Opening Pending"}
+                                </span>
+                                <span className="text-[10px] font-bold text-amber-900 bg-amber-200/70 px-2 py-0.5 rounded flex items-center gap-1">
+                                  <Clock className="h-3 w-3" /> Awaiting Scheduled Opening
+                                </span>
+                              </div>
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
+                                Technical Envelope Opening Scheduled
+                              </h4>
+                              <p className="text-[11px] text-slate-600 max-w-xl">
+                                Bid submission is closed. In compliance with sealed tender governance, technical envelopes and proposals remain securely sealed until the scheduled opening date on{" "}
+                                <strong className="text-slate-800 font-bold">
+                                  {technicalDateFormatted || "the scheduled opening time"}
+                                </strong>
+                                .
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Countdown Timer Widget */}
+                          {technicalDateValue && (
+                            <div className="shrink-0 flex items-center gap-2 bg-white/95 border border-amber-200 rounded-xl px-3.5 py-2 shadow-2xs">
+                              <DeadlineCountdown
+                                targetDate={technicalDateValue}
+                                label="Technical Opening in: "
+                                onExpire={() => {
+                                  setNowMs(Date.now());
+                                  queryClient.invalidateQueries({
+                                    queryKey: ["procurement-bid-detail", targetId],
+                                  });
+                                  queryClient.invalidateQueries({
+                                    queryKey: ["rfq-detail-v2", targetId],
+                                  });
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between pt-2 border-t border-amber-200/60 text-[11px] font-medium text-amber-900 gap-2">
+                          <span className="flex items-center gap-1.5">
+                            <ShieldCheck className="h-3.5 w-3.5 text-amber-700" />
+                            <span>{submittedParticipations.length} proposal(s) securely received and sealed</span>
+                          </span>
+                          <span className="text-slate-500 font-semibold">
+                            Evaluation buttons will unlock automatically when opening time is reached
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                   {/* Evaluation Progress Banner for both Two-Packet and Single-Packet mode */}
                   {submittedParticipations.length > 0 &&
@@ -12634,64 +12881,35 @@ export function ProcurementDetailUnifiedView(
                           : "As soon as suppliers submit their technical and financial proposals for this procurement, their quotations will appear here for your review."}
                       </p>
                     </div>
-                  ) : !isEvaluationReady ? (
-                    !isDeadlinePassed ? (
-                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 py-8 px-5 text-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white mb-3 shadow-md shadow-indigo-600/20">
-                          <Lock className="h-5 w-5" />
-                        </div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-0.5 text-xs font-black text-emerald-800 mb-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          Bidding Window Active
-                        </span>
-                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                          {submittedParticipations.length} Quotation
-                          {submittedParticipations.length === 1 ? "" : "s"}{" "}
-                          Received (Sealed)
-                        </h4>
-                        <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
-                          In accordance with procurement integrity and
-                          sealed-bidding rules, supplier quotes and commercial
-                          proposals remain strictly confidential until bidding
-                          concludes on{" "}
-                          <strong className="text-slate-800">
-                            {displaySealedClosingDate}
-                          </strong>
-                          .
-                        </p>
-                        <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-100/80 px-3 py-1 text-xs font-bold text-indigo-900 border border-indigo-200">
-                          <Clock className="h-3.5 w-3.5 text-indigo-600" />{" "}
-                          Quotations and evaluation tools will unlock upon closing
-                        </span>
+                  ) : !isDeadlinePassed && !isPostBiddingStage && !isBiddingClosed ? (
+                    <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/40 py-8 px-5 text-center">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-white mb-3 shadow-md shadow-indigo-600/20">
+                        <Lock className="h-5 w-5" />
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-200 bg-amber-50/40 py-8 px-5 text-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-600 text-white mb-3 shadow-md shadow-amber-600/20">
-                          <Clock className="h-5 w-5" />
-                        </div>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-300 px-3 py-0.5 text-xs font-black text-slate-800 mb-2">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                          Submission Window Closed
-                        </span>
-                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
-                          {submittedParticipations.length} Technical Packet
-                          {submittedParticipations.length === 1 ? "" : "s"}{" "}
-                          Received (Sealed)
-                        </h4>
-                        <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
-                          Quotations have been securely submitted. In accordance with two-packet procurement governance,
-                          technical packets remain view-only and scrutiny tools will unlock at the scheduled technical opening on{" "}
-                          <strong className="text-slate-900">
-                            {technicalDateFormatted || "the scheduled technical opening date"}
-                          </strong>
-                          .
-                        </p>
-                        <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-amber-100/80 px-3 py-1 text-xs font-bold text-amber-900 border border-amber-200">
-                          <Lock className="h-3.5 w-3.5 text-amber-600" />{" "}
-                          Technical scrutiny unlocks at scheduled opening time
-                        </span>
-                      </div>
-                    )
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 border border-emerald-200 px-3 py-0.5 text-xs font-black text-emerald-800 mb-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Bidding Window Active
+                      </span>
+                      <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">
+                        {submittedParticipations.length} Quotation
+                        {submittedParticipations.length === 1 ? "" : "s"}{" "}
+                        Received (Sealed)
+                      </h4>
+                      <p className="text-xs font-medium text-slate-600 max-w-md mt-1 leading-relaxed">
+                        In accordance with procurement integrity and
+                        sealed-bidding rules, supplier quotes and commercial
+                        proposals remain strictly confidential until bidding
+                        concludes on{" "}
+                        <strong className="text-slate-800">
+                          {displaySealedClosingDate}
+                        </strong>
+                        .
+                      </p>
+                      <span className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg bg-indigo-100/80 px-3 py-1 text-xs font-bold text-indigo-900 border border-indigo-200">
+                        <Clock className="h-3.5 w-3.5 text-indigo-600" />{" "}
+                        Quotations and evaluation tools will unlock upon closing
+                      </span>
+                    </div>
                   ) : (
                     <DataTable<any>
                       data={submittedParticipations}
@@ -12781,7 +12999,9 @@ export function ProcurementDetailUnifiedView(
                   onClose={() => setSelectedForTechnicalEval(null)}
                   participation={selectedForTechnicalEval}
                   bidId={targetId}
-                  readOnly={isBidAwarded}
+                  readOnly={isBidAwarded || !isTechnicalOpeningReady}
+                  isTechnicalOpeningReady={isTechnicalOpeningReady}
+                  technicalOpeningDate={technicalDateValue}
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isStage2Active={isTechEvalCompleted || isBidAwarded}
                   bidStatus={props.status || props.lifecycleStage}
@@ -12841,7 +13061,13 @@ export function ProcurementDetailUnifiedView(
                   initialLowestQuote={
                     submittedParticipations.length
                       ? Math.min(
-                          ...submittedParticipations
+                          ...(isTwoPacketMode
+                            ? submittedParticipations.filter(
+                                (p: any) =>
+                                  String(p.technicalStatus || "").toUpperCase() === "QUALIFIED",
+                              )
+                            : submittedParticipations
+                          )
                             .map((p: any) =>
                               Number(
                                 p.totalAmount ||
@@ -12854,7 +13080,17 @@ export function ProcurementDetailUnifiedView(
                         )
                       : undefined
                   }
-                  submittedVendors={submittedParticipations.map(
+                  submittedVendors={(isTwoPacketMode
+                    ? submittedParticipations.filter(
+                        (p: any) =>
+                          String(p.technicalStatus || "").toUpperCase() === "QUALIFIED",
+                      )
+                    : submittedParticipations.filter(
+                        (p: any) =>
+                          !p.isDisqualified &&
+                          String(p.technicalStatus || "").toUpperCase() !== "DISQUALIFIED",
+                      )
+                  ).map(
                     (p: any, idx: number) => ({
                       sellerOrgId:
                         p.sellerOrgId ||

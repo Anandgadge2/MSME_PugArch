@@ -44,6 +44,8 @@ export interface TechnicalEvaluationModalProps {
   readOnly?: boolean;
   isFinancialStageOpened?: boolean;
   isStage2Active?: boolean;
+  isTechnicalOpeningReady?: boolean;
+  technicalOpeningDate?: Date | string | null;
   bidStatus?: string;
   isTwoPacketMode?: boolean;
   packetType?: string;
@@ -61,6 +63,8 @@ export function TechnicalEvaluationModal({
   readOnly = false,
   isFinancialStageOpened = false,
   isStage2Active = false,
+  isTechnicalOpeningReady,
+  technicalOpeningDate,
   bidStatus,
   isTwoPacketMode,
   packetType,
@@ -147,7 +151,12 @@ export function TechnicalEvaluationModal({
       ].includes(rawBidStatus)
   );
 
-  const isEffectiveReadOnly = Boolean(readOnly || isStage2ActiveEffective);
+  const isTechnicalOpeningPending = Boolean(
+    isTechnicalOpeningReady === false ||
+    (technicalOpeningDate && !isNaN(new Date(technicalOpeningDate).getTime()) && new Date(technicalOpeningDate).getTime() > Date.now())
+  );
+
+  const isEffectiveReadOnly = Boolean(readOnly || isStage2ActiveEffective || isTechnicalOpeningPending);
 
   useEffect(() => {
     if (isOpen && formRef.current) {
@@ -780,6 +789,26 @@ export function TechnicalEvaluationModal({
             }
             className="flex-1 min-h-0 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5"
           >
+            {isTechnicalOpeningPending && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/95 p-3.5 text-xs text-amber-950 font-medium flex items-start gap-3 shadow-2xs">
+                <div className="h-8 w-8 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Lock className="h-4.5 w-4.5 text-white" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <strong className="text-amber-950 font-black text-xs sm:text-sm block">
+                    Technical Envelope Opening Scheduled
+                  </strong>
+                  <p className="text-[11.5px] text-amber-900/90 leading-relaxed">
+                    Technical proposal scrutiny and qualification actions are scheduled to open on{" "}
+                    <strong>
+                      {technicalOpeningDate ? new Date(technicalOpeningDate).toLocaleString("en-IN") : "the scheduled opening date"}
+                    </strong>
+                    . Evaluation records remain sealed and locked until opening.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {isAlreadyQualified ? (
               <div className="rounded-xl border border-emerald-300 bg-emerald-50/95 p-3.5 text-xs text-emerald-950 font-medium flex items-start gap-3 shadow-2xs">
                 <div className="h-8 w-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">

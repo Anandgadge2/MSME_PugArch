@@ -1219,6 +1219,63 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       }
     }
 
+    if (linkedBid) {
+      const packetMeta = (linkedBid.technicalPacket && typeof linkedBid.technicalPacket === 'object') ? linkedBid.technicalPacket as any : {};
+      const isTwoPacket = String(linkedBid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(linkedBid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
+
+      if (isTwoPacket) {
+        // 1. Stage 1 Technical Evaluation must be completed
+        const isTechComplete = [
+          'TECHNICAL_EVALUATION_COMPLETED',
+          'FINANCIAL_EVALUATION',
+          'L1_GENERATED',
+          'AWARD_RECOMMENDED',
+          'AWARDED',
+          'PO_GENERATED',
+          'COMPLETED'
+        ].includes(String(linkedBid.status || '').toUpperCase()) ||
+        [
+          'TECHNICAL_EVALUATION_COMPLETED',
+          'FINANCIAL_EVALUATION',
+          'L1_GENERATED',
+          'AWARD_RECOMMENDED',
+          'AWARDED',
+          'PO_GENERATED',
+          'COMPLETED'
+        ].includes(String(linkedBid.lifecycleStage || '').toUpperCase());
+
+        if (!isTechComplete) {
+          return res.status(400).json({
+            success: false,
+            error: 'Stage 1 Technical Evaluation must be fully completed before launching Stage 2 Reverse Auction.',
+            code: 'STAGE_1_NOT_COMPLETED'
+          });
+        }
+
+        // 2. Financial Opening Date check
+        const finOpenCandidate = linkedBid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate || packetMeta.financialEvaluationDate;
+        if (finOpenCandidate) {
+          const finOpenTime = new Date(finOpenCandidate).getTime();
+          if (!isNaN(finOpenTime) && finOpenTime > Date.now()) {
+            return res.status(400).json({
+              success: false,
+              error: `Stage 2 Reverse Auction cannot be initiated before the scheduled financial opening date and time (${new Date(finOpenCandidate).toLocaleString('en-IN')}).`,
+              code: 'FINANCIAL_OPENING_NOT_REACHED'
+            });
+          }
+        }
+
+        // 3. Minimum 2 qualified participants required for competitive reverse auction
+        if (payload.selectedSellers.length < 2) {
+          return res.status(400).json({
+            success: false,
+            error: 'Stage 2 Reverse Auction requires at least 2 technically qualified sellers for competitive bidding.',
+            code: 'INSUFFICIENT_QUALIFIED_SELLERS'
+          });
+        }
+      }
+    }
+
     const parentRef = linkedBid?.bidNumber || linkedReq?.requirementNumber || (Number.isFinite(numId) ? `RC-${numId}` : String(rawId));
     const parentBaseTitle = linkedBid?.title || linkedReq?.title || 'Procurement';
     const procurementTitle = payload.title

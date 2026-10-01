@@ -74,13 +74,9 @@ export default function StartReverseAuctionModal({
   // Vendor selection states - prioritize technically qualified vendors if present, otherwise select all non-disqualified
   const [selectedVendorKeys, setSelectedVendorKeys] = useState<Set<number>>(() => {
     const keys = new Set<number>();
-    const hasExplicitQualified = submittedVendors.some(
-      v => String(v.technicalStatus || '').toUpperCase() === 'QUALIFIED'
-    );
-
     submittedVendors.forEach((v, idx) => {
       const status = String(v.technicalStatus || '').toUpperCase();
-      if (hasExplicitQualified) {
+      if (isTwoPacket) {
         if (status === 'QUALIFIED') {
           keys.add(idx);
         }
@@ -90,7 +86,7 @@ export default function StartReverseAuctionModal({
         }
       }
     });
-    return keys.size > 0 ? keys : new Set(submittedVendors.map((_, idx) => idx));
+    return keys;
   });
 
   // Dynamic Opening Ceiling Benchmark calculated strictly from the APPROVED/SELECTED vendors!
