@@ -1272,6 +1272,9 @@ export default function CreateProcurementPage() {
 
     const importedItems = activeCart.items.map(cartItemToProcurementItem);
     const totals = computeProcurementTotals(importedItems);
+    const hasServices = activeCart.items.some(i => Boolean(i.service || i.serviceId));
+    const hasProducts = activeCart.items.some(i => !i.service && !i.serviceId);
+    const detectedBuying = (hasServices && !hasProducts) ? 'Service' : 'Product';
 
     setDraft(current => {
       const next = {
@@ -1279,7 +1282,8 @@ export default function CreateProcurementPage() {
         type: 'RFQ' as ProcurementMethodId,
         basics: {
           ...current.basics,
-          title: current.basics.title || 'Request for Quotation from Cart',
+          whatAreYouBuying: detectedBuying,
+          title: current.basics.title || (detectedBuying === 'Service' ? 'Request for Quotation - Services from Cart' : 'Request for Quotation from Cart'),
           estimatedValue: Math.round(totals.grossValue),
         },
         items: importedItems,
@@ -4700,7 +4704,7 @@ function ItemsDetailsForm({
       brandPolicy: 'Equivalent allowed',
       technicalSpecification: '',
       specificationFileName: '',
-      hsn_sac_code: '',
+      hsn_sac_code: itemType === 'Service' ? '9987' : '',
       brand_preference: '',
       brand_flexible: 'Yes',
       fileAssetId: null,
@@ -4719,9 +4723,10 @@ function ItemsDetailsForm({
         nextItems.push(item);
       }
       const totals = computeProcurementTotals(nextItems);
+      const nextEst = totals.grossValue > 0 ? Math.round(totals.grossValue) : current.basics.estimatedValue;
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
+        basics: { ...current.basics, estimatedValue: nextEst },
         items: nextItems
       };
     });
@@ -4740,9 +4745,10 @@ function ItemsDetailsForm({
         nextItems.push(item);
       }
       const totals = computeProcurementTotals(nextItems);
+      const nextEst = totals.grossValue > 0 ? Math.round(totals.grossValue) : current.basics.estimatedValue;
       return {
         ...current,
-        basics: { ...current.basics, estimatedValue: Math.round(totals.grossValue) },
+        basics: { ...current.basics, estimatedValue: nextEst },
         items: nextItems
       };
     });
@@ -4933,9 +4939,23 @@ function ItemsDetailsForm({
   };
 
   const handleImportCartItems = () => {
-    const cartItems = activeCart?.items || [];
+    const rawCartItems = activeCart?.items || [];
+    if (rawCartItems.length === 0) {
+      toast.error('Cart is empty. Add catalogue items from Marketplace first.');
+      return;
+    }
+
+    const cartItems = rawCartItems.filter(item => {
+      const isService = Boolean(item.serviceId || item.service || (item as any).itemType === 'Service');
+      return whatBuying === 'Service' ? isService : !isService;
+    });
+
     if (cartItems.length === 0) {
-      toast.error('Cart is empty. Add catalogue products from Marketplace first.');
+      if (whatBuying === 'Service') {
+        toast.error('No service items found in active cart. Please add services from the marketplace.');
+      } else {
+        toast.error('No product items found in active cart. Please add products from the marketplace.');
+      }
       return;
     }
 
@@ -4944,16 +4964,17 @@ function ItemsDetailsForm({
       const manualItems = current.items.filter(item => !String(item.id).startsWith('cart:'));
       const nextItems = [...manualItems, ...importedItems];
       const totals = computeProcurementTotals(nextItems);
+      const nextEst = totals.grossValue > 0 ? Math.round(totals.grossValue) : current.basics.estimatedValue;
       return {
         ...current,
         basics: {
           ...current.basics,
-          estimatedValue: Math.round(totals.grossValue),
+          estimatedValue: nextEst,
         },
         items: nextItems,
       };
     });
-    toast.success(`Imported ${importedItems.length} cart item${importedItems.length === 1 ? '' : 's'}`);
+    toast.success(`Imported ${importedItems.length} ${whatBuying === 'Service' ? 'service' : 'product'} item${importedItems.length === 1 ? '' : 's'} from Cart`);
   };
 
   // Service details handlers
@@ -5215,7 +5236,7 @@ function ItemsDetailsForm({
     },
     {
       key: 'rate',
-      header: 'Est. Unit Rate',
+      header: whatBuying === 'Service' ? 'Est. Service Rate' : 'Est. Unit Rate',
       width: 'w-[10%] min-w-[110px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
@@ -5228,13 +5249,17 @@ function ItemsDetailsForm({
             <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
           </div>
         ) : (
-          <span className="text-slate-400 font-normal">-</span>
+          <div className="text-right whitespace-nowrap">
+            <span className="inline-flex items-center text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title="Rate will be quoted by bidders during bidding">
+              Quote in Bid
+            </span>
+          </div>
         );
       }
     },
     {
       key: 'total',
-      header: 'Line Total (Incl. GST)',
+      header: whatBuying === 'Service' ? 'Service Fee (Incl. GST)' : 'Line Total (Incl. GST)',
       width: 'w-[11%] min-w-[125px]',
       align: 'right',
       cellClassName: 'font-extrabold text-slate-900',
@@ -5250,39 +5275,63 @@ function ItemsDetailsForm({
             <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
           </div>
         ) : (
-          <span className="text-slate-400 font-normal">-</span>
+          <div className="text-right whitespace-nowrap">
+            <span className="text-slate-400 text-[11px] italic">TBD in Bidding</span>
+          </div>
         );
       }
     },
     {
       key: 'hsn',
-      header: 'HSN / SAC',
+      header: whatBuying === 'Service' ? 'SAC Code' : 'HSN / SAC',
       width: 'w-[6%] min-w-[80px]',
       align: 'center',
       cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
-      cell: (item: any) => item.hsn_sac_code || <span className="text-slate-400">-</span>
+      cell: (item: any) => {
+        const code = item.hsn_sac_code || (item.itemType === 'Service' ? '9987' : '');
+        return code ? (
+          <span className={cn(
+            "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-tight inline-block",
+            item.itemType === 'Service'
+              ? "bg-purple-50 text-purple-700 border border-purple-200"
+              : "bg-slate-100 text-slate-700 border border-slate-200"
+          )}>
+            {item.itemType === 'Service' && !String(code).startsWith('SAC') ? `SAC ${code}` : code}
+          </span>
+        ) : (
+          <span className="text-slate-400">-</span>
+        );
+      }
     },
     {
       key: 'brand',
-      header: 'Brand & Policy',
+      header: whatBuying === 'Service' ? 'Contract Standard' : 'Brand & Policy',
       width: 'w-[9%] min-w-[105px]',
       cell: (item: any) => (
-        <div className="min-w-0">
-          <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
-            {item.brand_preference || 'Any Brand'}
+        item.itemType === 'Service' ? (
+          <div className="min-w-0">
+            <span className="inline-flex items-center text-[9.5px] font-black uppercase text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded shadow-3xs whitespace-nowrap">
+              SOW / SLA
+            </span>
           </div>
-          <div className="mt-0.5 whitespace-nowrap">
-            {item.brand_flexible === 'No' ? (
-              <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
-                Lock
-              </span>
-            ) : (
-              <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
-                Flexible
-              </span>
-            )}
+        ) : (
+          <div className="min-w-0">
+            <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
+              {item.brand_preference || 'Any Brand'}
+            </div>
+            <div className="mt-0.5 whitespace-nowrap">
+              {item.brand_flexible === 'No' ? (
+                <span className="inline-flex items-center text-[9px] font-black uppercase text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                  Lock
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded">
+                  Flexible
+                </span>
+              )}
+            </div>
           </div>
-        </div>
+        )
       )
     },
     {
@@ -5909,28 +5958,38 @@ function ItemsDetailsForm({
               type="button"
               size="sm"
               onClick={() => {
-                const title = draft.serviceDetails.serviceTitle || draft.basics.title || 'Master Service Scope';
+                const title = draft.serviceDetails.serviceTitle || draft.basics.title || 'Routine Maintenance & Service Scope';
                 const estVal = Number(draft.basics.estimatedValue || 0);
-                const baseVal = Math.round(estVal / 1.18);
+                const gst = 18;
+                const baseVal = estVal > 0 ? Math.round((estVal / (1 + gst / 100)) * 100) / 100 : 0;
+                const existingIdx = draft.items.findIndex(i => i.itemType === 'Service' && (i.id === 'sow-master-line' || i.name === title));
+                const targetId = existingIdx >= 0 ? draft.items[existingIdx].id : 'sow-master-line';
+
                 handleSaveItem({
-                  id: makeId(),
+                  id: targetId,
                   itemType: 'Service',
                   name: title,
-                  specification: draft.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) specification document.',
+                  specification: draft.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) specification document and SLA terms.',
                   quantity: 1,
-                  unit: 'Set',
-                  unitPrice: baseVal > 0 ? baseVal : estVal,
-                  gst: 18,
+                  unit: 'Job',
+                  unitPrice: baseVal,
+                  gst: gst,
                   deliveryDate: nextFortnight,
                   brandPolicy: 'Equivalent allowed',
                   technicalSpecification: draft.serviceDetails.scopeOfWork || '',
                   specificationFileName: draft.serviceDetails.sowFileName || '',
-                  hsn_sac_code: '9983',
+                  hsn_sac_code: '9987',
                   brand_preference: '',
                   brand_flexible: 'Yes',
                   fileAssetId: draft.serviceDetails.sowFileAssetId || null,
                   attachments: [],
                 });
+
+                if (estVal <= 0) {
+                  toast.info('SOW Line initialized with benchmark ₹0. Bidders will quote pricing in bid.');
+                } else {
+                  toast.success('Initialized 1 Lump-Sum SOW line synchronized with tender budget.');
+                }
               }}
               className="bg-purple-700 hover:bg-purple-800 text-white font-black text-xs shrink-0 cursor-pointer shadow-3xs"
             >
@@ -5941,84 +6000,106 @@ function ItemsDetailsForm({
         )}
 
         {/* Action Toolbar: Strictly gated by whatAreYouBuying */}
-        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
-          <div className="flex items-center gap-2 shrink-0 flex-nowrap">
-            {whatBuying !== 'Service' && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => handleAddNewItem('Product')}
-                className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
-              </Button>
-            )}
+        {(() => {
+          const serviceCartCount = (activeCart?.items || []).filter(i => Boolean(i.service || i.serviceId || (i as any).itemType === 'Service')).length;
+          const productCartCount = (activeCart?.items || []).filter(i => !i.service && !i.serviceId && (i as any).itemType !== 'Service').length;
 
-            {whatBuying === 'Service' && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => handleAddNewItem('Service')}
-                className="h-8.5 px-3.5 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shadow-3xs shrink-0 whitespace-nowrap"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
-              </Button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
-            {whatBuying !== 'Service' ? (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleImportCartItems}
-                  disabled={isCartLoading}
-                  className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
-                  title="Import catalogue items from your active cart"
-                >
-                  <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
-                  {isCartLoading ? 'Reading Cart...' : activeCart?.items?.length ? `Import Cart (${activeCart.items.length})` : 'Import Cart'}
-                </Button>
-
-                <div className="relative shrink-0">
-                  <input
-                    type="file"
-                    id="item-template-import"
-                    accept=".xlsx,.xls,.csv,.txt"
-                    onChange={handleImportItemTemplate}
-                    className="sr-only"
-                    aria-label="Import items from Excel or CSV spreadsheet"
-                  />
-                  <label
-                    htmlFor="item-template-import"
-                    className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
-                    title="Import items from Excel (.xlsx) or CSV spreadsheet"
+          return (
+            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
+              <div className="flex items-center gap-2 shrink-0 flex-nowrap">
+                {whatBuying !== 'Service' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleAddNewItem('Product')}
+                    className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
                   >
-                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
-                  </label>
-                </div>
+                    <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
+                  </Button>
+                )}
 
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDownloadItemTemplate}
-                  className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
-                  title="Download Excel template (.xlsx) for bulk items"
-                >
-                  <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
-                </Button>
-              </>
-            ) : (
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-100/80 border border-purple-200 px-3 py-1.5 rounded-lg shadow-3xs">
-                <Wrench className="h-3.5 w-3.5 text-purple-700 shrink-0" />
-                <span>Service & SOW Sourcing Mode</span>
+                {whatBuying === 'Service' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleAddNewItem('Service')}
+                    className="h-8.5 px-3.5 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shadow-3xs shrink-0 whitespace-nowrap"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+                  </Button>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+
+              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
+                {whatBuying !== 'Service' ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleImportCartItems}
+                      disabled={isCartLoading}
+                      className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+                      title="Import catalogue items from your active cart"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
+                      {isCartLoading ? 'Reading Cart...' : productCartCount ? `Import Cart (${productCartCount})` : 'Import Cart'}
+                    </Button>
+
+                    <div className="relative shrink-0">
+                      <input
+                        type="file"
+                        id="item-template-import"
+                        accept=".xlsx,.xls,.csv,.txt"
+                        onChange={handleImportItemTemplate}
+                        className="sr-only"
+                        aria-label="Import items from Excel or CSV spreadsheet"
+                      />
+                      <label
+                        htmlFor="item-template-import"
+                        className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
+                        title="Import items from Excel (.xlsx) or CSV spreadsheet"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
+                      </label>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleDownloadItemTemplate}
+                      className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+                      title="Download Excel template (.xlsx) for bulk items"
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleImportCartItems}
+                      disabled={isCartLoading}
+                      className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-purple-800 border-purple-200 hover:bg-purple-50 shrink-0 whitespace-nowrap"
+                      title="Import service items from your active cart"
+                    >
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-purple-600" aria-hidden="true" />
+                      {isCartLoading ? 'Reading Cart...' : serviceCartCount ? `Import Services (${serviceCartCount})` : 'Import Services from Cart'}
+                    </Button>
+
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-100/80 border border-purple-200 px-3 py-1.5 rounded-lg shadow-3xs">
+                      <Wrench className="h-3.5 w-3.5 text-purple-700 shrink-0" />
+                      <span>Service & SOW Mode</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Helpful Hint Cards - Contextually Gated */}
@@ -6151,14 +6232,22 @@ function ItemsDetailsForm({
               </div>
             </div>
 
-            {/* Reconciliation Banner between Step 2 estimate & BOQ schedule */}
+            {/* Reconciliation Banner between Step 2 estimate & Schedule */}
             {draft.items.length > 0 && (
               !isSynced ? (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs">
                   <div className="flex items-center gap-2 text-amber-900 font-semibold">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
                     <span>
-                      Step 2 initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but itemized schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
+                      {whatBuying === 'Service' ? (
+                        <>
+                          Tender initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but Service Schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
+                        </>
+                      ) : (
+                        <>
+                          Step 2 initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but itemized schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
+                        </>
+                      )}
                     </span>
                   </div>
                   <Button
@@ -6169,18 +6258,22 @@ function ItemsDetailsForm({
                         ...c,
                         basics: { ...c.basics, estimatedValue: Math.round(totals.grossValue) }
                       }));
-                      toast.success('Tender estimated budget synced with Schedule Total!');
+                      toast.success(whatBuying === 'Service' ? 'Tender estimated budget synced with Service Schedule Total!' : 'Tender estimated budget synced with Schedule Total!');
                     }}
                     className="h-7.5 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap shadow-3xs"
                   >
-                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync Tender Budget with BOQ
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> {whatBuying === 'Service' ? 'Sync Tender Budget with Service Schedule' : 'Sync Tender Budget with BOQ'}
                   </Button>
                 </div>
               ) : (
                 <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-semibold text-emerald-800">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                    <span>Tender estimated budget is fully synchronized with schedule line items (Base + GST).</span>
+                    <span>
+                      {whatBuying === 'Service'
+                        ? 'Service schedule total is fully aligned with your tender budget ceiling.'
+                        : 'Tender estimated budget is fully synchronized with schedule line items (Base + GST).'}
+                    </span>
                   </div>
                   <span className="text-[9.5px] font-black uppercase text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
                     Synchronized
