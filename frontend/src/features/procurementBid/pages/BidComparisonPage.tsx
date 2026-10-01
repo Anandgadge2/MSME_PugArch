@@ -198,7 +198,7 @@ export default function BidComparisonPage() {
     const firstVal = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
 
     const rawMakeBrand = firstVal(p.makeBrand, details.makeBrand, respData.makeBrand, ackData.makeBrand, descObj.makeBrand, techOffer.makeBrand, firstItem.makeBrand, firstItem.brand);
-    const resolvedMakeBrand = rawMakeBrand || 'Standard / OEM Make';
+    const resolvedMakeBrand = (rawMakeBrand && rawMakeBrand !== '—' && rawMakeBrand.toLowerCase() !== 'standard') ? rawMakeBrand : '—';
 
     const rawModel = firstVal(
       p.model,
@@ -217,7 +217,7 @@ export default function BidComparisonPage() {
       firstItem.modelNumber,
       firstItem.partNumber
     );
-    const resolvedModel = rawModel || (resolvedMakeBrand !== 'Standard / OEM Make' ? 'Standard / OEM Specs' : 'Standard / As Quoted');
+    const resolvedModel = (rawModel && rawModel !== '—' && rawModel.toLowerCase() !== 'standard') ? rawModel : '—';
 
     const rawPay = firstVal(
       p.paymentTerms,

@@ -334,7 +334,7 @@ export function TechnicalEvaluationModal({
     firstLine.makeBrand,
     firstLine.brand,
   );
-  const makeBrand = (rawMakeBrand && rawMakeBrand !== "—") ? rawMakeBrand : "Standard / OEM Make";
+  const makeBrand = (rawMakeBrand && rawMakeBrand !== "—" && rawMakeBrand.toLowerCase() !== "standard") ? rawMakeBrand : "—";
 
   const rawModel = firstValid(
     participation.model,
@@ -378,7 +378,7 @@ export function TechnicalEvaluationModal({
         )?.[1]
       : null,
   );
-  const model = (rawModel && rawModel !== "—") ? rawModel : (makeBrand !== "Standard / OEM Make" ? "Standard / OEM Specs" : "Standard / As Quoted");
+  const model = (rawModel && rawModel !== "—" && rawModel.toLowerCase() !== "standard") ? rawModel : "—";
 
   const techSpecs = firstValid(
     participation.technicalSpecifications,
@@ -410,7 +410,7 @@ export function TechnicalEvaluationModal({
     firstLine.complianceStatus,
   );
 
-  const deliveryTimeline = firstValid(
+  const rawDel = firstValid(
     participation.deliveryTimeline,
     detailsData.deliveryTimeline,
     respData.deliveryTimeline,
@@ -418,8 +418,17 @@ export function TechnicalEvaluationModal({
     descData.deliveryTimeline,
     rawPart.deliveryTimeline,
     firstLine.deliveryTimeline,
-    "—",
   );
+  let deliveryTimeline = "—";
+  if (
+    rawDel &&
+    !["standard", "standard terms", "standard schedule", "standard delivery window", "as specified"].includes(
+      String(rawDel).toLowerCase().trim(),
+    )
+  ) {
+    const trimmed = String(rawDel).trim();
+    deliveryTimeline = /^\d+$/.test(trimmed) ? `${trimmed} Days` : trimmed;
+  }
 
   const totalLineQty = lineItems.reduce(
     (sum: number, it: any) => sum + (Number(it.quantity) || 0),

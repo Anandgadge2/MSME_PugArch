@@ -1430,6 +1430,24 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
         sellerOrgId = sellerUserId || 1;
       }
 
+      let bpMatch: any = null;
+      if (linkedBid?.id) {
+        bpMatch = await db.procurementBidParticipation.findFirst({
+          where: {
+            bidId: linkedBid.id,
+            OR: [
+              ...(sellerUserId ? [{ sellerId: sellerUserId }] : []),
+              ...(sellerOrgId ? [{ seller: { organizationId: sellerOrgId } }] : [])
+            ]
+          }
+        }).catch(() => null);
+      }
+      const vendorAny = vendor as any;
+      const mb = vendorAny.makeBrand || bpMatch?.makeBrand || (bpMatch?.acknowledgement as any)?.makeBrand || (bpMatch?.acknowledgement as any)?.lineItems?.[0]?.makeBrand || null;
+      const mod = vendorAny.model || bpMatch?.model || (bpMatch?.acknowledgement as any)?.model || (bpMatch?.acknowledgement as any)?.lineItems?.[0]?.model || null;
+      const gst = Number(vendorAny.gstPercentage || vendorAny.gstPercent || bpMatch?.gstPercentage || (bpMatch?.acknowledgement as any)?.lineItems?.[0]?.gstPercent || 0) || null;
+      const initialAmount = Number(vendorAny.quotedAmount || bpMatch?.quotedAmount || amount);
+
       const part = await db.auctionParticipant.create({
         data: {
           auctionId: auction.id,
@@ -1440,7 +1458,11 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
           qualifiedAt: new Date(),
           currentRank: rank,
           lastBidAmount: amount,
-          initialQuoteTotal: amount
+          initialQuoteTotal: amount,
+          initialQuoteAmount: initialAmount,
+          initialQuoteGstPercent: gst,
+          makeBrand: mb,
+          model: mod
         }
       });
       participantRecords.push(part);
@@ -1950,14 +1972,66 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
 
     const participants = await db.auctionParticipant.findMany({
       where: { auctionId: id },
+      include: {
+        qualificationDocuments: true
+      },
       orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }]
     });
+
     const orgIds = Array.from(new Set(participants.map((p: any) => p.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({
       where: { id: { in: orgIds as number[] } },
-      select: { id: true, organizationName: true }
+      select: { id: true, organizationName: true, legalBusinessName: true }
     });
-    const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
+    const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName || o.legalBusinessName]));
+
+    const userIds = Array.from(new Set(participants.map((p: any) => p.sellerUserId).filter(Boolean)));
+    const users = userIds.length ? await db.user.findMany({
+      where: { id: { in: userIds as number[] } },
+      select: { id: true, name: true, email: true, mobile: true, organizationId: true }
+    }) : [];
+    const userMap = new Map(users.map((u: any) => [u.id, u]));
+
+    // Resolve linked procurement bid if present to retrieve authentic Stage 1 proposals, line items, and contacts
+    let parentBidId = auction.linkedBidId || null;
+    if (!parentBidId && (auction.referenceNo || (auction.auctionConfig as any)?.parentRefNumber)) {
+      const ref = auction.referenceNo || (auction.auctionConfig as any)?.parentRefNumber;
+      const cleanRef = String(ref).trim();
+      const foundBid = await db.procurementBid.findFirst({
+        where: {
+          OR: [
+            { bidNumber: cleanRef },
+            { bidNumber: cleanRef.replace(/^RA-/, 'RFQ-') },
+            { bidNumber: cleanRef.replace(/^RA-/, 'TEN-') },
+            { bidNumber: cleanRef.replace(/^RA-/, 'TND-') },
+            { bidNumber: cleanRef.replace(/^RA-/, 'RC-') }
+          ]
+        },
+        select: { id: true }
+      });
+      if (foundBid) parentBidId = foundBid.id;
+    }
+
+    const bidParticipations = parentBidId
+      ? await db.procurementBidParticipation.findMany({
+          where: { bidId: parentBidId },
+          include: {
+            seller: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                mobile: true,
+                organizationId: true,
+                organization: {
+                  select: { id: true, organizationName: true, legalBusinessName: true }
+                }
+              }
+            },
+            documents: true
+          }
+        })
+      : [];
 
     const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
     const mappedParticipants = participants.map((p: any, index: number) => {
@@ -1966,12 +2040,53 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
       const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
       const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
 
+      const matchedBp = bidParticipations.find((bp: any) => 
+        (p.sellerUserId && bp.sellerId === p.sellerUserId) ||
+        (p.sellerOrgId && (bp.seller?.organizationId === p.sellerOrgId || bp.sellerOrgId === p.sellerOrgId))
+      );
+
+      const ack = (matchedBp?.acknowledgement && typeof matchedBp.acknowledgement === 'object' && !Array.isArray(matchedBp.acknowledgement))
+        ? matchedBp.acknowledgement as any
+        : {};
+
+      const sellerUserObj = userMap.get(p.sellerUserId) || matchedBp?.seller || null;
+      const makeBrand = p.makeBrand || matchedBp?.makeBrand || ack.makeBrand || ack.lineItems?.[0]?.makeBrand || null;
+      const model = p.model || matchedBp?.model || ack.model || ack.lineItems?.[0]?.model || null;
+      const initialQuoteAmount = p.initialQuoteAmount ?? matchedBp?.quotedAmount ?? null;
+      const initialQuoteTotal = p.initialQuoteTotal ?? matchedBp?.totalAmount ?? null;
+      const initialQuoteGstPercent = p.initialQuoteGstPercent ?? matchedBp?.gstPercentage ?? ack.lineItems?.[0]?.gstPercent ?? null;
+      const lineItems = (Array.isArray(ack.lineItems) && ack.lineItems.length > 0) ? ack.lineItems : [];
+      const documents = (matchedBp?.documents && Array.isArray(matchedBp.documents) && matchedBp.documents.length > 0)
+        ? matchedBp.documents
+        : (p.qualificationDocuments || []);
+
       return {
         ...p,
         sellerOrgName: displayName,
         sellerOrgId: (showAllNames || isMe) ? p.sellerOrgId : null,
         sellerUserId: (showAllNames || isMe) ? p.sellerUserId : null,
-        isCurrentViewer: Boolean(isMe)
+        isCurrentViewer: Boolean(isMe),
+        makeBrand,
+        model,
+        initialQuoteAmount,
+        initialQuoteTotal,
+        initialQuoteGstPercent,
+        technicalSpecifications: matchedBp?.offeredItemDescription || ack.technicalSpecifications || ack.lineItems?.[0]?.specifications || null,
+        deliveryTimeline: ack.deliveryTimeline || null,
+        paymentTerms: ack.paymentTerms || ack.terms || null,
+        lineItems,
+        acknowledgement: matchedBp?.acknowledgement || null,
+        documents,
+        sellerUser: (showAllNames || isMe) && sellerUserObj ? {
+          id: sellerUserObj.id,
+          name: sellerUserObj.name,
+          email: sellerUserObj.email,
+          mobile: sellerUserObj.mobile
+        } : null,
+        sellerName: (showAllNames || isMe) ? (sellerUserObj?.name || null) : null,
+        sellerEmail: (showAllNames || isMe) ? (sellerUserObj?.email || null) : null,
+        sellerPhone: (showAllNames || isMe) ? (sellerUserObj?.mobile || null) : null,
+        contactPerson: (showAllNames || isMe) ? (sellerUserObj?.name || null) : null
       };
     });
     return apiResponse.success(res, { participants: maskSensitive(mappedParticipants) });

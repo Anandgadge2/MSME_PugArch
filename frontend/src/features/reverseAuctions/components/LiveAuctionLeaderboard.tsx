@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   Activity,
   Trophy,
@@ -38,6 +38,8 @@ export default function LiveAuctionLeaderboard({
   onPoGenerated,
 }: LiveAuctionLeaderboardProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isBuyer = pathname?.startsWith('/buyer');
   const [auction, setAuction] = useState<ReverseAuction | null>(null);
   const [participants, setParticipants] = useState<ReverseAuctionParticipant[]>([]);
   const [bids, setBids] = useState<any[]>([]);
@@ -329,13 +331,15 @@ export default function LiveAuctionLeaderboard({
             Refresh
           </Button>
 
-          <Link
-            href={`/seller/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`}
-            target="_blank"
-            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
-          >
-            <ExternalLink className="h-3.5 w-3.5" /> Open Full Board
-          </Link>
+          {isLive && (
+            <Link
+              href={`${isBuyer ? '/buyer' : '/seller'}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`}
+              target="_blank"
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
+            >
+              <ExternalLink className="h-3.5 w-3.5" /> Open Full Board
+            </Link>
+          )}
 
           {isLive && (
             <Button

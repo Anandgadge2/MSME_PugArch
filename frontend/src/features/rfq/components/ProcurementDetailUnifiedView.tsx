@@ -5505,22 +5505,45 @@ export function ProcurementDetailUnifiedView(
               : respData.deliveryTimeline &&
                   respData.deliveryTimeline !== "Standard"
                 ? respData.deliveryTimeline
-                : undefined,
+                : r.acknowledgement?.deliveryTimeline || undefined,
           paymentTerms:
-            r.paymentTerms || respData.paymentTerms || "As per tender",
-          makeBrand: r.makeBrand || respData.makeBrand || "Standard",
+            r.paymentTerms || respData.paymentTerms || r.acknowledgement?.paymentTerms || r.acknowledgement?.terms || undefined,
+          makeBrand:
+            r.makeBrand && r.makeBrand !== "Standard"
+              ? r.makeBrand
+              : respData.makeBrand && respData.makeBrand !== "Standard"
+                ? respData.makeBrand
+                : r.acknowledgement?.makeBrand || undefined,
+          model:
+            r.model && r.model !== "Standard"
+              ? r.model
+              : respData.model && respData.model !== "Standard"
+                ? respData.model
+                : r.acknowledgement?.model || undefined,
+          technicalSpecifications:
+            r.technicalSpecifications ||
+            respData.technicalSpecifications ||
+            r.offeredItemDescription ||
+            r.acknowledgement?.technicalSpecifications ||
+            undefined,
+          acknowledgement: r.acknowledgement || respData.acknowledgement || undefined,
+          gstPercentage: r.gstPercentage ?? r.gstPercent ?? r.initialQuoteGstPercent ?? respData.gstPercentage ?? undefined,
+          initialQuoteAmount: r.initialQuoteAmount ?? r.quotedAmount ?? undefined,
+          initialQuoteTotal: r.initialQuoteTotal ?? r.totalAmount ?? undefined,
           documents: r.documents || respData.documents || [],
           lineItems:
             Array.isArray(r.lineItems) && r.lineItems.length
               ? r.lineItems
-              : Array.isArray(respData.lineItems) && respData.lineItems.length
-                ? respData.lineItems
-                : Array.isArray(respData.lineQuotes) &&
-                    respData.lineQuotes.length
-                  ? respData.lineQuotes
-                  : Array.isArray(r.lineQuotes)
-                    ? r.lineQuotes
-                    : [],
+              : Array.isArray(r.acknowledgement?.lineItems) && r.acknowledgement.lineItems.length
+                ? r.acknowledgement.lineItems
+                : Array.isArray(respData.lineItems) && respData.lineItems.length
+                  ? respData.lineItems
+                  : Array.isArray(respData.lineQuotes) &&
+                      respData.lineQuotes.length
+                    ? respData.lineQuotes
+                    : Array.isArray(r.lineQuotes)
+                      ? r.lineQuotes
+                      : [],
           message: r.message || r.remarks || r.rfqNotes || "",
           seller: r.seller || {
             name: contactPerson,
@@ -5589,6 +5612,14 @@ export function ProcurementDetailUnifiedView(
                 props.linkedAuction
                   ? Promise.resolve(props.linkedAuction)
                   : reverseAuctionApi.get(idToken).catch(() => null),
+                ...((props.linkedAuction?.linkedBidId || (props.procurementData as any)?.bidNumber || (props.procurementData as any)?.id || (props as any).procurementBid?.bidNumber || props.linkedAuction?.referenceNo)
+                  ? [
+                      getApi(
+                        `/api/buyer/procurement-bids/${encodeURIComponent(String(props.linkedAuction?.linkedBidId || (props.procurementData as any)?.bidNumber || (props.procurementData as any)?.id || (props as any).procurementBid?.bidNumber || props.linkedAuction?.referenceNo))}/participants`,
+                        true,
+                      ).catch(() => null),
+                    ]
+                  : []),
               ]
             : [
                 getApi(
@@ -13667,12 +13698,12 @@ export function extractQuotationDetails(
       taxAmount: 0,
       gstPercentage: 0,
       offeredQty: "—",
-      deliveryTimeline: "Standard Delivery Window",
-      paymentTerms: "As per RFQ / Tender Terms (Escrow Protected)",
-      deliveryTerms: "Standard Delivery Window",
-      warranty: "Standard OEM Warranty",
-      makeBrand: "Standard / OEM Make",
-      model: "Standard / OEM Specs",
+      deliveryTimeline: "—",
+      paymentTerms: "—",
+      deliveryTerms: "—",
+      warranty: "—",
+      makeBrand: "—",
+      model: "—",
       techSpecs: "",
       complianceStatement: "",
       complianceRemarks: "",
@@ -13773,32 +13804,51 @@ export function extractQuotationDetails(
       : "Supplier Partner");
 
   const contactPerson =
-    participation.sellerName ||
-    participation.contactPerson ||
-    participation.seller?.name ||
-    participation.sellerUser?.name ||
-    "—";
+    first(
+      participation.contactPerson,
+      participation.sellerName,
+      participation.sellerUser?.name,
+      participation.seller?.name,
+      participation.representative,
+      respData.contactPerson,
+      respData.sellerName,
+      ackData.contactPerson,
+      ackData.sellerName,
+    ) || "—";
 
   const email =
     first(
       participation.sellerEmail,
-      participation.seller?.email,
+      participation.email,
       participation.sellerUser?.email,
+      participation.seller?.email,
       respData.sellerEmail,
+      respData.email,
       ackData.sellerEmail,
+      ackData.email,
       descData.sellerEmail,
+      descData.email,
     ) || "—";
 
   const phone =
     first(
       participation.sellerPhone,
-      participation.seller?.mobile,
-      participation.seller?.phone,
+      participation.phone,
+      participation.mobile,
+      participation.sellerMobile,
       participation.sellerUser?.mobile,
       participation.sellerUser?.phone,
+      participation.seller?.mobile,
+      participation.seller?.phone,
       respData.sellerMobile,
+      respData.mobile,
+      respData.phone,
       ackData.sellerMobile,
+      ackData.mobile,
+      ackData.phone,
       descData.sellerMobile,
+      descData.mobile,
+      descData.phone,
     ) || "—";
 
   // Financials & Taxes
@@ -13819,6 +13869,7 @@ export function extractQuotationDetails(
     first(
       participation.gstPercentage,
       participation.gstPercent,
+      participation.initialQuoteGstPercent,
       respData.gstPercentage,
       respData.gstPercent,
       ackData.gstPercentage,
@@ -13873,9 +13924,10 @@ export function extractQuotationDetails(
   const makeBrand =
     rawMakeBrand &&
     String(rawMakeBrand).trim() !== "" &&
-    String(rawMakeBrand).trim() !== "—"
+    String(rawMakeBrand).trim() !== "—" &&
+    String(rawMakeBrand).trim().toLowerCase() !== "standard"
       ? String(rawMakeBrand).trim()
-      : "Standard / OEM Make";
+      : "—";
 
   const rawModel = first(
     participation.model,
@@ -13928,11 +13980,10 @@ export function extractQuotationDetails(
   const model =
     rawModel &&
     String(rawModel).trim() !== "" &&
-    String(rawModel).trim() !== "—"
+    String(rawModel).trim() !== "—" &&
+    String(rawModel).trim().toLowerCase() !== "standard"
       ? String(rawModel).trim()
-      : (makeBrand && makeBrand !== "—" && makeBrand !== "Standard / OEM Make"
-          ? "Standard / OEM Specs"
-          : "Standard / As Quoted");
+      : "—";
 
   // Offered Quantity Resolution (Zero Dummy Fallback)
   const rawExplicitQty = first(
@@ -13988,10 +14039,10 @@ export function extractQuotationDetails(
     participation.deliveryDays ? `${participation.deliveryDays} Days` : undefined,
     respData.deliveryDays ? `${respData.deliveryDays} Days` : undefined,
   );
-  let deliveryTimeline = "Standard Delivery Window";
+  let deliveryTimeline = "—";
   if (
     rawDel &&
-    !["standard", "standard terms", "standard schedule", "as specified"].includes(
+    !["standard", "standard terms", "standard schedule", "standard delivery window", "as specified"].includes(
       String(rawDel).toLowerCase().trim(),
     )
   ) {
@@ -14032,7 +14083,7 @@ export function extractQuotationDetails(
   );
 
   const formatPaymentTerm = (val?: string | null): string => {
-    if (!val) return "As per RFQ / Tender Terms (Escrow Protected)";
+    if (!val) return "—";
     const str = String(val).trim();
     const lower = str.toLowerCase();
     if (lower === "on_delivery" || lower === "on delivery" || lower === "100_percent_delivery" || lower === "pay on delivery") {
@@ -14057,17 +14108,15 @@ export function extractQuotationDetails(
       return "Milestone / Stage-Wise Payment";
     }
     if (["standard", "standard terms", "standard payment terms", "as specified", "as per rfq", "as per tender", "as per tender terms", "as per tender requirements", "as per specifications"].includes(lower)) {
-      return "As per RFQ / Tender Terms (Escrow Protected)";
+      return "As per RFQ / Tender Terms";
     }
     return str;
   };
 
   let paymentTerms = formatPaymentTerm(rawPay);
-  if (!rawPay && (
+  if ((!rawPay || paymentTerms === "—") && (
     ackData.acceptedTerms === true ||
-    participation.acceptedTerms === true ||
-    participation.status === "SUBMITTED" ||
-    participation.submissionStatus === "SUBMITTED"
+    participation.acceptedTerms === true
   )) {
     paymentTerms = "RFQ terms accepted in full (Escrow Protected)";
   }

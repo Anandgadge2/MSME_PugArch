@@ -428,7 +428,7 @@ export function SupplierQuotationDetailView({
     rawLineItems[0]?.brand,
     ''
   );
-  const makeBrand = rawMakeBrand || 'Standard / OEM Make';
+  const makeBrand = (rawMakeBrand && rawMakeBrand !== '—' && rawMakeBrand.toLowerCase() !== 'standard') ? rawMakeBrand : '—';
 
   const rawModel = firstValidStr(
     result.model,
@@ -455,7 +455,7 @@ export function SupplierQuotationDetailView({
     rawLineItems[0]?.partNumber,
     ''
   );
-  const model = rawModel || (makeBrand && makeBrand !== 'Standard / OEM Make' ? 'Standard / OEM Specs' : 'Standard / As Quoted');
+  const model = (rawModel && rawModel !== '—' && rawModel.toLowerCase() !== 'standard') ? rawModel : '—';
 
   // If rawLineItems is empty or has only 1 summary row while tender specifies multiple items:
   if (rawLineItems.length <= 1 && uniqueTenderItems.length > 1) {
