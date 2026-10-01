@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   ChevronRight,
   UserCheck,
+  ExternalLink,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -602,9 +603,22 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             )}
             
             {auction.auctionCode && (
-              <span className="rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+              <span className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-mono font-black uppercase tracking-wider text-amber-700">
+                <span className="font-sans font-medium text-[9px] text-amber-600/80">Floor:</span>
                 {auction.auctionCode}
               </span>
+            )}
+
+            {auction.referenceNo && auction.referenceNo !== auction.auctionCode && (
+              <Link 
+                href={`/bids/${auction.referenceNo}`}
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-mono font-bold text-slate-700 hover:bg-slate-100 hover:text-[#0b2447] transition shadow-2xs"
+                title="View Originating Procurement Tender"
+              >
+                <span className="font-sans font-medium uppercase text-[9px] text-slate-400">Originating Tender:</span>
+                <span className="text-[#0b2447]">{auction.referenceNo}</span>
+                <ExternalLink className="h-2.5 w-2.5 text-slate-400 ml-0.5" />
+              </Link>
             )}
 
             {auction.autoExtensionEnabled && (

@@ -31,7 +31,7 @@ interface BuyerProcurementItem {
   id: string;
   bidNumber: string;
   title: string;
-  type: 'RFQ' | 'Open Tender' | 'Reverse Auction' | 'Direct Purchase';
+  type: 'RFQ' | 'Open Tender' | 'Limited Tender' | 'Rate Contract' | 'RFP' | 'Reverse Auction' | 'Direct Purchase';
   category: string;
   department?: string;
   location: string;
@@ -116,22 +116,63 @@ export function BuyerProcurementMonitor() {
         ? bid.participants.length 
         : (bid.participantsCount || bid.bidsCount || bid._count?.participants || 0);
 
+      const refToken = String(bid.referenceNumber || bid.bidNumber || '').trim().toUpperCase();
+      const rawMethod = String(
+        bid.method ||
+        bid.methodLabel ||
+        bid.canonicalMethod ||
+        bid.procurementMethod ||
+        bid.procurementType ||
+        bid.bidType ||
+        bid.type ||
+        ''
+      ).toUpperCase();
+
       let typeLabel: BuyerProcurementItem['type'] = 'RFQ';
       let methodSlug = 'rfq';
-      const rawMethod = String(bid.procurementMethod || bid.procurementType || bid.bidType || bid.type || '').toUpperCase();
-      if (bid.type === 'reverse_auction' || rawMethod.includes('AUCTION')) {
+
+      if (refToken.startsWith('RC-') || rawMethod.includes('RATE_CONTRACT') || rawMethod.includes('RATE-CONTRACT') || rawMethod.includes('RATE CONTRACT')) {
+        typeLabel = 'Rate Contract';
+        methodSlug = 'rate-contract';
+      } else if (refToken.startsWith('RA-') || bid.type === 'reverse_auction' || rawMethod.includes('AUCTION')) {
         typeLabel = 'Reverse Auction';
         methodSlug = 'reverse-auction';
-      } else if (bid.type === 'bid_tender' || rawMethod.includes('OPEN_TENDER') || rawMethod.includes('TENDER')) {
-        typeLabel = 'Open Tender';
-        methodSlug = 'open-tender';
-      } else if (rawMethod.includes('LIMITED')) {
+      } else if (refToken.startsWith('LTND-') || refToken.startsWith('LIM-') || rawMethod.includes('LIMITED')) {
+        typeLabel = 'Limited Tender';
         methodSlug = 'limited-tender';
-      } else if (rawMethod.includes('RFP')) {
+      } else if (refToken.startsWith('RFP-') || rawMethod.includes('RFP') || rawMethod.includes('PROPOSAL')) {
+        typeLabel = 'RFP';
         methodSlug = 'rfp';
-      } else if (bid.type === 'direct_purchase' || rawMethod.includes('DIRECT')) {
+      } else if (refToken.startsWith('DP-') || refToken.startsWith('DIR-') || bid.type === 'direct_purchase' || rawMethod.includes('DIRECT')) {
         typeLabel = 'Direct Purchase';
         methodSlug = 'direct-purchase';
+      } else if (refToken.startsWith('TND-') || rawMethod.includes('OPEN_TENDER') || rawMethod.includes('OPEN-TENDER') || rawMethod === 'TENDER' || rawMethod === 'OPEN TENDER') {
+        typeLabel = 'Open Tender';
+        methodSlug = 'open-tender';
+      } else if (refToken.startsWith('RFQ-') || rawMethod.includes('RFQ') || rawMethod.includes('QUOTE')) {
+        typeLabel = 'RFQ';
+        methodSlug = 'rfq';
+      } else {
+        const ml = String(bid.methodLabel || bid.method || '').toLowerCase();
+        if (ml.includes('rate contract')) {
+          typeLabel = 'Rate Contract';
+          methodSlug = 'rate-contract';
+        } else if (ml.includes('limited')) {
+          typeLabel = 'Limited Tender';
+          methodSlug = 'limited-tender';
+        } else if (ml.includes('rfp')) {
+          typeLabel = 'RFP';
+          methodSlug = 'rfp';
+        } else if (ml.includes('open tender') || ml === 'tender') {
+          typeLabel = 'Open Tender';
+          methodSlug = 'open-tender';
+        } else if (ml.includes('direct')) {
+          typeLabel = 'Direct Purchase';
+          methodSlug = 'direct-purchase';
+        } else {
+          typeLabel = 'RFQ';
+          methodSlug = 'rfq';
+        }
       }
 
       const procDetailId = bid.auctionCode || bid.id;
@@ -390,7 +431,21 @@ export function BuyerProcurementMonitor() {
                 {/* Left: Requisition Details */}
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-indigo-50 text-[#12335f] border border-indigo-100">
+                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${
+                      item.type === 'Rate Contract'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : item.type === 'Reverse Auction'
+                        ? 'bg-red-50 text-red-700 border-red-200'
+                        : item.type === 'Limited Tender'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : item.type === 'Open Tender'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : item.type === 'RFP'
+                        ? 'bg-teal-50 text-teal-700 border-teal-200'
+                        : item.type === 'Direct Purchase'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-indigo-50 text-[#12335f] border-indigo-100'
+                    }`}>
                       {item.type}
                     </span>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-mono">

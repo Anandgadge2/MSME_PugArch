@@ -30,13 +30,26 @@ export function getCanonicalLookupVariants(rawToken: string): string[] {
 }
 
 export function deriveMethodPrefix(method?: string | null, rawRef?: string | null, fallback = 'RFQ'): string {
+  // 1. If rawRef already has an authentic canonical prefix, it takes absolute precedence
+  if (rawRef && typeof rawRef === 'string') {
+    const trimmed = rawRef.trim().toUpperCase();
+    if (trimmed.startsWith('LTND-') || trimmed.startsWith('LIM-')) return 'LTND';
+    if (trimmed.startsWith('TND-')) return 'TND';
+    if (trimmed.startsWith('RFQ-')) return 'RFQ';
+    if (trimmed.startsWith('RFP-')) return 'RFP';
+    if (trimmed.startsWith('RC-')) return 'RC';
+    if (trimmed.startsWith('DP-') || trimmed.startsWith('DIR-')) return 'DP';
+    if (trimmed.startsWith('RA-')) return 'RA';
+  }
+
+  // 2. Otherwise derive from method token
   if (method) {
     const m = String(method).toUpperCase().replace(/[\s-]+/g, '_');
     if (m.includes('LIMITED_TENDER') || m === 'LTND' || m.includes('LIMITED_RFQ')) return 'LTND';
+    if (m.includes('RATE_CONTRACT') || m === 'RC' || m.includes('RATE')) return 'RC';
     if (m.includes('TENDER') || m === 'TND') return 'TND';
     if (m.includes('RFQ') || m.includes('QUOTE') || m.includes('QUOTATION')) return 'RFQ';
     if (m.includes('RFP') || m.includes('PROPOSAL')) return 'RFP';
-    if (m.includes('RATE_CONTRACT') || m === 'RC') return 'RC';
     if (
       m.includes('DIRECT_PURCHASE') ||
       m.includes('DIRECT') ||
@@ -47,17 +60,6 @@ export function deriveMethodPrefix(method?: string | null, rawRef?: string | nul
       m.includes('L1')
     ) return 'DP';
     if (m.includes('AUCTION') || m === 'RA') return 'RA';
-  }
-
-  if (rawRef && typeof rawRef === 'string') {
-    const trimmed = rawRef.trim().toUpperCase();
-    if (trimmed.startsWith('LTND-')) return 'LTND';
-    if (trimmed.startsWith('TND-')) return 'TND';
-    if (trimmed.startsWith('RFQ-')) return 'RFQ';
-    if (trimmed.startsWith('RFP-')) return 'RFP';
-    if (trimmed.startsWith('RC-')) return 'RC';
-    if (trimmed.startsWith('DP-')) return 'DP';
-    if (trimmed.startsWith('RA-')) return 'RA';
   }
 
   const fb = (fallback || 'RFQ').toUpperCase();
@@ -72,6 +74,14 @@ export function formatRefId(
   method?: string | null,
   year?: number | string | null
 ): string {
+  if (rawRef && typeof rawRef === 'string') {
+    const trimmed = rawRef.trim().toUpperCase();
+    // If rawRef is already in full canonical format, return it untouched
+    if (/^(RFQ|RFP|TND|LTND|RC|DP|RA)-\d{4}-\d{5}$/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
   const p = deriveMethodPrefix(method, rawRef, prefix);
   const defaultYear = year ? String(year) : '2026';
 

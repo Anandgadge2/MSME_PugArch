@@ -2309,14 +2309,30 @@ function RateContractParametersCard({
   rateContractConfig,
   terms,
   contractDocument,
+  isBuyer,
+  contractNumber,
+  contractId,
+  status,
+  isAwarded,
 }: {
   rateContractConfig: any;
   terms?: any;
   contractDocument?: any;
   isBuyer?: boolean;
+  contractNumber?: string | null;
+  contractId?: number | string | null;
+  status?: string | null;
+  isAwarded?: boolean;
 }) {
   const rc = rateContractConfig || {};
   const t = terms || {};
+
+  const isContractFormed = Boolean(
+    contractId ||
+    isAwarded ||
+    ['AWARDED', 'ACCEPTED', 'CONTRACT_ACTIVE', 'ACTIVE', 'COMPLETED', 'SETTLED'].includes(String(status || '').toUpperCase())
+  );
+  const activeContractNumber = contractNumber || (isContractFormed ? rc.rateContractNumber : null);
 
   const periodStart = rc.periodStartDate || rc.startDate || t.periodStartDate || null;
   const periodEnd = rc.periodEndDate || rc.endDate || t.periodEndDate || null;
@@ -2366,7 +2382,7 @@ function RateContractParametersCard({
                 Rate Contract Master Agreement Parameters
               </h3>
               <span className="rounded-full bg-blue-400/20 border border-blue-300/40 px-2 py-0.5 text-[9.5px] font-black uppercase text-blue-200">
-                Outline Standing Agreement
+                {isContractFormed ? "Executed Standing Agreement" : "Outline Standing Agreement"}
               </span>
             </div>
             <p className="text-[11px] text-white/80 font-medium">
@@ -2374,9 +2390,15 @@ function RateContractParametersCard({
             </p>
           </div>
         </div>
-        {rc.rateContractNumber && (
-          <span className="font-mono text-xs font-bold bg-white/15 px-2.5 py-1 rounded-lg border border-white/20 text-white">
-            {rc.rateContractNumber}
+        {isContractFormed && activeContractNumber ? (
+          <span className="font-mono text-xs font-bold bg-white/20 px-2.5 py-1 rounded-lg border border-white/30 text-white flex items-center gap-1.5 shadow-2xs">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" aria-hidden="true" />
+            <span>Master Agreement: {activeContractNumber}</span>
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-2.5 py-1 text-[11px] font-medium text-blue-200 backdrop-blur-xs">
+            <Clock className="h-3 w-3 text-blue-300" aria-hidden="true" />
+            <span>Agreement Number Allocated Upon Award</span>
           </span>
         )}
       </div>
@@ -4441,6 +4463,7 @@ export interface ProcurementDetailUnifiedViewProps {
 
   // Rate Contract Extensions
   contractId?: number;
+  contractNumber?: string | null;
   rateContractConfig?: any;
   contractDocument?: any;
   procurementData?: any;
@@ -10631,8 +10654,15 @@ export function ProcurementDetailUnifiedView(
                     displayIdStr !== "N/A" &&
                     displayIdStr !== "—" && (
                       <>
-                        <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60">
-                          {displayIdStr}
+                        <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
+                          <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
+                            {props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
+                              ? (displayIdStr.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
+                              : isRateContractType
+                              ? 'Tender Notice:'
+                              : 'Ref:'}
+                          </span>
+                          <span>{displayIdStr}</span>
                         </span>
                         <span>•</span>
                       </>
@@ -11464,6 +11494,14 @@ export function ProcurementDetailUnifiedView(
                     (props.procurementData as any)?.contractDocument ||
                     (props.rawBid as any)?.contractDocument
                   }
+                  contractId={props.contractId}
+                  contractNumber={
+                    props.contractNumber ||
+                    (props.procurementData as any)?.contractNumber ||
+                    (props.rawBid as any)?.contractNumber
+                  }
+                  status={effectiveStatusLabel || props.status}
+                  isAwarded={isBidAwarded || isAwardedToMe}
                   isBuyer={isBuyerSide}
                 />
               )}

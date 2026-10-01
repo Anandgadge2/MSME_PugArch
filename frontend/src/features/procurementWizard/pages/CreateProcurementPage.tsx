@@ -735,7 +735,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
 };
 
 const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: `RC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`,
+  rateContractNumber: '',
   contractTitle: '',
   contractDescription: '',
   contractCategory: '',
@@ -2759,7 +2759,7 @@ function BasicsStepForm({
               type="text"
               value={
                 draft.type === 'RATE_CONTRACT'
-                  ? (draft.rateContractConfig?.rateContractNumber || (draft as any).requirementNumber || 'Auto-generated upon creation')
+                  ? ((draft as any).requirementNumber ? formatRefId('RC', draft.id, (draft as any).requirementNumber, 'RATE_CONTRACT') : (draft.id ? formatRefId('RC', draft.id, null, 'RATE_CONTRACT') : 'Auto-generated upon creation'))
                   : draft.type === 'REVERSE_AUCTION'
                   ? ((draft.auctionConfig as any)?.auctionCode || (draft as any).requirementNumber || (draft.id ? formatRefId('REVERSE_AUCTION', draft.id, null, 'REVERSE_AUCTION') : 'Auto-generated upon creation'))
                   : (draft as any).requirementNumber
@@ -6772,10 +6772,17 @@ function ScheduleStepForm({
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100/70 px-3 py-1 text-xs font-mono font-bold text-slate-700">
-                <Lock className="h-3 w-3 text-slate-400" />
-                {draft.rateContractConfig.rateContractNumber}
-              </span>
+              {draft.rateContractConfig.rateContractNumber ? (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100/70 px-3 py-1 text-xs font-mono font-bold text-slate-700">
+                  <Lock className="h-3 w-3 text-slate-400" />
+                  {draft.rateContractConfig.rateContractNumber}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 px-2.5 py-1 text-[11px] font-medium text-blue-800">
+                  <Clock className="h-3 w-3 text-blue-600" />
+                  Master Agreement No. Allocated Upon Award
+                </span>
+              )}
             </div>
           </div>
 

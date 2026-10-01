@@ -1044,10 +1044,12 @@ export default function SubmitQuotationPage() {
                 id: bidData.bidNumber || bidData.id || requirementId,
                 procurementBidId: bidData.id,
                 procurementBidNumber: bidData.bidNumber,
+                bidNumber: bidData.bidNumber,
+                canonicalMethod: bidData.canonicalMethod || bidData.procurementType,
                 sourceId: bidData.sourceId,
                 sourceModel: bidData.sourceModel,
                 procurementType: bidData.procurementType,
-                procurementMethod: bidData.procurementMethod,
+                procurementMethod: bidData.procurementMethod || bidData.canonicalMethod || bidData.procurementType,
                 bidType: bidData.bidType || bidData.procurementType,
                 type: bidData.type || bidData.procurementType,
                 sourcingMethod: bidData.sourcingMethod,
@@ -1119,10 +1121,12 @@ export default function SubmitQuotationPage() {
               id: bidData.bidNumber || bidData.id || requirementId,
               procurementBidId: bidData.id,
               procurementBidNumber: bidData.bidNumber,
+              bidNumber: bidData.bidNumber,
+              canonicalMethod: bidData.canonicalMethod || bidData.procurementType,
               sourceId: bidData.sourceId,
               sourceModel: bidData.sourceModel,
               procurementType: bidData.procurementType,
-              procurementMethod: bidData.procurementMethod,
+              procurementMethod: bidData.procurementMethod || bidData.canonicalMethod || bidData.procurementType,
               bidType: bidData.bidType || bidData.procurementType,
               type: bidData.type || bidData.procurementType,
               sourcingMethod: bidData.sourcingMethod,
@@ -1228,12 +1232,14 @@ export default function SubmitQuotationPage() {
         isMarketplaceQuote: queryData.requirement.isMarketplaceQuote,
         isQuoteRequestEntity: queryData.requirement.isQuoteRequestEntity,
         procurementType: queryData.requirement.procurementType || queryData.requirement.bidType,
-        procurementMethod: queryData.requirement.procurementMethod,
+        canonicalMethod: queryData.requirement.canonicalMethod || queryData.requirement.procurementType,
+        procurementMethod: queryData.requirement.procurementMethod || queryData.requirement.canonicalMethod || queryData.requirement.procurementType,
         bidType: queryData.requirement.bidType,
         type: queryData.requirement.type,
         sourcingMethod: queryData.requirement.sourcingMethod,
         title: queryData.requirement.title || queryData.requirement.subject || (queryData.requirement.description && queryData.requirement.description.length < 80 && !queryData.requirement.description.includes('Sourcing Method:') ? queryData.requirement.description : undefined) || 'Sourcing Requirement',
-        requirementNumber: queryData.requirement.requirementNumber,
+        bidNumber: queryData.requirement.bidNumber || queryData.requirement.procurementBidNumber,
+        requirementNumber: queryData.requirement.requirementNumber || queryData.requirement.bidNumber,
         buyerOrganization: queryData.requirement.buyerOrganization,
         deadlineDate: queryData.requirement.lastDate,
         items: queryData.requirement.items || queryData.requirement.boqTable || queryData.requirement.payload?.items || queryData.requirement.payload?.boqTable || queryData.requirement.technicalPacket?.items || queryData.requirement.technicalPacket?.boqTable,
@@ -1509,7 +1515,15 @@ export default function SubmitQuotationPage() {
 
   const orgName = rfqData?.buyerOrganization?.organizationName || 'Buyer';
   const subject = rfqData?.title || 'Sourcing Requirement';
-  const rfqNumber = formatRefId('RFQ', requirementId || rfqData?.id, rfqData?.requirementNumber, rfqData?.procurementMethod || rfqData?.canonicalMethod || 'RFQ');
+  const effectiveMethod = rfqData?.canonicalMethod || rfqData?.procurementType || rfqData?.procurementMethod || procurementType;
+  const fallbackPrefix = isRateContract ? 'RC' : isRfp ? 'RFP' : isLimitedTender ? 'LTND' : isOpenTender ? 'TND' : 'RFQ';
+  const procurementNumber = formatRefId(
+    fallbackPrefix,
+    requirementId || rfqData?.id,
+    rfqData?.bidNumber || rfqData?.requirementNumber || (typeof requirementId === 'string' ? requirementId : null),
+    effectiveMethod
+  );
+  const rfqNumber = procurementNumber; // Backward-compatible alias
   const deadline = rfqData?.deadlineDate
     ? (hasExplicitTime(rfqData.deadlineDate) ? formatDateTime(rfqData.deadlineDate) : formatDate(rfqData.deadlineDate))
     : '—';

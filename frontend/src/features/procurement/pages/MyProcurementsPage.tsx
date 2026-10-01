@@ -334,6 +334,7 @@ const DATE_FILTERS = [
 ];
 
 const getConsolidatedType = (p: NormalizedProcurement): string => {
+  const refToken = String(p.referenceNumber || (p as any).bidNumber || '').trim().toUpperCase();
   const status = String(p.status || '').toLowerCase();
   const statusGroup = String(p.statusGroup || '').toLowerCase();
   const type = String(p.type || '').toLowerCase();
@@ -346,35 +347,29 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   if (status === 'draft' || statusGroup === 'draft' || type === 'bid_draft' || title.includes('draft')) {
     return 'Draft';
   }
-  // 2. RFQ
-  if (method === 'rfq' || type.includes('rfq')) {
-    return 'RFQ';
-  }
-  // 3. RFP
-  if (method === 'rfp' || method === 'rfi' || type.includes('rfp') || type.includes('rfi')) {
-    return 'RFP';
-  }
-  // 4. Reverse Auction
-  if (method === 'reverse-auction' || method === 'reverse_auction' || type === 'reverse_auction') {
-    return 'Reverse Auction';
-  }
-  // 5. Cart Checkout
-  if (type === 'procurement_request' || type.includes('checkout') || type.includes('cart') || method.includes('direct') || type.includes('direct')) {
-    return 'Cart Checkout';
-  }
-  // 6. Limited Tender (Checked BEFORE OpenTender)
-  if (method.includes('limited') || type.includes('limited') || typeLabel.includes('limited') || methodLabel.includes('limited')) {
-    return 'Limited Tender';
-  }
-  // 7. OpenTender
-  if (method === 'open-tender' || method === 'open_tender' || method === 'tender' || type.includes('open') || typeLabel.includes('open') || methodLabel.includes('open')) {
-    return 'OpenTender';
-  }
-  // 8. Rate Contract
-  if (method === 'rate-contract' || method === 'rate_contract' || type === 'rate_contract') {
+
+  // 2. Canonical Prefix & Exact Method Matches (Ground Truth)
+  if (refToken.startsWith('RC-') || method === 'rate-contract' || method === 'rate_contract' || type === 'rate_contract' || methodLabel.includes('rate contract')) {
     return 'Rate Contract';
   }
-  // 9. Repeat order
+  if (refToken.startsWith('RA-') || method === 'reverse-auction' || method === 'reverse_auction' || type === 'reverse_auction' || methodLabel.includes('auction')) {
+    return 'Reverse Auction';
+  }
+  if (refToken.startsWith('LTND-') || refToken.startsWith('LIM-') || method.includes('limited') || type.includes('limited') || typeLabel.includes('limited') || methodLabel.includes('limited')) {
+    return 'Limited Tender';
+  }
+  if (refToken.startsWith('TND-') || method === 'open-tender' || method === 'open_tender' || (method === 'tender' && !methodLabel.includes('rate')) || type.includes('open') || typeLabel.includes('open') || methodLabel.includes('open')) {
+    return 'OpenTender';
+  }
+  if (refToken.startsWith('RFP-') || method === 'rfp' || method === 'rfi' || type.includes('rfp') || type.includes('rfi') || methodLabel.includes('rfp')) {
+    return 'RFP';
+  }
+  if (refToken.startsWith('DP-') || refToken.startsWith('DIR-') || type === 'procurement_request' || type.includes('checkout') || type.includes('cart') || method.includes('direct') || type.includes('direct')) {
+    return 'Cart Checkout';
+  }
+  if (refToken.startsWith('RFQ-') || method === 'rfq' || type.includes('rfq') || methodLabel.includes('rfq')) {
+    return 'RFQ';
+  }
   if (method === 'repeat-order' || method === 'repeat_order' || method === 'repeat-purchase') {
     return 'Repeat order';
   }

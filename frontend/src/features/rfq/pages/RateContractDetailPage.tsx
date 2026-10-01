@@ -904,6 +904,7 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
         clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
         contractId={contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined))}
+        contractNumber={contractData?.contractNumber || (rcData as any)?.contractNumber || null}
         rateContractConfig={payload.rateContractConfig || rateContractConfig}
         terms={terms}
         contractDocument={contractDoc}
