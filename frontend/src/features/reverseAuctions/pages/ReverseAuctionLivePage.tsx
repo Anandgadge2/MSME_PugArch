@@ -661,44 +661,46 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={invalidate} 
-              disabled={summary.isFetching} 
-              className="rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs"
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Ambient Reactive Sync Indicator (Replaces manual 1990s Refresh button) */}
+            <div 
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-2xs"
+              title="Real-time auction telemetry connected via WebSocket"
             >
-              <RefreshCw className={cn('mr-1.5 h-3.5 w-3.5', summary.isFetching && 'animate-spin')} /> Refresh
-            </Button>
-            <Link href={`${rolePrefix}/procurement/reverse-auction/${canonicalCode}`}>
-              <Button type="button" variant="outline" className="rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs">
-                Details
-              </Button>
-            </Link>
-            
+              <span className={cn(
+                "h-2 w-2 rounded-full",
+                live ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" : "bg-slate-400"
+              )} />
+              <span>{live ? "Live Sync Active" : "Floor Offline"}</span>
+              {summary.isFetching && (
+                <RefreshCw className="h-3 w-3 animate-spin text-slate-400 ml-0.5" />
+              )}
+            </div>
+
             {isBuyerOrAdmin && (
-              <>
+              <div className="flex items-center gap-1.5">
                 {status === 'DRAFT' && (
-                  <Button onClick={() => transition.mutate('schedule')} variant="outline" className="rounded-xl border-slate-200">Schedule</Button>
+                  <Button onClick={() => transition.mutate('schedule')} variant="outline" size="sm" className="rounded-xl border-slate-200 text-xs font-bold">Schedule</Button>
                 )}
                 {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(status) && (
-                  <Button onClick={() => transition.mutate('start')} className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold">Start</Button>
+                  <Button onClick={() => transition.mutate('start')} size="sm" className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-2xs">Start</Button>
                 )}
                 {status === 'LIVE' && (
-                  <Button onClick={() => transition.mutate('pause')} variant="secondary" className="rounded-xl bg-slate-100 text-slate-800">Pause</Button>
+                  <Button onClick={() => transition.mutate('pause')} variant="secondary" size="sm" className="rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs">Pause</Button>
                 )}
                 {['LIVE', 'PAUSED'].includes(status) && (
-                  <Button onClick={() => transition.mutate('close')} className="rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold">Close Auction</Button>
+                  <Button onClick={() => transition.mutate('close')} size="sm" className="rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-2xs">Close Auction</Button>
                 )}
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
-                  className="rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-1.5 text-xs font-bold transition"
+                  className="rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs"
                 >
                   Results
-                </button>
-              </>
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -1250,6 +1252,30 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           </div>
         </CardContent>
       </Card>
+
+      {/* Mobile Sticky Quick-Bid Bar for participating sellers */}
+      {!isBuyerOrAdmin && live && minNextBid > 0 && (
+        <div className="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-2.5 shadow-lg xl:hidden flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="min-w-0">
+            <p className="text-[9.5px] font-black uppercase tracking-wider text-slate-500">Max Permitted Bid</p>
+            <p className="text-sm font-mono font-black text-red-600 truncate">{formatCurrency(minNextBid)}</p>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              const el = document.getElementById('bid-amount-input');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+              }
+            }}
+            className="h-9 px-3.5 rounded-xl bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold text-xs shadow-md shadow-red-600/20 shrink-0"
+          >
+            Jump to Bid ⚡
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

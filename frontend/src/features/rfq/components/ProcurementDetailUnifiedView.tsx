@@ -10790,7 +10790,7 @@ export function ProcurementDetailUnifiedView(
                             className="h-3 w-3 text-emerald-600"
                             aria-hidden="true"
                           />
-                          Submitted • Under Evaluation
+                          Your Proposal Recorded
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800 shadow-2xs">
@@ -10798,9 +10798,7 @@ export function ProcurementDetailUnifiedView(
                             className="h-3 w-3 text-emerald-600"
                             aria-hidden="true"
                           />
-                          {props.procurementType === "RFQ"
-                            ? "Quotation Submitted"
-                            : "Proposal Submitted"}
+                          Quotation Recorded
                         </span>
                       )
                     ) : isBeforeSubmissionStart ? (
@@ -10817,7 +10815,7 @@ export function ProcurementDetailUnifiedView(
                           className="h-3 w-3 text-rose-600"
                           aria-hidden="true"
                         />
-                        Submission Window Closed (Missed Deadline)
+                        Submission Window Closed
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 shadow-2xs">
@@ -10828,19 +10826,7 @@ export function ProcurementDetailUnifiedView(
                         Awaiting Your Quotation
                       </span>
                     )
-                  ) : (
-                    props.hasSubmittedProposal && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                        <ShieldCheck
-                          className="h-3 w-3 text-emerald-600"
-                          aria-hidden="true"
-                        />
-                        {props.procurementType === "RFQ"
-                          ? "Quotation Submitted"
-                          : "Proposal Submitted"}
-                      </span>
-                    )
-                  )}
+                  ) : null}
                 </div>
                 <h1 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 break-words leading-snug">
                   {resolvedSubject}
@@ -10926,7 +10912,7 @@ export function ProcurementDetailUnifiedView(
                       aria-hidden="true"
                     />
                   )}
-                  {isDownloadingPdf ? "Downloading..." : "Download"}
+                  {isDownloadingPdf ? "Downloading..." : "Download Notice (PDF)"}
                 </Button>
                 {props.invoiceStatus &&
                   (props.invoiceStatus.exists ? (
@@ -11040,14 +11026,14 @@ export function ProcurementDetailUnifiedView(
                       {isDownloadingQuotationPdf
                         ? "Downloading..."
                         : isRfqType
-                          ? "View Submitted Quotation"
+                          ? "Download My Quotation (PDF)"
                           : isRateContractType
-                            ? "View Submitted Rate Proposal"
+                            ? "Download My Proposal (PDF)"
                             : isReverseAuctionType
                               ? isBiddingClosed
                                 ? "View Auction Results"
-                                : "View Submitted Bid"
-                              : "View Submitted Proposal"}
+                                : "Download My Bid (PDF)"
+                              : "Download My Proposal (PDF)"}
                     </span>
                   </Button>
                 )}

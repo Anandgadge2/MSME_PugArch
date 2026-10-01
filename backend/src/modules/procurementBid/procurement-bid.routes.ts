@@ -1925,7 +1925,17 @@ router.get('/buyer/procurement-bids/:bidId/participants', authenticate, requireA
   const bid = await service.resolveBid(req.params.bidId);
   service.assertBuyerOwner(req.user!, bid);
   await enrichBidsWithResponses([bid], req.user!.role === 'buyer' ? req.user!.id : undefined);
-  return apiResponse.success(res, (bid.participations || []).map((p: any) => service.serializeParticipation(p, { canSeeFinancial: true, bid })), 200, 'Participants fetched');
+
+  const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
+  const isTwoPacket = String(bid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(bid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
+  const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
+  const isFinancialStage = service.financialOpenStatuses.includes(bid.status);
+
+  return apiResponse.success(res, (bid.participations || []).map((p: any) => {
+    const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
+    const canSeeFinancial = isAdmin || (!isTwoPacket ? true : (isFinancialStage && !isDisqualified));
+    return service.serializeParticipation(p, { canSeeFinancial, bid });
+  }), 200, 'Participants fetched');
 }));
 
 router.post('/buyer/procurement-bids/:bidId/clarifications', authenticate, requireAccountType('buyer', 'admin'), requirePermission('tender.update'), validate({ params: idParamSchema, body: clarificationSchema }), asyncRoute(async (req, res) => {

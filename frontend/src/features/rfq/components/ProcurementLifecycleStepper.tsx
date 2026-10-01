@@ -539,26 +539,28 @@ export function ProcurementLifecycleStepper({
         if (!isBuyer) {
           if (isSellerParticipated) {
             return {
-              hasAction: false,
-              idleStatusText: 'Quotation Under Evaluation',
-              actionHint: 'View your submitted quotation details',
+              hasAction: true,
+              actionLabel: 'Quotation Submitted',
+              idleStatusText: 'Quotation Submitted',
+              actionHint: 'Click to view submitted quotation details',
               onClick: () => {
                 if (onViewEvaluation) onViewEvaluation();
                 else if (onViewQuotationClick) onViewQuotationClick();
               },
             };
-          } else if (canSubmitBid && onSubmitClick) {
+          } else if (canSubmitBid) {
             return {
               hasAction: true,
-              actionLabel: 'Submit Quotation',
-              actionHint: 'Participate and submit formal quotation',
+              actionLabel: 'Accepting Proposals',
+              idleStatusText: 'Accepting Proposals',
+              actionHint: 'Participate and submit formal quotation via top action bar',
               onClick: onSubmitClick,
               isPrimary: true
             };
           } else {
             return {
               hasAction: false,
-              idleStatusText: 'Awaiting Window'
+              idleStatusText: isDeadlinePassed ? 'Window Closed' : 'Awaiting Window'
             };
           }
         } else {
@@ -567,8 +569,9 @@ export function ProcurementLifecycleStepper({
           if (bidsCount > 0) {
             return {
               hasAction: true,
-              actionLabel: `Review Bids (${bidsCount})`,
-              actionHint: 'Review submitted bidder proposals',
+              actionLabel: bidsCount === 1 ? '1 Bid Received' : `${bidsCount} Bids Received`,
+              idleStatusText: bidsCount === 1 ? '1 Bid Received' : `${bidsCount} Bids Received`,
+              actionHint: 'Click to view submitted bidder proposals',
               onClick: onViewEvaluation,
               isPrimary: currentStageId === 1
             };
