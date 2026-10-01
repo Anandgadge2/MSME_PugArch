@@ -264,9 +264,14 @@ export default function BidResultsPage() {
     );
   }, [bid, ranking, isAwardOfferPending, isPriceMatchPending, activeAward, poIssuedLocally]);
 
-  const isBidAlreadyAwarded = Boolean(isContractFinalized);
+  const isBidAlreadyAwarded = Boolean(
+    isContractFinalized ||
+    ['AWARDED', 'AWARD_OFFERED', 'AWARD_RECOMMENDED', 'COMPLETED', 'PO_ISSUED'].includes(String(bid?.status || '').toUpperCase()) ||
+    Boolean((bid as any)?.award) ||
+    Boolean(activeAward)
+  );
 
-  const isCurrentReverseAuction = React.useMemo(() => {
+  const hasLinkedAuction = React.useMemo(() => {
     const rawType = String(bid?.bidType || '').toUpperCase();
     const rawMethod = String((bid as any)?.procurementMethod || bid?.procurementType || '').toUpperCase();
     const rawBidId = String(bidId || '').toUpperCase();
@@ -276,9 +281,15 @@ export default function BidResultsPage() {
       rawMethod === 'REVERSE_AUCTION' ||
       rawMethod === 'REVERSE AUCTION' ||
       rawBidId.startsWith('RA-') ||
-      Boolean((bid as any)?.isReverseAuction)
+      Boolean((bid as any)?.isReverseAuction) ||
+      Boolean((bid as any)?.hasReverseAuction) ||
+      Boolean((bid as any)?.linkedAuction) ||
+      Boolean((bid as any)?.rawAuction) ||
+      Boolean((bid as any)?.auctionId)
     );
   }, [bid, bidId]);
+
+  const isCurrentReverseAuction = hasLinkedAuction;
 
   const l1Price = React.useMemo(() => {
     const prices = ranking
@@ -1293,6 +1304,25 @@ export default function BidResultsPage() {
               );
             }
 
+            if (hasLinkedAuction || isBidAlreadyAwarded) {
+              return (
+                <div className="flex items-center gap-1.5 justify-end">
+                  <span className="inline-flex h-8 items-center px-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold">
+                    <Lock className="h-3 w-3 mr-1 text-slate-400" />
+                    {hasLinkedAuction ? 'Superseded by RA' : 'Award Concluded'}
+                  </span>
+                  {hasLinkedAuction && (
+                    <Link
+                      href={`/buyer/procurement/reverse-auction/${(bid as any)?.auctionId || (bid as any)?.linkedAuction?.id || encodeURIComponent(bid?.id || String(bidId))}/result`}
+                      className="inline-flex h-8 items-center px-2 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition"
+                    >
+                      View RA Result
+                    </Link>
+                  )}
+                </div>
+              );
+            }
+
             if (row.finalRank === 'L1') {
               return (
                 <button
@@ -1876,35 +1906,63 @@ export default function BidResultsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Lowest Quote (L1)</span>
-              <div className="mt-0.5 text-base sm:text-lg font-black text-emerald-700 leading-tight truncate">
-                {ranking.length > 0 && ranking[0]?.totalPrice ? money(ranking[0].totalPrice) : '—'}
-              </div>
-              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
-                {ranking.length > 0 ? (ranking[0]?.sellerName || 'Leading quote') : 'Awaiting quotes'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-              <Trophy className="h-4 w-4" />
-            </div>
-          </div>
+          {(() => {
+            const rawAuctionLowest = Number(
+              (bid as any)?.rawAuction?.lowestBidAmount ||
+              (bid as any)?.rawAuction?.currentLowestAmount ||
+              (bid as any)?.rawAuction?.currentLowestBid ||
+              (bid as any)?.rawAuction?.currentBid ||
+              (bid as any)?.lowestBidAmount ||
+              0
+            );
+            const isRaPriceActive = hasLinkedAuction && rawAuctionLowest > 0;
+            const displayL1Price = isRaPriceActive ? rawAuctionLowest : (ranking[0]?.totalPrice ? Number(ranking[0].totalPrice) : 0);
+            const winnerName = (bid as any)?.rawAuction?.winnerName || (bid as any)?.rawAuction?.winnerSellerName || ranking[0]?.sellerName || 'Leading quote';
+            const isBudgetOverrun = Boolean(bid.estimatedValue && displayL1Price > Number(bid.estimatedValue));
+            const overrunPct = isBudgetOverrun && Number(bid.estimatedValue) > 0
+              ? (((displayL1Price - Number(bid.estimatedValue)) / Number(bid.estimatedValue)) * 100).toFixed(1)
+              : null;
 
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Procurement Budget</span>
-              <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight truncate">
-                {bid.estimatedValue ? money(bid.estimatedValue) : 'Confidential'}
-              </div>
-              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
-                {(isTwoPacketMode ? 'Two-Packet' : 'Single-Packet')} • {bid.evaluationMethod || 'L1 Basis'}
-              </p>
-            </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-              <Tag className="h-4 w-4" />
-            </div>
-          </div>
+            return (
+              <>
+                <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                      {isRaPriceActive ? 'Final Evaluated L1 (Post-RA)' : 'Lowest Quote (L1)'}
+                    </span>
+                    <div className="mt-0.5 text-base sm:text-lg font-black text-emerald-700 leading-tight truncate">
+                      {displayL1Price > 0 ? money(displayL1Price) : '—'}
+                    </div>
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate" title={winnerName}>
+                      {winnerName} {isRaPriceActive && ranking[0]?.totalPrice && Number(ranking[0].totalPrice) !== displayL1Price && `(Pre-RA: ${money(ranking[0].totalPrice)})`}
+                    </p>
+                  </div>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                    <Trophy className="h-4 w-4" />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Procurement Budget</span>
+                    <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight truncate">
+                      {bid.estimatedValue ? money(bid.estimatedValue) : 'Confidential'}
+                    </div>
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                      {isBudgetOverrun ? (
+                        <span className="text-amber-700 font-bold">Overrun: +{overrunPct}% (CFA Req.)</span>
+                      ) : (
+                        `${(isTwoPacketMode ? 'Two-Packet' : 'Single-Packet')} • ${bid.evaluationMethod || 'L1 Basis'}`
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                    <Tag className="h-4 w-4" />
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Reverse Auction Outcome Banner */}
@@ -2470,6 +2528,25 @@ export default function BidResultsPage() {
                               <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-semibold">
                                 Ineligible
                               </span>
+                            );
+                          }
+
+                          if (hasLinkedAuction || isBidAlreadyAwarded) {
+                            return (
+                              <div className="flex items-center gap-1.5 justify-end">
+                                <span className="inline-flex h-8 items-center px-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold">
+                                  <Lock className="h-3 w-3 mr-1 text-slate-400" />
+                                  {hasLinkedAuction ? 'Superseded by RA' : 'Award Concluded'}
+                                </span>
+                                {hasLinkedAuction && (
+                                  <Link
+                                    href={`/buyer/procurement/reverse-auction/${(bid as any)?.auctionId || (bid as any)?.linkedAuction?.id || encodeURIComponent(bid?.id || String(bidId))}/result`}
+                                    className="inline-flex h-8 items-center px-2 rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold transition"
+                                  >
+                                    View RA Result
+                                  </Link>
+                                )}
+                              </div>
                             );
                           }
 

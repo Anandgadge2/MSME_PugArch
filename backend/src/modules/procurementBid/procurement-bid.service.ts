@@ -4060,6 +4060,25 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
   assertBuyerOwner(req.user!, bid);
   logger.info({ user: req.user?.id }, '[RECOMMEND_AWARD] Buyer ownership verified');
 
+  // Strict Guard: If an auction is linked and active/concluded, direct quote awarding is illegal
+  const linkedAuction = await db.auction.findFirst({
+    where: {
+      OR: [
+        { linkedBidId: bid.id },
+        ...(bid.sourceId ? [{ linkedRequirementId: Number(bid.sourceId) }] : [])
+      ]
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (linkedAuction && ['LIVE', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARD_OFFERED', 'AWARDED'].includes(String(linkedAuction.status || '').toUpperCase())) {
+    throw new ApiError(
+      409,
+      `Cannot award directly from initial quotations. Reverse Auction (${linkedAuction.auctionCode || linkedAuction.id}) is active or concluded. All contract award offers must be executed via the Reverse Auction Outcome Engine.`,
+      'AWARD_LOCKED_BY_REVERSE_AUCTION'
+    );
+  }
+
   const rawPartId = body.participationId;
   let rawPartIdNum = typeof rawPartId === 'number' ? rawPartId : Number(String(rawPartId || '').replace(/^[^\d]+/, ''));
   let partIdNum = (rawPartIdNum && !isNaN(rawPartIdNum) && rawPartIdNum > 0 && rawPartIdNum <= 2147483647) ? rawPartIdNum : null;
@@ -5113,12 +5132,17 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     );
   }
 
+  const isMasterOrAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
+  const allowedStatuses = isMasterOrAdmin 
+    ? ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] 
+    : ['ACCEPTED', 'ADMIN_APPROVED'];
+
   let award = body?.awardId
     ? await db.procurementBidAward.findFirst({
         where: {
           bidId: bid.id,
           id: Number(body.awardId),
-          awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+          awardStatus: { in: allowedStatuses }
         },
         include: { participation: true },
         orderBy: { updatedAt: 'desc' }
@@ -5129,7 +5153,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     award = await db.procurementBidAward.findFirst({
       where: {
         bidId: bid.id,
-        awardStatus: { in: ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] }
+        awardStatus: { in: allowedStatuses }
       },
       include: { participation: true },
       orderBy: { updatedAt: 'desc' }
@@ -5137,7 +5161,17 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
   }
 
   if (!award) {
-    throw new ApiError(400, 'Cannot generate Purchase Order: No eligible award found for this bid.', 'AWARD_NOT_FOUND');
+    const pendingOffer = await db.procurementBidAward.findFirst({
+      where: { bidId: bid.id, awardStatus: 'OFFERED' }
+    });
+    if (pendingOffer) {
+      throw new ApiError(
+        400,
+        'Cannot generate Purchase Order: The awarded supplier has not yet accepted the award offer. Official PO generation will unlock once the supplier confirms formal acceptance.',
+        'SUPPLIER_ACCEPTANCE_PENDING'
+      );
+    }
+    throw new ApiError(400, 'Cannot generate Purchase Order: No eligible accepted award found for this bid.', 'AWARD_NOT_FOUND');
   }
 
   const po = await createOrReuseProcurementPOForAward(req, award, bid);

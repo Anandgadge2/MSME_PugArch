@@ -8183,7 +8183,19 @@ export function ProcurementDetailUnifiedView(
         header: "Lifecycle & Award Status",
         width: "w-[12%]",
         cell: (participation) => {
-          const isAwardWinner = Boolean(
+          const isAuctionWinner = Boolean(
+            linkedAuction &&
+            ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED'].includes(
+              String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
+            ) &&
+            (
+              (linkedAuction.winnerSellerId && String(linkedAuction.winnerSellerId) === String(participation.sellerUserId || participation.sellerId || participation.id)) ||
+              (linkedAuction.lowestBidderId && String(linkedAuction.lowestBidderId) === String(participation.sellerUserId || participation.sellerId || participation.id)) ||
+              (linkedAuction.winningSellerOrgId && String(linkedAuction.winningSellerOrgId) === String(participation.sellerOrgId || participation.sellerOrganizationId))
+            )
+          );
+
+          const isAwardWinner = isAuctionWinner || Boolean(
             activeAward &&
             ((activeAward.awardedSellerId &&
               String(activeAward.awardedSellerId) ===
@@ -8213,7 +8225,7 @@ export function ProcurementDetailUnifiedView(
                 </span>
               );
             }
-            if (activeAward.awardStatus === "ACCEPTED") {
+            if (activeAward?.awardStatus === "ACCEPTED") {
               return (
                 <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 bg-indigo-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-indigo-800 shadow-2xs whitespace-nowrap">
                   <Award className="h-3 w-3 text-indigo-600 shrink-0" />
@@ -8222,9 +8234,9 @@ export function ProcurementDetailUnifiedView(
               );
             }
             return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-amber-800 shadow-2xs whitespace-nowrap">
-                <Clock className="h-3 w-3 text-amber-600 shrink-0" />
-                Award Offered (Pending)
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-black uppercase text-emerald-800 shadow-2xs whitespace-nowrap">
+                <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                Awarded {isAuctionWinner ? '(via RA)' : '(Pending Acceptance)'}
               </span>
             );
           }
@@ -8232,11 +8244,14 @@ export function ProcurementDetailUnifiedView(
           if (
             isPOAccepted ||
             String(participation.finalStatus || "").toUpperCase() ===
-              "NOT_SELECTED"
+              "NOT_SELECTED" ||
+            (linkedAuction && ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()))
           ) {
             return (
               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[9.5px] font-bold uppercase text-slate-500 whitespace-nowrap">
-                Not Selected
+                {linkedAuction && ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase())
+                  ? 'Unsuccessful (in RA)'
+                  : 'Not Selected'}
               </span>
             );
           }
@@ -11103,27 +11118,55 @@ export function ProcurementDetailUnifiedView(
                     <Button
                       type="button"
                       size="sm"
-                      onClick={handleActionSubmit}
+                      onClick={() => {
+                        if (isBuyerOrAdmin && isBidAwarded && linkedAuction?.id) {
+                          router.push(`/buyer/procurement/reverse-auction/${linkedAuction.id}/result`);
+                          return;
+                        }
+                        handleActionSubmit();
+                      }}
                       className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
                     >
                       <span>
                         {isBuyerOrAdmin && isBidAwarded
-                          ? "View Awarded Results & Ranking"
+                          ? linkedAuction
+                            ? "View Reverse Auction Outcome"
+                            : "View Awarded Results & Ranking"
                           : props.submitButtonLabel || defaultSubmitBtnLabel}
                       </span>
                       <ArrowRight className="h-3 w-3" />
                     </Button>
                   )}
                 {isBuyerOrAdmin && isRateContractType && isBidAwarded && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => setIsIssueCallOffModalOpen(true)}
-                    className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                  >
-                    <Truck className="h-3.5 w-3.5" />
-                    <span>+ Issue Call-Off Order</span>
-                  </Button>
+                  (() => {
+                    const isAwardAccepted = Boolean(
+                      (activeAward && (activeAward.awardStatus === "ACCEPTED" || activeAward.status === "ACCEPTED")) ||
+                      effectiveActiveOrder ||
+                      isPOAccepted
+                    );
+                    if (!isAwardAccepted) {
+                      return (
+                        <div
+                          title="Call-Off PO will unlock once the awarded supplier formally confirms acceptance."
+                          className="h-8 px-3 text-amber-800 bg-amber-50 border border-amber-200 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs select-none"
+                        >
+                          <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+                          <span>Award Offered (Awaiting Acceptance)</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setIsIssueCallOffModalOpen(true)}
+                        className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        <span>+ Issue Call-Off Order</span>
+                      </Button>
+                    );
+                  })()
                 )}
               </div>
             </div>
@@ -13044,6 +13087,7 @@ export function ProcurementDetailUnifiedView(
                   targetId={targetId}
                   router={router}
                   resultsPageUrl={resultsPageUrl}
+                  linkedAuction={linkedAuction}
                   onSelectQuotationReview={(p) =>
                     setSelectedQuotationForReview(p)
                   }
@@ -15352,6 +15396,7 @@ interface QuotationComparisonModalProps {
   targetId: string;
   router: any;
   resultsPageUrl?: string;
+  linkedAuction?: any;
   onSelectQuotationReview?: (participation: any) => void;
 }
 
@@ -15364,8 +15409,22 @@ export function QuotationComparisonModal({
   targetId,
   router,
   resultsPageUrl,
+  linkedAuction,
   onSelectQuotationReview,
 }: QuotationComparisonModalProps) {
+  const isAuctionCompleted = Boolean(
+    linkedAuction &&
+    ['COMPLETED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED'].includes(
+      String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
+    )
+  );
+  const isAuctionLive = Boolean(
+    linkedAuction &&
+    ['LIVE', 'PAUSED'].includes(
+      String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
+    )
+  );
+
   const effectiveResultsUrl =
     resultsPageUrl ||
     (String(targetId).startsWith("RA-") || String(targetId).startsWith("AUCTION-")
@@ -16021,17 +16080,41 @@ export function QuotationComparisonModal({
           >
             Close Comparison
           </Button>
-          <Button
-            type="button"
-            onClick={() => {
-              onClose();
-              router.push(effectiveResultsUrl);
-            }}
-            className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm"
-          >
-            Proceed to Evaluation & Award
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
+          {isAuctionLive ? (
+            <Button
+              type="button"
+              disabled
+              className="bg-slate-200 text-slate-500 font-bold opacity-80 cursor-not-allowed flex items-center gap-1.5"
+            >
+              <Lock className="h-4 w-4" />
+              Awarding Locked During Live Reverse Auction
+            </Button>
+          ) : isAuctionCompleted ? (
+            <Button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push(`/buyer/procurement/reverse-auction/${linkedAuction.id}/result`);
+              }}
+              className="bg-indigo-600 hover:bg-indigo-700 font-bold text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Trophy className="h-4 w-4" />
+              View Reverse Auction Outcomes &amp; Award
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push(effectiveResultsUrl);
+              }}
+              className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              Proceed to Evaluation &amp; Award
+              <ArrowRight className="h-4 w-4 ml-1" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
