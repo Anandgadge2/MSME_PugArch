@@ -729,13 +729,14 @@ export default function BidComparisonPage() {
                 if (typeof window !== 'undefined' && window.history.length > 1) {
                   router.back();
                 } else {
-                  router.push(`/bids/${bidId}/results`);
+                  router.push(`/bids/${bidId}?tab=clarifications`);
                 }
               }}
               className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+              title="Return to Bid Details"
             >
               <ArrowLeft className="h-4 w-4 text-slate-500" />
-              <span>Back to Results</span>
+              <span>Back to Bid</span>
             </button>
 
             <nav className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-slate-500 ml-2">
@@ -1580,20 +1581,23 @@ export default function BidComparisonPage() {
 
           {/* Sticky Bottom Helper Bar */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-150 pt-4 text-xs">
-            <p className="text-slate-500 font-semibold text-[11px] flex items-center gap-1.5">
-              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>
-                Formal statutory actions (Contract Award, MSE Match L1, Reverse Auction) are executed on the Results Console.
-              </span>
-            </p>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => router.push(`/bids/${bidId}`)}
-                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-250 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+                onClick={() => router.push(`/bids/${bidId}?tab=clarifications`)}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-slate-250 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs cursor-pointer"
               >
-                Back to Tender
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                <span>Back to Bid</span>
               </button>
+              <p className="text-slate-500 font-semibold text-[11px] hidden md:flex items-center gap-1.5 ml-2">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                <span>
+                  Formal statutory actions (Contract Award, MSE Match L1, Reverse Auction) are executed on the Results Console.
+                </span>
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5">
               <button
                 type="button"
                 onClick={() => router.push(`/bids/${bidId}/results`)}

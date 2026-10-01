@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target, Lock, Loader2
+  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -1198,7 +1198,7 @@ export default function BidResultsPage() {
                 className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
               >
                 <FileText className="h-3 w-3" />
-                {isPending ? 'Evaluate Technical Bid' : 'Edit Evaluation'}
+                {isPending ? 'Evaluate Technical Bid' : 'View Evaluation'}
               </button>
             )}
           </div>
@@ -1596,10 +1596,11 @@ export default function BidResultsPage() {
             subtitle={`${bid.id} • ${bid.title || 'Procurement'}`}
             action={
               <Link
-                href={`/bids/${bid.id}`}
+                href={`/bids/${bid.id}?tab=clarifications`}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50 transition shadow-2xs"
               >
-                Back to Bid Details
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                <span>Back to Bid Details</span>
               </Link>
             }
           />
@@ -1668,10 +1669,11 @@ export default function BidResultsPage() {
             subtitle={`${bid.id} • ${bid.title || 'Procurement'}`}
             action={
               <Link
-                href={`/bids/${bid.id}`}
+                href={`/bids/${bid.id}?tab=clarifications`}
                 className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-black text-slate-700 hover:bg-slate-50 transition shadow-2xs"
               >
-                Back to Bid Details
+                <ArrowLeft className="h-4 w-4 text-slate-500" />
+                <span>Back to Bid Details</span>
               </Link>
             }
           />
@@ -1835,15 +1837,24 @@ export default function BidResultsPage() {
         <section className="relative overflow-hidden rounded-xl border border-slate-200/90 bg-white px-4 py-3 md:px-5 md:py-3 shadow-2xs">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-0.5">
-            <div className="flex flex-wrap items-center gap-2 min-w-0">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 select-none">
+            <div className="flex flex-wrap items-center gap-2.5 min-w-0">
+              <Link
+                href={`/bids/${bid.id}?tab=clarifications`}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs cursor-pointer shrink-0"
+                title="Return to Bid Details"
+              >
+                <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+                <span>Back to Bid</span>
+              </Link>
+              <div className="h-4 w-px bg-slate-200 hidden sm:block shrink-0" />
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 select-none shrink-0">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
                 MSME Procurement Control
               </span>
               <h1 className="text-base md:text-lg font-black tracking-tight text-slate-900 truncate">
                 Bid Result and Financial Ranking
               </h1>
-              <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+              <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 shrink-0">
                 {bid.id}
               </span>
               <span className="text-slate-300 hidden sm:inline">•</span>
@@ -1881,12 +1892,6 @@ export default function BidResultsPage() {
                   <Download className="h-3.5 w-3.5 text-slate-500" /> Export CSV
                 </button>
               )}
-              <Link
-                href={`/bids/${bid.id}`}
-                className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs"
-              >
-                Back to bid
-              </Link>
             </div>
           </div>
         </section>
