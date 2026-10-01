@@ -8428,9 +8428,9 @@ export function ProcurementDetailUnifiedView(
             ts === "REJECTED" ||
             Boolean(participation.isDisqualified);
 
-          if (isTwoPacketMode) {
-            return (
-              <div className="flex items-center justify-end">
+          return (
+            <div className="flex items-center justify-end gap-1.5">
+              {(isBuyerSide || isBuyerOrAdmin) && (
                 <Button
                   type="button"
                   size="sm"
@@ -8441,13 +8441,13 @@ export function ProcurementDetailUnifiedView(
                       : undefined
                   }
                   className={cn(
-                    "h-7.5 px-3 gap-1.5 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all",
+                    "h-7.5 px-2.5 gap-1.5 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all",
                     isEvaluationReady
                       ? isQual
                         ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
                         : isDisq
                           ? "border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 cursor-pointer"
-                          : "border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100 cursor-pointer"
+                          : "border-indigo-300 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 cursor-pointer"
                       : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
                   )}
                   title={
@@ -8472,7 +8472,7 @@ export function ProcurementDetailUnifiedView(
                     ) : isDisq ? (
                       <XCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
                     ) : (
-                      <ShieldCheck className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                      <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
                     )
                   ) : (
                     <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
@@ -8486,16 +8486,11 @@ export function ProcurementDetailUnifiedView(
                           : "Evaluation Audit / Edit"
                         : isDisq
                           ? "View Disqualification"
-                          : "Scrutinize Proposal"}
+                          : "Evaluate Bid"}
                   </span>
                 </Button>
-              </div>
-            );
-          }
+              )}
 
-          // Single packet workflow: direct quotation review
-          return (
-            <div className="flex items-center justify-end">
               <Button
                 type="button"
                 size="sm"
@@ -8506,10 +8501,10 @@ export function ProcurementDetailUnifiedView(
                     : undefined
                 }
                 className={cn(
-                  "h-7.5 px-3 gap-1.5 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all",
+                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all border border-slate-200 bg-white hover:bg-slate-50 text-slate-700",
                   isEvaluationReady
-                    ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                    : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
+                    ? "cursor-pointer"
+                    : "cursor-not-allowed opacity-75",
                 )}
                 title={
                   isEvaluationReady
@@ -8523,7 +8518,7 @@ export function ProcurementDetailUnifiedView(
                   <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                 )}
                 <span>
-                  {isEvaluationReady ? "Review Quotation" : "Sealed until Closing"}
+                  {isEvaluationReady ? "Review Quotation" : "Sealed"}
                 </span>
               </Button>
             </div>
@@ -14968,6 +14963,19 @@ export function SellerQuotationReviewModal({
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {isBuyer && onOpenTechnicalEvaluation && (
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenTechnicalEvaluation(participation);
+                    }}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-xs border border-emerald-400/40"
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-200" />
+                    <span>Evaluate Bid</span>
+                  </Button>
+                )}
                 {!isFinancialSealed && (
                   <Button
                     type="button"

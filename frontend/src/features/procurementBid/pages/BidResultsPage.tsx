@@ -118,6 +118,7 @@ export default function BidResultsPage() {
   const [isOpeningFinancialEvalSuccess, setIsOpeningFinancialEvalSuccess] = useState(false);
   const [isGeneratingPO, setIsGeneratingPO] = useState(false);
   const [poIssuedLocally, setPoIssuedLocally] = useState(false);
+  const hasInitialLoadedRef = React.useRef(false);
 
   const isTwoPacketMode = React.useMemo(() => {
     if (!bid) return false;
@@ -258,15 +259,16 @@ export default function BidResultsPage() {
     );
     return (
       hasActivePo ||
-      ['PO_ISSUED', 'PO_GENERATED', 'CLOSED', 'COMPLETED', 'GRN_COMPLETED'].includes(rawStatus) ||
-      ['PO_GENERATED', 'CLOSED', 'COMPLETED'].includes(rawStage) ||
+      ['PO_ISSUED', 'PO_GENERATED', 'GRN_COMPLETED'].includes(rawStatus) ||
+      (['COMPLETED'].includes(rawStatus) && (hasActivePo || Boolean(activeAward))) ||
+      ['PO_GENERATED', 'PO_ISSUED'].includes(rawStage) ||
       ranking.some(r => String((r as any).finalStatus || '').toUpperCase() === 'ORDERED')
     );
   }, [bid, ranking, isAwardOfferPending, isPriceMatchPending, activeAward, poIssuedLocally]);
 
   const isBidAlreadyAwarded = Boolean(
     isContractFinalized ||
-    ['AWARDED', 'AWARD_OFFERED', 'AWARD_RECOMMENDED', 'COMPLETED', 'PO_ISSUED'].includes(String(bid?.status || '').toUpperCase()) ||
+    ['AWARDED', 'AWARD_OFFERED', 'AWARD_RECOMMENDED', 'PO_ISSUED', 'PO_GENERATED'].includes(String(bid?.status || '').toUpperCase()) ||
     Boolean((bid as any)?.award) ||
     Boolean(activeAward)
   );
@@ -372,7 +374,7 @@ export default function BidResultsPage() {
       toast.success(
         'Stage 1 Technical Evaluation completed successfully! You can now open Stage 2 financial ranking.',
       );
-      await loadBid();
+      await loadBid(true);
     } catch (err: any) {
       console.error(err);
       toast.error(
@@ -404,7 +406,7 @@ export default function BidResultsPage() {
       toast.success(
         'Stage 2 Financial Evaluation opened successfully! L1/L2/L3 commercial ranking generated.',
       );
-      await loadBid();
+      await loadBid(true);
     } catch (err: any) {
       console.error(err);
       toast.error(
@@ -557,20 +559,36 @@ export default function BidResultsPage() {
     }
   };
 
-  const loadBid = React.useCallback(async () => {
+  const loadBid = React.useCallback(async (isSilent = false) => {
     let alive = true;
-    setLoading(true);
+    if (!isSilent && !hasInitialLoadedRef.current) {
+      setLoading(true);
+    }
     setError('');
 
     try {
+      const isReverseAuctionBid = String(bidId || '').toUpperCase().startsWith('RA-');
+
       // Execute primary bid detail fetch and fallback endpoints concurrently in parallel!
-      const [bidRes, fallbackRes1, fallbackRes2, raResultRes, raDetailRes] = await Promise.allSettled([
+      const promises: Promise<any>[] = [
         procurementBidApi.getBidResults(bidId),
         getApi(`/api/buyer/requirements/${encodeURIComponent(bidId)}/responses`, true),
         getApi(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, true),
-        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}/result`, true),
-        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}`, true),
-      ]);
+      ];
+
+      if (isReverseAuctionBid) {
+        promises.push(
+          getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}/result`, true),
+          getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}`, true)
+        );
+      }
+
+      const results = await Promise.allSettled(promises);
+      const bidRes = results[0];
+      const fallbackRes1 = results[1];
+      const fallbackRes2 = results[2];
+      const raResultRes: PromiseSettledResult<any> = isReverseAuctionBid && results[3] ? results[3] : { status: 'rejected', reason: null };
+      const raDetailRes: PromiseSettledResult<any> = isReverseAuctionBid && results[4] ? results[4] : { status: 'rejected', reason: null };
 
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
 
@@ -972,6 +990,7 @@ export default function BidResultsPage() {
         return (a.totalPrice || Number.MAX_SAFE_INTEGER) - (b.totalPrice || Number.MAX_SAFE_INTEGER);
       });
       setRanking(sorted);
+      hasInitialLoadedRef.current = true;
     } catch (err: any) {
       if (!alive) return;
       setError(err instanceof Error ? err.message : 'Unable to load bid evaluation result.');
@@ -981,9 +1000,9 @@ export default function BidResultsPage() {
   }, [bidId]);
 
   useEffect(() => {
-    loadBid();
+    loadBid(false);
     const interval = setInterval(() => {
-      loadBid();
+      loadBid(true);
     }, 15000);
     return () => clearInterval(interval);
   }, [loadBid]);
@@ -1382,7 +1401,7 @@ export default function BidResultsPage() {
       });
       toast.success(`Award offer sent to ${awardModal.row.sellerName}! Waiting for supplier acceptance.`);
       setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false });
-      loadBid();
+      loadBid(true);
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Failed to create award offer.');
       setAwardModal(prev => ({ ...prev, submitting: false }));
@@ -1416,7 +1435,7 @@ export default function BidResultsPage() {
       });
       toast.success(`Price-match counter-offer sent to ${priceMatchModal.row.sellerName}! Response deadline set to ${deadlineHours} hours.`);
       setPriceMatchModal({ show: false, row: null, targetPrice: 0, deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false });
-      loadBid();
+      loadBid(true);
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Failed to send price-match counter-offer.');
       setPriceMatchModal(prev => ({ ...prev, submitting: false }));
@@ -1432,7 +1451,7 @@ export default function BidResultsPage() {
       toast.success('Purchase Order generated & issued successfully! Standby bidders have been politely notified.');
       window.dispatchEvent(new CustomEvent('orders:updated', { detail: { bidId: bid.id } }));
       window.dispatchEvent(new CustomEvent('award:accepted', { detail: { bidId: bid.id } }));
-      await loadBid();
+      await loadBid(true);
     } catch (err: any) {
       toast.error(err instanceof Error ? err.message : 'Failed to generate Purchase Order.');
     } finally {
@@ -1510,7 +1529,7 @@ export default function BidResultsPage() {
       <PageShell>
         <main className="mx-auto w-full max-w-7xl px-4 py-6">
           <ProcurementHero title="Bid Result and Financial Ranking" subtitle={bidId || 'Requested bid'} action={<Link href="/bids" className="inline-flex h-10 items-center rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-700">Back to bids</Link>} />
-          <div className="mt-5"><ProcurementErrorState message={error} onRetry={loadBid} /></div>
+          <div className="mt-5"><ProcurementErrorState message={error} onRetry={() => { hasInitialLoadedRef.current = false; loadBid(false); }} /></div>
         </main>
       </PageShell>
     );
@@ -2861,14 +2880,14 @@ export default function BidResultsPage() {
           onClose={() => setSelectedForTechEval(null)}
           procurementId={bidId}
           participation={selectedForTechEval}
-          readOnly={true}
-          isFinancialStageOpened={true}
-          isStage2Active={true}
+          readOnly={Boolean(isBidAlreadyAwarded || isContractFinalized)}
+          isFinancialStageOpened={Boolean(isFinancialEvalOpened)}
+          isStage2Active={Boolean(isFinancialEvalOpened)}
           bidStatus={bid?.status}
           isTwoPacketMode={bid?.packetType === 'TWO_PACKET'}
           packetType={bid?.packetType}
           onSuccess={() => {
-            loadBid();
+            loadBid(true);
           }}
         />
       )}
